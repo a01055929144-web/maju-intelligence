@@ -4,7 +4,7 @@ import { CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert } from "lucide
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
-import { getSystemStatus } from "@/lib/store";
+import { getSystemDiagnostics } from "@/lib/store";
 
 const statusLabels = {
   ready: "준비됨",
@@ -12,11 +12,11 @@ const statusLabels = {
   missing: "누락"
 };
 
-export default function AdminSystemPage() {
+export default async function AdminSystemPage() {
   const session = getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const system = getSystemStatus();
+  const system = await getSystemDiagnostics();
 
   return (
     <main className="min-h-screen bg-background">
@@ -84,6 +84,26 @@ export default function AdminSystemPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Supabase 데이터 점검</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {system.databaseChecks.map((check) => (
+              <div key={check.name} className="rounded-md border border-border p-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="font-black">{check.name}</p>
+                  <Badge className={check.status === "ready" ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}>
+                    {statusLabels[check.status]}
+                  </Badge>
+                </div>
+                <p className="text-2xl font-black">{check.count === null ? "-" : check.count.toLocaleString()}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{check.description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-primary" />
               실서버 전환 체크리스트
@@ -122,4 +142,3 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Database; label: st
     </Card>
   );
 }
-

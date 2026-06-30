@@ -76,6 +76,13 @@ export type SystemStatus = {
   mode: "production-db" | "local-fallback";
   requiredEnvironment: Array<{ key: string; present: boolean; scope: "server" | "client" }>;
   services: Array<{ name: string; status: "ready" | "fallback" | "missing"; description: string }>;
+  databaseChecks: DatabaseCheck[];
+};
+export type DatabaseCheck = {
+  name: string;
+  status: "ready" | "fallback" | "missing";
+  count: number | null;
+  description: string;
 };
 
 type SupabaseConfig = {
@@ -175,8 +182,112 @@ export function getSystemStatus(): SystemStatus {
         status: "ready",
         description: "방문 결과 기반 매출 파이프라인 계산이 준비되었습니다."
       }
-    ]
+    ],
+    databaseChecks: []
   };
+}
+
+export async function getSystemDiagnostics(): Promise<SystemStatus> {
+  const system = getSystemStatus();
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      ...system,
+      databaseChecks: [
+        {
+          name: "Supabase 연결",
+          status: "fallback",
+          count: null,
+          description: "환경변수가 없어 DB 조회를 건너뛰고 샘플 데이터 모드로 동작합니다."
+        }
+      ]
+    };
+  }
+
+  const checks = await Promise.all([
+    countTableRows("companies", "고객사", "등록된 고객사 수입니다."),
+    countTableRows("customer_imports", "업로드/분석 이력", "엑셀 업로드 후 생성되는 import job입니다."),
+    countTableRows("normalized_customers", "정제 거래처", "정제되어 저장된 거래처 row입니다."),
+    countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
+    countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
+    countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
+    checkDemoCompany()
+  ]);
+
+  return {
+    ...system,
+    databaseChecks: checks
+  };
+}
+
+async function countTableRows(table: string, name: string, description: string): Promise<DatabaseCheck> {
+  try {
+    const count = await supabaseCount(table);
+    return {
+      name,
+      status: "ready",
+      count,
+      description
+    };
+  } catch (error) {
+    return {
+      name,
+      status: "missing",
+      count: null,
+      description: `${description} ${getErrorMessage(error)}`
+    };
+  }
+}
+
+async function checkDemoCompany(): Promise<DatabaseCheck> {
+  try {
+    const rows = await supabaseRequest<Array<{ id: string }>>(
+      `companies?select=id&id=eq.${encodeURIComponent(getDefaultCompanyId())}&limit=1`
+    );
+
+    return {
+      name: "데모 고객사 UUID",
+      status: rows.length ? "ready" : "missing",
+      count: rows.length,
+      description: rows.length
+        ? "CUSTOMER_COMPANY_ID와 Supabase companies.id가 연결되어 있습니다."
+        : "seed.sql을 실행했거나 CUSTOMER_COMPANY_ID가 실제 companies.id와 일치하는지 확인해야 합니다."
+    };
+  } catch (error) {
+    return {
+      name: "데모 고객사 UUID",
+      status: "missing",
+      count: null,
+      description: getErrorMessage(error)
+    };
+  }
+}
+
+async function supabaseCount(table: string) {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+
+  const response = await fetch(`${config.url}/rest/v1/${table}?select=id&limit=1`, {
+    headers: {
+      apikey: config.serviceRoleKey,
+      Authorization: `Bearer ${config.serviceRoleKey}`,
+      Prefer: "count=exact"
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`조회 실패: ${response.status} ${message}`);
+  }
+
+  const contentRange = response.headers.get("content-range");
+  const count = Number(contentRange?.split("/")[1]);
+  return Number.isFinite(count) ? count : 0;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
 }
 
 export async function saveAnalysis(
