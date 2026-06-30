@@ -21,6 +21,7 @@ const DEFAULT_ADMIN_EMAIL = "admin@maju.local";
 const DEFAULT_ADMIN_PASSWORD = "maju-admin-2026";
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
 const DEFAULT_CUSTOMER_PASSWORD = "maju-owner-2026";
+const DEFAULT_CUSTOMER_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 
 function getSecret() {
   return process.env.ADMIN_SESSION_SECRET || "local-development-session-secret";
@@ -91,7 +92,7 @@ export function validateCustomerCredentials(email: string, password: string): Cu
   if (password !== customerPassword) return null;
 
   return {
-    companyId: "local-sample-company",
+    companyId: process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
     companyName: "마주식자재",
     email: customerEmail,
     role: "owner",

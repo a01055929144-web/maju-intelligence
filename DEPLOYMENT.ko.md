@@ -11,6 +11,7 @@
 - 관리자 로그인: 준비 완료
 - 고객 대시보드 로그인: 준비 완료
 - Supabase 스키마: `supabase/schema.sql`
+- Supabase 데모 seed: `supabase/seed.sql`
 - Vercel 설정 파일: `vercel.json`
 - GitHub Actions 빌드 체크: `.github/workflows/ci.yml`
 
@@ -30,10 +31,11 @@
 1. Supabase에서 새 프로젝트를 만듭니다.
 2. SQL Editor를 엽니다.
 3. 이 저장소의 `supabase/schema.sql` 전체를 붙여넣고 실행합니다.
-4. Project Settings > API에서 아래 값을 복사합니다.
+4. 데모 고객사와 리포트가 필요하면 `supabase/seed.sql`도 이어서 실행합니다.
+5. Project Settings > API에서 아래 값을 복사합니다.
    - Project URL
    - service_role key
-5. 복사한 값을 Vercel Environment Variables에 등록합니다.
+6. 복사한 값을 Vercel Environment Variables에 등록합니다.
 
 ## 4. Vercel 환경변수
 
@@ -51,6 +53,7 @@ ADMIN_SESSION_SECRET=replace-with-random-long-secret
 
 CUSTOMER_EMAIL=owner@your-domain.com
 CUSTOMER_PASSWORD=replace-with-strong-password
+CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 ```
 
 주의: `SUPABASE_SERVICE_ROLE_KEY`는 절대 브라우저나 공개 문서에 노출하면 안 됩니다.
@@ -84,12 +87,13 @@ CUSTOMER_PASSWORD=replace-with-strong-password
 - `ADMIN_PASSWORD`는 강한 비밀번호로 변경합니다.
 - `ADMIN_SESSION_SECRET`은 긴 랜덤 문자열로 변경합니다.
 - `CUSTOMER_PASSWORD`도 임시 비밀번호가 아닌 운영용 비밀번호로 변경합니다.
+- `CUSTOMER_COMPANY_ID`는 고객 로그인 세션이 조회할 Supabase `companies.id`와 일치해야 합니다.
 - Supabase RLS 정책은 v1 MVP 기준으로 켜져 있으며, 실제 고객사별 권한 분리는 Phase 2에서 더 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 
 ## 8. 다음 개발 우선순위
 
-1. Supabase 실제 저장 검증 및 seed 데이터 추가
+1. Supabase 실제 저장 검증
 2. 관리자 계정 생성/초대 기능
 3. 고객사별 사용자 초대 기능
 4. 엑셀 업로드 이력 상세 보기

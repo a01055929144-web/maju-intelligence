@@ -84,6 +84,7 @@ type SupabaseConfig = {
 };
 
 type SupabaseRow = Record<string, unknown>;
+const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -120,6 +121,10 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
 
 export function isProductionStoreConfigured() {
   return Boolean(getSupabaseConfig());
+}
+
+function getDefaultCompanyId() {
+  return process.env.CUSTOMER_COMPANY_ID || DEFAULT_COMPANY_ID;
 }
 
 export function getSystemStatus(): SystemStatus {
@@ -506,7 +511,7 @@ export async function saveVisitResult(input: {
     method: "POST",
     body: JSON.stringify([
       {
-        company_id: input.companyId,
+        company_id: input.companyId || getDefaultCompanyId(),
         lead_id: input.leadId,
         result: input.result,
         memo: input.memo || null,

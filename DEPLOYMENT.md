@@ -12,7 +12,8 @@ This app is ready for a real server with:
 1. Create a Supabase project.
 2. Open SQL Editor.
 3. Run `supabase/schema.sql`.
-4. Copy these values:
+4. Optional: run `supabase/seed.sql` to create the demo company, report, leads, and visit history.
+5. Copy these values:
    - Project URL
    - Service role key
 
@@ -28,6 +29,9 @@ SUPABASE_SERVICE_ROLE_KEY=replace-with-service-role-key
 ADMIN_EMAIL=admin@your-domain.com
 ADMIN_PASSWORD=strong-production-password
 ADMIN_SESSION_SECRET=random-long-secret
+CUSTOMER_EMAIL=owner@your-domain.com
+CUSTOMER_PASSWORD=strong-production-password
+CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must stay server-only.
@@ -77,6 +81,8 @@ If Supabase variables are configured, the API stores:
 - health score snapshot
 - lead recommendations
 - admin audit logs
+
+The demo seed uses `CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001`.
 
 If Supabase variables are missing, the app falls back to sample data for local development.
 
