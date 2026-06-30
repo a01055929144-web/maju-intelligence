@@ -64,7 +64,7 @@ The project includes `.github/workflows/ci.yml` for install and build checks on 
 
 ## Production
 
-See `DEPLOYMENT.md`. The app supports Supabase-backed production storage through these environment variables:
+See `DEPLOYMENT.md` and `DEPLOYMENT.ko.md`. The app supports Supabase-backed production storage through these environment variables:
 
 - `SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`

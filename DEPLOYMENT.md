@@ -36,7 +36,7 @@ ADMIN_SESSION_SECRET=random-long-secret
 
 Recommended flow:
 
-1. Push this folder to GitHub as `maju-intelligence-v1`.
+1. Push this folder to GitHub as `maju-intelligence`.
 2. Import the GitHub repo into Vercel.
 3. Set the environment variables above.
 4. Deploy.
@@ -79,3 +79,7 @@ If Supabase variables are configured, the API stores:
 - admin audit logs
 
 If Supabase variables are missing, the app falls back to sample data for local development.
+
+## 6. Korean Runbook
+
+For the Korean step-by-step production checklist, see `DEPLOYMENT.ko.md`.
