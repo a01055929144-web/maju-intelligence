@@ -599,6 +599,21 @@ export async function getLatestBriefing(companyId?: string) {
   };
 }
 
+function getSampleBriefing() {
+  const report = analyzeCompany(sampleCustomers);
+  return {
+    greeting: "안녕하세요 정두영님.",
+    currentCustomers: report.customers,
+    weeklyOpportunities: report.newOpportunities,
+    todayRecommendations: Math.min(12, report.leadRecommendations.length),
+    highProbability: report.highProbabilityCount,
+    routeLeads: report.routeLeads,
+    missingRegions: report.missingRegions,
+    healthScore: report.health.total,
+    source: "sample"
+  };
+}
+
 export async function getLatestLeads(companyId?: string) {
   if (!isProductionStoreConfigured()) return getLeadPayload();
 
@@ -799,10 +814,10 @@ export async function getSalesAssistantDrafts(companyId?: string): Promise<Sales
 
 export async function getCompanyDashboardPayload(companyId?: string) {
   const [briefing, report, leads, uploadHistory] = await Promise.all([
-    getLatestBriefing(companyId),
-    getLatestReport(companyId),
-    getLatestLeads(companyId),
-    getUploadHistory(companyId)
+    getLatestBriefing(companyId).catch(() => getSampleBriefing()),
+    getLatestReport(companyId).catch(() => analyzeCompany(sampleCustomers)),
+    getLatestLeads(companyId).catch(() => getLeadPayload()),
+    getUploadHistory(companyId).catch(() => getSampleUploadHistory(companyId))
   ]);
 
   return {
@@ -816,17 +831,18 @@ export async function getCompanyDashboardPayload(companyId?: string) {
 
 export async function getCompanySettings(companyId?: string, fallbackName = "마주식자재"): Promise<CompanySettings> {
   const id = companyId || getDefaultCompanyId();
+  const fallback = {
+    id,
+    name: fallbackName,
+    businessType: "식자재 유통",
+    ownerName: "정두영",
+    originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+    status: "fallback",
+    updatedAt: "샘플 기준"
+  };
 
   if (!isProductionStoreConfigured()) {
-    return {
-      id,
-      name: fallbackName,
-      businessType: "식자재 유통",
-      ownerName: "정두영",
-      originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
-      status: "active",
-      updatedAt: "로컬 샘플"
-    };
+    return fallback;
   }
 
   const rows = await supabaseRequest<
@@ -839,18 +855,14 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
       status: string;
       updated_at: string;
     }>
-  >(`companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`);
+  >(`companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`).catch(() => []);
 
   const row = rows[0];
   if (!row) {
     return {
-      id,
-      name: fallbackName,
-      businessType: "",
-      ownerName: "",
-      originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "",
+      ...fallback,
       status: "missing",
-      updatedAt: "미생성"
+      updatedAt: "회사 미생성"
     };
   }
 
