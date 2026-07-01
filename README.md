@@ -69,3 +69,7 @@ See `DEPLOYMENT.md` and `DEPLOYMENT.ko.md`. The app supports Supabase-backed pro
 - `SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+
+## Product Flow
+
+See `FLOW_VALIDATION.ko.md` for the v1 flow validation checklist.
