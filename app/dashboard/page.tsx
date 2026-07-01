@@ -76,15 +76,29 @@ export default async function DashboardPage() {
       <section className="border-b border-border bg-white">
         <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_360px] lg:items-stretch">
           <div className="min-w-0">
-            <Badge className="mb-4 bg-primary/10 text-primary">오늘의 AI 브리핑</Badge>
+            <Badge className="mb-4 bg-primary/10 text-primary">MAJU 운영 지휘판</Badge>
             <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-4xl">
-              안녕하세요 {session.name}님.
-              <span className="block text-primary">오늘은 {briefing.missingRegions[0]}부터 확인하세요.</span>
+              거래처 히스토리와 배송 동선을 기준으로
+              <span className="block text-primary">오늘 공략할 매장을 정리했습니다.</span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-              현재 {briefing.currentCustomers.toLocaleString()}개 거래처를 기준으로 이번주 신규 기회 {briefing.weeklyOpportunities.toLocaleString()}곳,
-              오늘 추천 {briefing.todayRecommendations}곳을 추렸습니다.
+              {session.name}님 회사의 거래처 {briefing.currentCustomers.toLocaleString()}개, 이번주 신규 기회 {briefing.weeklyOpportunities.toLocaleString()}곳,
+              동선 내 리드 {briefing.routeLeads}곳을 한 화면에서 판단합니다.
             </p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-xs font-bold text-muted-foreground">거래처 기준</p>
+                <p className="mt-1 font-black">사업자 정보 + 히스토리</p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-xs font-bold text-muted-foreground">운영 기준</p>
+                <p className="mt-1 font-black">출발지에서 배송주소까지</p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-xs font-bold text-muted-foreground">성장 기준</p>
+                <p className="mt-1 font-black">{briefing.missingRegions[0]} 신규 발굴</p>
+              </div>
+            </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:opacity-90"
@@ -219,7 +233,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-primary" />
-              최근 업로드 이력
+              최근 데이터 등록 이력
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">

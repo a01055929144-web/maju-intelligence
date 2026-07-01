@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
   Activity,
@@ -245,142 +246,185 @@ function Briefing({
   onSample: () => void;
 }) {
   const metrics = [
-    ["현재 거래처", `${analysis.customers}개`, Building2],
-    ["이번주 신규 영업기회", `${analysis.newOpportunities}곳`, Target],
-    ["오늘 추천", "12곳", ClipboardList],
-    ["계약확률 86% 이상", `${analysis.highProbabilityCount}곳`, Sparkles],
-    ["배송동선 내 신규리드", `${analysis.routeLeads}곳`, Route]
+    ["관리 거래처", `${analysis.customers}개`, "사업자 정보 기반 마스터"],
+    ["동선 내 기회", `${analysis.routeLeads}곳`, "배송권역 기준 신규 매장"],
+    ["이번주 발굴", `${analysis.newOpportunities}곳`, "White Space 후보"],
+    ["고확률 리드", `${analysis.highProbabilityCount}곳`, "우선 방문 대상"]
   ];
-  const flow = [
-    ["1", "회사 설정 확인", "관리자가 생성한 회사/계정으로 로그인하고, 설정에서 물류 출발지와 회사 정보를 수정합니다."],
-    ["2", "거래처 정보 기입", "거래처명, 사업자번호, 배송주소, 담당자, 연락처를 마스터로 등록합니다."],
-    ["3", "매출 정보 기입", "수기 입력 또는 ERP 엑셀로 일/월/분기/연 현황과 이탈 신호를 갱신합니다."]
+  const pillars = [
+    ["거래처 히스토리", "사업자등록번호, 대표자, 주소, 상태 변경, 방문 이력을 한 거래처 카드에 누적합니다.", Building2],
+    ["운영 동선 최적화", "회사 물류 출발지에서 거래처 배송주소까지 거리와 이동시간을 기록하고 권역을 관리합니다.", Route],
+    ["신규 매장 발굴", "현재 잘 팔리는 업종과 지역 패턴을 기준으로 공략 가능한 신규 매장을 추천합니다.", Target]
   ] as const;
-  const outcomes = [
-    ["현황 파악", "대표와 관리자가 회사 건강도, 매출 흐름, 이탈 위험을 바로 봅니다.", HeartPulse],
-    ["분포도와 히스토리", "거래처 위치와 방문/매출 이력을 지도 시각화로 연결합니다.", MapPin]
+  const routeRows = [
+    ["하남 물류센터", "성수 온반", "24.3km", "42분"],
+    ["하남 물류센터", "송파 고깃집", "18.8km", "31분"],
+    ["하남 물류센터", "위례 반찬", "12.4km", "24분"]
   ] as const;
+  const historyRows = ["사업자 상태 정상 확인", "배송주소 변경 기록", "6월 매출 18% 증가", "방문 메모 3건 누적"];
 
   return (
-    <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.2fr_0.8fr]">
-      <div className="space-y-6">
-        <div className="rounded-lg border border-border bg-white p-6 shadow-panel">
-          <Badge className="mb-5 bg-primary/10 text-primary">MAJU Intelligence 시작</Badge>
-          <h1 className="max-w-3xl text-3xl font-black tracking-normal sm:text-5xl">
-            먼저 기초등록,
-            <span className="block text-primary">그다음 매출 업데이트</span>
+    <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+      <div className="grid gap-6 lg:grid-cols-[1fr_430px] lg:items-stretch">
+        <div className="rounded-lg border border-border bg-white p-6 shadow-panel sm:p-8">
+          <Badge className="mb-5 bg-primary/10 text-primary">AI Sales Intelligence Platform</Badge>
+          <h1 className="max-w-4xl text-3xl font-black leading-tight tracking-normal sm:text-5xl">
+            거래처 히스토리부터
+            <span className="block text-primary">동선 최적화와 신규 매장 발굴까지</span>
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-            회사와 계정은 관리자가 먼저 생성합니다. 사용자는 로그인 후 설정에서 회사 기준값을 수정하고, 거래처 마스터와 매출 데이터를 쌓아 현황과 동선을 관리합니다.
+          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
+            MAJU는 엑셀 업로드 도구가 아니라 식자재 유통사의 영업 데이터를 운영 자산으로 바꾸는 플랫폼입니다.
+            사업자등록 기반 거래처 관리, 물류 출발지 기준 동선 기록, 신규 매장 추천을 하나의 흐름으로 연결합니다.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button onClick={() => onStart("customer-master")}>
-              <Upload size={18} />
-              기초 등록 시작
-            </Button>
-            <Button variant="outline" onClick={() => onStart("sales-analysis")}>
-              <BarChart3 size={18} />
-              매출 업데이트
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Link className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:opacity-90" href="/dashboard/login">
+              고객사 대시보드 보기
+              <ArrowRight size={18} />
+            </Link>
+            <Button variant="outline" onClick={() => onStart("customer-master")}>
+              <Building2 size={18} />
+              거래처 등록 체험
             </Button>
             <Button variant="accent" onClick={onSample}>
               <Sparkles size={18} />
               샘플 진단 보기
             </Button>
           </div>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {metrics.map(([label, value, hint]) => (
+              <div key={label} className="rounded-md border border-border bg-muted/35 p-4">
+                <p className="text-xs font-bold text-muted-foreground">{label}</p>
+                <p className="mt-1 text-3xl font-black">{value}</p>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{hint}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          {flow.map(([step, label, description]) => (
-            <Card key={label} className="shadow-none">
-              <CardContent className="p-4">
-                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-black text-white">{step}</span>
-                <p className="mt-3 font-black">{label}</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          {outcomes.map(([label, description, Icon]) => (
-            <Card key={label as string} className="shadow-none">
-              <CardContent className="flex gap-4 p-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-foreground">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="font-black">{label as string}</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{description as string}</p>
+        <div className="rounded-lg border border-border bg-foreground p-5 text-white shadow-panel">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold text-white/60">Company Health Score</p>
+              <div className="mt-3 flex items-end gap-2">
+                <span className="text-7xl font-black text-accent">{analysis.health.total}</span>
+                <span className="pb-3 text-sm font-bold text-white/60">/ 100</span>
+              </div>
+            </div>
+            <Badge className="bg-white/10 text-white">진단 완료</Badge>
+          </div>
+          <div className="mt-5 space-y-3">
+            {[
+              ["영업력", analysis.health.salesPower],
+              ["배송효율", analysis.health.deliveryEfficiency],
+              ["신규영업", analysis.health.newSales],
+              ["리스크", analysis.health.risk]
+            ].map(([label, value]) => (
+              <div key={label as string}>
+                <div className="mb-1 flex justify-between text-xs font-bold text-white/70">
+                  <span>{label as string}</span>
+                  <span>{value as number}</span>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {metrics.map(([label, value, Icon]) => (
-            <Card key={label as string} className="shadow-none">
-              <CardContent className="p-4">
-                <Icon className="mb-3 h-5 w-5 text-primary" />
-                <p className="text-xs font-semibold text-muted-foreground">{label as string}</p>
-                <p className="mt-1 text-2xl font-black">{value as string}</p>
-              </CardContent>
-            </Card>
-          ))}
+                <div className="h-2 overflow-hidden rounded-full bg-white/15">
+                  <div className="h-full rounded-full bg-accent" style={{ width: `${value as number}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-5 text-sm leading-6 text-white/70">
+            대표가 보고 싶은 것은 기능 목록이 아니라 회사 상태입니다. MAJU는 거래처, 동선, 신규영업을 숫자로 압축합니다.
+          </p>
         </div>
       </div>
 
-      <aside className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-3">
+        {pillars.map(([title, description, Icon]) => (
+          <Card key={title} className="shadow-none">
+            <CardContent className="p-5">
+              <Icon className="mb-4 h-6 w-6 text-primary" />
+              <p className="text-lg font-black">{title}</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <Card>
           <CardHeader>
-            <CardTitle>등록 후 바로 확인</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              거래처 카드 예시
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              ["회사 설정", "관리자 생성 후 수정"],
-              ["마스터 저장", "신규/수정 거래처를 구분"],
-              ["매출 누적", "월/분기/연 단위 분석"],
-              ["지도 시각화", "분포도와 히스토리 연결"],
-              ["관리자 확인", "업데이트 시점 표시"]
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-                <span className="font-bold">{label}</span>
-                <Badge>{value}</Badge>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-border bg-muted/35 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xl font-black">성수 온반</p>
+                  <p className="mt-1 text-sm text-muted-foreground">사업자등록번호 123-45-67890 · 한식 · 정상</p>
+                </div>
+                <Badge className="bg-primary/10 text-primary">거래중</Badge>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>이번주 놓치고 있는 지역</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analysis.missingRegions.map((region, index) => (
-              <div key={region} className="flex items-center justify-between rounded-md border border-border p-3">
-                <span className="font-bold">{index + 1}. {region}</span>
-                <Badge>White Space</Badge>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <MiniFact label="대표자" value="김성수" />
+                <MiniFact label="배송주소" value="서울 성동구" />
+                <MiniFact label="월매출" value="420만원" />
               </div>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Company Health Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-3">
-              <span className="text-6xl font-black text-primary">{analysis.health.total}</span>
-              <span className="pb-2 text-sm font-semibold text-muted-foreground">/ 100점</span>
             </div>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">대표가 바로 이해할 수 있도록 영업력, 배송효율, 신규영업, 리스크를 하나의 숫자로 압축합니다.</p>
+            <div className="space-y-2">
+              {historyRows.map((item) => (
+                <div key={item} className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="font-semibold">{item}</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
-        <Button className="w-full" size="default" onClick={() => onStart("customer-master")}>
-          기초 등록으로 시작
-          <ArrowRight size={18} />
-        </Button>
-      </aside>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Route className="h-5 w-5 text-primary" />
+              운영 동선과 신규 매장
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-border bg-white p-4">
+              <p className="text-sm font-black">물류 출발지: 경기도 하남시 초이로 133 1층</p>
+              <div className="mt-3 space-y-2">
+                {routeRows.map(([origin, destination, distance, minutes]) => (
+                  <div key={destination} className="grid gap-2 rounded-md bg-muted/35 p-3 text-sm sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                    <span className="font-semibold">{origin}에서 {destination}까지</span>
+                    <Badge>{distance}</Badge>
+                    <Badge className="bg-accent/20 text-foreground">{minutes}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {analysis.missingRegions.slice(0, 3).map((region, index) => (
+                <div key={region} className="rounded-md border border-border p-4">
+                  <p className="text-xs font-bold text-muted-foreground">White Space {index + 1}</p>
+                  <p className="mt-1 text-lg font-black">{region}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">신규 매장 우선 발굴 지역</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </section>
+  );
+}
+
+function MiniFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-white p-3">
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 font-black">{value}</p>
+    </div>
   );
 }
 
