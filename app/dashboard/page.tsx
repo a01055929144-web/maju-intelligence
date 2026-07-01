@@ -1,6 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BarChart3, Building2, ClipboardList, FileSpreadsheet, HeartPulse, Lightbulb, MessageSquareText, Route, Sparkles, Target, TrendingUp, Upload } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  ClipboardList,
+  FileSpreadsheet,
+  HeartPulse,
+  Lightbulb,
+  MessageSquareText,
+  Route,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Upload
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +30,7 @@ export default async function DashboardPage() {
 
   const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(session.companyId);
   const topLeads = leadPayload.leads.slice(0, 6);
+  const primaryLead = topLeads[0];
   const scoreRows = [
     ["영업력", report.health.salesPower],
     ["배송효율", report.health.deliveryEfficiency],
@@ -24,61 +39,91 @@ export default async function DashboardPage() {
     ["집중도", report.health.concentration],
     ["리스크", report.health.risk]
   ];
+  const quickActions = [
+    { href: "/routes/today", label: "오늘 방문 계획", icon: Route, description: "추천 리드를 지역별로 묶어 방문 순서를 봅니다." },
+    { href: "/revenue/pipeline", label: "매출 파이프라인", icon: TrendingUp, description: "방문 결과가 예상 매출로 얼마나 전환되는지 봅니다." },
+    { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
+    { href: "/", label: "엑셀 다시 분석", icon: Upload, description: "새 거래처 파일을 올려 진단 리포트를 갱신합니다." }
+  ];
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+    <main className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-20 border-b border-border bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">Company Dashboard</Badge>
-            <h1 className="text-2xl font-black">{session.companyName} AI 영업 대시보드</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {session.name} · {session.role} · {session.email}
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-black text-white">M</span>
+              <div>
+                <p className="text-sm font-black">{session.companyName}</p>
+                <p className="text-xs text-muted-foreground">MAJU Intelligence</p>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto">
             <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/routes/today"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-semibold transition hover:bg-muted"
+              href="/admin/system"
             >
-              <Route className="h-4 w-4" />
-              방문 계획
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/crm/timeline"
-            >
-              <MessageSquareText className="h-4 w-4" />
-              방문 이력
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/revenue/pipeline"
-            >
-              <TrendingUp className="h-4 w-4" />
-              매출 파이프라인
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/assistant"
-            >
-              <Sparkles className="h-4 w-4" />
-              AI Assistant
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/"
-            >
-              <Upload className="h-4 w-4" />
-              엑셀 업로드
+              <BarChart3 className="h-4 w-4" />
+              시스템
             </Link>
             <CustomerLogoutButton />
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-5">
+      <section className="border-b border-border bg-white">
+        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_360px] lg:items-stretch">
+          <div className="min-w-0">
+            <Badge className="mb-4 bg-primary/10 text-primary">오늘의 AI 브리핑</Badge>
+            <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-4xl">
+              안녕하세요 {session.name}님.
+              <span className="block text-primary">오늘은 {briefing.missingRegions[0]}부터 확인하세요.</span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+              현재 {briefing.currentCustomers.toLocaleString()}개 거래처를 기준으로 이번주 신규 기회 {briefing.weeklyOpportunities.toLocaleString()}곳,
+              오늘 추천 {briefing.todayRecommendations}곳을 추렸습니다.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:opacity-90"
+                href="/routes/today"
+              >
+                오늘 영업 시작
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted"
+                href="/"
+              >
+                <Upload className="h-4 w-4" />
+                새 엑셀 분석
+              </Link>
+              <Link
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted"
+                href="/crm/timeline"
+              >
+                <MessageSquareText className="h-4 w-4" />
+                방문 이력
+              </Link>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-5">
+            <p className="text-xs font-bold text-muted-foreground">Company Health Score</p>
+            <div className="mt-3 flex items-end gap-3">
+              <span className="text-7xl font-black text-primary">{report.health.total}</span>
+              <span className="pb-3 text-sm font-bold text-muted-foreground">/ 100</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              영업력 {report.health.salesPower}, 배송효율 {report.health.deliveryEfficiency}, 신규영업 {report.health.newSales} 기준의 종합 건강도입니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Metric icon={Building2} label="현재 거래처" value={`${briefing.currentCustomers}개`} />
           <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
           <Metric icon={ClipboardList} label="오늘 추천" value={`${briefing.todayRecommendations}곳`} />
@@ -86,20 +131,16 @@ export default async function DashboardPage() {
           <Metric icon={Route} label="동선 내 리드" value={`${briefing.routeLeads}곳`} />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <HeartPulse className="h-5 w-5 text-primary" />
-                Company Health Score
+                건강도 세부 점수
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-6 flex items-end gap-3">
-                <span className="text-7xl font-black text-primary">{report.health.total}</span>
-                <span className="pb-3 text-sm font-bold text-muted-foreground">점</span>
-              </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {scoreRows.map(([label, value]) => (
                   <div key={label as string}>
                     <div className="mb-1 flex justify-between text-sm font-bold">
@@ -117,12 +158,13 @@ export default async function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-primary" />
-                오늘의 AI 제안
+                AI가 보는 오늘의 우선순위
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {report.aiInsights.map((insight) => (
+            <CardContent className="grid gap-3 lg:grid-cols-2">
+              {report.aiInsights.map((insight, index) => (
                 <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm leading-6">
+                  <Badge className="mb-3 bg-white text-foreground">제안 {index + 1}</Badge>
                   {insight}
                 </div>
               ))}
@@ -130,10 +172,10 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>이번주 놓치고 있는 지역</CardTitle>
+              <CardTitle>공략 지역</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {briefing.missingRegions.map((region, index) => (
@@ -149,7 +191,10 @@ export default async function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>추천 리드 TOP6</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>추천 리드 TOP6</CardTitle>
+                {primaryLead ? <Badge className="bg-accent/20 text-foreground">1순위 {primaryLead.region}</Badge> : null}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {topLeads.map((lead, index) => (
@@ -204,6 +249,20 @@ export default async function DashboardPage() {
             ))}
           </CardContent>
         </Card>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {quickActions.map((action) => (
+            <Link key={action.href} className="group rounded-lg border border-border bg-white p-5 shadow-none transition hover:border-primary/40 hover:shadow-panel" href={action.href}>
+              <action.icon className="mb-4 h-5 w-5 text-primary" />
+              <p className="font-black">{action.label}</p>
+              <p className="mt-2 min-h-10 text-sm leading-5 text-muted-foreground">{action.description}</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-primary">
+                열기
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          ))}
+        </div>
       </section>
     </main>
   );
