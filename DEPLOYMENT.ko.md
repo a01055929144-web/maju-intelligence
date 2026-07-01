@@ -54,6 +54,9 @@ ADMIN_SESSION_SECRET=replace-with-random-long-secret
 CUSTOMER_EMAIL=owner@your-domain.com
 CUSTOMER_PASSWORD=replace-with-strong-password
 CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
+
+COMPANY_ORIGIN_ADDRESS=경기도 하남시 초이로 133 1층
+TMAP_API_KEY=replace-with-tmap-api-key
 ```
 
 주의: `SUPABASE_SERVICE_ROLE_KEY`는 절대 브라우저나 공개 문서에 노출하면 안 됩니다.
@@ -91,6 +94,7 @@ CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 - 기존 DB에 이미 `schema.sql`을 실행했다면 `supabase/migrations/20260701_customer_master_upsert.sql`도 한 번 실행합니다.
 - 매출 엑셀 업로드와 사업자 기본정보 확장을 적용하려면 `supabase/migrations/20260701_sales_transactions.sql`도 한 번 실행합니다.
 - ERP/유통사별 엑셀 매핑 프리셋 저장을 준비하려면 `supabase/migrations/20260701_excel_mapping_presets.sql`도 한 번 실행합니다.
+- 회사 출발지에서 거래처까지 티맵 거리/시간/경로 캐시를 저장하려면 `supabase/migrations/20260701_tmap_route_cache.sql`도 한 번 실행합니다.
 - Supabase RLS 정책은 v1 MVP 기준으로 켜져 있으며, 실제 고객사별 권한 분리는 Phase 2에서 더 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 

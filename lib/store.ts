@@ -139,6 +139,7 @@ export function getSystemStatus(): SystemStatus {
   const appUrlConfigured = Boolean(process.env.NEXT_PUBLIC_APP_URL);
   const adminConfigured = Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET);
   const customerConfigured = Boolean(process.env.CUSTOMER_EMAIL && process.env.CUSTOMER_PASSWORD);
+  const routeConfigured = Boolean(process.env.COMPANY_ORIGIN_ADDRESS && process.env.TMAP_API_KEY);
 
   return {
     appUrlConfigured,
@@ -154,7 +155,10 @@ export function getSystemStatus(): SystemStatus {
       { key: "ADMIN_PASSWORD", present: Boolean(process.env.ADMIN_PASSWORD), scope: "server" },
       { key: "ADMIN_SESSION_SECRET", present: Boolean(process.env.ADMIN_SESSION_SECRET), scope: "server" },
       { key: "CUSTOMER_EMAIL", present: Boolean(process.env.CUSTOMER_EMAIL), scope: "server" },
-      { key: "CUSTOMER_PASSWORD", present: Boolean(process.env.CUSTOMER_PASSWORD), scope: "server" }
+      { key: "CUSTOMER_PASSWORD", present: Boolean(process.env.CUSTOMER_PASSWORD), scope: "server" },
+      { key: "CUSTOMER_COMPANY_ID", present: Boolean(process.env.CUSTOMER_COMPANY_ID), scope: "server" },
+      { key: "COMPANY_ORIGIN_ADDRESS", present: Boolean(process.env.COMPANY_ORIGIN_ADDRESS), scope: "server" },
+      { key: "TMAP_API_KEY", present: Boolean(process.env.TMAP_API_KEY), scope: "server" }
     ],
     services: [
       {
@@ -181,6 +185,13 @@ export function getSystemStatus(): SystemStatus {
         name: "Revenue Intelligence",
         status: "ready",
         description: "방문 결과 기반 매출 파이프라인 계산이 준비되었습니다."
+      },
+      {
+        name: "Route Intelligence",
+        status: routeConfigured ? "ready" : "fallback",
+        description: routeConfigured
+          ? "회사 출발지와 Tmap API 키가 설정되어 거리/시간/경로 계산을 붙일 수 있습니다."
+          : "회사 출발지 또는 Tmap API 키가 없어 주소 텍스트/기존 캐시 기준으로 동작합니다."
       }
     ],
     databaseChecks: []
@@ -209,6 +220,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("customer_imports", "업로드/분석 이력", "엑셀 업로드 후 생성되는 import job입니다."),
     countTableRows("normalized_customers", "정제 거래처", "정제되어 저장된 거래처 row입니다."),
     countTableRows("sales_transactions", "매출 거래내역", "ERP 엑셀에서 적재된 일자/품목/금액 단위 거래내역입니다."),
+    countTableRows("route_distance_cache", "티맵 경로 캐시", "회사 출발지에서 거래처 도착지까지 계산된 거리/시간/경로입니다."),
     countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),

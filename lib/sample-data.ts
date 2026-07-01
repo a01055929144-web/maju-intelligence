@@ -37,7 +37,7 @@ export const customerMasterFields = [
   { key: "representativeName", label: "대표자명", aliases: ["대표자", "대표자명", "대표", "owner", "ceo"], required: true },
   { key: "openingDate", label: "개업일", aliases: ["개업일", "개업년월일", "open date", "opening"], required: false },
   { key: "address", label: "배송주소", aliases: ["주소", "배송주소", "소재지", "address"], required: true },
-  { key: "deliveryKm", label: "회사-매장 고정거리(km)", aliases: ["배송거리", "고정배송거리", "회사매장거리", "거리", "km", "delivery"], required: false },
+  { key: "deliveryKm", label: "기존 계산거리(km)", aliases: ["배송거리", "고정배송거리", "회사매장거리", "거리", "km", "delivery"], required: false, description: "선택값입니다. 운영에서는 회사 주소와 거래처 주소로 티맵이 1회 계산한 값을 저장합니다." },
   { key: "phone", label: "연락처", aliases: ["연락처", "전화", "휴대폰", "phone", "mobile"], required: false },
   { key: "email", label: "이메일", aliases: ["이메일", "email", "메일"], required: false },
   { key: "birthDate", label: "생년월일", aliases: ["생년월일", "생일", "birth"], required: false },
