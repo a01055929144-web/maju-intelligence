@@ -62,6 +62,12 @@ export default function Home() {
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
   const currentTemplate = uploadTemplates[uploadType];
 
+  function startUploadFlow(nextType: UploadTemplateType) {
+    setUploadType(nextType);
+    setFieldMap(autoMapHeaders(headers, uploadTemplates[nextType].fields));
+    setScreen("onboarding");
+  }
+
   function startSampleReport() {
     setUsingSample(true);
     setCustomers(sampleCustomers);
@@ -154,7 +160,7 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       <TopNav active={screen} onMove={setScreen} />
-      {screen === "briefing" && <Briefing analysis={analysis} onStart={() => setScreen("onboarding")} onSample={startSampleReport} />}
+      {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onSample={startSampleReport} />}
       {screen === "onboarding" && (
         <Onboarding
           headers={headers}
@@ -194,9 +200,9 @@ function TopNav({ active, onMove }: { active: string; onMove: (screen: "briefing
         </button>
         <nav className="hidden items-center gap-2 md:flex">
           {[
-            ["briefing", "AI 브리핑"],
-            ["onboarding", "진단 시작"],
-            ["report", "AI 리포트"]
+            ["briefing", "시작"],
+            ["onboarding", "데이터 등록"],
+            ["report", "리포트"]
           ].map(([key, label]) => (
             <Button key={key} variant={active === key ? "default" : "ghost"} size="sm" onClick={() => onMove(key as "briefing" | "onboarding" | "report")}>
               {label}
@@ -208,7 +214,15 @@ function TopNav({ active, onMove }: { active: string; onMove: (screen: "briefing
   );
 }
 
-function Briefing({ analysis, onStart, onSample }: { analysis: AnalysisResult; onStart: () => void; onSample: () => void }) {
+function Briefing({
+  analysis,
+  onStart,
+  onSample
+}: {
+  analysis: AnalysisResult;
+  onStart: (type: UploadTemplateType) => void;
+  onSample: () => void;
+}) {
   const metrics = [
     ["현재 거래처", `${analysis.customers}개`, Building2],
     ["이번주 신규 영업기회", `${analysis.newOpportunities}곳`, Target],
@@ -216,29 +230,51 @@ function Briefing({ analysis, onStart, onSample }: { analysis: AnalysisResult; o
     ["계약확률 86% 이상", `${analysis.highProbabilityCount}곳`, Sparkles],
     ["배송동선 내 신규리드", `${analysis.routeLeads}곳`, Route]
   ];
+  const flow = [
+    ["1", "기초 등록", "거래처 마스터를 1회 등록하고 계속 보완합니다."],
+    ["2", "매출 업데이트", "ERP 매출 엑셀을 주기적으로 올려 현황을 갱신합니다."],
+    ["3", "회사 진단", "Health Score, 이탈 위험, 업종/지역 편중을 계산합니다."],
+    ["4", "영업 기획", "White Space와 추천 거래처를 다음 액션으로 정리합니다."]
+  ];
 
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.2fr_0.8fr]">
       <div className="space-y-6">
         <div className="rounded-lg border border-border bg-white p-6 shadow-panel">
-          <Badge className="mb-5 bg-primary/10 text-primary">오늘의 AI 브리핑</Badge>
+          <Badge className="mb-5 bg-primary/10 text-primary">MAJU Intelligence 시작</Badge>
           <h1 className="max-w-3xl text-3xl font-black tracking-normal sm:text-5xl">
-            안녕하세요 정두영님.
-            <span className="block text-primary">오늘 영업은 어디서 시작할까요?</span>
+            먼저 기초등록,
+            <span className="block text-primary">그다음 매출 업데이트</span>
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-            MAJU는 CRM 화면이 아니라 회사의 영업 데이터를 먼저 진단합니다. 샘플 데이터로도 바로 리포트 구조를 확인할 수 있습니다.
+            거래처 마스터를 한 번 등록해 기본값을 저장하고, 이후 ERP 매출 엑셀을 업데이트하면 현재 회사 상태와 다음 영업 방향을 분석합니다.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button onClick={onStart}>
+            <Button onClick={() => onStart("customer-master")}>
               <Upload size={18} />
-              엑셀 업로드
+              기초 등록 시작
+            </Button>
+            <Button variant="outline" onClick={() => onStart("sales-analysis")}>
+              <BarChart3 size={18} />
+              매출 업데이트
             </Button>
             <Button variant="accent" onClick={onSample}>
               <Sparkles size={18} />
               샘플 진단 보기
             </Button>
           </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {flow.map(([step, label, description]) => (
+            <Card key={label} className="shadow-none">
+              <CardContent className="p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-black text-white">{step}</span>
+                <p className="mt-3 font-black">{label}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -255,6 +291,24 @@ function Briefing({ analysis, onStart, onSample }: { analysis: AnalysisResult; o
       </div>
 
       <aside className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>업로드 후 바로 확인</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              ["마스터 저장", "신규/수정 거래처를 구분"],
+              ["매출 누적", "월/분기/연 단위 분석"],
+              ["ERP 매핑", "서로 다른 헤더명을 직접 연결"],
+              ["관리자 확인", "마지막 업데이트 시점 표시"]
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                <span className="font-bold">{label}</span>
+                <Badge>{value}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>이번주 놓치고 있는 지역</CardTitle>
@@ -280,8 +334,8 @@ function Briefing({ analysis, onStart, onSample }: { analysis: AnalysisResult; o
             <p className="mt-3 text-sm leading-6 text-muted-foreground">대표가 바로 이해할 수 있도록 영업력, 배송효율, 신규영업, 리스크를 하나의 숫자로 압축합니다.</p>
           </CardContent>
         </Card>
-        <Button className="w-full" size="default" onClick={onStart}>
-          오늘 영업 시작
+        <Button className="w-full" size="default" onClick={() => onStart("customer-master")}>
+          기초 등록으로 시작
           <ArrowRight size={18} />
         </Button>
       </aside>
@@ -321,13 +375,23 @@ function Onboarding({
   onSample: () => void;
 }) {
   const complete = template.fields.filter((field) => field.required).every((field) => fieldMap[field.key]);
+  const isMaster = uploadType === "customer-master";
+  const uploadHint = isMaster
+    ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
+    : "거래처 key와 매출 행을 누적해 일/월/분기/반기/연 분석과 이탈 징후를 갱신합니다.";
+  const saveHint = isMaster
+    ? "기초값은 고정 보존하고, 새 엑셀은 기존 거래처 수정과 신규 거래처 등록으로 반영합니다."
+    : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
 
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.85fr_1.15fr]">
       <Card>
         <CardHeader>
           <Badge className="w-fit bg-primary/10 text-primary">AI Company Diagnosis</Badge>
-          <CardTitle className="text-2xl">엑셀 업로드 방식 선택</CardTitle>
+          <CardTitle className="text-2xl">데이터 등록 방식 선택</CardTitle>
+          <p className="text-sm leading-6 text-muted-foreground">
+            먼저 거래처 마스터를 등록하고, 이후 매출 엑셀을 업데이트하면 분석 리포트가 계속 살아납니다.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3">
@@ -342,15 +406,22 @@ function Onboarding({
                 onClick={() => onUploadType(key as UploadTemplateType)}
                 type="button"
               >
-                <span className="block font-black">{item.label}</span>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="font-black">{item.label}</span>
+                  <Badge>{key === "customer-master" ? "기초 등록" : "업데이트"}</Badge>
+                </span>
                 <span className="mt-1 block text-sm leading-6 text-muted-foreground">{item.description}</span>
               </button>
             ))}
           </div>
+          <div className="rounded-md border border-border bg-white p-4 text-sm leading-6 text-muted-foreground">
+            <p className="font-bold text-foreground">{template.label}에서 하는 일</p>
+            <p className="mt-1">{uploadHint}</p>
+          </div>
           <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/45 p-6 text-center transition hover:bg-muted">
             <FileSpreadsheet className="mb-4 h-10 w-10 text-primary" />
             <span className="text-base font-black">{template.label} 엑셀 파일 선택</span>
-            <span className="mt-2 text-sm text-muted-foreground">ERP마다 양식이 달라도 아래 필수 컬럼을 매핑해서 적재합니다.</span>
+            <span className="mt-2 text-sm text-muted-foreground">ERP마다 양식이 달라도 아래 필수 컬럼을 매핑해서 저장합니다.</span>
             <input className="sr-only" type="file" accept=".xlsx,.xls,.csv" onChange={onFile} />
           </label>
           <Button variant="outline" className="w-full" onClick={onSample}>
@@ -358,7 +429,7 @@ function Onboarding({
           </Button>
           <div className="rounded-md bg-white p-4 text-sm text-muted-foreground">
             <p className="font-bold text-foreground">v1 저장 방식</p>
-            <p className="mt-1 leading-6">거래처 기본정보는 회사 마스터로 유지하고, 새 엑셀은 기존 거래처 업데이트와 신규 거래처 추가에 사용합니다.</p>
+            <p className="mt-1 leading-6">{saveHint}</p>
           </div>
         </CardContent>
       </Card>
@@ -398,7 +469,7 @@ function Onboarding({
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <Check className={complete || usingSample ? "h-4 w-4 text-primary" : "h-4 w-4 text-muted-foreground"} />
-                  {complete ? "필수 컬럼 매핑 완료" : "필수 컬럼을 매핑하면 누적 데이터에 업데이트합니다."}
+                  {complete ? "필수 컬럼 매핑 완료" : `${template.label} 필수 컬럼을 연결하면 저장/업데이트할 수 있습니다.`}
                 </span>
                 <Button onClick={onAnalyze} disabled={!complete && !usingSample}>
                   업데이트 후 리포트 갱신
