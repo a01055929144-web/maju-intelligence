@@ -10,6 +10,7 @@ import {
   Lightbulb,
   MessageSquareText,
   Route,
+  Settings,
   Sparkles,
   Target,
   TrendingUp,
@@ -43,7 +44,7 @@ export default async function DashboardPage() {
     { href: "/routes/today", label: "오늘 방문 계획", icon: Route, description: "추천 리드를 지역별로 묶어 방문 순서를 봅니다." },
     { href: "/revenue/pipeline", label: "매출 파이프라인", icon: TrendingUp, description: "방문 결과가 예상 매출로 얼마나 전환되는지 봅니다." },
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
-    { href: "/", label: "엑셀 다시 분석", icon: Upload, description: "새 거래처 파일을 올려 진단 리포트를 갱신합니다." }
+    { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
 
   return (
@@ -62,10 +63,10 @@ export default async function DashboardPage() {
           <div className="flex items-center gap-2 overflow-x-auto">
             <Link
               className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/system"
+              href="/dashboard/settings"
             >
-              <BarChart3 className="h-4 w-4" />
-              시스템
+              <Settings className="h-4 w-4" />
+              설정
             </Link>
             <CustomerLogoutButton />
           </div>
@@ -97,7 +98,7 @@ export default async function DashboardPage() {
                 href="/"
               >
                 <Upload className="h-4 w-4" />
-                새 엑셀 분석
+                거래처/매출 등록
               </Link>
               <Link
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted"

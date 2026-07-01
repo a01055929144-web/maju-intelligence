@@ -16,6 +16,21 @@ export type UploadHistoryItem = {
   healthScore: number;
   createdAt: string;
 };
+export type CompanySettings = {
+  id: string;
+  name: string;
+  businessType: string;
+  ownerName: string;
+  originAddress: string;
+  status: string;
+  updatedAt: string;
+};
+export type CompanySettingsInput = {
+  businessType?: string;
+  name: string;
+  originAddress?: string;
+  ownerName?: string;
+};
 export type LeadStatus = "today" | "reviewing" | "visit-planned" | "high-probability" | "excluded" | "this-week";
 export type LeadItem = {
   id: string;
@@ -796,6 +811,118 @@ export async function getCompanyDashboardPayload(companyId?: string) {
     leads,
     uploadHistory,
     source: isProductionStoreConfigured() ? "supabase" : "sample"
+  };
+}
+
+export async function getCompanySettings(companyId?: string, fallbackName = "마주식자재"): Promise<CompanySettings> {
+  const id = companyId || getDefaultCompanyId();
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      id,
+      name: fallbackName,
+      businessType: "식자재 유통",
+      ownerName: "정두영",
+      originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+      status: "active",
+      updatedAt: "로컬 샘플"
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      name: string;
+      business_type: string | null;
+      owner_name: string | null;
+      origin_address: string | null;
+      status: string;
+      updated_at: string;
+    }>
+  >(`companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`);
+
+  const row = rows[0];
+  if (!row) {
+    return {
+      id,
+      name: fallbackName,
+      businessType: "",
+      ownerName: "",
+      originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "",
+      status: "missing",
+      updatedAt: "미생성"
+    };
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    businessType: row.business_type || "",
+    ownerName: row.owner_name || "",
+    originAddress: row.origin_address || "",
+    status: row.status,
+    updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+  };
+}
+
+export async function updateCompanySettings(companyId: string, input: CompanySettingsInput) {
+  const payload = {
+    id: companyId,
+    name: input.name.trim(),
+    business_type: input.businessType?.trim() || null,
+    owner_name: input.ownerName?.trim() || null,
+    origin_address: input.originAddress?.trim() || null,
+    status: "active",
+    updated_at: new Date().toISOString()
+  };
+
+  if (!payload.name) throw new Error("회사명은 필수입니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      company: {
+        id: companyId,
+        name: payload.name,
+        businessType: payload.business_type || "",
+        ownerName: payload.owner_name || "",
+        originAddress: payload.origin_address || "",
+        status: "active",
+        updatedAt: "로컬 샘플"
+      }
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      name: string;
+      business_type: string | null;
+      owner_name: string | null;
+      origin_address: string | null;
+      status: string;
+      updated_at: string;
+    }>
+  >("companies?on_conflict=id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([payload])
+  });
+
+  const row = rows[0];
+  return {
+    persisted: true,
+    company: {
+      id: row.id,
+      name: row.name,
+      businessType: row.business_type || "",
+      ownerName: row.owner_name || "",
+      originAddress: row.origin_address || "",
+      status: row.status,
+      updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+    }
   };
 }
 

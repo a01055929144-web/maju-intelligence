@@ -252,7 +252,7 @@ function Briefing({
     ["배송동선 내 신규리드", `${analysis.routeLeads}곳`, Route]
   ];
   const flow = [
-    ["1", "사용자 기초 등록", "회사명, 출발지 주소, 관리자 계정처럼 분석의 기준이 되는 값을 먼저 저장합니다."],
+    ["1", "회사 설정 확인", "관리자가 생성한 회사/계정으로 로그인하고, 설정에서 물류 출발지와 회사 정보를 수정합니다."],
     ["2", "거래처 정보 기입", "거래처명, 사업자번호, 배송주소, 담당자, 연락처를 마스터로 등록합니다."],
     ["3", "매출 정보 기입", "수기 입력 또는 ERP 엑셀로 일/월/분기/연 현황과 이탈 신호를 갱신합니다."]
   ] as const;
@@ -271,7 +271,7 @@ function Briefing({
             <span className="block text-primary">그다음 매출 업데이트</span>
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-            사용자 회사의 기준 정보를 먼저 등록하고, 거래처 마스터와 매출 데이터를 순서대로 쌓으면 현황, 분포도, 히스토리, 지도 시각화까지 이어집니다.
+            회사와 계정은 관리자가 먼저 생성합니다. 사용자는 로그인 후 설정에서 회사 기준값을 수정하고, 거래처 마스터와 매출 데이터를 쌓아 현황과 동선을 관리합니다.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={() => onStart("customer-master")}>
@@ -337,7 +337,7 @@ function Briefing({
           </CardHeader>
           <CardContent className="space-y-3">
             {[
-              ["사용자 기준", "회사 출발지/계정 저장"],
+              ["회사 설정", "관리자 생성 후 수정"],
               ["마스터 저장", "신규/수정 거래처를 구분"],
               ["매출 누적", "월/분기/연 단위 분석"],
               ["지도 시각화", "분포도와 히스토리 연결"],
