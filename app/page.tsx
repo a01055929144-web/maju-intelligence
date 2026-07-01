@@ -231,11 +231,14 @@ function Briefing({
     ["배송동선 내 신규리드", `${analysis.routeLeads}곳`, Route]
   ];
   const flow = [
-    ["1", "기초 등록", "거래처 마스터를 1회 등록하고 계속 보완합니다."],
-    ["2", "매출 업데이트", "ERP 매출 엑셀을 주기적으로 올려 현황을 갱신합니다."],
-    ["3", "회사 진단", "Health Score, 이탈 위험, 업종/지역 편중을 계산합니다."],
-    ["4", "영업 기획", "White Space와 추천 거래처를 다음 액션으로 정리합니다."]
-  ];
+    ["1", "사용자 기초 등록", "회사명, 출발지 주소, 관리자 계정처럼 분석의 기준이 되는 값을 먼저 저장합니다."],
+    ["2", "거래처 정보 기입", "거래처명, 사업자번호, 배송주소, 담당자, 연락처를 마스터로 등록합니다."],
+    ["3", "매출 정보 기입", "ERP 매출 엑셀을 업데이트해 일/월/분기/연 현황과 이탈 신호를 갱신합니다."]
+  ] as const;
+  const outcomes = [
+    ["현황 파악", "대표와 관리자가 회사 건강도, 매출 흐름, 이탈 위험을 바로 봅니다.", HeartPulse],
+    ["분포도와 히스토리", "거래처 위치와 방문/매출 이력을 지도 시각화로 연결합니다.", MapPin]
+  ] as const;
 
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -247,7 +250,7 @@ function Briefing({
             <span className="block text-primary">그다음 매출 업데이트</span>
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-            거래처 마스터를 한 번 등록해 기본값을 저장하고, 이후 ERP 매출 엑셀을 업데이트하면 현재 회사 상태와 다음 영업 방향을 분석합니다.
+            사용자 회사의 기준 정보를 먼저 등록하고, 거래처 마스터와 매출 엑셀을 순서대로 쌓으면 현황, 분포도, 히스토리, 지도 시각화까지 이어집니다.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={() => onStart("customer-master")}>
@@ -265,13 +268,29 @@ function Briefing({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 lg:grid-cols-3">
           {flow.map(([step, label, description]) => (
             <Card key={label} className="shadow-none">
               <CardContent className="p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-black text-white">{step}</span>
                 <p className="mt-3 font-black">{label}</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {outcomes.map(([label, description, Icon]) => (
+            <Card key={label as string} className="shadow-none">
+              <CardContent className="flex gap-4 p-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-foreground">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="font-black">{label as string}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{description as string}</p>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -297,10 +316,11 @@ function Briefing({
           </CardHeader>
           <CardContent className="space-y-3">
             {[
+              ["사용자 기준", "회사 출발지/계정 저장"],
               ["마스터 저장", "신규/수정 거래처를 구분"],
               ["매출 누적", "월/분기/연 단위 분석"],
-              ["ERP 매핑", "서로 다른 헤더명을 직접 연결"],
-              ["관리자 확인", "마지막 업데이트 시점 표시"]
+              ["지도 시각화", "분포도와 히스토리 연결"],
+              ["관리자 확인", "업데이트 시점 표시"]
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
                 <span className="font-bold">{label}</span>
@@ -390,7 +410,7 @@ function Onboarding({
           <Badge className="w-fit bg-primary/10 text-primary">AI Company Diagnosis</Badge>
           <CardTitle className="text-2xl">데이터 등록 방식 선택</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            먼저 거래처 마스터를 등록하고, 이후 매출 엑셀을 업데이트하면 분석 리포트가 계속 살아납니다.
+            사용자 기초 등록 후 거래처 정보를 저장하고, 이후 매출 엑셀을 업데이트하면 분석 리포트와 지도 기반 히스토리가 계속 살아납니다.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
