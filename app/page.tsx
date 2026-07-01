@@ -646,7 +646,7 @@ function mapMasterRowsToCustomers(rows: RawRow[], fieldMap: FieldMap): CustomerR
     monthlyRevenue: 0,
     lastOrderDays: 0,
     visitCount: 0,
-    deliveryKm: 0
+    deliveryKm: toNumber(row[fieldMap.deliveryKm || ""])
   }));
 }
 
@@ -658,6 +658,7 @@ function mapSalesRowsToCustomers(rows: RawRow[], fieldMap: FieldMap): CustomerRo
       amount: number;
       industry: string;
       lastDate: Date | null;
+      name: string;
       region: string;
       visits: number;
     }
@@ -666,12 +667,15 @@ function mapSalesRowsToCustomers(rows: RawRow[], fieldMap: FieldMap): CustomerRo
   rows.forEach((row) => {
     const customerName = getCell(row, fieldMap.customerName);
     if (!customerName) return;
+    const businessRegistrationNumber = getCell(row, fieldMap.businessRegistrationNumber).replace(/[^0-9]/g, "");
+    const customerKey = businessRegistrationNumber || customerName;
 
-    const current = grouped.get(customerName) || {
+    const current = grouped.get(customerKey) || {
       address: getCell(row, fieldMap.address),
       amount: 0,
       industry: getCell(row, fieldMap.productName) || "미분류",
       lastDate: null,
+      name: customerName,
       region: getCell(row, fieldMap.region) || extractRegion(getCell(row, fieldMap.address)),
       visits: 0
     };
@@ -682,12 +686,12 @@ function mapSalesRowsToCustomers(rows: RawRow[], fieldMap: FieldMap): CustomerRo
     if (nextDate && (!current.lastDate || nextDate > current.lastDate)) current.lastDate = nextDate;
     if (!current.address) current.address = getCell(row, fieldMap.address);
     if (!current.region) current.region = getCell(row, fieldMap.region) || extractRegion(current.address);
-    grouped.set(customerName, current);
+    grouped.set(customerKey, current);
   });
 
-  return Array.from(grouped.entries()).map(([customerName, row]) => ({
+  return Array.from(grouped.values()).map((row) => ({
     companyName: "마주식자재",
-    customerName,
+    customerName: row.name,
     region: row.region || "미분류",
     address: row.address,
     industry: row.industry,

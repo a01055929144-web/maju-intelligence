@@ -388,12 +388,13 @@ export async function saveAnalysis(
 
   const normalizedRows = rows.map((row, index) => {
     const rawRow = options.rawRows?.[index];
-    const normalizedKey = makeNormalizedKey(row);
-    return {
+    const businessRegistrationNumber = rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) : "";
+    const normalizedKey = businessRegistrationNumber || makeNormalizedKey(row);
+    const baseRow: Record<string, unknown> = {
       company_id: companyId,
       import_id: importId,
       customer_name: row.customerName,
-      business_registration_number: rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) || null : null,
+      business_registration_number: businessRegistrationNumber || null,
       representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
       opening_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.openingDate || ""]) : null,
       region: row.region,
@@ -405,10 +406,15 @@ export async function saveAnalysis(
       monthly_revenue: row.monthlyRevenue,
       last_order_days: row.lastOrderDays,
       visit_count: row.visitCount,
-      delivery_km: row.deliveryKm,
       normalized_key: normalizedKey,
       duplicate_of: null
     };
+
+    if (options.uploadType !== "sales-analysis" || row.deliveryKm > 0) {
+      baseRow.delivery_km = row.deliveryKm;
+    }
+
+    return baseRow;
   });
 
   if (normalizedRows.length) {

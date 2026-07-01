@@ -65,6 +65,17 @@ create table if not exists public.column_mappings (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.excel_mapping_presets (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  upload_type text not null,
+  preset_name text not null,
+  erp_name text,
+  mapping jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.raw_customer_rows (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -179,6 +190,7 @@ create index if not exists idx_company_members_company on public.company_members
 create index if not exists idx_uploaded_files_company_created on public.uploaded_files(company_id, created_at desc);
 create index if not exists idx_customer_imports_company_created on public.customer_imports(company_id, created_at desc);
 create index if not exists idx_column_mappings_import on public.column_mappings(import_id);
+create unique index if not exists idx_excel_mapping_presets_company_type_name on public.excel_mapping_presets(company_id, upload_type, preset_name);
 create index if not exists idx_raw_customer_rows_import on public.raw_customer_rows(import_id);
 create index if not exists idx_normalized_customers_company_key on public.normalized_customers(company_id, normalized_key);
 create unique index if not exists idx_normalized_customers_company_key_unique on public.normalized_customers(company_id, normalized_key);
@@ -196,6 +208,7 @@ alter table public.company_members enable row level security;
 alter table public.uploaded_files enable row level security;
 alter table public.customer_imports enable row level security;
 alter table public.column_mappings enable row level security;
+alter table public.excel_mapping_presets enable row level security;
 alter table public.raw_customer_rows enable row level security;
 alter table public.normalized_customers enable row level security;
 alter table public.sales_transactions enable row level security;
