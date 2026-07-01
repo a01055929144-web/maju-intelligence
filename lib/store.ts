@@ -301,7 +301,7 @@ export async function saveAnalysis(
     actorName?: string;
   } = {}
 ) {
-  const report = analyzeCompany(rows.length ? rows : sampleCustomers);
+  let report = analyzeCompany(rows.length ? rows : sampleCustomers);
   const duplicateCount = countDuplicates(rows);
   const qualityScore = estimateQualityScore(rows);
 
@@ -319,7 +319,8 @@ export async function saveAnalysis(
     };
   }
 
-  const companyId = options.companyId || (await createCompany(report.companyName || companyName));
+  const companyId = options.companyId || getDefaultCompanyId();
+  await upsertCompany(companyId, report.companyName || companyName);
 
   const files = await supabaseRequest<Array<{ id: string }>>("uploaded_files", {
     method: "POST",
@@ -398,11 +399,17 @@ export async function saveAnalysis(
   });
 
   if (normalizedRows.length) {
-    await supabaseRequest("normalized_customers", {
+    await supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
       method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation"
+      },
       body: JSON.stringify(normalizedRows)
     });
   }
+
+  const masterRows = await getNormalizedCustomersForAnalysis(companyId);
+  report = analyzeCompany(masterRows.length ? masterRows : rows);
 
   const legacyCustomerRows = rows.map((row) => ({
     company_id: companyId,
@@ -896,13 +903,52 @@ function countDuplicates(rows: CustomerRow[]) {
   return duplicates;
 }
 
-async function createCompany(name: string) {
-  const companies = await supabaseRequest<Array<{ id: string }>>("companies", {
+async function upsertCompany(companyId: string, name: string) {
+  await supabaseRequest<Array<{ id: string }>>("companies?on_conflict=id", {
     method: "POST",
-    body: JSON.stringify([{ name }])
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        id: companyId,
+        name,
+        status: "active",
+        updated_at: new Date().toISOString()
+      }
+    ])
   });
+}
 
-  return companies[0].id;
+async function getNormalizedCustomersForAnalysis(companyId: string): Promise<CustomerRow[]> {
+  const rows = await supabaseRequest<
+    Array<{
+      customer_name: string;
+      region: string | null;
+      address: string | null;
+      industry: string | null;
+      monthly_revenue: number | string | null;
+      last_order_days: number | null;
+      visit_count: number | null;
+      delivery_km: number | string | null;
+    }>
+  >(
+    `normalized_customers?select=customer_name,region,address,industry,monthly_revenue,last_order_days,visit_count,delivery_km&company_id=eq.${encodeURIComponent(
+      companyId
+    )}&order=created_at.desc&limit=5000`
+  );
+
+  return rows.map((row) => ({
+    companyName: "마주식자재",
+    customerName: row.customer_name,
+    region: row.region || "미분류",
+    address: row.address || "",
+    industry: row.industry || "미분류",
+    monthlyRevenue: Number(row.monthly_revenue || 0),
+    lastOrderDays: Number(row.last_order_days || 0),
+    visitCount: Number(row.visit_count || 0),
+    deliveryKm: Number(row.delivery_km || 0)
+  }));
 }
 
 function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {

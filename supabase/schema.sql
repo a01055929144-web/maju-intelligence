@@ -156,6 +156,7 @@ create index if not exists idx_customer_imports_company_created on public.custom
 create index if not exists idx_column_mappings_import on public.column_mappings(import_id);
 create index if not exists idx_raw_customer_rows_import on public.raw_customer_rows(import_id);
 create index if not exists idx_normalized_customers_company_key on public.normalized_customers(company_id, normalized_key);
+create unique index if not exists idx_normalized_customers_company_key_unique on public.normalized_customers(company_id, normalized_key);
 create index if not exists idx_ai_reports_company_created on public.ai_reports(company_id, created_at desc);
 create index if not exists idx_health_score_snapshots_company_created on public.health_score_snapshots(company_id, created_at desc);
 create index if not exists idx_lead_recommendations_score on public.lead_recommendations(score desc);
