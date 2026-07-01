@@ -50,6 +50,7 @@ export default function Home() {
   const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("briefing");
   const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
+  const [manualDraft, setManualDraft] = useState<RawRow>({});
   const [headers, setHeaders] = useState<string[]>([]);
   const [fieldMap, setFieldMap] = useState<FieldMap>(emptyMap);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -98,6 +99,22 @@ export default function Home() {
     setFieldMap(autoMapHeaders(nextHeaders, currentTemplate.fields));
     setUploadedFilename(file.name);
     setUsingSample(false);
+  }
+
+  function saveManualEntry() {
+    const nextHeaders = currentTemplate.fields.map((field) => field.key);
+    const nextRow = currentTemplate.fields.reduce<RawRow>((row, field) => {
+      row[field.key] = manualDraft[field.key] ?? "";
+      return row;
+    }, {});
+    const nextRows = [...rawRows, nextRow];
+
+    setRawRows(nextRows);
+    setHeaders(nextHeaders);
+    setFieldMap(createIdentityFieldMap(currentTemplate.fields));
+    setUploadedFilename(`${currentTemplate.label}-manual`);
+    setUsingSample(false);
+    setManualDraft({});
   }
 
   async function analyzeUploadedRows() {
@@ -167,6 +184,7 @@ export default function Home() {
           fieldMap={fieldMap}
           uploadType={uploadType}
           template={currentTemplate}
+          manualDraft={manualDraft}
           rawRows={rawRows}
           isAnalyzing={isAnalyzing}
           pipelineMeta={pipelineMeta}
@@ -177,7 +195,10 @@ export default function Home() {
           onUploadType={(nextType) => {
             setUploadType(nextType);
             setFieldMap(autoMapHeaders(headers, uploadTemplates[nextType].fields));
+            setManualDraft({});
           }}
+          onManualChange={setManualDraft}
+          onManualSave={saveManualEntry}
           onAnalyze={analyzeUploadedRows}
           onSample={startSampleReport}
         />
@@ -233,7 +254,7 @@ function Briefing({
   const flow = [
     ["1", "사용자 기초 등록", "회사명, 출발지 주소, 관리자 계정처럼 분석의 기준이 되는 값을 먼저 저장합니다."],
     ["2", "거래처 정보 기입", "거래처명, 사업자번호, 배송주소, 담당자, 연락처를 마스터로 등록합니다."],
-    ["3", "매출 정보 기입", "ERP 매출 엑셀을 업데이트해 일/월/분기/연 현황과 이탈 신호를 갱신합니다."]
+    ["3", "매출 정보 기입", "수기 입력 또는 ERP 엑셀로 일/월/분기/연 현황과 이탈 신호를 갱신합니다."]
   ] as const;
   const outcomes = [
     ["현황 파악", "대표와 관리자가 회사 건강도, 매출 흐름, 이탈 위험을 바로 봅니다.", HeartPulse],
@@ -250,7 +271,7 @@ function Briefing({
             <span className="block text-primary">그다음 매출 업데이트</span>
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-            사용자 회사의 기준 정보를 먼저 등록하고, 거래처 마스터와 매출 엑셀을 순서대로 쌓으면 현황, 분포도, 히스토리, 지도 시각화까지 이어집니다.
+            사용자 회사의 기준 정보를 먼저 등록하고, 거래처 마스터와 매출 데이터를 순서대로 쌓으면 현황, 분포도, 히스토리, 지도 시각화까지 이어집니다.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={() => onStart("customer-master")}>
@@ -312,7 +333,7 @@ function Briefing({
       <aside className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>업로드 후 바로 확인</CardTitle>
+            <CardTitle>등록 후 바로 확인</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {[
@@ -368,6 +389,7 @@ function Onboarding({
   fieldMap,
   uploadType,
   template,
+  manualDraft,
   rawRows,
   isAnalyzing,
   pipelineMeta,
@@ -376,6 +398,8 @@ function Onboarding({
   onFile,
   onMap,
   onUploadType,
+  onManualChange,
+  onManualSave,
   onAnalyze,
   onSample
 }: {
@@ -383,6 +407,7 @@ function Onboarding({
   fieldMap: FieldMap;
   uploadType: UploadTemplateType;
   template: { label: string; description: string; fields: readonly UploadTemplateField[] };
+  manualDraft: RawRow;
   rawRows: RawRow[];
   isAnalyzing: boolean;
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
@@ -391,10 +416,13 @@ function Onboarding({
   onFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onMap: (map: FieldMap) => void;
   onUploadType: (type: UploadTemplateType) => void;
+  onManualChange: (draft: RawRow) => void;
+  onManualSave: () => void;
   onAnalyze: () => void;
   onSample: () => void;
 }) {
   const complete = template.fields.filter((field) => field.required).every((field) => fieldMap[field.key]);
+  const manualComplete = template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim());
   const isMaster = uploadType === "customer-master";
   const uploadHint = isMaster
     ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
@@ -410,7 +438,7 @@ function Onboarding({
           <Badge className="w-fit bg-primary/10 text-primary">AI Company Diagnosis</Badge>
           <CardTitle className="text-2xl">데이터 등록 방식 선택</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            사용자 기초 등록 후 거래처 정보를 저장하고, 이후 매출 엑셀을 업데이트하면 분석 리포트와 지도 기반 히스토리가 계속 살아납니다.
+            수기로 하나씩 저장하거나 엑셀로 대량 등록할 수 있습니다. 엑셀 업로드는 등록 방법 중 하나입니다.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -438,10 +466,41 @@ function Onboarding({
             <p className="font-bold text-foreground">{template.label}에서 하는 일</p>
             <p className="mt-1">{uploadHint}</p>
           </div>
+          <div className="rounded-lg border border-border bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-black">수기 입력</p>
+                <p className="mt-1 text-sm text-muted-foreground">소량 등록이나 수정은 화면에서 바로 입력해 저장합니다.</p>
+              </div>
+              <Badge>{rawRows.length}개 대기</Badge>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {template.fields.map((field) => (
+                <label key={field.key} className="space-y-1.5">
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {field.label}
+                    {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                  </span>
+                  <input
+                    className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    inputMode={manualInputMode(field.key)}
+                    type={manualInputType(field.key)}
+                    value={String(manualDraft[field.key] ?? "")}
+                    onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
+                    placeholder={field.description || `${field.label} 입력`}
+                  />
+                </label>
+              ))}
+            </div>
+            <Button className="mt-4 w-full" onClick={onManualSave} disabled={!manualComplete}>
+              <Save size={18} />
+              수기 입력 저장
+            </Button>
+          </div>
           <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/45 p-6 text-center transition hover:bg-muted">
             <FileSpreadsheet className="mb-4 h-10 w-10 text-primary" />
-            <span className="text-base font-black">{template.label} 엑셀 파일 선택</span>
-            <span className="mt-2 text-sm text-muted-foreground">ERP마다 양식이 달라도 아래 필수 컬럼을 매핑해서 저장합니다.</span>
+            <span className="text-base font-black">{template.label} 대량 엑셀 등록</span>
+            <span className="mt-2 text-sm text-muted-foreground">대량 등록이 필요할 때 엑셀을 올리고, ERP별 다른 헤더는 오른쪽에서 매핑합니다.</span>
             <input className="sr-only" type="file" accept=".xlsx,.xls,.csv" onChange={onFile} />
           </label>
           <Button variant="outline" className="w-full" onClick={onSample}>
@@ -456,42 +515,51 @@ function Onboarding({
 
       <Card>
         <CardHeader>
-          <CardTitle>{template.label} 필수 컬럼 매핑</CardTitle>
-          <p className="text-sm text-muted-foreground">{rawRows.length ? `${rawRows.length}개 행을 불러왔습니다.` : "파일을 올리면 자동 매핑을 먼저 시도합니다."}</p>
+          <CardTitle>{template.label} 저장 대기 데이터</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {rawRows.length ? `${rawRows.length}개 행이 저장 대기 중입니다.` : "수기 입력 또는 엑셀 업로드 후 저장할 데이터를 확인합니다."}
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           {isAnalyzing ? (
             <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
           ) : (
             <>
-              <div className="grid gap-3 md:grid-cols-2">
-                {template.fields.map((field) => (
-                  <label key={field.key} className="space-y-1.5">
-                    <span className="text-xs font-bold text-muted-foreground">
-                      {field.label}
-                      {field.required ? <span className="ml-1 text-destructive">*</span> : null}
-                    </span>
-                    <select
-                      className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                      value={fieldMap[field.key] || ""}
-                      onChange={(event) => onMap({ ...fieldMap, [field.key]: event.target.value })}
-                    >
-                      <option value="">컬럼 선택</option>
-                      {headers.map((header) => (
-                        <option key={header} value={header}>
-                          {header}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
+              {headers.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {template.fields.map((field) => (
+                    <label key={field.key} className="space-y-1.5">
+                      <span className="text-xs font-bold text-muted-foreground">
+                        {field.label}
+                        {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                      </span>
+                      <select
+                        className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        value={fieldMap[field.key] || ""}
+                        onChange={(event) => onMap({ ...fieldMap, [field.key]: event.target.value })}
+                      >
+                        <option value="">컬럼 선택</option>
+                        {headers.map((header) => (
+                          <option key={header} value={header}>
+                            {fieldLabelForHeader(header, template.fields)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border bg-muted/35 p-6 text-center">
+                  <p className="font-black">아직 저장 대기 데이터가 없습니다.</p>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">왼쪽에서 수기로 입력해 저장하거나, 엑셀을 올리면 이곳에서 저장 전 데이터를 확인합니다.</p>
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <Check className={complete || usingSample ? "h-4 w-4 text-primary" : "h-4 w-4 text-muted-foreground"} />
-                  {complete ? "필수 컬럼 매핑 완료" : `${template.label} 필수 컬럼을 연결하면 저장/업데이트할 수 있습니다.`}
+                  {complete ? "저장 준비 완료" : `${template.label} 데이터를 입력하거나 필수 컬럼을 연결하면 저장/업데이트할 수 있습니다.`}
                 </span>
-                <Button onClick={onAnalyze} disabled={!complete && !usingSample}>
+                <Button onClick={onAnalyze} disabled={rawRows.length === 0 && !usingSample}>
                   업데이트 후 리포트 갱신
                   <ArrowRight size={18} />
                 </Button>
@@ -802,6 +870,29 @@ function autoMapHeaders(headers: string[], fields: readonly UploadTemplateField[
     if (matched) map[field.key] = matched;
     return map;
   }, {});
+}
+
+function createIdentityFieldMap(fields: readonly UploadTemplateField[]): FieldMap {
+  return fields.reduce<FieldMap>((map, field) => {
+    map[field.key] = field.key;
+    return map;
+  }, {});
+}
+
+function fieldLabelForHeader(header: string, fields: readonly UploadTemplateField[]) {
+  return fields.find((field) => field.key === header)?.label || header;
+}
+
+function manualInputType(key: string) {
+  if (key.toLowerCase().includes("date")) return "date";
+  if (["salesAmount", "quantity", "deliveryKm"].includes(key)) return "number";
+  return "text";
+}
+
+function manualInputMode(key: string) {
+  if (["salesAmount", "quantity", "deliveryKm"].includes(key)) return "decimal";
+  if (key.toLowerCase().includes("phone") || key.toLowerCase().includes("number")) return "numeric";
+  return "text";
 }
 
 function getCell(row: RawRow, key?: string) {
