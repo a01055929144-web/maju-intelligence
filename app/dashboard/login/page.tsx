@@ -12,15 +12,14 @@ export default function CustomerLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function login(nextEmail = email, nextPassword = password) {
     setLoading(true);
     setError("");
 
     const response = await fetch("/api/customer/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email: nextEmail, password: nextPassword })
     });
 
     setLoading(false);
@@ -33,6 +32,19 @@ export default function CustomerLoginPage() {
     window.location.href = "/dashboard";
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await login();
+  }
+
+  async function handleDemoLogin() {
+    const demoEmail = "owner@maju.local";
+    const demoPassword = "maju-owner-2026";
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    await login(demoEmail, demoPassword);
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <Card className="w-full max-w-md">
@@ -42,7 +54,9 @@ export default function CustomerLoginPage() {
             MAJU Company
           </Badge>
           <CardTitle className="text-2xl">고객사 로그인</CardTitle>
-          <p className="text-sm leading-6 text-muted-foreground">대표와 팀원이 자기 회사의 AI 진단 리포트만 확인하는 화면입니다.</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            관리자가 생성한 고객사 계정으로 로그인합니다. 데모에서는 아래 기본 계정으로 바로 확인할 수 있습니다.
+          </p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -65,9 +79,17 @@ export default function CustomerLoginPage() {
               />
             </label>
             {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
+            <div className="rounded-md border border-border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
+              <p className="font-bold text-foreground">데모 고객사 계정</p>
+              <p>이메일: owner@maju.local</p>
+              <p>비밀번호: maju-owner-2026</p>
+            </div>
             <Button className="w-full" disabled={loading}>
               {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
               로그인
+            </Button>
+            <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleDemoLogin}>
+              데모 계정으로 로그인
             </Button>
           </form>
         </CardContent>
@@ -75,4 +97,3 @@ export default function CustomerLoginPage() {
     </main>
   );
 }
-
