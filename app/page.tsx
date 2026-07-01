@@ -24,10 +24,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
-import { CustomerRow, RequiredFieldKey, requiredFields, sampleCustomers } from "@/lib/sample-data";
+import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
 
 type RawRow = Record<string, string | number | boolean | null | undefined>;
-type FieldMap = Partial<Record<RequiredFieldKey, string>>;
+type FieldMap = Record<string, string>;
 type PipelineStatus = "pending" | "running" | "done" | "error";
 type PipelineStep = {
   key: string;
@@ -48,6 +48,7 @@ const initialPipelineSteps: PipelineStep[] = [
 
 export default function Home() {
   const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("briefing");
+  const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [fieldMap, setFieldMap] = useState<FieldMap>(emptyMap);
@@ -59,6 +60,7 @@ export default function Home() {
   const [pipelineMeta, setPipelineMeta] = useState({ rows: sampleCustomers.length, qualityScore: 100, persisted: false });
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
+  const currentTemplate = uploadTemplates[uploadType];
 
   function startSampleReport() {
     setUsingSample(true);
@@ -87,23 +89,13 @@ export default function Home() {
 
     setRawRows(json);
     setHeaders(nextHeaders);
-    setFieldMap(autoMapHeaders(nextHeaders));
+    setFieldMap(autoMapHeaders(nextHeaders, currentTemplate.fields));
     setUploadedFilename(file.name);
     setUsingSample(false);
   }
 
   async function analyzeUploadedRows() {
-    const mapped = rawRows.map((row) => ({
-      companyName: "업로드 고객사",
-      customerName: String(row[fieldMap.customerName || ""] || ""),
-      region: String(row[fieldMap.region || ""] || ""),
-      address: String(row[fieldMap.address || ""] || ""),
-      industry: String(row[fieldMap.industry || ""] || ""),
-      monthlyRevenue: Number(row[fieldMap.monthlyRevenue || ""] || 0),
-      lastOrderDays: Number(row[fieldMap.lastOrderDays || ""] || 0),
-      visitCount: Number(row[fieldMap.visitCount || ""] || 0),
-      deliveryKm: Number(row[fieldMap.deliveryKm || ""] || 0)
-    }));
+    const mapped = uploadType === "sales-analysis" ? mapSalesRowsToCustomers(rawRows, fieldMap) : mapMasterRowsToCustomers(rawRows, fieldMap);
 
     const nextRows = mapped.length ? mapped : sampleCustomers;
     setCustomers(nextRows);
@@ -131,7 +123,8 @@ export default function Home() {
         companyName: nextRows[0]?.companyName || "업로드 고객사",
         originalFilename: nextFilename,
         rawRows: nextRawRows,
-        rows: nextRows
+        rows: nextRows,
+        uploadType
       })
     }).catch(() => null);
 
@@ -166,6 +159,8 @@ export default function Home() {
         <Onboarding
           headers={headers}
           fieldMap={fieldMap}
+          uploadType={uploadType}
+          template={currentTemplate}
           rawRows={rawRows}
           isAnalyzing={isAnalyzing}
           pipelineMeta={pipelineMeta}
@@ -173,6 +168,10 @@ export default function Home() {
           usingSample={usingSample}
           onFile={handleFile}
           onMap={setFieldMap}
+          onUploadType={(nextType) => {
+            setUploadType(nextType);
+            setFieldMap(autoMapHeaders(headers, uploadTemplates[nextType].fields));
+          }}
           onAnalyze={analyzeUploadedRows}
           onSample={startSampleReport}
         />
@@ -293,6 +292,8 @@ function Briefing({ analysis, onStart, onSample }: { analysis: AnalysisResult; o
 function Onboarding({
   headers,
   fieldMap,
+  uploadType,
+  template,
   rawRows,
   isAnalyzing,
   pipelineMeta,
@@ -300,11 +301,14 @@ function Onboarding({
   usingSample,
   onFile,
   onMap,
+  onUploadType,
   onAnalyze,
   onSample
 }: {
   headers: string[];
   fieldMap: FieldMap;
+  uploadType: UploadTemplateType;
+  template: { label: string; description: string; fields: readonly UploadTemplateField[] };
   rawRows: RawRow[];
   isAnalyzing: boolean;
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
@@ -312,23 +316,41 @@ function Onboarding({
   usingSample: boolean;
   onFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onMap: (map: FieldMap) => void;
+  onUploadType: (type: UploadTemplateType) => void;
   onAnalyze: () => void;
   onSample: () => void;
 }) {
-  const complete = requiredFields.every((field) => fieldMap[field.key]);
+  const complete = template.fields.filter((field) => field.required).every((field) => fieldMap[field.key]);
 
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.85fr_1.15fr]">
       <Card>
         <CardHeader>
           <Badge className="w-fit bg-primary/10 text-primary">AI Company Diagnosis</Badge>
-          <CardTitle className="text-2xl">엑셀 업로드 후 30초 진단</CardTitle>
+          <CardTitle className="text-2xl">엑셀 업로드 방식 선택</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-3">
+            {Object.entries(uploadTemplates).map(([key, item]) => (
+              <button
+                key={key}
+                className={
+                  uploadType === key
+                    ? "rounded-lg border border-primary bg-primary/5 p-4 text-left"
+                    : "rounded-lg border border-border bg-white p-4 text-left transition hover:bg-muted/50"
+                }
+                onClick={() => onUploadType(key as UploadTemplateType)}
+                type="button"
+              >
+                <span className="block font-black">{item.label}</span>
+                <span className="mt-1 block text-sm leading-6 text-muted-foreground">{item.description}</span>
+              </button>
+            ))}
+          </div>
           <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/45 p-6 text-center transition hover:bg-muted">
             <FileSpreadsheet className="mb-4 h-10 w-10 text-primary" />
-            <span className="text-base font-black">거래처 엑셀 파일 선택</span>
-            <span className="mt-2 text-sm text-muted-foreground">xlsx, xls, csv 첫 번째 시트를 읽습니다.</span>
+            <span className="text-base font-black">{template.label} 엑셀 파일 선택</span>
+            <span className="mt-2 text-sm text-muted-foreground">ERP마다 양식이 달라도 아래 필수 컬럼을 매핑해서 적재합니다.</span>
             <input className="sr-only" type="file" accept=".xlsx,.xls,.csv" onChange={onFile} />
           </label>
           <Button variant="outline" className="w-full" onClick={onSample}>
@@ -336,14 +358,14 @@ function Onboarding({
           </Button>
           <div className="rounded-md bg-white p-4 text-sm text-muted-foreground">
             <p className="font-bold text-foreground">v1 저장 방식</p>
-            <p className="mt-1 leading-6">첫 버전은 브라우저 상태에서 분석합니다. Supabase/SQLite 저장, 좌표 변환, 지도 HeatMap은 v2 단계로 분리했습니다.</p>
+            <p className="mt-1 leading-6">거래처 기본정보는 회사 마스터로 유지하고, 새 엑셀은 기존 거래처 업데이트와 신규 거래처 추가에 사용합니다.</p>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>필수 컬럼 매핑</CardTitle>
+          <CardTitle>{template.label} 필수 컬럼 매핑</CardTitle>
           <p className="text-sm text-muted-foreground">{rawRows.length ? `${rawRows.length}개 행을 불러왔습니다.` : "파일을 올리면 자동 매핑을 먼저 시도합니다."}</p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -352,9 +374,12 @@ function Onboarding({
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-2">
-                {requiredFields.map((field) => (
+                {template.fields.map((field) => (
                   <label key={field.key} className="space-y-1.5">
-                    <span className="text-xs font-bold text-muted-foreground">{field.label}</span>
+                    <span className="text-xs font-bold text-muted-foreground">
+                      {field.label}
+                      {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                    </span>
                     <select
                       className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                       value={fieldMap[field.key] || ""}
@@ -373,10 +398,10 @@ function Onboarding({
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <Check className={complete || usingSample ? "h-4 w-4 text-primary" : "h-4 w-4 text-muted-foreground"} />
-                  {complete ? "필수 컬럼 매핑 완료" : "필수 컬럼을 매핑하면 업로드 데이터로 분석합니다."}
+                  {complete ? "필수 컬럼 매핑 완료" : "필수 컬럼을 매핑하면 누적 데이터에 업데이트합니다."}
                 </span>
                 <Button onClick={onAnalyze} disabled={!complete && !usingSample}>
-                  AI 리포트 생성
+                  업데이트 후 리포트 갱신
                   <ArrowRight size={18} />
                 </Button>
               </div>
@@ -611,8 +636,70 @@ function BigNumber({ value, label }: { value: string; label: string }) {
   );
 }
 
-function autoMapHeaders(headers: string[]): FieldMap {
-  return requiredFields.reduce<FieldMap>((map, field) => {
+function mapMasterRowsToCustomers(rows: RawRow[], fieldMap: FieldMap): CustomerRow[] {
+  return rows.map((row) => ({
+    companyName: "마주식자재",
+    customerName: getCell(row, fieldMap.customerName),
+    region: getCell(row, fieldMap.region) || extractRegion(getCell(row, fieldMap.address)),
+    address: getCell(row, fieldMap.address),
+    industry: getCell(row, fieldMap.industry) || "미분류",
+    monthlyRevenue: 0,
+    lastOrderDays: 0,
+    visitCount: 0,
+    deliveryKm: 0
+  }));
+}
+
+function mapSalesRowsToCustomers(rows: RawRow[], fieldMap: FieldMap): CustomerRow[] {
+  const grouped = new Map<
+    string,
+    {
+      address: string;
+      amount: number;
+      industry: string;
+      lastDate: Date | null;
+      region: string;
+      visits: number;
+    }
+  >();
+
+  rows.forEach((row) => {
+    const customerName = getCell(row, fieldMap.customerName);
+    if (!customerName) return;
+
+    const current = grouped.get(customerName) || {
+      address: getCell(row, fieldMap.address),
+      amount: 0,
+      industry: getCell(row, fieldMap.productName) || "미분류",
+      lastDate: null,
+      region: getCell(row, fieldMap.region) || extractRegion(getCell(row, fieldMap.address)),
+      visits: 0
+    };
+    const nextDate = parseExcelDate(row[fieldMap.salesDate || ""]);
+
+    current.amount += toNumber(row[fieldMap.salesAmount || ""]);
+    current.visits += 1;
+    if (nextDate && (!current.lastDate || nextDate > current.lastDate)) current.lastDate = nextDate;
+    if (!current.address) current.address = getCell(row, fieldMap.address);
+    if (!current.region) current.region = getCell(row, fieldMap.region) || extractRegion(current.address);
+    grouped.set(customerName, current);
+  });
+
+  return Array.from(grouped.entries()).map(([customerName, row]) => ({
+    companyName: "마주식자재",
+    customerName,
+    region: row.region || "미분류",
+    address: row.address,
+    industry: row.industry,
+    monthlyRevenue: Math.round(row.amount),
+    lastOrderDays: row.lastDate ? daysSince(row.lastDate) : 0,
+    visitCount: row.visits,
+    deliveryKm: 0
+  }));
+}
+
+function autoMapHeaders(headers: string[], fields: readonly UploadTemplateField[]): FieldMap {
+  return fields.reduce<FieldMap>((map, field) => {
     const matched = headers.find((header) => {
       const normalized = header.toLowerCase().replace(/\s/g, "");
       return field.aliases.some((alias) => normalized.includes(alias.toLowerCase().replace(/\s/g, "")));
@@ -620,6 +707,38 @@ function autoMapHeaders(headers: string[]): FieldMap {
     if (matched) map[field.key] = matched;
     return map;
   }, {});
+}
+
+function getCell(row: RawRow, key?: string) {
+  return key ? String(row[key] || "").trim() : "";
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === "number") return value;
+  const parsed = Number(String(value || "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseExcelDate(value: unknown) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    epoch.setUTCDate(epoch.getUTCDate() + value);
+    return epoch;
+  }
+  const date = new Date(String(value).replace(/\./g, "-").replace(/\//g, "-"));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysSince(date: Date) {
+  const diff = Date.now() - date.getTime();
+  return Math.max(0, Math.round(diff / (1000 * 60 * 60 * 24)));
+}
+
+function extractRegion(address: string) {
+  const tokens = address.split(/\s+/).filter(Boolean);
+  return tokens.find((token) => token.endsWith("구") || token.endsWith("동") || token.endsWith("시")) || tokens[1] || "미분류";
 }
 
 function resetPipelineSteps() {

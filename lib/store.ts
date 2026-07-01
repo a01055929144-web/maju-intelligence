@@ -208,6 +208,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("companies", "고객사", "등록된 고객사 수입니다."),
     countTableRows("customer_imports", "업로드/분석 이력", "엑셀 업로드 후 생성되는 import job입니다."),
     countTableRows("normalized_customers", "정제 거래처", "정제되어 저장된 거래처 row입니다."),
+    countTableRows("sales_transactions", "매출 거래내역", "ERP 엑셀에서 적재된 일자/품목/금액 단위 거래내역입니다."),
     countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
@@ -299,6 +300,7 @@ export async function saveAnalysis(
     columnMapping?: ColumnMapping;
     originalFilename?: string;
     actorName?: string;
+    uploadType?: "customer-master" | "sales-analysis";
   } = {}
 ) {
   let report = analyzeCompany(rows.length ? rows : sampleCustomers);
@@ -340,7 +342,7 @@ export async function saveAnalysis(
       {
         company_id: companyId,
         uploaded_file_id: uploadedFileId,
-        source: "excel",
+        source: options.uploadType || "excel",
         row_count: rows.length,
         status: "completed",
         quality_score: qualityScore,
@@ -380,14 +382,25 @@ export async function saveAnalysis(
     });
   }
 
-  const normalizedRows = rows.map((row) => {
+  if (options.uploadType === "sales-analysis" && options.rawRows?.length) {
+    await saveSalesTransactions(companyId, importId, options.rawRows, options.columnMapping || {});
+  }
+
+  const normalizedRows = rows.map((row, index) => {
+    const rawRow = options.rawRows?.[index];
     const normalizedKey = makeNormalizedKey(row);
     return {
       company_id: companyId,
       import_id: importId,
       customer_name: row.customerName,
+      business_registration_number: rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) || null : null,
+      representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
+      opening_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.openingDate || ""]) : null,
       region: row.region,
       address: row.address,
+      phone: rawRow ? getRawCell(rawRow, options.columnMapping?.phone) || null : null,
+      email: rawRow ? getRawCell(rawRow, options.columnMapping?.email) || null : null,
+      birth_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.birthDate || ""]) : null,
       industry: row.industry,
       monthly_revenue: row.monthlyRevenue,
       last_order_days: row.lastOrderDays,
@@ -870,6 +883,36 @@ export async function getUploadHistory(companyId?: string): Promise<UploadHistor
   }));
 }
 
+async function saveSalesTransactions(companyId: string, importId: string, rawRows: RawUploadRow[], columnMapping: ColumnMapping) {
+  const salesRows = rawRows
+    .map((row) => {
+      const customerName = getRawCell(row, columnMapping.customerName);
+      const businessRegistrationNumber = normalizeBusinessNumber(getRawCell(row, columnMapping.businessRegistrationNumber));
+      const customerKey = businessRegistrationNumber || makeCustomerKey(customerName, getRawCell(row, columnMapping.address));
+
+      return {
+        company_id: companyId,
+        import_id: importId,
+        customer_key: customerKey,
+        customer_name: customerName,
+        business_registration_number: businessRegistrationNumber || null,
+        sales_date: toPostgresDate(row[columnMapping.salesDate || ""]),
+        product_name: getRawCell(row, columnMapping.productName) || null,
+        quantity: toNumeric(row[columnMapping.quantity || ""]),
+        sales_amount: toNumeric(row[columnMapping.salesAmount || ""]),
+        raw_data: row
+      };
+    })
+    .filter((row) => row.customer_name && row.sales_amount > 0);
+
+  if (!salesRows.length) return;
+
+  await supabaseRequest("sales_transactions", {
+    method: "POST",
+    body: JSON.stringify(salesRows)
+  });
+}
+
 function estimateQualityScore(rows: CustomerRow[]) {
   if (!rows.length) return 0;
 
@@ -881,6 +924,44 @@ function estimateQualityScore(rows: CustomerRow[]) {
   );
 
   return Math.round((filled / total) * 100);
+}
+
+function getRawCell(row: RawUploadRow, key?: string) {
+  return key ? String(row[key] || "").trim() : "";
+}
+
+function normalizeBusinessNumber(value: string) {
+  return value.replace(/[^0-9]/g, "");
+}
+
+function makeCustomerKey(customerName: string, address: string) {
+  return `${customerName}-${address}`
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replace(/[^0-9a-zA-Z가-힣-]/g, "");
+}
+
+function toNumeric(value: unknown) {
+  if (typeof value === "number") return value;
+  const parsed = Number(String(value || "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toPostgresDate(value: unknown) {
+  const date = parseUploadDate(value);
+  return date ? date.toISOString().slice(0, 10) : null;
+}
+
+function parseUploadDate(value: unknown) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    epoch.setUTCDate(epoch.getUTCDate() + value);
+    return epoch;
+  }
+  const date = new Date(String(value).replace(/\./g, "-").replace(/\//g, "-"));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function makeNormalizedKey(row: CustomerRow) {

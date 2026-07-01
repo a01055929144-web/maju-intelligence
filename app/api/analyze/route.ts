@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
     originalFilename?: string;
     rawRows?: RawUploadRow[];
     rows?: CustomerRow[];
+    uploadType?: "customer-master" | "sales-analysis";
   } | null;
   const customerSession = getCustomerSession();
   const rows = body?.rows?.length ? body.rows : sampleCustomers;
@@ -19,7 +20,8 @@ export async function POST(request: NextRequest) {
     columnMapping: body?.columnMapping,
     companyId: customerSession?.companyId,
     originalFilename: body?.originalFilename,
-    rawRows: body?.rawRows
+    rawRows: body?.rawRows,
+    uploadType: body?.uploadType
   });
 
   return NextResponse.json({

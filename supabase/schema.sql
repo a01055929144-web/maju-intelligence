@@ -79,15 +79,40 @@ create table if not exists public.normalized_customers (
   company_id uuid not null references public.companies(id) on delete cascade,
   import_id uuid not null references public.customer_imports(id) on delete cascade,
   customer_name text not null,
+  business_registration_number text,
+  representative_name text,
+  opening_date date,
   region text,
   address text,
+  phone text,
+  email text,
+  birth_date date,
   industry text,
   monthly_revenue numeric not null default 0,
   last_order_days integer not null default 0,
   visit_count integer not null default 0,
   delivery_km numeric not null default 0,
+  business_status text,
+  business_status_checked_at timestamptz,
+  business_license_file_url text,
+  bank_account_file_url text,
   normalized_key text not null,
   duplicate_of uuid references public.normalized_customers(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.sales_transactions (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  import_id uuid not null references public.customer_imports(id) on delete cascade,
+  customer_key text not null,
+  customer_name text not null,
+  business_registration_number text,
+  sales_date date,
+  product_name text,
+  quantity numeric,
+  sales_amount numeric not null default 0,
+  raw_data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
@@ -157,6 +182,8 @@ create index if not exists idx_column_mappings_import on public.column_mappings(
 create index if not exists idx_raw_customer_rows_import on public.raw_customer_rows(import_id);
 create index if not exists idx_normalized_customers_company_key on public.normalized_customers(company_id, normalized_key);
 create unique index if not exists idx_normalized_customers_company_key_unique on public.normalized_customers(company_id, normalized_key);
+create index if not exists idx_sales_transactions_company_date on public.sales_transactions(company_id, sales_date desc);
+create index if not exists idx_sales_transactions_customer_key on public.sales_transactions(company_id, customer_key);
 create index if not exists idx_ai_reports_company_created on public.ai_reports(company_id, created_at desc);
 create index if not exists idx_health_score_snapshots_company_created on public.health_score_snapshots(company_id, created_at desc);
 create index if not exists idx_lead_recommendations_score on public.lead_recommendations(score desc);
@@ -171,6 +198,7 @@ alter table public.customer_imports enable row level security;
 alter table public.column_mappings enable row level security;
 alter table public.raw_customer_rows enable row level security;
 alter table public.normalized_customers enable row level security;
+alter table public.sales_transactions enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.health_score_snapshots enable row level security;
 alter table public.lead_recommendations enable row level security;

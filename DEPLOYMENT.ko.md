@@ -89,6 +89,7 @@ CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 - `CUSTOMER_PASSWORD`도 임시 비밀번호가 아닌 운영용 비밀번호로 변경합니다.
 - `CUSTOMER_COMPANY_ID`는 고객 로그인 세션이 조회할 Supabase `companies.id`와 일치해야 합니다.
 - 기존 DB에 이미 `schema.sql`을 실행했다면 `supabase/migrations/20260701_customer_master_upsert.sql`도 한 번 실행합니다.
+- 매출 엑셀 업로드와 사업자 기본정보 확장을 적용하려면 `supabase/migrations/20260701_sales_transactions.sql`도 한 번 실행합니다.
 - Supabase RLS 정책은 v1 MVP 기준으로 켜져 있으며, 실제 고객사별 권한 분리는 Phase 2에서 더 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 
