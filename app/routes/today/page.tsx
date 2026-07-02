@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarCheck, Clock, Navigation, Target, Truck } from "lucide-react";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 import { KakaoMapMarker } from "@/components/kakao-address-map";
 import { RoutePlanWorkspace } from "@/components/route-plan-workspace";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
@@ -17,23 +18,22 @@ export default async function TodayRoutePage() {
   const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
-            <h1 className="text-xl font-black text-slate-950">오늘의 영업·배송 코스</h1>
-            <p className="mt-1 text-sm font-medium text-slate-500">방문 관리와 배송 경유 계산</p>
-          </div>
-          <Link
-            className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            href={customerSession ? "/dashboard" : "/admin"}
-          >
-            돌아가기
-          </Link>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-7xl space-y-4 px-4 py-5 sm:px-6">
+    <CustomerAppShell
+      active="routes"
+      companyName={customerSession?.companyName || "관리자 미리보기"}
+      rightAction={
+        <Link
+          className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
+          href={customerSession ? "/dashboard" : "/admin"}
+        >
+          돌아가기
+        </Link>
+      }
+      subtitle="방문 관리, 배송 차량 배정, 티맵 경유 도로 계산"
+      title="오늘의 영업·배송 코스"
+      userName={customerSession?.name || adminSession?.email || "관리자"}
+    >
+      <section className="mx-auto max-w-[1680px] space-y-4">
         <div className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 md:grid-cols-5">
           <Metric icon={CalendarCheck} label="영업 방문 후보" value={`${routePlan.totalStops}곳`} />
           <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
@@ -44,7 +44,7 @@ export default async function TodayRoutePage() {
 
         <RoutePlanWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />
       </section>
-    </main>
+    </CustomerAppShell>
   );
 }
 
