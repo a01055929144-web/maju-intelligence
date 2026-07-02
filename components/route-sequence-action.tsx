@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { GitBranch, Loader2 } from "lucide-react";
+import { KakaoAddressMap, KakaoMapMarker, KakaoRoutePoint } from "@/components/kakao-address-map";
 import { Button } from "@/components/ui/button";
 
 type RouteSequenceActionProps = {
@@ -19,6 +20,9 @@ type RouteLeg = {
 
 type RouteSequence = {
   legs: RouteLeg[];
+  originAddress: string;
+  path: KakaoRoutePoint[];
+  stops: string[];
   totalDistanceKm: number;
   totalDurationMinutes: number;
 };
@@ -28,6 +32,7 @@ export function RouteSequenceAction({ destinations }: RouteSequenceActionProps) 
   const [message, setMessage] = useState("");
   const [sequence, setSequence] = useState<RouteSequence | null>(null);
   const uniqueDestinations = useMemo(() => Array.from(new Set(destinations.filter(Boolean))).slice(0, 10), [destinations]);
+  const routeMarkers = useMemo(() => (sequence ? createRouteMarkers(sequence) : []), [sequence]);
 
   async function calculateSequence() {
     if (!uniqueDestinations.length) return;
@@ -83,6 +88,14 @@ export function RouteSequenceAction({ destinations }: RouteSequenceActionProps) 
               </div>
             ))}
           </div>
+          {sequence.path.length ? (
+            <div className="pt-2">
+              <p className="mb-2 text-xs font-black text-muted-foreground">티맵 실제 도로 경로</p>
+              <KakaoAddressMap markers={routeMarkers} routePath={sequence.path} showList={false} />
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-amber-700">티맵 도로 좌표가 없어 구간 거리/시간만 표시합니다.</p>
+          )}
         </div>
       ) : null}
     </div>
@@ -99,4 +112,27 @@ function formatMinutes(minutes: number) {
 function shortenAddress(address: string) {
   const words = address.split(/\s+/).filter(Boolean);
   return words.slice(0, 3).join(" ") || address;
+}
+
+function createRouteMarkers(sequence: RouteSequence): KakaoMapMarker[] {
+  const stopMarkers = sequence.stops.map((address, index) => ({
+    address,
+    label: String(index + 1),
+    name: `경유 ${index + 1}`,
+    tone: "customer" as const,
+    x: 24 + ((index * 13) % 58),
+    y: 28 + ((index * 17) % 44)
+  }));
+
+  return [
+    {
+      address: sequence.originAddress,
+      label: "출발",
+      name: "물류 출발지",
+      tone: "origin",
+      x: 72,
+      y: 62
+    },
+    ...stopMarkers
+  ];
 }
