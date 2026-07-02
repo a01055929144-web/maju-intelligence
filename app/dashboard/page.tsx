@@ -18,7 +18,7 @@ import {
   Upload
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
@@ -58,33 +58,16 @@ export default async function DashboardPage() {
   ] as const;
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-black text-white">M</span>
-              <div>
-                <p className="text-sm font-black">{session.companyName}</p>
-                <p className="text-xs text-muted-foreground">MAJU Intelligence</p>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto">
-            <Link
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-semibold transition hover:bg-muted"
-              href="/dashboard/settings"
-            >
-              <Settings className="h-4 w-4" />
-              설정
-            </Link>
-            <CustomerLogoutButton />
-          </div>
-        </div>
-      </header>
-
-      <section className="border-b border-border bg-white">
-        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_360px] lg:items-stretch">
+    <CustomerAppShell
+      active="dashboard"
+      companyName={session.companyName}
+      rightAction={<CustomerLogoutButton />}
+      subtitle="거래처 히스토리, 배송 동선, 신규 리드 현황"
+      title="대시보드"
+      userName={session.name}
+    >
+      <section className="mx-auto max-w-[1680px] space-y-6">
+        <div className="grid gap-6 rounded-lg border border-border bg-white p-6 shadow-sm lg:grid-cols-[1fr_360px] lg:items-stretch">
           <div className="min-w-0">
             <Badge className="mb-4 bg-primary/10 text-primary">MAJU 운영 지휘판</Badge>
             <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-4xl">
@@ -145,9 +128,7 @@ export default async function DashboardPage() {
             </p>
           </div>
         </div>
-      </section>
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Metric icon={Building2} label="현재 거래처" value={`${briefing.currentCustomers}개`} />
           <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
@@ -301,7 +282,7 @@ export default async function DashboardPage() {
           ))}
         </div>
       </section>
-    </main>
+    </CustomerAppShell>
   );
 }
 
