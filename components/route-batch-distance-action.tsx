@@ -6,10 +6,11 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type RouteBatchDistanceActionProps = {
+  readonly buttonLabel?: string;
   readonly destinations: readonly string[];
 };
 
-export function RouteBatchDistanceAction({ destinations }: RouteBatchDistanceActionProps) {
+export function RouteBatchDistanceAction({ buttonLabel = "전체 거리 계산", destinations }: RouteBatchDistanceActionProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -43,7 +44,7 @@ export function RouteBatchDistanceAction({ destinations }: RouteBatchDistanceAct
     <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" className="gap-2" disabled={!uniqueDestinations.length || isLoading} onClick={calculateAll}>
         <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-        {isLoading ? "전체 계산 중" : "전체 거리 계산"}
+        {isLoading ? "전체 계산 중" : buttonLabel}
       </Button>
       {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
     </div>

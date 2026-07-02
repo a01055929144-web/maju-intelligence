@@ -24,8 +24,8 @@ export default async function TodayRoutePage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
           <div>
             <Badge className="mb-2 bg-primary/10 text-primary">Route Intelligence</Badge>
-            <h1 className="text-2xl font-black">오늘의 방문 계획</h1>
-            <p className="mt-1 text-sm text-muted-foreground">방문 예정, 오늘 추천, 계약 가능 리드를 지역별로 묶었습니다.</p>
+            <h1 className="text-2xl font-black">오늘의 영업·배송 코스</h1>
+            <p className="mt-1 text-sm text-muted-foreground">영업 방문 관리와 배송 경유 계산을 별도 코스로 나눠 확인합니다.</p>
           </div>
           <Link
             className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
@@ -38,10 +38,10 @@ export default async function TodayRoutePage() {
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-5">
-          <Metric icon={CalendarCheck} label="오늘 방문" value={`${routePlan.totalStops}곳`} />
+          <Metric icon={CalendarCheck} label="영업 방문 후보" value={`${routePlan.totalStops}곳`} />
           <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
-          <Metric icon={Navigation} label="예상 이동거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-          <Metric icon={Clock} label="예상 이동시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
+          <Metric icon={Navigation} label="배송 예상거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+          <Metric icon={Clock} label="배송 예상시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
           <Metric icon={Route} label="지역 묶음" value={`${routePlan.groups.length}개`} />
         </div>
 

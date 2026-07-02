@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MapPin, Navigation, SlidersHorizontal } from "lucide-react";
+import { LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
@@ -16,10 +16,18 @@ type RoutePlanWorkspaceProps = {
   readonly routePlan: RoutePlan;
 };
 
-type ViewMode = "map" | "stops" | "route";
+type CourseMode = "sales" | "delivery";
+type SalesViewMode = "map" | "stops";
+type DeliveryViewMode = "map" | "route";
+const courseOptions: Array<{ icon: LucideIcon; key: CourseMode; label: string }> = [
+  { icon: UsersRound, key: "sales", label: "영업 코스" },
+  { icon: PackageCheck, key: "delivery", label: "배송 코스" }
+];
 
 export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspaceProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("map");
+  const [courseMode, setCourseMode] = useState<CourseMode>("sales");
+  const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
+  const [deliveryViewMode, setDeliveryViewMode] = useState<DeliveryViewMode>("map");
   const [region, setRegion] = useState("all");
   const regions = useMemo(() => routePlan.groups.map((group) => group.region), [routePlan.groups]);
   const filteredGroups = useMemo(
@@ -29,6 +37,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const filteredStops = filteredGroups.flatMap((group) => group.stops);
   const destinations = filteredStops.map((stop) => stop.address || "").filter(Boolean);
   const filteredMarkers = filterMarkersForStops(mapMarkers, filteredStops, region);
+  const isSalesCourse = courseMode === "sales";
 
   return (
     <Card>
@@ -36,25 +45,37 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <CardTitle className="flex items-center gap-2">
             <Navigation className="h-5 w-5 text-primary" />
-            방문 동선 작업공간
+            코스 작업공간
           </CardTitle>
           <div className="flex flex-wrap gap-2">
-            {[
-              ["map", "지도"],
-              ["stops", "방문순서"],
-              ["route", "동선계산"]
-            ].map(([key, label]) => (
+            {courseOptions.map(({ icon: Icon, key, label }) => (
               <button
                 key={key}
-                className={`h-9 rounded-md border px-3 text-sm font-bold transition ${
-                  viewMode === key ? "border-primary bg-primary text-white" : "border-border bg-white hover:bg-muted"
+                className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
+                  courseMode === key ? "border-primary bg-primary text-white" : "border-border bg-white hover:bg-muted"
                 }`}
-                onClick={() => setViewMode(key as ViewMode)}
+                onClick={() => setCourseMode(key as CourseMode)}
                 type="button"
               >
+                <Icon className="h-4 w-4" />
                 {label}
               </button>
             ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-white p-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-black">{isSalesCourse ? "영업 코스" : "배송 코스"}</p>
+              <p className="text-xs text-muted-foreground">
+                {isSalesCourse
+                  ? "신규 리드 방문, 담당자 메모, 방문 결과 기록을 관리합니다."
+                  : "물류 출발지 기준으로 거래처까지 실제 도로 거리와 경유 경로를 계산합니다."}
+              </p>
+            </div>
+            <Badge className={isSalesCourse ? "bg-primary/10 text-primary" : "bg-accent/20 text-foreground"}>
+              {isSalesCourse ? "Sales Visit" : "Delivery Route"}
+            </Badge>
           </div>
         </div>
         <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -69,24 +90,46 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
             ))}
           </div>
         </div>
+        <div className="flex flex-wrap gap-2">
+          {isSalesCourse
+            ? ([
+                ["map", "영업 지도"],
+                ["stops", "방문 관리"]
+              ] as const).map(([key, label]) => (
+                <ViewButton key={key} active={salesViewMode === key} label={label} onClick={() => setSalesViewMode(key)} />
+              ))
+            : ([
+                ["map", "배송 지도"],
+                ["route", "경유 계산"]
+              ] as const).map(([key, label]) => (
+                <ViewButton key={key} active={deliveryViewMode === key} label={label} onClick={() => setDeliveryViewMode(key)} />
+              ))}
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {viewMode === "map" ? (
+        {isSalesCourse && salesViewMode === "map" ? (
           <div className="space-y-3">
             <KakaoAddressMap markers={filteredMarkers} />
-            <p className="text-xs font-bold text-muted-foreground">지도에는 선택한 지역의 방문 후보와 물류 출발지가 표시됩니다.</p>
+            <p className="text-xs font-bold text-muted-foreground">영업 지도에는 선택한 지역의 방문 후보 위치가 표시됩니다.</p>
           </div>
         ) : null}
 
-        {viewMode === "route" ? (
+        {!isSalesCourse && deliveryViewMode === "map" ? (
           <div className="space-y-3">
-            <RouteBatchDistanceAction destinations={destinations} />
-            <RouteSequenceAction destinations={destinations} />
+            <KakaoAddressMap markers={filteredMarkers} />
+            <p className="text-xs font-bold text-muted-foreground">배송 지도에는 물류 출발지와 거래처 배송 후보가 표시됩니다.</p>
           </div>
         ) : null}
 
-        {viewMode === "stops" ? (
+        {!isSalesCourse && deliveryViewMode === "route" ? (
+          <div className="space-y-3">
+            <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
+            <RouteSequenceAction buttonLabel="배송 경유 도로 연결" destinations={destinations} resultTitle="티맵 실제 배송 도로 경로" />
+          </div>
+        ) : null}
+
+        {isSalesCourse && salesViewMode === "stops" ? (
           <RouteStopGroups groups={filteredGroups} />
         ) : null}
 
@@ -99,6 +142,20 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function ViewButton({ active, label, onClick }: { readonly active: boolean; readonly label: string; readonly onClick: () => void }) {
+  return (
+    <button
+      className={`h-9 rounded-md border px-3 text-sm font-bold transition ${
+        active ? "border-foreground bg-foreground text-white" : "border-border bg-white hover:bg-muted"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
   );
 }
 

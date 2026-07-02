@@ -6,7 +6,9 @@ import { KakaoAddressMap, KakaoMapMarker, KakaoRoutePoint } from "@/components/k
 import { Button } from "@/components/ui/button";
 
 type RouteSequenceActionProps = {
+  readonly buttonLabel?: string;
   readonly destinations: readonly string[];
+  readonly resultTitle?: string;
 };
 
 type RouteLeg = {
@@ -27,7 +29,11 @@ type RouteSequence = {
   totalDurationMinutes: number;
 };
 
-export function RouteSequenceAction({ destinations }: RouteSequenceActionProps) {
+export function RouteSequenceAction({
+  buttonLabel = "경유 동선 연결",
+  destinations,
+  resultTitle = "티맵 실제 도로 경로"
+}: RouteSequenceActionProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [sequence, setSequence] = useState<RouteSequence | null>(null);
@@ -63,7 +69,7 @@ export function RouteSequenceAction({ destinations }: RouteSequenceActionProps) 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" className="gap-2" disabled={!uniqueDestinations.length || isLoading} onClick={calculateSequence}>
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
-          {isLoading ? "경유 계산 중" : "경유 동선 연결"}
+          {isLoading ? "경유 계산 중" : buttonLabel}
         </Button>
         {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
       </div>
@@ -90,7 +96,7 @@ export function RouteSequenceAction({ destinations }: RouteSequenceActionProps) 
           </div>
           {sequence.path.length ? (
             <div className="pt-2">
-              <p className="mb-2 text-xs font-black text-muted-foreground">티맵 실제 도로 경로</p>
+              <p className="mb-2 text-xs font-black text-muted-foreground">{resultTitle}</p>
               <KakaoAddressMap markers={routeMarkers} routePath={sequence.path} showList={false} />
             </div>
           ) : (
