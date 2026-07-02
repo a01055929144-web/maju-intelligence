@@ -18,7 +18,6 @@ type RoutePlanWorkspaceProps = {
 
 type CourseMode = "sales" | "delivery";
 type SalesViewMode = "map" | "stops";
-type DeliveryViewMode = "map" | "route";
 type DeliveryVehicle = {
   id: string;
   name: string;
@@ -245,7 +244,6 @@ const storeNamePool = [
 export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspaceProps) {
   const [courseMode, setCourseMode] = useState<CourseMode>("sales");
   const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
-  const [deliveryViewMode, setDeliveryViewMode] = useState<DeliveryViewMode>("map");
   const [vehicleId, setVehicleId] = useState("truck-1");
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [selectedStoreIdsByVehicle, setSelectedStoreIdsByVehicle] = useState<Record<string, string[]>>({});
@@ -330,12 +328,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
               ] as const).map(([key, label]) => (
                 <ViewButton key={key} active={salesViewMode === key} label={label} onClick={() => setSalesViewMode(key)} />
               ))
-            : ([
-                ["map", "배송 지도"],
-                ["route", "경유 계산"]
-              ] as const).map(([key, label]) => (
-                <ViewButton key={key} active={deliveryViewMode === key} label={label} onClick={() => setDeliveryViewMode(key)} />
-              ))}
+            : null}
         </div>
         {!isSalesCourse ? (
           <div className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-5">
@@ -381,16 +374,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
           </div>
         ) : null}
 
-        {!isSalesCourse && deliveryViewMode === "map" ? (
-          <div className="space-y-3">
-            <KakaoAddressMap markers={deliveryMarkers} />
-            <p className="text-xs font-bold text-muted-foreground">
-              배송 지도에는 {selectedVehicle?.name || "선택 차량"}이 오늘 선택한 배송지가 표시됩니다.
-            </p>
-          </div>
-        ) : null}
-
-        {!isSalesCourse && deliveryViewMode === "route" ? (
+        {!isSalesCourse ? (
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_430px]">
             <div>
               {selectedVehicle ? (
