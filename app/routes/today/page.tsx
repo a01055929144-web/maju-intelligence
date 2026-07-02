@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarCheck, MapPin, Navigation, Route, Target } from "lucide-react";
+import { CalendarCheck, Clock, MapPin, Navigation, Route, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RouteBatchDistanceAction } from "@/components/route-batch-distance-action";
 import { RouteDistanceAction } from "@/components/route-distance-action";
 import { VisitResultForm } from "@/components/visit-result-form";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
@@ -15,6 +16,7 @@ export default async function TodayRoutePage() {
   if (!customerSession && !adminSession) redirect("/dashboard/login");
 
   const routePlan = await getTodayRoutePlan(customerSession?.companyId);
+  const destinations = routePlan.groups.flatMap((group) => group.stops.map((stop) => stop.address || "").filter(Boolean));
 
   return (
     <main className="min-h-screen bg-background">
@@ -35,18 +37,21 @@ export default async function TodayRoutePage() {
       </header>
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-5">
           <Metric icon={CalendarCheck} label="오늘 방문" value={`${routePlan.totalStops}곳`} />
           <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
+          <Metric icon={Navigation} label="예상 이동거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+          <Metric icon={Clock} label="예상 이동시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
           <Metric icon={Route} label="지역 묶음" value={`${routePlan.groups.length}개`} />
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="flex items-center gap-2">
               <Navigation className="h-5 w-5 text-primary" />
               권장 방문 순서와 티맵 거리
             </CardTitle>
+            <RouteBatchDistanceAction destinations={destinations} />
           </CardHeader>
           <CardContent className="space-y-4">
             {routePlan.groups.map((group) => (
@@ -55,7 +60,8 @@ export default async function TodayRoutePage() {
                   <div>
                     <p className="text-lg font-black">{group.region}</p>
                     <p className="text-xs text-muted-foreground">
-                      {group.stops.length}곳 · 예상 월 {group.expectedRevenue.toLocaleString()}만원
+                      {group.stops.length}곳 · {group.totalDistanceKm.toLocaleString()}km · {formatMinutes(group.totalDurationMinutes)} · 예상 월{" "}
+                      {group.expectedRevenue.toLocaleString()}만원
                     </p>
                   </div>
                   <Badge className="bg-primary/10 text-primary">지역 묶음</Badge>
@@ -113,4 +119,11 @@ function Metric({ icon: Icon, label, value }: { icon: typeof CalendarCheck; labe
       </CardContent>
     </Card>
   );
+}
+
+function formatMinutes(minutes: number) {
+  if (!minutes) return "0분";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
 }

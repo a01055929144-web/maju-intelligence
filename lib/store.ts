@@ -54,11 +54,15 @@ export type RoutePlanGroup = {
   region: string;
   stops: RoutePlanStop[];
   expectedRevenue: number;
+  totalDistanceKm: number;
+  totalDurationMinutes: number;
 };
 export type RoutePlan = {
-  totalStops: number;
-  totalExpectedRevenue: number;
   groups: RoutePlanGroup[];
+  totalDistanceKm: number;
+  totalDurationMinutes: number;
+  totalExpectedRevenue: number;
+  totalStops: number;
 };
 export type VisitResult = "visited" | "interested" | "quote-requested" | "pending" | "failed";
 export type VisitTimelineItem = {
@@ -685,14 +689,18 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
     .map(([region, stops]) => ({
       region,
       stops,
-      expectedRevenue: stops.reduce((total, stop) => total + stop.expectedRevenue, 0)
+      expectedRevenue: stops.reduce((total, stop) => total + stop.expectedRevenue, 0),
+      totalDistanceKm: roundToOneDecimal(stops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
+      totalDurationMinutes: stops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
     }))
     .sort((a, b) => b.expectedRevenue - a.expectedRevenue);
 
   return {
-    totalStops: planned.length,
+    groups,
+    totalDistanceKm: roundToOneDecimal(planned.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
+    totalDurationMinutes: planned.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0),
     totalExpectedRevenue: planned.reduce((total, stop) => total + stop.expectedRevenue, 0),
-    groups
+    totalStops: planned.length
   };
 }
 
@@ -808,6 +816,10 @@ function findSampleCustomerForLead(lead: LeadItem) {
 function estimateMinutesFromKm(distanceKm?: number) {
   if (!distanceKm) return undefined;
   return Math.max(10, Math.round(distanceKm * 2.2));
+}
+
+function roundToOneDecimal(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 export async function saveVisitResult(input: {
