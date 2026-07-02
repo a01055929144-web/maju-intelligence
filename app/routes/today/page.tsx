@@ -16,6 +16,7 @@ export default async function TodayRoutePage() {
   const routePlan = await getTodayRoutePlan(customerSession?.companyId);
   const originAddress = await getCompanyOriginAddress(customerSession?.companyId);
   const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const fuelCost = estimateFuelCost(routePlan.totalDistanceKm);
 
   return (
     <CustomerAppShell
@@ -35,11 +36,11 @@ export default async function TodayRoutePage() {
     >
       <section className="mx-auto max-w-[1680px] space-y-4">
         <div className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 md:grid-cols-5">
-          <Metric icon={CalendarCheck} label="영업 방문 후보" value={`${routePlan.totalStops}곳`} />
-          <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
-          <Metric icon={Navigation} label="배송 예상거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-          <Metric icon={Clock} label="배송 예상시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-          <Metric icon={Truck} label="배송차량" value="10대" />
+          <Metric icon={Navigation} label="금일 총 km" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+          <Metric icon={Target} label="예상 주유비" value={`${fuelCost.toLocaleString()}원`} />
+          <Metric icon={Clock} label="일 배송 예정 시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
+          <Metric icon={CalendarCheck} label="주간 예상 시간" value={formatCompactMinutes(routePlan.totalDurationMinutes * 5)} />
+          <Metric icon={Truck} label="월간 예상 시간" value={formatCompactMinutes(routePlan.totalDurationMinutes * 22)} />
         </div>
 
         <RoutePlanWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />
@@ -65,6 +66,21 @@ function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function formatCompactMinutes(minutes: number) {
+  if (!minutes) return "0분";
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return formatMinutes(minutes);
+  const days = Math.floor(hours / 8);
+  const restHours = hours % 8;
+  return restHours ? `${days}일 ${restHours}시간` : `${days}일`;
+}
+
+function estimateFuelCost(distanceKm: number) {
+  const fuelPrice = 1650;
+  const fuelEfficiencyKmPerLiter = 7.5;
+  return Math.round((distanceKm / fuelEfficiencyKmPerLiter) * fuelPrice);
 }
 
 function createRouteMapMarkers(originAddress: string, stops: Array<{ address?: string; name: string; order: number }>): KakaoMapMarker[] {

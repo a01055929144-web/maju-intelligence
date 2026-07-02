@@ -253,6 +253,8 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const selectedDeliveryStoreIds = selectedStoreIdsByVehicle[vehicleId] || defaultDeliveryStoreIds;
   const selectedDeliveryStoreIdSet = useMemo(() => new Set(selectedDeliveryStoreIds), [selectedDeliveryStoreIds]);
   const deliveryStops = allDeliveryStops.filter((stop) => selectedDeliveryStoreIdSet.has(stop.id));
+  const selectedDeliveryDistanceKm = roundToOneDecimal(deliveryStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0));
+  const selectedDeliveryDurationMinutes = deliveryStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0);
   const activeStore = allDeliveryStops.find((store) => store.id === activeStoreId) || deliveryStops[0] || allDeliveryStops[0];
   const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
   const destinationsKey = destinations.join("|");
@@ -317,7 +319,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
       </CardHeader>
 
       <CardContent className="space-y-3 bg-slate-50 p-4">
-        <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:grid-cols-[360px_minmax(620px,1fr)_340px]">
           <aside className="min-w-0 border-b border-slate-200 bg-white xl:border-b-0 xl:border-r">
             <DeliveryVehicleSidebar
               onSelectVehicle={setVehicleId}
@@ -362,22 +364,28 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
               </div>
               <KakaoAddressMap mapClassName="h-[760px]" markers={unifiedMapMarkers} routePath={deliveryRoutePath} showList={false} />
             </div>
+          </section>
 
-            <div className="mt-3 grid gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="min-w-0 border-t border-slate-200 bg-white p-3 xl:border-l xl:border-t-0">
+            <RoutePeriodDashboard
+              deliveryMinutes={selectedDeliveryDurationMinutes || routePlan.totalDurationMinutes}
+              deliveryStops={deliveryStops.length}
+              fuelDistanceKm={selectedDeliveryDistanceKm || routePlan.totalDistanceKm}
+              salesStops={filteredStops.length}
+            />
+            <div className="mt-3 space-y-3">
               <div className="rounded-md border border-slate-200 bg-white p-3">
                 <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
               </div>
-              <div>
-                <RouteSequenceAction
-                  buttonLabel="배송 경유 도로 연결"
-                  destinations={destinations}
-                  onSequenceChange={setDeliverySequence}
-                  resultTitle="티맵 실제 배송 도로 경로"
-                  showMap={false}
-                />
-              </div>
+              <RouteSequenceAction
+                buttonLabel="배송 경유 도로 연결"
+                destinations={destinations}
+                onSequenceChange={setDeliverySequence}
+                resultTitle="티맵 실제 배송 도로 경로"
+                showMap={false}
+              />
             </div>
-          </section>
+          </aside>
         </div>
 
         {!filteredGroups.length ? (
@@ -653,6 +661,78 @@ function SalesLeadList({ groups }: { readonly groups: RoutePlan["groups"] }) {
   );
 }
 
+function RoutePeriodDashboard({
+  deliveryMinutes,
+  deliveryStops,
+  fuelDistanceKm,
+  salesStops
+}: {
+  readonly deliveryMinutes: number;
+  readonly deliveryStops: number;
+  readonly fuelDistanceKm: number;
+  readonly salesStops: number;
+}) {
+  const periods = [
+    { label: "일별", multiplier: 1 },
+    { label: "주별", multiplier: 5 },
+    { label: "월별", multiplier: 22 },
+    { label: "분기", multiplier: 66 },
+    { label: "연간", multiplier: 264 }
+  ];
+  const dailyFuelCost = estimateFuelCost(fuelDistanceKm);
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3">
+        <p className="text-sm font-black text-slate-950">영업·배송 대시보드</p>
+        <p className="mt-1 text-xs font-medium text-slate-500">선택한 배송지 기준 운영량을 기간별로 환산합니다.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <DashboardStat label="금일 총 km" value={`${fuelDistanceKm.toLocaleString()}km`} />
+        <DashboardStat label="예상 주유비" value={`${dailyFuelCost.toLocaleString()}원`} />
+        <DashboardStat label="배송 예정" value={formatMinutes(deliveryMinutes)} />
+        <DashboardStat label="영업 후보" value={`${salesStops}곳`} />
+      </div>
+
+      <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+        <div className="grid grid-cols-[54px_1fr_1fr_1fr] bg-slate-100 px-2 py-2 text-[11px] font-black text-slate-500">
+          <span>기간</span>
+          <span className="text-right">km</span>
+          <span className="text-right">주유비</span>
+          <span className="text-right">배송시간</span>
+        </div>
+        {periods.map((period) => {
+          const distance = Math.round(fuelDistanceKm * period.multiplier);
+          const fuelCost = dailyFuelCost * period.multiplier;
+          const minutes = deliveryMinutes * period.multiplier;
+          return (
+            <div key={period.label} className="grid grid-cols-[54px_1fr_1fr_1fr] border-t border-slate-100 px-2 py-2 text-[11px] font-bold text-slate-700">
+              <span className="font-black text-slate-950">{period.label}</span>
+              <span className="text-right">{distance.toLocaleString()}</span>
+              <span className="text-right">{fuelCost.toLocaleString()}</span>
+              <span className="text-right">{formatCompactMinutes(minutes)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-[11px] font-medium leading-5 text-slate-500">
+        주유비는 1L당 1,650원, 평균 연비 7.5km/L 가정값입니다. 실제 차량별 연비는 v2에서 차량 설정값으로 분리합니다.
+      </p>
+    </div>
+  );
+}
+
+function DashboardStat({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3">
+      <p className="text-[11px] font-black text-slate-500">{label}</p>
+      <p className="mt-1 text-base font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="grid grid-cols-[72px_1fr] gap-2">
@@ -858,9 +938,24 @@ function roundToOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function estimateFuelCost(distanceKm: number) {
+  const fuelPrice = 1650;
+  const fuelEfficiencyKmPerLiter = 7.5;
+  return Math.round((distanceKm / fuelEfficiencyKmPerLiter) * fuelPrice);
+}
+
 function formatMinutes(minutes: number) {
   if (!minutes) return "0분";
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function formatCompactMinutes(minutes: number) {
+  if (!minutes) return "0분";
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return formatMinutes(minutes);
+  const days = Math.floor(hours / 8);
+  const restHours = hours % 8;
+  return restHours ? `${days}일 ${restHours}시간` : `${days}일`;
 }

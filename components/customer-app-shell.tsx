@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -11,6 +14,8 @@ import {
   LucideIcon,
   MapPinned,
   MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Route,
   Settings,
   Sparkles
@@ -66,39 +71,52 @@ const navigationGroups: NavigationGroup[] = [
 ];
 
 export function CustomerAppShell({ active, children, companyName, rightAction, subtitle, title, userName }: CustomerAppShellProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
-      <div className="grid min-h-screen lg:grid-cols-[248px_minmax(0,1fr)]">
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-200 ${collapsed ? "lg:grid-cols-[76px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200 p-4">
-              <Link className="flex items-center gap-3" href="/dashboard">
+              <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
+              <Link className="flex min-w-0 items-center gap-3" href="/dashboard">
                 <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-700 text-sm font-black text-white">M</span>
-                <span className="min-w-0">
+                {!collapsed ? <span className="min-w-0">
                   <span className="block truncate text-sm font-black">MAJU Intelligence</span>
                   <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
-                </span>
+                </span> : null}
               </Link>
+              <button
+                aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
+                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 lg:inline-flex"
+                onClick={() => setCollapsed((value) => !value)}
+                type="button"
+              >
+                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </button>
+              </div>
             </div>
 
             <nav className="flex-1 space-y-5 overflow-auto p-3">
               {navigationGroups.map((group) => (
                 <div key={group.label}>
-                  <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p>
+                  {!collapsed ? <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p> : null}
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       const selected = active === item.active && !["AI 리포트", "관리자"].includes(item.label);
                       return (
                         <Link
                           key={`${group.label}-${item.label}`}
-                          className={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-black transition ${
+                          className={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-black transition ${collapsed ? "justify-center" : ""} ${
                             selected ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                           }`}
                           href={item.href}
+                          title={collapsed ? item.label : undefined}
                         >
                           <item.icon className={`h-4 w-4 ${selected ? "text-emerald-700" : "text-slate-400"}`} />
-                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                          {item.badge ? <Badge className="bg-emerald-100 px-1.5 py-0 text-[10px] text-emerald-800">{item.badge}</Badge> : null}
+                          {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
+                          {!collapsed && item.badge ? <Badge className="bg-emerald-100 px-1.5 py-0 text-[10px] text-emerald-800">{item.badge}</Badge> : null}
                         </Link>
                       );
                     })}
@@ -107,7 +125,7 @@ export function CustomerAppShell({ active, children, companyName, rightAction, s
               ))}
             </nav>
 
-            <div className="border-t border-slate-200 p-3">
+            {!collapsed ? <div className="border-t border-slate-200 p-3">
               <div className="rounded-md bg-slate-50 p-3">
                 <div className="flex items-center gap-2 text-xs font-black text-slate-500">
                   <HelpCircle className="h-4 w-4 text-slate-400" />
@@ -115,7 +133,7 @@ export function CustomerAppShell({ active, children, companyName, rightAction, s
                 </div>
                 <p className="mt-2 text-xs font-bold leading-5 text-slate-500">데이터 등록, 배송 경로, AI 리포트 설정을 한 곳에서 관리합니다.</p>
               </div>
-            </div>
+            </div> : null}
           </div>
         </aside>
 
