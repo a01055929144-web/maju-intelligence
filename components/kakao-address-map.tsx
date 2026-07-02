@@ -53,11 +53,12 @@ export function KakaoAddressMap({ markers, showList = true }: KakaoAddressMapPro
         });
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
+        const positions: any[] = [];
         let found = 0;
 
         await Promise.all(
           markers.map(
-            (marker) =>
+            (marker, index) =>
               new Promise<void>((resolve) => {
                 geocoder.addressSearch(marker.address, (result: any[], geocodeStatus: string) => {
                   if (ignore) {
@@ -79,6 +80,7 @@ export function KakaoAddressMap({ markers, showList = true }: KakaoAddressMapPro
                       overlay.setMap(overlay.getMap() ? null : map);
                     });
 
+                    positions[index] = position;
                     bounds.extend(position);
                     found += 1;
                   }
@@ -100,6 +102,7 @@ export function KakaoAddressMap({ markers, showList = true }: KakaoAddressMapPro
           map.setCenter(bounds.getSouthWest());
           map.setLevel(5);
         } else {
+          drawRoutePolyline(kakao, map, positions.filter(Boolean));
           map.setBounds(bounds);
         }
 
@@ -133,6 +136,20 @@ export function KakaoAddressMap({ markers, showList = true }: KakaoAddressMapPro
       {showList && <MarkerList markers={markers} />}
     </div>
   );
+}
+
+function drawRoutePolyline(kakao: any, map: any, positions: any[]) {
+  if (positions.length < 2) return;
+
+  new kakao.maps.Polyline({
+    endArrow: true,
+    map,
+    path: positions,
+    strokeColor: "#0f766e",
+    strokeOpacity: 0.9,
+    strokeStyle: "solid",
+    strokeWeight: 5
+  });
 }
 
 function loadKakaoMapSdk(appKey: string) {
@@ -190,14 +207,23 @@ function escapeHtml(value: string) {
 }
 
 function FallbackAddressMap({ markers, showList }: KakaoAddressMapProps) {
+  const routePoints = markers.map((marker) => `${marker.x},${marker.y}`).join(" ");
+
   return (
     <div className="space-y-4">
       <div className="relative h-[360px] overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]">
         <div className="absolute left-[8%] top-[18%] h-[2px] w-[80%] rotate-12 bg-white shadow-sm" />
         <div className="absolute left-[20%] top-[70%] h-[2px] w-[68%] -rotate-12 bg-white shadow-sm" />
         <div className="absolute left-[52%] top-[8%] h-[82%] w-[2px] rotate-6 bg-white shadow-sm" />
+        <svg className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+          <polyline fill="none" points={routePoints} stroke="#0f766e" strokeDasharray="1.5 1.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="0.9" />
+          {markers.slice(1).map((marker, index) => {
+            const previous = markers[index];
+            return <RouteArrow key={`${previous.label}-${marker.label}`} from={previous} to={marker} />;
+          })}
+        </svg>
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
-          카카오맵 API 키 입력 전 샘플 좌표 화면
+          출발지와 방문 후보를 경유 순서대로 연결한 지도
         </div>
         {markers.map((marker) => (
           <div
@@ -221,6 +247,20 @@ function FallbackAddressMap({ markers, showList }: KakaoAddressMapProps) {
       </div>
       {showList && <MarkerList markers={markers} />}
     </div>
+  );
+}
+
+function RouteArrow({ from, to }: { readonly from: KakaoMapMarker; readonly to: KakaoMapMarker }) {
+  const midX = (from.x + to.x) / 2;
+  const midY = (from.y + to.y) / 2;
+  const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+
+  return (
+    <polygon
+      fill="#0f766e"
+      points={`${midX + 1.2},${midY} ${midX - 1},${midY - 0.8} ${midX - 1},${midY + 0.8}`}
+      transform={`rotate(${angle} ${midX} ${midY})`}
+    />
   );
 }
 
