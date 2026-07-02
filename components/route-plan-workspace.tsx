@@ -338,43 +338,9 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
               ))
             : null}
         </div>
-        {!isSalesCourse ? (
-          <div className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-5">
-            {deliveryVehicles.map((vehicle) => (
-              <button
-                key={vehicle.id}
-                className={`p-3 text-left transition ${
-                  vehicleId === vehicle.id ? "bg-slate-950 text-white" : "bg-white text-slate-900 hover:bg-slate-50"
-                }`}
-                onClick={() => setVehicleId(vehicle.id)}
-                type="button"
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-2 text-sm font-black">
-                    <Truck className={`h-4 w-4 ${vehicleId === vehicle.id ? "text-white" : "text-emerald-700"}`} />
-                    {vehicle.name}
-                  </span>
-                  <Badge className={vehicleId === vehicle.id ? "bg-white text-slate-950" : "bg-slate-100 text-slate-700"}>
-                    {getSelectedStoreCount(selectedStoreIdsByVehicle, vehicle)}곳 선택
-                  </Badge>
-                </div>
-                <p className={`text-xs font-bold ${vehicleId === vehicle.id ? "text-slate-300" : "text-slate-500"}`}>{vehicle.driver} · {vehicle.area}</p>
-                <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden rounded-md bg-slate-200 text-[11px] font-black">
-                  <span className={`px-2 py-1 ${vehicleId === vehicle.id ? "bg-white/10" : "bg-slate-50"}`}>{vehicle.totalDistanceKm.toLocaleString()}km</span>
-                  <span className={`px-2 py-1 ${vehicleId === vehicle.id ? "bg-white/10" : "bg-slate-50"}`}>{formatMinutes(vehicle.totalDurationMinutes)}</span>
-                  <span className={`px-2 py-1 ${vehicleId === vehicle.id ? "bg-white/10" : "bg-slate-50"}`}>월 {vehicle.expectedRevenue.toLocaleString()}만</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : null}
       </CardHeader>
 
       <CardContent className="space-y-3 bg-slate-50 p-4">
-        {!isSalesCourse && selectedVehicle ? (
-          <SelectedDeliverySummary selectedCount={deliveryStops.length} selectedVehicle={selectedVehicle} />
-        ) : null}
-
         {isSalesCourse && salesViewMode === "map" ? (
           <div className="space-y-3">
             <KakaoAddressMap markers={salesMarkers} />
@@ -383,32 +349,18 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
 
         {!isSalesCourse ? (
-          <div className="space-y-3">
-            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-black text-slate-950">통합 배송 지도</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">
-                    선택한 배송지와 티맵 경유 도로 경로를 한 지도에서 확인합니다.
-                  </p>
-                </div>
-                <Badge className={deliverySequence ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
-                  {deliverySequence ? "티맵 경로 반영" : "배송지 선택 지도"}
-                </Badge>
-              </div>
-              <KakaoAddressMap
-                mapClassName="h-[680px]"
-                markers={integratedDeliveryMarkers}
-                routePath={deliveryRoutePath}
-                showList={false}
+          <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:grid-cols-[380px_minmax(0,1fr)]">
+            <aside className="min-w-0 border-b border-slate-200 bg-white xl:border-b-0 xl:border-r">
+              <DeliveryVehicleSidebar
+                onSelectVehicle={setVehicleId}
+                selectedStoreIdsByVehicle={selectedStoreIdsByVehicle}
+                selectedVehicleId={vehicleId}
+                vehicles={deliveryVehicles}
               />
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
               {selectedVehicle ? (
                 <DeliveryStopList
-                  allStores={allDeliveryStops}
                   activeStore={activeStore}
+                  allStores={allDeliveryStops}
                   onClear={() => updateSelectedStoreIds([])}
                   onSelectStore={setActiveStoreId}
                   onSelectAssigned={() => updateSelectedStoreIds(defaultDeliveryStoreIds)}
@@ -417,19 +369,47 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                   vehicle={selectedVehicle}
                 />
               ) : null}
-              <div className="space-y-3">
+            </aside>
+
+            <section className="min-w-0 bg-slate-50 p-4">
+              {selectedVehicle ? (
+                <SelectedDeliverySummary selectedCount={deliveryStops.length} selectedVehicle={selectedVehicle} />
+              ) : null}
+              <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-white p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-slate-950">통합 배송 지도</p>
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      선택한 배송지와 티맵 경유 도로 경로를 한 지도에서 확인합니다.
+                    </p>
+                  </div>
+                  <Badge className={deliverySequence ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
+                    {deliverySequence ? "티맵 경로 반영" : "배송지 선택 지도"}
+                  </Badge>
+                </div>
+                <KakaoAddressMap
+                  mapClassName="h-[760px]"
+                  markers={integratedDeliveryMarkers}
+                  routePath={deliveryRoutePath}
+                  showList={false}
+                />
+              </div>
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
                 </div>
-                <RouteSequenceAction
-                  buttonLabel="배송 경유 도로 연결"
-                  destinations={destinations}
-                  onSequenceChange={setDeliverySequence}
-                  resultTitle="티맵 실제 배송 도로 경로"
-                  showMap={false}
-                />
+                <div>
+                  <RouteSequenceAction
+                    buttonLabel="배송 경유 도로 연결"
+                    destinations={destinations}
+                    onSequenceChange={setDeliverySequence}
+                    resultTitle="티맵 실제 배송 도로 경로"
+                    showMap={false}
+                  />
+                </div>
               </div>
-            </div>
+            </section>
           </div>
         ) : null}
 
@@ -479,6 +459,65 @@ function SelectedDeliverySummary({
   );
 }
 
+function DeliveryVehicleSidebar({
+  onSelectVehicle,
+  selectedStoreIdsByVehicle,
+  selectedVehicleId,
+  vehicles
+}: {
+  readonly onSelectVehicle: (vehicleId: string) => void;
+  readonly selectedStoreIdsByVehicle: Record<string, string[]>;
+  readonly selectedVehicleId: string;
+  readonly vehicles: DeliveryVehicle[];
+}) {
+  return (
+    <div className="border-b border-slate-200 p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-black text-slate-950">배송 차량</p>
+          <p className="text-xs font-bold text-slate-500">차량을 선택하고 오늘 배송지를 배정합니다.</p>
+        </div>
+        <Badge className="bg-slate-100 text-slate-700">{vehicles.length}대</Badge>
+      </div>
+      <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+        {vehicles.map((vehicle) => {
+          const selected = selectedVehicleId === vehicle.id;
+          return (
+            <button
+              key={vehicle.id}
+              className={`w-full rounded-md border p-3 text-left transition ${
+                selected
+                  ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+              onClick={() => onSelectVehicle(vehicle.id)}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-2 text-sm font-black">
+                  <Truck className={`h-4 w-4 ${selected ? "text-white" : "text-emerald-700"}`} />
+                  {vehicle.name}
+                </span>
+                <span className={`rounded-md px-2 py-1 text-[11px] font-black ${selected ? "bg-white text-slate-950" : "bg-slate-100 text-slate-700"}`}>
+                  {getSelectedStoreCount(selectedStoreIdsByVehicle, vehicle)}곳
+                </span>
+              </div>
+              <p className={`mt-1 text-xs font-bold ${selected ? "text-slate-300" : "text-slate-500"}`}>{vehicle.driver}</p>
+              <div className={`mt-2 flex flex-wrap gap-1 text-[11px] font-black ${selected ? "text-slate-200" : "text-slate-500"}`}>
+                <span>{vehicle.area}</span>
+                <span>·</span>
+                <span>{vehicle.totalDistanceKm.toLocaleString()}km</span>
+                <span>·</span>
+                <span>{formatMinutes(vehicle.totalDurationMinutes)}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function DeliveryStopList({
   activeStore,
   allStores,
@@ -509,11 +548,11 @@ function DeliveryStopList({
   }
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div className="p-3">
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <p className="font-black text-slate-950">{vehicle.name} 배송지 선택</p>
-          <p className="text-xs font-medium text-slate-500">{vehicle.driver} · 전체 거래처 {allStores.length}곳 중 오늘 배송지 선택</p>
+          <p className="text-sm font-black text-slate-950">{vehicle.name} 배송지</p>
+          <p className="text-xs font-medium text-slate-500">전체 거래처 {allStores.length}곳 중 오늘 배송지 선택</p>
         </div>
         <Badge className="bg-emerald-50 text-emerald-700">{selectedStoreIds.length}/15곳 선택</Badge>
       </div>
@@ -524,18 +563,18 @@ function DeliveryStopList({
         <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={onClear} type="button">
           선택 해제
         </button>
-        {isSelectionFull ? <span className="self-center text-xs font-bold text-amber-700">티맵 경유 계산은 최대 15곳까지 선택합니다.</span> : null}
+        {isSelectionFull ? <span className="text-xs font-bold text-amber-700">최대 15곳</span> : null}
       </div>
 
-      <div className="mb-3 grid gap-3 lg:grid-cols-[1fr_320px]">
+      <div className="mb-3 space-y-3">
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
           <p className="mb-2 text-xs font-black text-slate-500">오늘 배송지</p>
           {selectedStores.length ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="max-h-[130px] space-y-1 overflow-auto">
               {selectedStores.map((store, index) => (
                 <button
                   key={store.id}
-                  className="rounded-md bg-white px-2 py-1 text-left text-xs font-black text-emerald-700 shadow-sm hover:bg-emerald-50"
+                  className="block w-full rounded-md bg-white px-2 py-1 text-left text-xs font-black text-emerald-700 shadow-sm hover:bg-emerald-50"
                   onClick={() => onSelectStore(store.id)}
                   type="button"
                 >
@@ -548,7 +587,7 @@ function DeliveryStopList({
           )}
         </div>
         {activeStore ? (
-          <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
             <div className="mb-3 flex items-start justify-between gap-2">
               <div>
                 <p className="text-xs font-black text-slate-500">매장 상세</p>
@@ -570,8 +609,8 @@ function DeliveryStopList({
         ) : null}
       </div>
 
-      <div className="max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
-        <div className="grid gap-px bg-slate-200 md:grid-cols-2">
+      <div className="max-h-[560px] overflow-auto rounded-md border border-slate-200 bg-white">
+        <div className="grid gap-px bg-slate-200">
           {allStores.map((stop) => {
             const checked = selectedStoreIdSet.has(stop.id);
             const isDisabled = !checked && isSelectionFull;

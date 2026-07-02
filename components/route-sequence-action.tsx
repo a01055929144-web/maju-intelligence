@@ -35,8 +35,7 @@ export function RouteSequenceAction({
   buttonLabel = "경유 동선 연결",
   destinations,
   onSequenceChange,
-  resultTitle = "티맵 실제 도로 경로"
-  ,
+  resultTitle = "티맵 실제 도로 경로",
   showMap = true
 }: RouteSequenceActionProps) {
   const [isLoading, setIsLoading] = useState(false);
