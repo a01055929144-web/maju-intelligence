@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
@@ -399,7 +400,7 @@ function Briefing({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <AddressMapPanel markers={mapMarkers} />
+            <KakaoAddressMap markers={mapMarkers} />
             <div className="rounded-md border border-border bg-white p-4">
               <p className="text-sm font-black">물류 출발지: 경기도 하남시 초이로 133 1층</p>
               <div className="mt-3 space-y-2">

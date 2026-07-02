@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getCustomerSession } from "@/lib/auth";
@@ -163,7 +164,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <DashboardAddressMap markers={mapMarkers} />
+            <KakaoAddressMap markers={mapMarkers} />
           </CardContent>
         </Card>
 

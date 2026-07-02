@@ -57,9 +57,17 @@ CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 
 COMPANY_ORIGIN_ADDRESS=경기도 하남시 초이로 133 1층
 TMAP_API_KEY=replace-with-tmap-api-key
+NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
 ```
 
 주의: `SUPABASE_SERVICE_ROLE_KEY`는 절대 브라우저나 공개 문서에 노출하면 안 됩니다.
+
+카카오맵을 실제로 표시하려면 Kakao Developers에서 JavaScript 키를 발급하고, 앱 설정 > 플랫폼 > Web에 아래 도메인을 등록합니다.
+
+- `https://maju-intelligence.vercel.app`
+- `http://localhost:3000`
+
+등록 후 Vercel Environment Variables에 `NEXT_PUBLIC_KAKAO_MAP_APP_KEY`를 추가하고 재배포합니다.
 
 ## 5. 배포 후 확인 URL
 
