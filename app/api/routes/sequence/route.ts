@@ -8,6 +8,8 @@ type RoutePoint = {
   lng: number;
 };
 
+type RouteLegResult = Awaited<ReturnType<typeof calculateRouteDistance>>;
+
 export async function POST(request: Request) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
@@ -28,24 +30,17 @@ export async function POST(request: Request) {
 
   const companyId = customerSession?.companyId || body?.companyId;
   const originAddress = String(body?.originAddress || (await getCompanyOriginAddress(companyId))).trim();
-  const legs = [];
-  const path: RoutePoint[] = [];
-  let currentAddress = originAddress;
-
-  for (let index = 0; index < destinations.length; index += 1) {
-    const destinationAddress = destinations[index];
-    const result = await calculateRouteDistance(currentAddress, destinationAddress);
-    path.push(...extractRoutePath(result.routeGeometry));
-    legs.push({
-      distanceKm: result.distanceKm,
-      durationMinutes: result.durationMinutes,
-      fromAddress: currentAddress,
-      order: index + 1,
-      provider: result.provider,
-      toAddress: destinationAddress
-    });
-    currentAddress = destinationAddress;
-  }
+  const optimizedLegs = await optimizeRouteLegs(originAddress, destinations);
+  const legs = optimizedLegs.map(({ destinationAddress, fromAddress, order, result }) => ({
+    distanceKm: result.distanceKm,
+    durationMinutes: result.durationMinutes,
+    fromAddress,
+    order,
+    provider: result.provider,
+    toAddress: destinationAddress
+  }));
+  const path = optimizedLegs.flatMap(({ result }) => extractRoutePath(result.routeGeometry));
+  const optimizedStops = optimizedLegs.map(({ destinationAddress }) => destinationAddress);
 
   const totalDistanceKm = Math.round(legs.reduce((total, leg) => total + Number(leg.distanceKm || 0), 0) * 10) / 10;
   const totalDurationMinutes = legs.reduce((total, leg) => total + Number(leg.durationMinutes || 0), 0);
@@ -55,11 +50,44 @@ export async function POST(request: Request) {
       legs,
       originAddress,
       path: dedupePath(path),
-      stops: destinations,
+      stops: optimizedStops,
       totalDistanceKm,
       totalDurationMinutes
     }
   });
+}
+
+async function optimizeRouteLegs(originAddress: string, destinations: string[]) {
+  const optimizedLegs: Array<{
+    destinationAddress: string;
+    fromAddress: string;
+    order: number;
+    result: RouteLegResult;
+  }> = [];
+  const remaining = [...destinations];
+  let currentAddress = originAddress;
+
+  while (remaining.length) {
+    const candidates = await Promise.all(
+      remaining.map(async (destinationAddress) => ({
+        destinationAddress,
+        result: await calculateRouteDistance(currentAddress, destinationAddress)
+      }))
+    );
+    const next = candidates.sort((a, b) => a.result.distanceKm - b.result.distanceKm || a.result.durationMinutes - b.result.durationMinutes)[0];
+    const nextIndex = remaining.indexOf(next.destinationAddress);
+
+    if (nextIndex >= 0) remaining.splice(nextIndex, 1);
+    optimizedLegs.push({
+      destinationAddress: next.destinationAddress,
+      fromAddress: currentAddress,
+      order: optimizedLegs.length + 1,
+      result: next.result
+    });
+    currentAddress = next.destinationAddress;
+  }
+
+  return optimizedLegs;
 }
 
 function extractRoutePath(routeGeometry: unknown): RoutePoint[] {

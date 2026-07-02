@@ -76,7 +76,7 @@ export function RouteSequenceAction({
       </div>
       {!sequence ? (
         <p className="text-xs font-bold text-muted-foreground">
-          선택한 배송지 {uniqueDestinations.length}곳을 출발지부터 순서대로 연결합니다. 버튼을 누르면 티맵 거리·시간과 실제 도로 경로를 계산합니다.
+          선택한 배송지 {uniqueDestinations.length}곳을 출발지 기준 가까운 경유지부터 재정렬합니다. 버튼을 누르면 티맵 거리·시간과 실제 도로 경로를 계산합니다.
         </p>
       ) : null}
 
@@ -85,7 +85,7 @@ export function RouteSequenceAction({
           <div className="flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-md bg-muted px-2 py-1">총 {sequence.totalDistanceKm.toLocaleString()}km</span>
             <span className="rounded-md bg-muted px-2 py-1">총 {formatMinutes(sequence.totalDurationMinutes)}</span>
-            <span className="rounded-md bg-muted px-2 py-1">{sequence.legs.length}개 구간</span>
+            <span className="rounded-md bg-muted px-2 py-1">최적 순서 {sequence.legs.length}개 구간</span>
           </div>
           <div className="space-y-1">
             {sequence.legs.map((leg) => (
