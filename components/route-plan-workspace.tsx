@@ -348,6 +348,10 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {!isSalesCourse && selectedVehicle ? (
+          <SelectedDeliverySummary selectedCount={deliveryStops.length} selectedVehicle={selectedVehicle} />
+        ) : null}
+
         {isSalesCourse && salesViewMode === "map" ? (
           <div className="space-y-3">
             <KakaoAddressMap markers={salesMarkers} />
@@ -376,6 +380,13 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                 vehicle={selectedVehicle}
               />
             ) : null}
+            <div className="space-y-3 rounded-md border border-border bg-white p-3">
+              <div>
+                <p className="text-sm font-black">선택 배송지 지도</p>
+                <p className="mt-1 text-xs text-muted-foreground">아래 지도는 현재 선택된 배송지입니다. 실제 도로 경로는 버튼을 눌러 티맵 계산 후 표시됩니다.</p>
+              </div>
+              <KakaoAddressMap markers={deliveryMarkers} showList={false} />
+            </div>
             <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
             <RouteSequenceAction buttonLabel="배송 경유 도로 연결" destinations={destinations} resultTitle="티맵 실제 배송 도로 경로" />
           </div>
@@ -394,6 +405,34 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function SelectedDeliverySummary({
+  selectedCount,
+  selectedVehicle
+}: {
+  readonly selectedCount: number;
+  readonly selectedVehicle: DeliveryVehicle;
+}) {
+  return (
+    <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-white">
+            <Truck className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-black">오늘 선택한 배송차</p>
+            <p className="mt-1 text-lg font-black">{selectedVehicle.name}</p>
+            <p className="text-xs font-bold text-muted-foreground">
+              {selectedVehicle.driver} · {selectedVehicle.area} · 선택 배송지 {selectedCount}곳
+            </p>
+          </div>
+        </div>
+        <Badge className="bg-white text-primary">{selectedCount ? "배송지 선택됨" : "배송지 미선택"}</Badge>
+      </div>
+    </div>
   );
 }
 

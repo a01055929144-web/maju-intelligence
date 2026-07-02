@@ -60,7 +60,8 @@ export function RouteSequenceAction({
 
     const payload = await response.json().catch(() => null);
     setSequence(payload?.routeSequence || null);
-    setMessage("경유 동선 계산됨");
+    const routePathCount = Number(payload?.routeSequence?.path?.length || 0);
+    setMessage(routePathCount ? "티맵 도로 경로 계산됨" : "거리/시간 계산됨 · 도로 좌표 없음");
     setIsLoading(false);
   }
 
@@ -73,6 +74,11 @@ export function RouteSequenceAction({
         </Button>
         {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
       </div>
+      {!sequence ? (
+        <p className="text-xs font-bold text-muted-foreground">
+          선택한 배송지 {uniqueDestinations.length}곳을 출발지부터 순서대로 연결합니다. 버튼을 누르면 티맵 거리·시간과 실제 도로 경로를 계산합니다.
+        </p>
+      ) : null}
 
       {sequence ? (
         <div className="space-y-2">
@@ -100,7 +106,12 @@ export function RouteSequenceAction({
               <KakaoAddressMap markers={routeMarkers} routePath={sequence.path} showList={false} />
             </div>
           ) : (
-            <p className="text-xs font-bold text-amber-700">티맵 도로 좌표가 없어 구간 거리/시간만 표시합니다.</p>
+            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-bold text-amber-800">티맵 도로 좌표가 없어 구간 거리/시간만 표시합니다.</p>
+              <p className="text-xs text-amber-800">
+                이 경우는 티맵 키/주소 지오코딩/요청 제한 중 하나로 실제 도로 geometry가 반환되지 않은 상태입니다. 주소 목록과 선택 배송지는 유지됩니다.
+              </p>
+            </div>
           )}
         </div>
       ) : null}
