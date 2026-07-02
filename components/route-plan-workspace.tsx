@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, Truck, UsersRound } from "lucide-react";
+import { Check, LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, Truck, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
@@ -375,7 +375,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
 
         {!isSalesCourse ? (
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_430px]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
             <div>
               {selectedVehicle ? (
                 <DeliveryStopList
@@ -396,7 +396,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                   <p className="text-sm font-black text-slate-950">선택 배송지 지도</p>
                   <p className="mt-1 text-xs font-medium text-slate-500">선택된 배송지를 확인하고 경로를 계산합니다.</p>
                 </div>
-                <KakaoAddressMap markers={deliveryMarkers} showList={false} />
+                <KakaoAddressMap mapClassName="h-[520px]" markers={deliveryMarkers} showList={false} />
               </div>
               <div className="rounded-md border border-slate-200 bg-white p-3">
                 <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
@@ -475,6 +475,12 @@ function DeliveryStopList({
   const selectedStores = allStores.filter((store) => selectedStoreIdSet.has(store.id));
   const isSelectionFull = selectedStoreIds.length >= 15;
 
+  function handleStoreCardSelect(storeId: string, checked: boolean) {
+    onSelectStore(storeId);
+    if (!checked && isSelectionFull) return;
+    onToggleStore(storeId);
+  }
+
   return (
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -541,28 +547,31 @@ function DeliveryStopList({
         <div className="grid gap-px bg-slate-200 md:grid-cols-2">
           {allStores.map((stop) => {
             const checked = selectedStoreIdSet.has(stop.id);
+            const isDisabled = !checked && isSelectionFull;
             return (
               <div
                 key={stop.id}
-                className={`flex cursor-pointer items-start gap-3 bg-white p-3 text-sm transition hover:bg-slate-50 ${
-                  activeStore?.id === stop.id ? "ring-2 ring-inset ring-slate-950" : checked ? "bg-emerald-50" : ""
+                className={`flex cursor-pointer items-start gap-3 border-l-4 p-3 text-sm transition hover:bg-slate-50 ${
+                  checked ? "border-l-emerald-600 bg-emerald-50" : "border-l-transparent bg-white"
+                } ${activeStore?.id === stop.id ? "ring-2 ring-inset ring-slate-950" : ""} ${
+                  isDisabled ? "cursor-not-allowed opacity-60" : ""
                 }`}
-                onClick={() => onSelectStore(stop.id)}
+                onClick={() => handleStoreCardSelect(stop.id, checked)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  handleStoreCardSelect(stop.id, checked);
+                }}
                 role="button"
                 tabIndex={0}
               >
-                <input
-                  checked={checked}
-                  className="mt-1 h-4 w-4 accent-emerald-700"
-                  disabled={!checked && isSelectionFull}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    onToggleStore(stop.id);
-                    onSelectStore(stop.id);
-                  }}
-                  onClick={(event) => event.stopPropagation()}
-                  type="checkbox"
-                />
+                <span
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-white ${
+                    checked ? "border-emerald-700 bg-emerald-700" : "border-slate-300 bg-white"
+                  }`}
+                >
+                  {checked ? <Check className="h-3.5 w-3.5" /> : null}
+                </span>
                 <div>
                   <p className="font-black text-slate-950">{stop.name}</p>
                   <p className="text-xs font-medium text-slate-500">{stop.region} · {stop.address || "주소 미등록"}</p>

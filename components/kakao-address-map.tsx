@@ -19,6 +19,7 @@ export type KakaoRoutePoint = {
 };
 
 type KakaoAddressMapProps = {
+  readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
   readonly showList?: boolean;
@@ -32,8 +33,9 @@ declare global {
 
 let kakaoScriptPromise: Promise<void> | null = null;
 const emptyRoutePath: ReadonlyArray<KakaoRoutePoint> = [];
+const defaultMapClassName = "h-[360px]";
 
-export function KakaoAddressMap({ markers, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
+export function KakaoAddressMap({ mapClassName = defaultMapClassName, markers, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
@@ -129,12 +131,12 @@ export function KakaoAddressMap({ markers, routePath = emptyRoutePath, showList 
   }, [appKey, canUseKakao, markers, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap markers={markers} showList={showList} />;
+    return <FallbackAddressMap mapClassName={mapClassName} markers={markers} routePath={routePath} showList={showList} />;
   }
 
   return (
     <div className="space-y-4">
-      <div className="relative h-[360px] overflow-hidden rounded-md border border-border bg-muted">
+      <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
         {status === "loading" && (
           <div className="absolute inset-0 grid place-items-center bg-white/80 text-sm font-bold text-muted-foreground backdrop-blur-sm">
@@ -215,10 +217,10 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function FallbackAddressMap({ markers, routePath, showList }: KakaoAddressMapProps) {
+function FallbackAddressMap({ mapClassName = defaultMapClassName, markers, routePath, showList }: KakaoAddressMapProps) {
   return (
     <div className="space-y-4">
-      <div className="relative h-[360px] overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]">
+      <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
         <div className="absolute left-[8%] top-[18%] h-[2px] w-[80%] rotate-12 bg-white shadow-sm" />
         <div className="absolute left-[20%] top-[70%] h-[2px] w-[68%] -rotate-12 bg-white shadow-sm" />
         <div className="absolute left-[52%] top-[8%] h-[82%] w-[2px] rotate-6 bg-white shadow-sm" />
