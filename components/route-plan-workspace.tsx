@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, Truck, UsersRound } from "lucide-react";
+import { Check, MapPin, Navigation, SlidersHorizontal, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
@@ -16,8 +16,6 @@ type RoutePlanWorkspaceProps = {
   readonly routePlan: RoutePlan;
 };
 
-type CourseMode = "sales" | "delivery";
-type SalesViewMode = "map" | "stops";
 type DeliveryVehicle = {
   id: string;
   name: string;
@@ -29,11 +27,6 @@ type DeliveryVehicle = {
   totalDurationMinutes: number;
   expectedRevenue: number;
 };
-
-const courseOptions: Array<{ icon: LucideIcon; key: CourseMode; label: string }> = [
-  { icon: UsersRound, key: "sales", label: "영업 코스" },
-  { icon: PackageCheck, key: "delivery", label: "배송 코스" }
-];
 
 const deliveryAddressGroups: ReadonlyArray<readonly string[]> = [
   [
@@ -242,8 +235,6 @@ const storeNamePool = [
 ];
 
 export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspaceProps) {
-  const [courseMode, setCourseMode] = useState<CourseMode>("sales");
-  const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
   const [vehicleId, setVehicleId] = useState("truck-1");
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [deliverySequence, setDeliverySequence] = useState<RouteSequence | null>(null);
@@ -268,8 +259,8 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
   const deliveryMarkers = createDeliveryMarkers(mapMarkers, deliveryStops);
   const integratedDeliveryMarkers = deliverySequence ? createRouteMarkersFromSequence(deliverySequence, deliveryStops) : deliveryMarkers;
+  const unifiedMapMarkers = mergeRouteMarkers(integratedDeliveryMarkers, createSalesLeadMarkers(salesMarkers));
   const deliveryRoutePath = deliverySequence?.path || [];
-  const isSalesCourse = courseMode === "sales";
 
   useEffect(() => {
     setDeliverySequence(null);
@@ -296,24 +287,19 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
     <Card className="overflow-hidden border-slate-200 bg-white shadow-none">
       <CardHeader className="space-y-3 border-b border-slate-200 bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
-            <Navigation className="h-5 w-5 text-slate-500" />
-            코스 작업공간
-          </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            {courseOptions.map(({ icon: Icon, key, label }) => (
-              <button
-                key={key}
-                className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
-                  courseMode === key ? "border-slate-950 bg-slate-950 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-                onClick={() => setCourseMode(key as CourseMode)}
-                type="button"
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
+              <Navigation className="h-5 w-5 text-slate-500" />
+              통합 코스 작업공간
+            </CardTitle>
+            <p className="mt-1 text-sm font-medium text-slate-500">영업 방문 후보와 배송지를 같은 지도에서 관리합니다.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-black">
+            <Badge className="bg-emerald-50 text-emerald-700">배송지 {deliveryStops.length}곳</Badge>
+            <Badge className="bg-blue-50 text-blue-700">영업 후보 {filteredStops.length}곳</Badge>
+            <Badge className={deliverySequence ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}>
+              {deliverySequence ? "티맵 경로 반영" : "경로 계산 전"}
+            </Badge>
           </div>
         </div>
         <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -328,94 +314,71 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {isSalesCourse
-            ? ([
-                ["map", "영업 지도"],
-                ["stops", "방문 관리"]
-              ] as const).map(([key, label]) => (
-                <ViewButton key={key} active={salesViewMode === key} label={label} onClick={() => setSalesViewMode(key)} />
-              ))
-            : null}
-        </div>
       </CardHeader>
 
       <CardContent className="space-y-3 bg-slate-50 p-4">
-        {isSalesCourse && salesViewMode === "map" ? (
-          <div className="space-y-3">
-            <KakaoAddressMap markers={salesMarkers} />
-            <p className="text-xs font-bold text-muted-foreground">영업 지도에는 선택한 지역의 방문 후보 위치가 표시됩니다.</p>
-          </div>
-        ) : null}
-
-        {!isSalesCourse ? (
-          <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:grid-cols-[380px_minmax(0,1fr)]">
-            <aside className="min-w-0 border-b border-slate-200 bg-white xl:border-b-0 xl:border-r">
-              <DeliveryVehicleSidebar
-                onSelectVehicle={setVehicleId}
-                selectedStoreIdsByVehicle={selectedStoreIdsByVehicle}
-                selectedVehicleId={vehicleId}
-                vehicles={deliveryVehicles}
+        <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:grid-cols-[420px_minmax(0,1fr)]">
+          <aside className="min-w-0 border-b border-slate-200 bg-white xl:border-b-0 xl:border-r">
+            <DeliveryVehicleSidebar
+              onSelectVehicle={setVehicleId}
+              selectedStoreIdsByVehicle={selectedStoreIdsByVehicle}
+              selectedVehicleId={vehicleId}
+              vehicles={deliveryVehicles}
+            />
+            {selectedVehicle ? (
+              <DeliveryStopList
+                activeStore={activeStore}
+                allStores={allDeliveryStops}
+                onClear={() => updateSelectedStoreIds([])}
+                onSelectStore={setActiveStoreId}
+                onSelectAssigned={() => updateSelectedStoreIds(defaultDeliveryStoreIds)}
+                onToggleStore={toggleDeliveryStore}
+                selectedStoreIds={selectedDeliveryStoreIds}
+                vehicle={selectedVehicle}
               />
-              {selectedVehicle ? (
-                <DeliveryStopList
-                  activeStore={activeStore}
-                  allStores={allDeliveryStops}
-                  onClear={() => updateSelectedStoreIds([])}
-                  onSelectStore={setActiveStoreId}
-                  onSelectAssigned={() => updateSelectedStoreIds(defaultDeliveryStoreIds)}
-                  onToggleStore={toggleDeliveryStore}
-                  selectedStoreIds={selectedDeliveryStoreIds}
-                  vehicle={selectedVehicle}
-                />
-              ) : null}
-            </aside>
+            ) : null}
+            <SalesLeadList groups={filteredGroups} />
+          </aside>
 
-            <section className="min-w-0 bg-slate-50 p-4">
-              {selectedVehicle ? (
-                <SelectedDeliverySummary selectedCount={deliveryStops.length} selectedVehicle={selectedVehicle} />
-              ) : null}
-              <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-white p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-black text-slate-950">통합 배송 지도</p>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      선택한 배송지와 티맵 경유 도로 경로를 한 지도에서 확인합니다.
-                    </p>
-                  </div>
-                  <Badge className={deliverySequence ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
-                    {deliverySequence ? "티맵 경로 반영" : "배송지 선택 지도"}
+          <section className="min-w-0 bg-slate-50 p-4">
+            {selectedVehicle ? (
+              <SelectedDeliverySummary selectedCount={deliveryStops.length} selectedVehicle={selectedVehicle} />
+            ) : null}
+            <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-white p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-slate-950">통합 영업·배송 지도</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    파란 마커는 영업 후보, 초록 마커는 오늘 배송지입니다. 티맵 경유 계산 후 같은 지도에 도로 경로가 표시됩니다.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="bg-blue-50 text-blue-700">영업</Badge>
+                  <Badge className="bg-emerald-50 text-emerald-700">배송</Badge>
+                  <Badge className={deliverySequence ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}>
+                    {deliverySequence ? "티맵 경로 반영" : "선택 지도"}
                   </Badge>
                 </div>
-                <KakaoAddressMap
-                  mapClassName="h-[760px]"
-                  markers={integratedDeliveryMarkers}
-                  routePath={deliveryRoutePath}
-                  showList={false}
+              </div>
+              <KakaoAddressMap mapClassName="h-[760px]" markers={unifiedMapMarkers} routePath={deliveryRoutePath} showList={false} />
+            </div>
+
+            <div className="mt-3 grid gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
+              <div className="rounded-md border border-slate-200 bg-white p-3">
+                <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
+              </div>
+              <div>
+                <RouteSequenceAction
+                  buttonLabel="배송 경유 도로 연결"
+                  destinations={destinations}
+                  onSequenceChange={setDeliverySequence}
+                  resultTitle="티맵 실제 배송 도로 경로"
+                  showMap={false}
                 />
               </div>
-
-              <div className="mt-3 grid gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
-                <div className="rounded-md border border-slate-200 bg-white p-3">
-                  <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
-                </div>
-                <div>
-                  <RouteSequenceAction
-                    buttonLabel="배송 경유 도로 연결"
-                    destinations={destinations}
-                    onSequenceChange={setDeliverySequence}
-                    resultTitle="티맵 실제 배송 도로 경로"
-                    showMap={false}
-                  />
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : null}
-
-        {isSalesCourse && salesViewMode === "stops" ? (
-          <RouteStopGroups groups={filteredGroups} />
-        ) : null}
+            </div>
+          </section>
+        </div>
 
         {!filteredGroups.length ? (
           <div className="rounded-md border border-border bg-muted/35 p-6 text-center">
@@ -654,6 +617,42 @@ function DeliveryStopList({
   );
 }
 
+function SalesLeadList({ groups }: { readonly groups: RoutePlan["groups"] }) {
+  const leads = groups.flatMap((group) => group.stops).slice(0, 12);
+
+  return (
+    <div className="border-t border-slate-200 p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-black text-slate-950">영업 방문 후보</p>
+          <p className="text-xs font-medium text-slate-500">배송 동선과 함께 볼 영업 대상</p>
+        </div>
+        <Badge className="bg-blue-50 text-blue-700">{leads.length}곳</Badge>
+      </div>
+      <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
+        {leads.map((lead, index) => (
+          <div key={lead.id || `${lead.name}-${index}`} className="rounded-md border border-slate-200 bg-white p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-950">
+                  {index + 1}. {lead.name}
+                </p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{lead.region} · {lead.address || "주소 미등록"}</p>
+              </div>
+              <Badge className="bg-blue-50 text-blue-700">{lead.score}점</Badge>
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-md bg-slate-200 text-[11px] font-black text-slate-600">
+              <span className="bg-slate-50 px-2 py-1">{lead.distanceKm || 0}km</span>
+              <span className="bg-slate-50 px-2 py-1">{formatMinutes(lead.durationMinutes || 0)}</span>
+              <span className="bg-slate-50 px-2 py-1">월 {lead.expectedRevenue}만</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="grid grid-cols-[72px_1fr] gap-2">
@@ -665,20 +664,6 @@ function DetailRow({ label, value }: { readonly label: string; readonly value: s
 
 function getSelectedStoreCount(selectedStoreIdsByVehicle: Record<string, string[]>, vehicle: DeliveryVehicle) {
   return selectedStoreIdsByVehicle[vehicle.id]?.length ?? vehicle.stops.length;
-}
-
-function ViewButton({ active, label, onClick }: { readonly active: boolean; readonly label: string; readonly onClick: () => void }) {
-  return (
-    <button
-      className={`h-9 rounded-md border px-3 text-sm font-bold transition ${
-        active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-      }`}
-      onClick={onClick}
-      type="button"
-    >
-      {label}
-    </button>
-  );
 }
 
 function RouteStopGroups({ groups }: { readonly groups: RoutePlan["groups"] }) {
@@ -819,6 +804,27 @@ function createDeliveryMarkers(markers: KakaoMapMarker[], stops: RoutePlanStop[]
   }));
 
   return origin ? [origin, ...stopMarkers] : stopMarkers;
+}
+
+function createSalesLeadMarkers(markers: KakaoMapMarker[]) {
+  return markers
+    .filter((marker) => marker.tone !== "origin")
+    .slice(0, 12)
+    .map((marker, index) => ({
+      ...marker,
+      label: `영업 ${index + 1}`,
+      tone: "lead" as const
+    }));
+}
+
+function mergeRouteMarkers(primaryMarkers: KakaoMapMarker[], secondaryMarkers: KakaoMapMarker[]) {
+  const seen = new Set<string>();
+  return [...primaryMarkers, ...secondaryMarkers].filter((marker) => {
+    const key = `${marker.tone}-${marker.address}-${marker.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function createRouteMarkersFromSequence(sequence: RouteSequence, stops: RoutePlanStop[]) {
