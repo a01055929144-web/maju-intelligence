@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarCheck, Clock, Navigation, Target, Truck } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { KakaoMapMarker } from "@/components/kakao-address-map";
 import { RoutePlanWorkspace } from "@/components/route-plan-workspace";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
@@ -19,13 +17,12 @@ export default async function TodayRoutePage() {
   const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (
-    <main className="min-h-screen bg-[#f5f8f7]">
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+    <main className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div>
-            <Badge className="mb-2 rounded-md bg-emerald-50 px-2.5 py-1 text-emerald-700">Route Intelligence</Badge>
-            <h1 className="text-2xl font-black text-slate-950">오늘의 영업·배송 코스</h1>
-            <p className="mt-1 text-sm font-medium text-slate-500">영업 방문과 배송 최적화를 분리해서 운영합니다.</p>
+            <h1 className="text-xl font-black text-slate-950">오늘의 영업·배송 코스</h1>
+            <p className="mt-1 text-sm font-medium text-slate-500">방문 관리와 배송 경유 계산</p>
           </div>
           <Link
             className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
@@ -36,8 +33,8 @@ export default async function TodayRoutePage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="grid gap-3 md:grid-cols-5">
+      <section className="mx-auto max-w-7xl space-y-4 px-4 py-5 sm:px-6">
+        <div className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 md:grid-cols-5">
           <Metric icon={CalendarCheck} label="영업 방문 후보" value={`${routePlan.totalStops}곳`} />
           <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
           <Metric icon={Navigation} label="배송 예상거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
@@ -53,15 +50,13 @@ export default async function TodayRoutePage() {
 
 function Metric({ icon: Icon, label, value }: { icon: typeof CalendarCheck; label: string; value: string }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-4">
-        <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-slate-950 text-white">
-          <Icon className="h-4 w-4" />
-        </div>
-        <p className="text-xs font-bold text-slate-500">{label}</p>
-        <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="bg-white p-4">
+      <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+        <Icon className="h-4 w-4 text-slate-400" />
+        {label}
+      </div>
+      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 
