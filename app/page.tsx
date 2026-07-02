@@ -261,6 +261,14 @@ function Briefing({
     ["하남 물류센터", "송파 고깃집", "18.8km", "31분"],
     ["하남 물류센터", "위례 반찬", "12.4km", "24분"]
   ] as const;
+  const mapMarkers = [
+    { label: "출발", name: "하남 물류센터", address: "경기도 하남시 초이로 133 1층", x: 72, y: 62, tone: "origin" },
+    { label: "A", name: "성수 온반", address: "서울 성동구 성수이로 88", x: 45, y: 28, tone: "customer" },
+    { label: "B", name: "광진 능동 식당", address: "서울시 광진구 능동로 41길 17 1층", x: 58, y: 34, tone: "customer" },
+    { label: "C", name: "송파 고깃집", address: "서울 송파구 가락로 120", x: 62, y: 50, tone: "customer" },
+    { label: "D", name: "위례 반찬", address: "경기 성남시 수정구 위례광장로 21", x: 67, y: 56, tone: "lead" },
+    { label: "E", name: "망원 브런치", address: "서울 마포구 망원로 33", x: 28, y: 31, tone: "lead" }
+  ] as const;
   const historyRows = ["사업자 상태 정상 확인", "배송주소 변경 기록", "6월 매출 18% 증가", "방문 메모 3건 누적"];
 
   return (
@@ -387,10 +395,11 @@ function Briefing({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Route className="h-5 w-5 text-primary" />
-              운영 동선과 신규 매장
+              운영 동선과 주소 지도
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <AddressMapPanel markers={mapMarkers} />
             <div className="rounded-md border border-border bg-white p-4">
               <p className="text-sm font-black">물류 출발지: 경기도 하남시 초이로 133 1층</p>
               <div className="mt-3 space-y-2">
@@ -424,6 +433,56 @@ function MiniFact({ label, value }: { label: string; value: string }) {
     <div className="rounded-md bg-white p-3">
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 font-black">{value}</p>
+    </div>
+  );
+}
+
+function AddressMapPanel({
+  markers
+}: {
+  markers: ReadonlyArray<{ readonly address: string; readonly label: string; readonly name: string; readonly tone: "customer" | "lead" | "origin"; readonly x: number; readonly y: number }>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-white">
+      <div className="relative min-h-80 bg-[linear-gradient(90deg,rgba(15,118,110,0.10)_1px,transparent_1px),linear-gradient(180deg,rgba(15,118,110,0.10)_1px,transparent_1px)] bg-[size:42px_42px]">
+        <div className="absolute left-[10%] top-[20%] h-[62%] w-[74%] rounded-[40%] border-2 border-dashed border-primary/25" />
+        <div className="absolute left-[24%] top-[28%] h-[44%] w-[58%] rounded-[48%] border border-accent/60 bg-accent/10" />
+        <div className="absolute left-[42%] top-[31%] h-[2px] w-[30%] rotate-[28deg] bg-primary/30" />
+        <div className="absolute left-[55%] top-[44%] h-[2px] w-[20%] rotate-[42deg] bg-primary/30" />
+        <div className="absolute left-[30%] top-[42%] h-[2px] w-[44%] rotate-[18deg] bg-primary/20" />
+        {markers.map((marker) => (
+          <div
+            key={marker.name}
+            className="group absolute -translate-x-1/2 -translate-y-1/2"
+            style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
+          >
+            <span
+              className={
+                marker.tone === "origin"
+                  ? "flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-foreground text-xs font-black text-white shadow-panel"
+                  : marker.tone === "lead"
+                    ? "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-accent text-xs font-black text-foreground shadow-panel"
+                    : "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-primary text-xs font-black text-white shadow-panel"
+              }
+            >
+              {marker.label}
+            </span>
+            <div className="pointer-events-none absolute left-1/2 top-10 z-10 hidden w-56 -translate-x-1/2 rounded-md border border-border bg-white p-3 text-xs shadow-panel group-hover:block">
+              <p className="font-black text-foreground">{marker.name}</p>
+              <p className="mt-1 leading-5 text-muted-foreground">{marker.address}</p>
+            </div>
+          </div>
+        ))}
+        <div className="absolute bottom-3 left-3 rounded-md border border-border bg-white/95 p-3 text-xs shadow-panel">
+          <p className="font-black">임의 주소 지도 시각화</p>
+          <p className="mt-1 text-muted-foreground">출발지, 거래처, 신규 리드 위치를 MVP용 좌표로 표시했습니다.</p>
+        </div>
+      </div>
+      <div className="grid gap-2 border-t border-border p-3 text-xs sm:grid-cols-3">
+        <span className="inline-flex items-center gap-2 font-bold"><span className="h-3 w-3 rounded-full bg-foreground" />출발지</span>
+        <span className="inline-flex items-center gap-2 font-bold"><span className="h-3 w-3 rounded-full bg-primary" />거래처</span>
+        <span className="inline-flex items-center gap-2 font-bold"><span className="h-3 w-3 rounded-full bg-accent" />신규 리드</span>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   HeartPulse,
   Lightbulb,
+  MapPin,
   MessageSquareText,
   Route,
   Settings,
@@ -46,6 +47,14 @@ export default async function DashboardPage() {
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
     { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
+  const mapMarkers = [
+    { label: "출발", name: "하남 물류센터", address: "경기도 하남시 초이로 133 1층", x: 72, y: 62, tone: "origin" },
+    { label: "A", name: "성수 온반", address: "서울 성동구 성수이로 88", x: 45, y: 28, tone: "customer" },
+    { label: "B", name: "광진 능동 식당", address: "서울시 광진구 능동로 41길 17 1층", x: 58, y: 34, tone: "customer" },
+    { label: "C", name: "송파 고깃집", address: "서울 송파구 가락로 120", x: 62, y: 50, tone: "customer" },
+    { label: "D", name: "위례 신규매장", address: "경기 성남시 수정구 위례광장로 21", x: 67, y: 56, tone: "lead" },
+    { label: "E", name: "망원 브런치", address: "서울 마포구 망원로 33", x: 28, y: 31, tone: "lead" }
+  ] as const;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -145,6 +154,18 @@ export default async function DashboardPage() {
           <Metric icon={Lightbulb} label="고확률 리드" value={`${briefing.highProbability}곳`} />
           <Metric icon={Route} label="동선 내 리드" value={`${briefing.routeLeads}곳`} />
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              거래처 주소 지도
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DashboardAddressMap markers={mapMarkers} />
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <Card>
@@ -292,5 +313,55 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
         <p className="mt-1 text-3xl font-black">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function DashboardAddressMap({
+  markers
+}: {
+  markers: ReadonlyArray<{ readonly address: string; readonly label: string; readonly name: string; readonly tone: "customer" | "lead" | "origin"; readonly x: number; readonly y: number }>;
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="relative min-h-96 overflow-hidden rounded-lg border border-border bg-white bg-[linear-gradient(90deg,rgba(15,118,110,0.10)_1px,transparent_1px),linear-gradient(180deg,rgba(15,118,110,0.10)_1px,transparent_1px)] bg-[size:42px_42px]">
+        <div className="absolute left-[10%] top-[20%] h-[62%] w-[74%] rounded-[40%] border-2 border-dashed border-primary/25" />
+        <div className="absolute left-[24%] top-[28%] h-[44%] w-[58%] rounded-[48%] border border-accent/60 bg-accent/10" />
+        <div className="absolute left-[42%] top-[31%] h-[2px] w-[30%] rotate-[28deg] bg-primary/30" />
+        <div className="absolute left-[55%] top-[44%] h-[2px] w-[20%] rotate-[42deg] bg-primary/30" />
+        <div className="absolute left-[30%] top-[42%] h-[2px] w-[44%] rotate-[18deg] bg-primary/20" />
+        {markers.map((marker) => (
+          <div key={marker.name} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${marker.x}%`, top: `${marker.y}%` }}>
+            <span
+              className={
+                marker.tone === "origin"
+                  ? "flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-foreground text-xs font-black text-white shadow-panel"
+                  : marker.tone === "lead"
+                    ? "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-accent text-xs font-black text-foreground shadow-panel"
+                    : "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-primary text-xs font-black text-white shadow-panel"
+              }
+            >
+              {marker.label}
+            </span>
+          </div>
+        ))}
+        <div className="absolute bottom-3 left-3 rounded-md border border-border bg-white/95 p-3 text-xs shadow-panel">
+          <p className="font-black">임의 주소 좌표</p>
+          <p className="mt-1 text-muted-foreground">실제 API 연동 전 지도 UX 검증용 화면입니다.</p>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {markers.map((marker) => (
+          <div key={marker.name} className="rounded-md border border-border bg-muted/35 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-black">{marker.name}</p>
+              <Badge className={marker.tone === "lead" ? "bg-accent/20 text-foreground" : marker.tone === "origin" ? "bg-foreground text-white" : "bg-primary/10 text-primary"}>
+                {marker.label}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{marker.address}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
