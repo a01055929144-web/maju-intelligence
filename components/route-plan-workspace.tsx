@@ -287,19 +287,21 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   }
 
   return (
-    <Card>
-      <CardHeader className="space-y-4">
+    <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
+      <CardHeader className="space-y-4 border-b border-slate-200 bg-white p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Navigation className="h-5 w-5 text-primary" />
+          <CardTitle className="flex items-center gap-2 text-slate-950">
+            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-950 text-white">
+              <Navigation className="h-4 w-4" />
+            </span>
             코스 작업공간
           </CardTitle>
           <div className="flex flex-wrap gap-2">
             {courseOptions.map(({ icon: Icon, key, label }) => (
               <button
                 key={key}
-                className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
-                  courseMode === key ? "border-primary bg-primary text-white" : "border-border bg-white hover:bg-muted"
+                className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
+                  courseMode === key ? "border-slate-950 bg-slate-950 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
                 onClick={() => setCourseMode(key as CourseMode)}
                 type="button"
@@ -310,24 +312,24 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
             ))}
           </div>
         </div>
-        <div className="rounded-md border border-border bg-white p-3">
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-black">{isSalesCourse ? "영업 코스" : "배송 코스"}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm font-black text-slate-950">{isSalesCourse ? "영업 코스" : "배송 코스"}</p>
+              <p className="text-xs font-medium text-slate-500">
                 {isSalesCourse
                   ? "신규 리드 방문, 담당자 메모, 방문 결과 기록을 관리합니다."
                   : "물류 출발지 기준으로 거래처까지 실제 도로 거리와 경유 경로를 계산합니다."}
               </p>
             </div>
-            <Badge className={isSalesCourse ? "bg-primary/10 text-primary" : "bg-accent/20 text-foreground"}>
+            <Badge className={isSalesCourse ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-900"}>
               {isSalesCourse ? "Sales Visit" : "Delivery Route"}
             </Badge>
           </div>
         </div>
-        <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-sm font-black">
-            <SlidersHorizontal className="h-4 w-4 text-primary" />
+        <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-sm font-black text-slate-700">
+            <SlidersHorizontal className="h-4 w-4 text-slate-500" />
             지역 필터
           </div>
           <div className="flex flex-wrap gap-2">
@@ -358,23 +360,25 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
               <button
                 key={vehicle.id}
                 className={`rounded-md border p-4 text-left transition ${
-                  vehicleId === vehicle.id ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-white hover:bg-muted/45"
+                  vehicleId === vehicle.id ? "border-slate-950 bg-slate-950 text-white shadow-md" : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
                 }`}
                 onClick={() => setVehicleId(vehicle.id)}
                 type="button"
               >
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-2 text-sm font-black">
-                    <Truck className="h-4 w-4 text-primary" />
+                    <Truck className={`h-4 w-4 ${vehicleId === vehicle.id ? "text-white" : "text-emerald-700"}`} />
                     {vehicle.name}
                   </span>
-                  <Badge className="bg-muted text-foreground">{getSelectedStoreCount(selectedStoreIdsByVehicle, vehicle)}곳 선택</Badge>
+                  <Badge className={vehicleId === vehicle.id ? "bg-white text-slate-950" : "bg-slate-100 text-slate-700"}>
+                    {getSelectedStoreCount(selectedStoreIdsByVehicle, vehicle)}곳 선택
+                  </Badge>
                 </div>
-                <p className="text-xs font-bold text-muted-foreground">{vehicle.driver} · {vehicle.area}</p>
+                <p className={`text-xs font-bold ${vehicleId === vehicle.id ? "text-slate-300" : "text-slate-500"}`}>{vehicle.driver} · {vehicle.area}</p>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] font-black">
-                  <span className="rounded-md bg-white px-2 py-1">{vehicle.totalDistanceKm.toLocaleString()}km</span>
-                  <span className="rounded-md bg-white px-2 py-1">{formatMinutes(vehicle.totalDurationMinutes)}</span>
-                  <span className="rounded-md bg-white px-2 py-1">월 {vehicle.expectedRevenue.toLocaleString()}만</span>
+                  <span className={`rounded-md px-2 py-1 ${vehicleId === vehicle.id ? "bg-white/10" : "bg-slate-100"}`}>{vehicle.totalDistanceKm.toLocaleString()}km</span>
+                  <span className={`rounded-md px-2 py-1 ${vehicleId === vehicle.id ? "bg-white/10" : "bg-slate-100"}`}>{formatMinutes(vehicle.totalDurationMinutes)}</span>
+                  <span className={`rounded-md px-2 py-1 ${vehicleId === vehicle.id ? "bg-white/10" : "bg-slate-100"}`}>월 {vehicle.expectedRevenue.toLocaleString()}만</span>
                 </div>
               </button>
             ))}
@@ -382,7 +386,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 bg-slate-50/60 p-5">
         {!isSalesCourse && selectedVehicle ? (
           <SelectedDeliverySummary selectedCount={deliveryStops.length} selectedVehicle={selectedVehicle} />
         ) : null}
@@ -417,10 +421,10 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                 vehicle={selectedVehicle}
               />
             ) : null}
-            <div className="space-y-3 rounded-md border border-border bg-white p-3">
+            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
               <div>
-                <p className="text-sm font-black">선택 배송지 지도</p>
-                <p className="mt-1 text-xs text-muted-foreground">아래 지도는 현재 선택된 배송지입니다. 실제 도로 경로는 버튼을 눌러 티맵 계산 후 표시됩니다.</p>
+                <p className="text-sm font-black text-slate-950">선택 배송지 지도</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">선택된 배송지를 먼저 확인하고 실제 도로 경로를 계산합니다.</p>
               </div>
               <KakaoAddressMap markers={deliveryMarkers} showList={false} />
             </div>
@@ -453,21 +457,23 @@ function SelectedDeliverySummary({
   readonly selectedVehicle: DeliveryVehicle;
 }) {
   return (
-    <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-700 text-white">
             <Truck className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-black">오늘 선택한 배송차</p>
-            <p className="mt-1 text-lg font-black">{selectedVehicle.name}</p>
-            <p className="text-xs font-bold text-muted-foreground">
+            <p className="text-sm font-black text-slate-500">오늘 선택한 배송차</p>
+            <p className="mt-1 text-lg font-black text-slate-950">{selectedVehicle.name}</p>
+            <p className="text-xs font-bold text-slate-500">
               {selectedVehicle.driver} · {selectedVehicle.area} · 선택 배송지 {selectedCount}곳
             </p>
           </div>
         </div>
-        <Badge className="bg-white text-primary">{selectedCount ? "배송지 선택됨" : "배송지 미선택"}</Badge>
+        <Badge className={selectedCount ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
+          {selectedCount ? "배송지 선택됨" : "배송지 미선택"}
+        </Badge>
       </div>
     </div>
   );
@@ -497,33 +503,33 @@ function DeliveryStopList({
   const isSelectionFull = selectedStoreIds.length >= 15;
 
   return (
-    <div className="rounded-md border border-border bg-muted/25 p-4">
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-black">{vehicle.name} 배송지 선택</p>
-          <p className="text-xs text-muted-foreground">{vehicle.driver} · 전체 거래처 {allStores.length}곳 중 오늘 배송지 선택</p>
+          <p className="font-black text-slate-950">{vehicle.name} 배송지 선택</p>
+          <p className="text-xs font-medium text-slate-500">{vehicle.driver} · 전체 거래처 {allStores.length}곳 중 오늘 배송지 선택</p>
         </div>
-        <Badge className="bg-primary/10 text-primary">{selectedStoreIds.length}/15곳 선택</Badge>
+        <Badge className="bg-emerald-50 text-emerald-700">{selectedStoreIds.length}/15곳 선택</Badge>
       </div>
       <div className="mb-3 flex flex-wrap gap-2">
-        <button className="h-8 rounded-md border border-border bg-white px-3 text-xs font-black hover:bg-muted" onClick={onSelectAssigned} type="button">
+        <button className="h-8 rounded-md border border-slate-200 bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800" onClick={onSelectAssigned} type="button">
           기본 권역 15곳
         </button>
-        <button className="h-8 rounded-md border border-border bg-white px-3 text-xs font-black hover:bg-muted" onClick={onClear} type="button">
+        <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={onClear} type="button">
           선택 해제
         </button>
         {isSelectionFull ? <span className="self-center text-xs font-bold text-amber-700">티맵 경유 계산은 최대 15곳까지 선택합니다.</span> : null}
       </div>
 
       <div className="mb-3 grid gap-3 lg:grid-cols-[1fr_320px]">
-        <div className="rounded-md bg-white p-3">
-          <p className="mb-2 text-xs font-black text-muted-foreground">오늘 배송지</p>
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-xs font-black text-slate-500">오늘 배송지</p>
           {selectedStores.length ? (
             <div className="flex flex-wrap gap-2">
               {selectedStores.map((store, index) => (
                 <button
                   key={store.id}
-                  className="rounded-md bg-primary/10 px-2 py-1 text-left text-xs font-black text-primary hover:bg-primary/15"
+                  className="rounded-md bg-white px-2 py-1 text-left text-xs font-black text-emerald-700 shadow-sm hover:bg-emerald-50"
                   onClick={() => onSelectStore(store.id)}
                   type="button"
                 >
@@ -532,17 +538,17 @@ function DeliveryStopList({
               ))}
             </div>
           ) : (
-            <p className="text-xs font-bold text-muted-foreground">아래 거래처에서 오늘 배송할 매장을 선택하세요.</p>
+            <p className="text-xs font-bold text-slate-500">아래 거래처에서 오늘 배송할 매장을 선택하세요.</p>
           )}
         </div>
         {activeStore ? (
-          <div className="rounded-md border border-border bg-white p-3">
+          <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-start justify-between gap-2">
               <div>
-                <p className="text-xs font-black text-muted-foreground">매장 상세</p>
-                <p className="mt-1 text-base font-black">{activeStore.name}</p>
+                <p className="text-xs font-black text-slate-500">매장 상세</p>
+                <p className="mt-1 text-base font-black text-slate-950">{activeStore.name}</p>
               </div>
-              <Badge className={selectedStoreIdSet.has(activeStore.id) ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}>
+              <Badge className={selectedStoreIdSet.has(activeStore.id) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
                 {selectedStoreIdSet.has(activeStore.id) ? "오늘 배송" : "미선택"}
               </Badge>
             </div>
@@ -558,15 +564,15 @@ function DeliveryStopList({
         ) : null}
       </div>
 
-      <div className="max-h-[420px] overflow-auto rounded-md border border-border bg-white">
-        <div className="grid gap-px bg-border md:grid-cols-2">
+      <div className="max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
+        <div className="grid gap-px bg-slate-200 md:grid-cols-2">
           {allStores.map((stop) => {
             const checked = selectedStoreIdSet.has(stop.id);
             return (
               <div
                 key={stop.id}
-                className={`flex cursor-pointer items-start gap-3 bg-white p-3 text-sm ${
-                  activeStore?.id === stop.id ? "ring-2 ring-inset ring-primary" : checked ? "bg-primary/5" : ""
+                className={`flex cursor-pointer items-start gap-3 bg-white p-3 text-sm transition hover:bg-slate-50 ${
+                  activeStore?.id === stop.id ? "ring-2 ring-inset ring-slate-950" : checked ? "bg-emerald-50" : ""
                 }`}
                 onClick={() => onSelectStore(stop.id)}
                 role="button"
@@ -574,7 +580,7 @@ function DeliveryStopList({
               >
                 <input
                   checked={checked}
-                  className="mt-1 h-4 w-4 accent-primary"
+                  className="mt-1 h-4 w-4 accent-emerald-700"
                   disabled={!checked && isSelectionFull}
                   onChange={(event) => {
                     event.stopPropagation();
@@ -585,9 +591,9 @@ function DeliveryStopList({
                   type="checkbox"
                 />
                 <div>
-                  <p className="font-black">{stop.name}</p>
-                  <p className="text-xs text-muted-foreground">{stop.region} · {stop.address || "주소 미등록"}</p>
-                  <p className="mt-1 text-xs font-bold text-muted-foreground">
+                  <p className="font-black text-slate-950">{stop.name}</p>
+                  <p className="text-xs font-medium text-slate-500">{stop.region} · {stop.address || "주소 미등록"}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
                     {stop.distanceKm || 0}km · {formatMinutes(stop.durationMinutes || 0)} · 예상 월 {stop.expectedRevenue.toLocaleString()}만원
                   </p>
                 </div>
@@ -603,8 +609,8 @@ function DeliveryStopList({
 function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="grid grid-cols-[72px_1fr] gap-2">
-      <span className="font-black text-muted-foreground">{label}</span>
-      <span className="font-bold text-foreground">{value}</span>
+      <span className="font-black text-slate-500">{label}</span>
+      <span className="font-bold text-slate-900">{value}</span>
     </div>
   );
 }
@@ -617,7 +623,7 @@ function ViewButton({ active, label, onClick }: { readonly active: boolean; read
   return (
     <button
       className={`h-9 rounded-md border px-3 text-sm font-bold transition ${
-        active ? "border-foreground bg-foreground text-white" : "border-border bg-white hover:bg-muted"
+        active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
       }`}
       onClick={onClick}
       type="button"
@@ -679,7 +685,7 @@ function FilterButton({ active, label, onClick }: { readonly active: boolean; re
   return (
     <button
       className={`h-8 rounded-md border px-3 text-xs font-black transition ${
-        active ? "border-primary bg-primary text-white" : "border-border bg-white hover:bg-muted"
+        active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
       }`}
       onClick={onClick}
       type="button"
