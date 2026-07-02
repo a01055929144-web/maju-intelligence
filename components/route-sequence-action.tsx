@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 type RouteSequenceActionProps = {
   readonly buttonLabel?: string;
   readonly destinations: readonly string[];
+  readonly onSequenceChange?: (sequence: RouteSequence | null) => void;
   readonly resultTitle?: string;
+  readonly showMap?: boolean;
 };
 
 type RouteLeg = {
@@ -20,7 +22,7 @@ type RouteLeg = {
   toAddress: string;
 };
 
-type RouteSequence = {
+export type RouteSequence = {
   legs: RouteLeg[];
   originAddress: string;
   path: KakaoRoutePoint[];
@@ -32,7 +34,10 @@ type RouteSequence = {
 export function RouteSequenceAction({
   buttonLabel = "경유 동선 연결",
   destinations,
+  onSequenceChange,
   resultTitle = "티맵 실제 도로 경로"
+  ,
+  showMap = true
 }: RouteSequenceActionProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -54,12 +59,16 @@ export function RouteSequenceAction({
 
     if (!response?.ok) {
       setMessage("경유 계산 실패");
+      setSequence(null);
+      onSequenceChange?.(null);
       setIsLoading(false);
       return;
     }
 
     const payload = await response.json().catch(() => null);
-    setSequence(payload?.routeSequence || null);
+    const nextSequence = payload?.routeSequence || null;
+    setSequence(nextSequence);
+    onSequenceChange?.(nextSequence);
     const routePathCount = Number(payload?.routeSequence?.path?.length || 0);
     setMessage(routePathCount ? "티맵 도로 경로 계산됨" : "거리/시간 계산됨 · 도로 좌표 없음");
     setIsLoading(false);
@@ -100,19 +109,19 @@ export function RouteSequenceAction({
               </div>
             ))}
           </div>
-          {sequence.path.length ? (
+          {showMap && sequence.path.length ? (
             <div className="pt-2">
               <p className="mb-2 text-xs font-black text-muted-foreground">{resultTitle}</p>
               <KakaoAddressMap markers={routeMarkers} routePath={sequence.path} showList={false} />
             </div>
-          ) : (
+          ) : !sequence.path.length ? (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
               <p className="text-xs font-bold text-amber-800">티맵 도로 좌표가 없어 구간 거리/시간만 표시합니다.</p>
               <p className="text-xs text-amber-800">
                 이 경우는 티맵 키/주소 지오코딩/요청 제한 중 하나로 실제 도로 geometry가 반환되지 않은 상태입니다. 주소 목록과 선택 배송지는 유지됩니다.
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       ) : null}
     </div>

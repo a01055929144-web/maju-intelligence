@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, Truck, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteBatchDistanceAction } from "@/components/route-batch-distance-action";
 import { RouteDistanceAction } from "@/components/route-distance-action";
-import { RouteSequenceAction } from "@/components/route-sequence-action";
+import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { VisitResultForm } from "@/components/visit-result-form";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
@@ -246,6 +246,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
   const [vehicleId, setVehicleId] = useState("truck-1");
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
+  const [deliverySequence, setDeliverySequence] = useState<RouteSequence | null>(null);
   const [selectedStoreIdsByVehicle, setSelectedStoreIdsByVehicle] = useState<Record<string, string[]>>({});
   const [region, setRegion] = useState("all");
   const regions = useMemo(() => routePlan.groups.map((group) => group.region), [routePlan.groups]);
@@ -263,9 +264,16 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const deliveryStops = allDeliveryStops.filter((stop) => selectedDeliveryStoreIdSet.has(stop.id));
   const activeStore = allDeliveryStops.find((store) => store.id === activeStoreId) || deliveryStops[0] || allDeliveryStops[0];
   const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
+  const destinationsKey = destinations.join("|");
   const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
   const deliveryMarkers = createDeliveryMarkers(mapMarkers, deliveryStops);
+  const integratedDeliveryMarkers = deliverySequence ? createRouteMarkersFromSequence(deliverySequence, deliveryStops) : deliveryMarkers;
+  const deliveryRoutePath = deliverySequence?.path || [];
   const isSalesCourse = courseMode === "sales";
+
+  useEffect(() => {
+    setDeliverySequence(null);
+  }, [destinationsKey, vehicleId]);
 
   function updateSelectedStoreIds(nextStoreIds: string[]) {
     setSelectedStoreIdsByVehicle((current) => ({
@@ -375,8 +383,28 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
 
         {!isSalesCourse ? (
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
-            <div>
+          <div className="space-y-3">
+            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-slate-950">통합 배송 지도</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    선택한 배송지와 티맵 경유 도로 경로를 한 지도에서 확인합니다.
+                  </p>
+                </div>
+                <Badge className={deliverySequence ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
+                  {deliverySequence ? "티맵 경로 반영" : "배송지 선택 지도"}
+                </Badge>
+              </div>
+              <KakaoAddressMap
+                mapClassName="h-[680px]"
+                markers={integratedDeliveryMarkers}
+                routePath={deliveryRoutePath}
+                showList={false}
+              />
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
               {selectedVehicle ? (
                 <DeliveryStopList
                   allStores={allDeliveryStops}
@@ -389,19 +417,18 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                   vehicle={selectedVehicle}
                 />
               ) : null}
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
-                <div>
-                  <p className="text-sm font-black text-slate-950">선택 배송지 지도</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">선택된 배송지를 확인하고 경로를 계산합니다.</p>
+              <div className="space-y-3">
+                <div className="rounded-md border border-slate-200 bg-white p-3">
+                  <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
                 </div>
-                <KakaoAddressMap mapClassName="h-[520px]" markers={deliveryMarkers} showList={false} />
+                <RouteSequenceAction
+                  buttonLabel="배송 경유 도로 연결"
+                  destinations={destinations}
+                  onSequenceChange={setDeliverySequence}
+                  resultTitle="티맵 실제 배송 도로 경로"
+                  showMap={false}
+                />
               </div>
-              <div className="rounded-md border border-slate-200 bg-white p-3">
-                <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
-              </div>
-              <RouteSequenceAction buttonLabel="배송 경유 도로 연결" destinations={destinations} resultTitle="티맵 실제 배송 도로 경로" />
             </div>
           </div>
         ) : null}
@@ -753,6 +780,33 @@ function createDeliveryMarkers(markers: KakaoMapMarker[], stops: RoutePlanStop[]
   }));
 
   return origin ? [origin, ...stopMarkers] : stopMarkers;
+}
+
+function createRouteMarkersFromSequence(sequence: RouteSequence, stops: RoutePlanStop[]) {
+  const stopByAddress = new Map(stops.map((stop) => [stop.address, stop]));
+  const stopMarkers = sequence.stops.map((address, index) => {
+    const stop = stopByAddress.get(address);
+    return {
+      address,
+      label: String(index + 1),
+      name: stop?.name || `경유 ${index + 1}`,
+      tone: "customer" as const,
+      x: 18 + ((index * 7) % 68),
+      y: 18 + ((index * 11) % 60)
+    };
+  });
+
+  return [
+    {
+      address: sequence.originAddress,
+      label: "출발",
+      name: "물류 출발지",
+      tone: "origin" as const,
+      x: 72,
+      y: 62
+    },
+    ...stopMarkers
+  ];
 }
 
 function roundToOneDecimal(value: number) {
