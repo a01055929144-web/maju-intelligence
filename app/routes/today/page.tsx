@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarCheck, Clock, Navigation, Route, Target } from "lucide-react";
+import { CalendarCheck, Clock, Navigation, Target, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { KakaoMapMarker } from "@/components/kakao-address-map";
@@ -42,7 +42,7 @@ export default async function TodayRoutePage() {
           <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
           <Metric icon={Navigation} label="배송 예상거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
           <Metric icon={Clock} label="배송 예상시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-          <Metric icon={Route} label="지역 묶음" value={`${routePlan.groups.length}개`} />
+          <Metric icon={Truck} label="배송차량" value="3대" />
         </div>
 
         <RoutePlanWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />

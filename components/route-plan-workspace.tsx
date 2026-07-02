@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, UsersRound } from "lucide-react";
+import { LucideIcon, MapPin, Navigation, PackageCheck, SlidersHorizontal, Truck, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
@@ -19,6 +19,17 @@ type RoutePlanWorkspaceProps = {
 type CourseMode = "sales" | "delivery";
 type SalesViewMode = "map" | "stops";
 type DeliveryViewMode = "map" | "route";
+type DeliveryVehicle = {
+  id: string;
+  name: string;
+  driver: string;
+  area: string;
+  stops: RoutePlanStop[];
+  totalDistanceKm: number;
+  totalDurationMinutes: number;
+  expectedRevenue: number;
+};
+
 const courseOptions: Array<{ icon: LucideIcon; key: CourseMode; label: string }> = [
   { icon: UsersRound, key: "sales", label: "영업 코스" },
   { icon: PackageCheck, key: "delivery", label: "배송 코스" }
@@ -28,6 +39,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const [courseMode, setCourseMode] = useState<CourseMode>("sales");
   const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
   const [deliveryViewMode, setDeliveryViewMode] = useState<DeliveryViewMode>("map");
+  const [vehicleId, setVehicleId] = useState("truck-1");
   const [region, setRegion] = useState("all");
   const regions = useMemo(() => routePlan.groups.map((group) => group.region), [routePlan.groups]);
   const filteredGroups = useMemo(
@@ -35,8 +47,12 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
     [region, routePlan.groups]
   );
   const filteredStops = filteredGroups.flatMap((group) => group.stops);
-  const destinations = filteredStops.map((stop) => stop.address || "").filter(Boolean);
-  const filteredMarkers = filterMarkersForStops(mapMarkers, filteredStops, region);
+  const deliveryVehicles = useMemo(() => createDeliveryVehicles(filteredStops), [filteredStops]);
+  const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleId) || deliveryVehicles[0];
+  const deliveryStops = selectedVehicle?.stops || [];
+  const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
+  const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
+  const deliveryMarkers = filterMarkersForStops(mapMarkers, deliveryStops, true);
   const isSalesCourse = courseMode === "sales";
 
   return (
@@ -105,25 +121,56 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                 <ViewButton key={key} active={deliveryViewMode === key} label={label} onClick={() => setDeliveryViewMode(key)} />
               ))}
         </div>
+        {!isSalesCourse ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {deliveryVehicles.map((vehicle) => (
+              <button
+                key={vehicle.id}
+                className={`rounded-md border p-4 text-left transition ${
+                  vehicleId === vehicle.id ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-white hover:bg-muted/45"
+                }`}
+                onClick={() => setVehicleId(vehicle.id)}
+                type="button"
+              >
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-2 text-sm font-black">
+                    <Truck className="h-4 w-4 text-primary" />
+                    {vehicle.name}
+                  </span>
+                  <Badge className="bg-muted text-foreground">{vehicle.stops.length}곳</Badge>
+                </div>
+                <p className="text-xs font-bold text-muted-foreground">{vehicle.driver} · {vehicle.area}</p>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                  <span className="rounded-md bg-white px-2 py-1">{vehicle.totalDistanceKm.toLocaleString()}km</span>
+                  <span className="rounded-md bg-white px-2 py-1">{formatMinutes(vehicle.totalDurationMinutes)}</span>
+                  <span className="rounded-md bg-white px-2 py-1">월 {vehicle.expectedRevenue.toLocaleString()}만</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </CardHeader>
 
       <CardContent className="space-y-4">
         {isSalesCourse && salesViewMode === "map" ? (
           <div className="space-y-3">
-            <KakaoAddressMap markers={filteredMarkers} />
+            <KakaoAddressMap markers={salesMarkers} />
             <p className="text-xs font-bold text-muted-foreground">영업 지도에는 선택한 지역의 방문 후보 위치가 표시됩니다.</p>
           </div>
         ) : null}
 
         {!isSalesCourse && deliveryViewMode === "map" ? (
           <div className="space-y-3">
-            <KakaoAddressMap markers={filteredMarkers} />
-            <p className="text-xs font-bold text-muted-foreground">배송 지도에는 물류 출발지와 거래처 배송 후보가 표시됩니다.</p>
+            <KakaoAddressMap markers={deliveryMarkers} />
+            <p className="text-xs font-bold text-muted-foreground">
+              배송 지도에는 {selectedVehicle?.name || "선택 차량"}의 물류 출발지와 담당 거래처가 표시됩니다.
+            </p>
           </div>
         ) : null}
 
         {!isSalesCourse && deliveryViewMode === "route" ? (
           <div className="space-y-3">
+            {selectedVehicle ? <DeliveryStopList vehicle={selectedVehicle} /> : null}
             <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
             <RouteSequenceAction buttonLabel="배송 경유 도로 연결" destinations={destinations} resultTitle="티맵 실제 배송 도로 경로" />
           </div>
@@ -142,6 +189,38 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function DeliveryStopList({ vehicle }: { readonly vehicle: DeliveryVehicle }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/25 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-black">{vehicle.name} 담당 거래처</p>
+          <p className="text-xs text-muted-foreground">{vehicle.driver} · {vehicle.area}</p>
+        </div>
+        <Badge className="bg-primary/10 text-primary">{vehicle.stops.length}곳 배정</Badge>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {vehicle.stops.map((stop, index) => (
+          <div key={stop.id || `${vehicle.id}-${stop.name}`} className="rounded-md bg-white p-3 text-sm">
+            <div className="flex items-start gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-black text-white">
+                {index + 1}
+              </span>
+              <div>
+                <p className="font-black">{stop.name}</p>
+                <p className="text-xs text-muted-foreground">{stop.address || "주소 미등록"}</p>
+                <p className="mt-1 text-xs font-bold text-muted-foreground">
+                  {stop.distanceKm || 0}km · {formatMinutes(stop.durationMinutes || 0)} · 예상 월 {stop.expectedRevenue.toLocaleString()}만원
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -221,10 +300,33 @@ function FilterButton({ active, label, onClick }: { readonly active: boolean; re
   );
 }
 
-function filterMarkersForStops(markers: KakaoMapMarker[], stops: RoutePlanStop[], region: string) {
-  if (region === "all") return markers;
+function filterMarkersForStops(markers: KakaoMapMarker[], stops: RoutePlanStop[], includeOrigin: boolean) {
   const stopAddresses = new Set(stops.map((stop) => stop.address).filter(Boolean));
-  return markers.filter((marker) => marker.tone === "origin" || stopAddresses.has(marker.address));
+  return markers.filter((marker) => (includeOrigin && marker.tone === "origin") || stopAddresses.has(marker.address));
+}
+
+function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
+  const templates = [
+    { area: "동부권", driver: "김배송 매니저", id: "truck-1", name: "배송 1호차" },
+    { area: "강남·송파권", driver: "박배송 매니저", id: "truck-2", name: "배송 2호차" },
+    { area: "하남·외곽권", driver: "이배송 매니저", id: "truck-3", name: "배송 3호차" }
+  ];
+  const sortedStops = [...stops].sort((a, b) => `${a.region}-${a.order}`.localeCompare(`${b.region}-${b.order}`));
+
+  return templates.map((template, vehicleIndex) => {
+    const vehicleStops = sortedStops.filter((_, stopIndex) => stopIndex % templates.length === vehicleIndex);
+    return {
+      ...template,
+      stops: vehicleStops,
+      expectedRevenue: vehicleStops.reduce((total, stop) => total + stop.expectedRevenue, 0),
+      totalDistanceKm: roundToOneDecimal(vehicleStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
+      totalDurationMinutes: vehicleStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
+    };
+  });
+}
+
+function roundToOneDecimal(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 function formatMinutes(minutes: number) {
