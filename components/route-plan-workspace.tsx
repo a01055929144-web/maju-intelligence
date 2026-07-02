@@ -24,6 +24,7 @@ type DeliveryVehicle = {
   name: string;
   driver: string;
   area: string;
+  addresses: readonly string[];
   stops: RoutePlanStop[];
   totalDistanceKm: number;
   totalDurationMinutes: number;
@@ -33,6 +34,179 @@ type DeliveryVehicle = {
 const courseOptions: Array<{ icon: LucideIcon; key: CourseMode; label: string }> = [
   { icon: UsersRound, key: "sales", label: "영업 코스" },
   { icon: PackageCheck, key: "delivery", label: "배송 코스" }
+];
+
+const deliveryAddressGroups: ReadonlyArray<readonly string[]> = [
+  [
+    "서울 성동구 왕십리로 63",
+    "서울 성동구 아차산로 100",
+    "서울 성동구 성수이로 118",
+    "서울 성동구 뚝섬로 273",
+    "서울 성동구 광나루로 144",
+    "서울 광진구 능동로 92",
+    "서울 광진구 아차산로 272",
+    "서울 광진구 자양로 117",
+    "서울 광진구 군자로 70",
+    "서울 광진구 동일로 178",
+    "서울 성동구 행당로 84",
+    "서울 성동구 독서당로 302",
+    "서울 광진구 천호대로 536",
+    "서울 광진구 광나루로 361",
+    "서울 성동구 고산자로 202"
+  ],
+  [
+    "서울 강남구 테헤란로 152",
+    "서울 강남구 논현로 508",
+    "서울 강남구 도산대로 145",
+    "서울 강남구 압구정로 165",
+    "서울 강남구 선릉로 428",
+    "서울 서초구 강남대로 373",
+    "서울 서초구 서초대로 396",
+    "서울 서초구 반포대로 222",
+    "서울 서초구 방배로 100",
+    "서울 서초구 양재대로 12길 36",
+    "서울 강남구 삼성로 212",
+    "서울 강남구 학동로 426",
+    "서울 강남구 언주로 508",
+    "서울 서초구 사임당로 174",
+    "서울 서초구 효령로 292"
+  ],
+  [
+    "서울 송파구 올림픽로 300",
+    "서울 송파구 송파대로 345",
+    "서울 송파구 백제고분로 276",
+    "서울 송파구 오금로 87",
+    "서울 송파구 가락로 99",
+    "서울 송파구 중대로 135",
+    "서울 송파구 위례성대로 6",
+    "서울 송파구 문정로 83",
+    "서울 송파구 양재대로 932",
+    "서울 송파구 석촌호수로 210",
+    "경기 성남시 수정구 위례광장로 300",
+    "경기 성남시 수정구 위례서일로 10",
+    "경기 하남시 위례대로 190",
+    "경기 하남시 위례학암로 14",
+    "서울 송파구 충민로 66"
+  ],
+  [
+    "경기 하남시 미사강변대로 200",
+    "경기 하남시 미사강변중앙로 180",
+    "경기 하남시 미사대로 750",
+    "경기 하남시 조정대로 45",
+    "경기 하남시 덕풍동로 111",
+    "경기 하남시 신장로 130",
+    "경기 하남시 하남대로 802",
+    "경기 하남시 감일백제로 105",
+    "경기 하남시 초이로 133",
+    "경기 하남시 서하남로 488",
+    "경기 하남시 검단산로 239",
+    "경기 하남시 미사강변한강로 135",
+    "경기 하남시 아리수로 570",
+    "경기 하남시 대청로 15",
+    "경기 하남시 천현로 51"
+  ],
+  [
+    "서울 성동구 연무장길 76",
+    "서울 성동구 서울숲2길 32",
+    "서울 성동구 성수일로 77",
+    "서울 성동구 성수이로 51",
+    "서울 성동구 상원길 54",
+    "서울 성동구 왕십리로 83",
+    "서울 성동구 뚝섬로 379",
+    "서울 광진구 동일로 20길 106",
+    "서울 광진구 능동로 120",
+    "서울 광진구 아차산로 241",
+    "서울 광진구 화양동 7-4",
+    "서울 광진구 군자로 24",
+    "서울 광진구 자양번영로 60",
+    "서울 성동구 아차산로 17",
+    "서울 성동구 둘레15길 12"
+  ],
+  [
+    "서울 마포구 월드컵로 75",
+    "서울 마포구 동교로 162",
+    "서울 마포구 양화로 45",
+    "서울 마포구 포은로 90",
+    "서울 마포구 망원로 74",
+    "서울 마포구 독막로 8",
+    "서울 마포구 잔다리로 30",
+    "서울 마포구 와우산로 94",
+    "서울 마포구 성미산로 29",
+    "서울 마포구 백범로 35",
+    "서울 서대문구 연희로 89",
+    "서울 서대문구 신촌로 83",
+    "서울 은평구 응암로 189",
+    "서울 은평구 통일로 684",
+    "서울 마포구 월드컵북로 396"
+  ],
+  [
+    "서울 용산구 이태원로 177",
+    "서울 용산구 한강대로 405",
+    "서울 용산구 독서당로 46",
+    "서울 용산구 녹사평대로 150",
+    "서울 용산구 후암로 107",
+    "서울 용산구 청파로 378",
+    "서울 용산구 회나무로 13",
+    "서울 용산구 대사관로 35",
+    "서울 용산구 서빙고로 17",
+    "서울 용산구 원효로 51",
+    "서울 중구 퇴계로 100",
+    "서울 중구 다산로 128",
+    "서울 중구 동호로 249",
+    "서울 용산구 보광로 60",
+    "서울 용산구 장문로 23"
+  ],
+  [
+    "서울 중구 세종대로 110",
+    "서울 중구 을지로 100",
+    "서울 중구 명동길 26",
+    "서울 중구 퇴계로 173",
+    "서울 중구 마른내로 15",
+    "서울 중구 청계천로 40",
+    "서울 종로구 종로 1",
+    "서울 종로구 대학로 101",
+    "서울 종로구 삼청로 30",
+    "서울 종로구 율곡로 75",
+    "서울 종로구 자하문로 10",
+    "서울 종로구 돈화문로 30",
+    "서울 종로구 인사동길 49",
+    "서울 중구 장충단로 275",
+    "서울 중구 남대문로 81"
+  ],
+  [
+    "경기 성남시 분당구 판교역로 166",
+    "경기 성남시 분당구 대왕판교로 660",
+    "경기 성남시 분당구 운중로 242",
+    "경기 성남시 분당구 정자일로 95",
+    "경기 성남시 분당구 성남대로 331",
+    "경기 성남시 분당구 황새울로 258",
+    "경기 성남시 분당구 야탑로 81",
+    "경기 성남시 분당구 돌마로 46",
+    "경기 성남시 분당구 미금일로 90",
+    "경기 성남시 수정구 창업로 54",
+    "경기 성남시 수정구 성남대로 1200",
+    "경기 성남시 중원구 둔촌대로 80",
+    "경기 성남시 분당구 불정로 6",
+    "경기 성남시 분당구 수내로 39",
+    "경기 성남시 분당구 판교로 255"
+  ],
+  [
+    "경기 구리시 경춘로 261",
+    "경기 구리시 안골로 57",
+    "경기 구리시 동구릉로 136",
+    "경기 구리시 갈매중앙로 89",
+    "경기 구리시 벌말로 180",
+    "경기 남양주시 다산중앙로 123",
+    "경기 남양주시 미금로 103",
+    "경기 남양주시 별내중앙로 30",
+    "경기 남양주시 순화궁로 249",
+    "경기 남양주시 화도읍 마석중앙로 70",
+    "경기 남양주시 진접읍 해밀예당1로 50",
+    "경기 남양주시 오남읍 진건오남로 806",
+    "경기 남양주시 와부읍 덕소로 97",
+    "경기 남양주시 평내로 29",
+    "경기 남양주시 호평로 46"
+  ]
 ];
 
 export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspaceProps) {
@@ -307,48 +481,40 @@ function filterMarkersForStops(markers: KakaoMapMarker[], stops: RoutePlanStop[]
 
 function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
   const templates = [
-    { area: "성동·광진권", driver: "김배송 매니저", id: "truck-1", name: "배송 1호차" },
-    { area: "강남·서초권", driver: "박배송 매니저", id: "truck-2", name: "배송 2호차" },
-    { area: "송파·위례권", driver: "이배송 매니저", id: "truck-3", name: "배송 3호차" },
-    { area: "하남·미사권", driver: "최배송 매니저", id: "truck-4", name: "배송 4호차" },
-    { area: "성수·건대권", driver: "정배송 매니저", id: "truck-5", name: "배송 5호차" },
-    { area: "마포·망원권", driver: "한배송 매니저", id: "truck-6", name: "배송 6호차" },
-    { area: "용산·이태원권", driver: "오배송 매니저", id: "truck-7", name: "배송 7호차" },
-    { area: "중구·종로권", driver: "서배송 매니저", id: "truck-8", name: "배송 8호차" },
-    { area: "분당·판교권", driver: "신배송 매니저", id: "truck-9", name: "배송 9호차" },
-    { area: "구리·남양주권", driver: "문배송 매니저", id: "truck-10", name: "배송 10호차" }
+    { addresses: deliveryAddressGroups[0], area: "성동·광진권", driver: "김배송 매니저", id: "truck-1", name: "배송 1호차" },
+    { addresses: deliveryAddressGroups[1], area: "강남·서초권", driver: "박배송 매니저", id: "truck-2", name: "배송 2호차" },
+    { addresses: deliveryAddressGroups[2], area: "송파·위례권", driver: "이배송 매니저", id: "truck-3", name: "배송 3호차" },
+    { addresses: deliveryAddressGroups[3], area: "하남·미사권", driver: "최배송 매니저", id: "truck-4", name: "배송 4호차" },
+    { addresses: deliveryAddressGroups[4], area: "성수·건대권", driver: "정배송 매니저", id: "truck-5", name: "배송 5호차" },
+    { addresses: deliveryAddressGroups[5], area: "마포·망원권", driver: "한배송 매니저", id: "truck-6", name: "배송 6호차" },
+    { addresses: deliveryAddressGroups[6], area: "용산·이태원권", driver: "오배송 매니저", id: "truck-7", name: "배송 7호차" },
+    { addresses: deliveryAddressGroups[7], area: "중구·종로권", driver: "서배송 매니저", id: "truck-8", name: "배송 8호차" },
+    { addresses: deliveryAddressGroups[8], area: "분당·판교권", driver: "신배송 매니저", id: "truck-9", name: "배송 9호차" },
+    { addresses: deliveryAddressGroups[9], area: "구리·남양주권", driver: "문배송 매니저", id: "truck-10", name: "배송 10호차" }
   ];
   const sortedStops = [...stops].sort((a, b) => `${a.region}-${a.order}`.localeCompare(`${b.region}-${b.order}`));
-  const deliveryPool = createDeliveryStopPool(sortedStops, templates.length * 15);
+  const seedStops = sortedStops.length ? sortedStops : [createFallbackStop()];
 
   return templates.map((template, vehicleIndex) => {
-    const vehicleStops = deliveryPool.slice(vehicleIndex * 15, vehicleIndex * 15 + 15).map((stop, stopIndex) => ({
-      ...stop,
-      order: stopIndex + 1
-    }));
+    const vehicleStops = template.addresses.map((address, stopIndex) => {
+      const source = seedStops[(vehicleIndex * 15 + stopIndex) % seedStops.length];
+      return {
+        ...source,
+        address,
+        expectedRevenue: Math.max(80, source.expectedRevenue + ((stopIndex % 5) - 2) * 12),
+        id: `${template.id}-store-${stopIndex + 1}`,
+        name: `${template.area} 거래처 ${String(stopIndex + 1).padStart(2, "0")}`,
+        order: stopIndex + 1,
+        region: template.area,
+        score: Math.max(50, Math.min(99, source.score - (stopIndex % 7)))
+      };
+    });
     return {
       ...template,
       stops: vehicleStops,
       expectedRevenue: vehicleStops.reduce((total, stop) => total + stop.expectedRevenue, 0),
       totalDistanceKm: roundToOneDecimal(vehicleStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
       totalDurationMinutes: vehicleStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
-    };
-  });
-}
-
-function createDeliveryStopPool(stops: RoutePlanStop[], totalCount: number): RoutePlanStop[] {
-  const seedStops = stops.length ? stops : [createFallbackStop()];
-
-  return Array.from({ length: totalCount }, (_, index) => {
-    const source = seedStops[index % seedStops.length];
-    const copyRound = Math.floor(index / seedStops.length) + 1;
-    return {
-      ...source,
-      expectedRevenue: Math.max(80, source.expectedRevenue + ((index % 5) - 2) * 12),
-      id: `${source.id || "delivery"}-${index + 1}`,
-      name: copyRound === 1 ? source.name : `${source.name} 배송처 ${copyRound}`,
-      order: index + 1,
-      score: Math.max(50, Math.min(99, source.score - (index % 7)))
     };
   });
 }
