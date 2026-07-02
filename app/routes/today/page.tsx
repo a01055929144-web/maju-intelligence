@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarCheck, MapPin, Navigation, Route, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RouteDistanceAction } from "@/components/route-distance-action";
 import { VisitResultForm } from "@/components/visit-result-form";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
@@ -44,7 +45,7 @@ export default async function TodayRoutePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Navigation className="h-5 w-5 text-primary" />
-              권장 방문 순서
+              권장 방문 순서와 티맵 거리
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -67,9 +68,18 @@ export default async function TodayRoutePage() {
                         <div>
                           <p className="font-bold">{stop.name}</p>
                           <p className="text-xs text-muted-foreground">{stop.region} · 예상 월 {stop.expectedRevenue}만원</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{stop.address || "주소 미등록"}</p>
                         </div>
                         <Badge className="justify-center bg-accent/20 text-foreground">{stop.score}점</Badge>
                         <span className="text-xs font-bold text-muted-foreground">방문 후보</span>
+                      </div>
+                      <div className="mt-3 rounded-md bg-muted/45 p-3">
+                        <RouteDistanceAction
+                          destinationAddress={stop.address}
+                          distanceKm={stop.distanceKm}
+                          durationMinutes={stop.durationMinutes}
+                          routeProvider={stop.routeProvider}
+                        />
                       </div>
                       <div className="mt-3 border-t border-border pt-3">
                         <VisitResultForm expectedRevenue={stop.expectedRevenue} leadId={stop.id} />

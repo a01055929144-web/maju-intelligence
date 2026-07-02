@@ -1,6 +1,7 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { getAdminDashboard, getLeadPayload } from "./backend";
 import { CustomerRow, sampleCustomers } from "./sample-data";
+import { RouteDistanceResult } from "./tmap";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -42,7 +43,12 @@ export type LeadItem = {
   expectedRevenue: number;
 };
 export type RoutePlanStop = LeadItem & {
+  address?: string;
+  distanceKm?: number;
+  durationMinutes?: number;
   order: number;
+  routeCalculatedAt?: string;
+  routeProvider?: "tmap" | "estimated" | "cached" | "sample";
 };
 export type RoutePlanGroup = {
   region: string;
@@ -647,11 +653,27 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
 
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
   const leadPayload = await getLatestLeads(companyId);
+  const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
   const planned = (leadPayload.leads as LeadItem[])
     .filter((lead) => lead.status === "visit-planned" || lead.status === "today" || lead.status === "high-probability")
     .sort((a, b) => b.score - a.score)
     .slice(0, 12)
-    .map((lead, index) => ({ ...lead, order: index + 1 }));
+    .map((lead, index) => {
+      const sample = findSampleCustomerForLead(lead);
+      const address = sample?.address || `${lead.region || "서울"} ${lead.name}`;
+      const cached = routeCache.get(address);
+      const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : "sample";
+
+      return {
+        ...lead,
+        address,
+        distanceKm: cached?.distanceKm ?? sample?.deliveryKm,
+        durationMinutes: cached?.durationMinutes ?? estimateMinutesFromKm(sample?.deliveryKm),
+        order: index + 1,
+        routeCalculatedAt: cached?.calculatedAt,
+        routeProvider
+      };
+    });
 
   const groupMap = new Map<string, RoutePlanStop[]>();
   planned.forEach((lead) => {
@@ -672,6 +694,120 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
     totalExpectedRevenue: planned.reduce((total, stop) => total + stop.expectedRevenue, 0),
     groups
   };
+}
+
+export async function getCompanyOriginAddress(companyId?: string) {
+  const settings = await getCompanySettings(companyId);
+  return settings.originAddress || process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층";
+}
+
+export async function saveRouteDistanceCache(
+  companyId: string | undefined,
+  result: RouteDistanceResult,
+  options: { customerId?: string | null } = {}
+) {
+  const resolvedCompanyId = companyId || getDefaultCompanyId();
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      ...result
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      calculated_at: string;
+      distance_km: number | string;
+      duration_minutes: number;
+      id: string;
+      provider: string;
+    }>
+  >("route_distance_cache?on_conflict=company_id,destination_address", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        company_id: resolvedCompanyId,
+        customer_id: options.customerId || null,
+        origin_address: result.originAddress,
+        destination_address: result.destinationAddress,
+        origin_lat: result.originPoint?.lat ?? null,
+        origin_lng: result.originPoint?.lng ?? null,
+        destination_lat: result.destinationPoint?.lat ?? null,
+        destination_lng: result.destinationPoint?.lng ?? null,
+        distance_km: result.distanceKm,
+        duration_minutes: result.durationMinutes,
+        provider: result.provider,
+        route_geometry: result.routeGeometry,
+        raw_response: result.rawResponse,
+        calculated_at: new Date().toISOString()
+      }
+    ])
+  });
+
+  return {
+    persisted: true,
+    cacheId: rows[0]?.id,
+    ...result,
+    calculatedAt: rows[0]?.calculated_at
+  };
+}
+
+async function getRouteDistanceCacheMap(companyId: string) {
+  const cache = new Map<
+    string,
+    {
+      calculatedAt: string;
+      distanceKm: number;
+      durationMinutes: number;
+    }
+  >();
+
+  if (!isProductionStoreConfigured()) return cache;
+
+  const rows = await supabaseRequest<
+    Array<{
+      calculated_at: string;
+      destination_address: string;
+      distance_km: number | string;
+      duration_minutes: number;
+    }>
+  >(
+    `route_distance_cache?select=destination_address,distance_km,duration_minutes,calculated_at&company_id=eq.${encodeURIComponent(
+      companyId
+    )}&order=calculated_at.desc&limit=1000`
+  ).catch(() => []);
+
+  rows.forEach((row) => {
+    if (!cache.has(row.destination_address)) {
+      cache.set(row.destination_address, {
+        calculatedAt: new Date(row.calculated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        distanceKm: Number(row.distance_km || 0),
+        durationMinutes: Number(row.duration_minutes || 0)
+      });
+    }
+  });
+
+  return cache;
+}
+
+function findSampleCustomerForLead(lead: LeadItem) {
+  const region = lead.region || "";
+  const name = lead.name || "";
+
+  return (
+    sampleCustomers.find((customer) => customer.customerName === name) ||
+    sampleCustomers.find((customer) => name.includes(customer.region) || customer.region === region) ||
+    sampleCustomers.find((customer) => customer.region === region)
+  );
+}
+
+function estimateMinutesFromKm(distanceKm?: number) {
+  if (!distanceKm) return undefined;
+  return Math.max(10, Math.round(distanceKm * 2.2));
 }
 
 export async function saveVisitResult(input: {
