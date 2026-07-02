@@ -37,7 +37,7 @@ export function RouteSequenceAction({
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [sequence, setSequence] = useState<RouteSequence | null>(null);
-  const uniqueDestinations = useMemo(() => Array.from(new Set(destinations.filter(Boolean))).slice(0, 10), [destinations]);
+  const uniqueDestinations = useMemo(() => Array.from(new Set(destinations.filter(Boolean))).slice(0, 15), [destinations]);
   const routeMarkers = useMemo(() => (sequence ? createRouteMarkers(sequence) : []), [sequence]);
 
   async function calculateSequence() {

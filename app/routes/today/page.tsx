@@ -42,7 +42,7 @@ export default async function TodayRoutePage() {
           <Metric icon={Target} label="예상 월매출" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
           <Metric icon={Navigation} label="배송 예상거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
           <Metric icon={Clock} label="배송 예상시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-          <Metric icon={Truck} label="배송차량" value="3대" />
+          <Metric icon={Truck} label="배송차량" value="10대" />
         </div>
 
         <RoutePlanWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />

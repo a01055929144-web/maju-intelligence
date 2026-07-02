@@ -52,7 +52,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const deliveryStops = selectedVehicle?.stops || [];
   const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
   const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
-  const deliveryMarkers = filterMarkersForStops(mapMarkers, deliveryStops, true);
+  const deliveryMarkers = createDeliveryMarkers(mapMarkers, deliveryStops);
   const isSalesCourse = courseMode === "sales";
 
   return (
@@ -122,7 +122,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
               ))}
         </div>
         {!isSalesCourse ? (
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {deliveryVehicles.map((vehicle) => (
               <button
                 key={vehicle.id}
@@ -140,7 +140,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                   <Badge className="bg-muted text-foreground">{vehicle.stops.length}곳</Badge>
                 </div>
                 <p className="text-xs font-bold text-muted-foreground">{vehicle.driver} · {vehicle.area}</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] font-black">
                   <span className="rounded-md bg-white px-2 py-1">{vehicle.totalDistanceKm.toLocaleString()}km</span>
                   <span className="rounded-md bg-white px-2 py-1">{formatMinutes(vehicle.totalDurationMinutes)}</span>
                   <span className="rounded-md bg-white px-2 py-1">월 {vehicle.expectedRevenue.toLocaleString()}만</span>
@@ -307,14 +307,25 @@ function filterMarkersForStops(markers: KakaoMapMarker[], stops: RoutePlanStop[]
 
 function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
   const templates = [
-    { area: "동부권", driver: "김배송 매니저", id: "truck-1", name: "배송 1호차" },
-    { area: "강남·송파권", driver: "박배송 매니저", id: "truck-2", name: "배송 2호차" },
-    { area: "하남·외곽권", driver: "이배송 매니저", id: "truck-3", name: "배송 3호차" }
+    { area: "성동·광진권", driver: "김배송 매니저", id: "truck-1", name: "배송 1호차" },
+    { area: "강남·서초권", driver: "박배송 매니저", id: "truck-2", name: "배송 2호차" },
+    { area: "송파·위례권", driver: "이배송 매니저", id: "truck-3", name: "배송 3호차" },
+    { area: "하남·미사권", driver: "최배송 매니저", id: "truck-4", name: "배송 4호차" },
+    { area: "성수·건대권", driver: "정배송 매니저", id: "truck-5", name: "배송 5호차" },
+    { area: "마포·망원권", driver: "한배송 매니저", id: "truck-6", name: "배송 6호차" },
+    { area: "용산·이태원권", driver: "오배송 매니저", id: "truck-7", name: "배송 7호차" },
+    { area: "중구·종로권", driver: "서배송 매니저", id: "truck-8", name: "배송 8호차" },
+    { area: "분당·판교권", driver: "신배송 매니저", id: "truck-9", name: "배송 9호차" },
+    { area: "구리·남양주권", driver: "문배송 매니저", id: "truck-10", name: "배송 10호차" }
   ];
   const sortedStops = [...stops].sort((a, b) => `${a.region}-${a.order}`.localeCompare(`${b.region}-${b.order}`));
+  const deliveryPool = createDeliveryStopPool(sortedStops, templates.length * 15);
 
   return templates.map((template, vehicleIndex) => {
-    const vehicleStops = sortedStops.filter((_, stopIndex) => stopIndex % templates.length === vehicleIndex);
+    const vehicleStops = deliveryPool.slice(vehicleIndex * 15, vehicleIndex * 15 + 15).map((stop, stopIndex) => ({
+      ...stop,
+      order: stopIndex + 1
+    }));
     return {
       ...template,
       stops: vehicleStops,
@@ -323,6 +334,50 @@ function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
       totalDurationMinutes: vehicleStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
     };
   });
+}
+
+function createDeliveryStopPool(stops: RoutePlanStop[], totalCount: number): RoutePlanStop[] {
+  const seedStops = stops.length ? stops : [createFallbackStop()];
+
+  return Array.from({ length: totalCount }, (_, index) => {
+    const source = seedStops[index % seedStops.length];
+    const copyRound = Math.floor(index / seedStops.length) + 1;
+    return {
+      ...source,
+      expectedRevenue: Math.max(80, source.expectedRevenue + ((index % 5) - 2) * 12),
+      id: `${source.id || "delivery"}-${index + 1}`,
+      name: copyRound === 1 ? source.name : `${source.name} 배송처 ${copyRound}`,
+      order: index + 1,
+      score: Math.max(50, Math.min(99, source.score - (index % 7)))
+    };
+  });
+}
+
+function createFallbackStop(): RoutePlanStop {
+  return {
+    address: "서울 성동구 성수동",
+    expectedRevenue: 120,
+    id: "delivery-fallback",
+    name: "샘플 거래처",
+    order: 1,
+    region: "성수동",
+    score: 78,
+    status: "today"
+  };
+}
+
+function createDeliveryMarkers(markers: KakaoMapMarker[], stops: RoutePlanStop[]) {
+  const origin = markers.find((marker) => marker.tone === "origin");
+  const stopMarkers = stops.map((stop, index) => ({
+    address: stop.address || "",
+    label: String(index + 1),
+    name: stop.name,
+    tone: "customer" as const,
+    x: 18 + ((index * 7) % 68),
+    y: 18 + ((index * 11) % 60)
+  }));
+
+  return origin ? [origin, ...stopMarkers] : stopMarkers;
 }
 
 function roundToOneDecimal(value: number) {

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const rawDestinations = Array.isArray(body?.destinations) ? body.destinations : [];
   const destinations = Array.from(
     new Set<string>(rawDestinations.map((address: unknown) => String(address || "").trim()).filter(Boolean))
-  ).slice(0, 10);
+  ).slice(0, 15);
 
   if (!destinations.length) {
     return NextResponse.json({ error: "경유지 주소가 필요합니다." }, { status: 400 });
