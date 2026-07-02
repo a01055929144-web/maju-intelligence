@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteBatchDistanceAction } from "@/components/route-batch-distance-action";
 import { RouteDistanceAction } from "@/components/route-distance-action";
+import { RouteSequenceAction } from "@/components/route-sequence-action";
 import { VisitResultForm } from "@/components/visit-result-form";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
@@ -61,12 +62,15 @@ export default async function TodayRoutePage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Navigation className="h-5 w-5 text-primary" />
-              권장 방문 순서와 티맵 거리
-            </CardTitle>
-            <RouteBatchDistanceAction destinations={destinations} />
+          <CardHeader className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Navigation className="h-5 w-5 text-primary" />
+                권장 방문 순서와 티맵 거리
+              </CardTitle>
+              <RouteBatchDistanceAction destinations={destinations} />
+            </div>
+            <RouteSequenceAction destinations={destinations} />
           </CardHeader>
           <CardContent className="space-y-4">
             {routePlan.groups.map((group) => (

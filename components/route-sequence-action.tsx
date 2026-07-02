@@ -1,0 +1,102 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { GitBranch, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+type RouteSequenceActionProps = {
+  readonly destinations: readonly string[];
+};
+
+type RouteLeg = {
+  distanceKm: number;
+  durationMinutes: number;
+  fromAddress: string;
+  order: number;
+  provider: string;
+  toAddress: string;
+};
+
+type RouteSequence = {
+  legs: RouteLeg[];
+  totalDistanceKm: number;
+  totalDurationMinutes: number;
+};
+
+export function RouteSequenceAction({ destinations }: RouteSequenceActionProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [sequence, setSequence] = useState<RouteSequence | null>(null);
+  const uniqueDestinations = useMemo(() => Array.from(new Set(destinations.filter(Boolean))).slice(0, 10), [destinations]);
+
+  async function calculateSequence() {
+    if (!uniqueDestinations.length) return;
+
+    setIsLoading(true);
+    setMessage("");
+
+    const response = await fetch("/api/routes/sequence", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destinations: uniqueDestinations })
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      setMessage("경유 계산 실패");
+      setIsLoading(false);
+      return;
+    }
+
+    const payload = await response.json().catch(() => null);
+    setSequence(payload?.routeSequence || null);
+    setMessage("경유 동선 계산됨");
+    setIsLoading(false);
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" className="gap-2" disabled={!uniqueDestinations.length || isLoading} onClick={calculateSequence}>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
+          {isLoading ? "경유 계산 중" : "경유 동선 연결"}
+        </Button>
+        {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
+      </div>
+
+      {sequence ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2 text-xs font-black">
+            <span className="rounded-md bg-muted px-2 py-1">총 {sequence.totalDistanceKm.toLocaleString()}km</span>
+            <span className="rounded-md bg-muted px-2 py-1">총 {formatMinutes(sequence.totalDurationMinutes)}</span>
+            <span className="rounded-md bg-muted px-2 py-1">{sequence.legs.length}개 구간</span>
+          </div>
+          <div className="space-y-1">
+            {sequence.legs.map((leg) => (
+              <div key={`${leg.order}-${leg.toAddress}`} className="rounded-md bg-muted/45 p-2 text-xs leading-5">
+                <span className="font-black">{leg.order}구간</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  {shortenAddress(leg.fromAddress)} → {shortenAddress(leg.toAddress)}
+                </span>
+                <span className="font-bold"> · {leg.distanceKm}km · {formatMinutes(leg.durationMinutes)}</span>
+                {leg.provider === "estimated" ? <span className="font-bold text-amber-700"> · 추정</span> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatMinutes(minutes: number) {
+  if (!minutes) return "0분";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function shortenAddress(address: string) {
+  const words = address.split(/\s+/).filter(Boolean);
+  return words.slice(0, 3).join(" ") || address;
+}
