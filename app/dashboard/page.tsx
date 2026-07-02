@@ -4,8 +4,11 @@ import {
   ArrowRight,
   BarChart3,
   Building2,
+  CalendarDays,
   ClipboardList,
+  Clock,
   FileSpreadsheet,
+  Fuel,
   HeartPulse,
   Lightbulb,
   MapPin,
@@ -15,6 +18,7 @@ import {
   Sparkles,
   Target,
   TrendingUp,
+  Truck,
   Upload
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +28,7 @@ import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getCustomerSession } from "@/lib/auth";
-import { getCompanyDashboardPayload } from "@/lib/store";
+import { getCompanyDashboardPayload, getTodayRoutePlan } from "@/lib/store";
 import { CustomerLogoutButton } from "./logout-button";
 
 export default async function DashboardPage() {
@@ -32,6 +36,8 @@ export default async function DashboardPage() {
   if (!session) redirect("/dashboard/login");
 
   const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(session.companyId);
+  const routePlan = await getTodayRoutePlan(session.companyId);
+  const estimatedFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
   const scoreRows = [
@@ -136,6 +142,52 @@ export default async function DashboardPage() {
           <Metric icon={Lightbulb} label="고확률 리드" value={`${briefing.highProbability}곳`} />
           <Metric icon={Route} label="동선 내 리드" value={`${briefing.routeLeads}곳`} />
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-primary" />
+              배송 운영 대시보드
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">배송 코스에서 계산되는 km, 주유비, 예정 시간을 기간별로 관리합니다.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Metric icon={Route} label="금일 총 km" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+              <Metric icon={Fuel} label="예상 주유비" value={`${estimatedFuelCost.toLocaleString()}원`} />
+              <Metric icon={Clock} label="일 배송 예정" value={formatMinutes(routePlan.totalDurationMinutes)} />
+              <Metric icon={CalendarDays} label="월 배송 예정" value={formatCompactMinutes(routePlan.totalDurationMinutes * 22)} />
+            </div>
+            <div className="mt-4 overflow-hidden rounded-md border border-border">
+              <div className="grid grid-cols-[72px_1fr_1fr_1fr_1fr] bg-muted px-3 py-2 text-xs font-black text-muted-foreground">
+                <span>기간</span>
+                <span className="text-right">예상 km</span>
+                <span className="text-right">주유비</span>
+                <span className="text-right">배송시간</span>
+                <span className="text-right">방문/배송</span>
+              </div>
+              {[
+                ["일별", 1],
+                ["주별", 5],
+                ["월별", 22],
+                ["분기", 66],
+                ["연간", 264]
+              ].map(([label, multiplier]) => {
+                const count = Number(multiplier);
+                return (
+                  <div key={String(label)} className="grid grid-cols-[72px_1fr_1fr_1fr_1fr] border-t border-border px-3 py-3 text-xs font-bold">
+                    <span className="font-black">{String(label)}</span>
+                    <span className="text-right">{Math.round(routePlan.totalDistanceKm * count).toLocaleString()}km</span>
+                    <span className="text-right">{(estimatedFuelCost * count).toLocaleString()}원</span>
+                    <span className="text-right">{formatCompactMinutes(routePlan.totalDurationMinutes * count)}</span>
+                    <span className="text-right">{(routePlan.totalStops * count).toLocaleString()}곳</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">주유비는 1L당 1,650원, 평균 연비 7.5km/L 기준의 가정값입니다.</p>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -296,6 +348,28 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
       </CardContent>
     </Card>
   );
+}
+
+function estimateFuelCost(distanceKm: number) {
+  const fuelPrice = 1650;
+  const fuelEfficiencyKmPerLiter = 7.5;
+  return Math.round((distanceKm / fuelEfficiencyKmPerLiter) * fuelPrice);
+}
+
+function formatMinutes(minutes: number) {
+  if (!minutes) return "0분";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function formatCompactMinutes(minutes: number) {
+  if (!minutes) return "0분";
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return formatMinutes(minutes);
+  const days = Math.floor(hours / 8);
+  const restHours = hours % 8;
+  return restHours ? `${days}일 ${restHours}시간` : `${days}일`;
 }
 
 function DashboardAddressMap({
