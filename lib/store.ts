@@ -656,7 +656,7 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
 }
 
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
-  const leadPayload = await getLatestLeads(companyId);
+  const leadPayload = await getLatestLeads(companyId).catch(() => getLeadPayload());
   const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
   const planned = (leadPayload.leads as LeadItem[])
     .filter((lead) => lead.status === "visit-planned" || lead.status === "today" || lead.status === "high-probability")
@@ -705,8 +705,8 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
 }
 
 export async function getCompanyOriginAddress(companyId?: string) {
-  const settings = await getCompanySettings(companyId);
-  return settings.originAddress || process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층";
+  const settings = await getCompanySettings(companyId).catch(() => null);
+  return settings?.originAddress || process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층";
 }
 
 export async function saveRouteDistanceCache(
