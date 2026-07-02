@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { CalendarCheck, Clock, MapPin, Navigation, Route, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteBatchDistanceAction } from "@/components/route-batch-distance-action";
 import { RouteDistanceAction } from "@/components/route-distance-action";
 import { VisitResultForm } from "@/components/visit-result-form";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
-import { getTodayRoutePlan } from "@/lib/store";
+import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 
 export default async function TodayRoutePage() {
   const customerSession = getCustomerSession();
@@ -16,7 +17,9 @@ export default async function TodayRoutePage() {
   if (!customerSession && !adminSession) redirect("/dashboard/login");
 
   const routePlan = await getTodayRoutePlan(customerSession?.companyId);
+  const originAddress = await getCompanyOriginAddress(customerSession?.companyId);
   const destinations = routePlan.groups.flatMap((group) => group.stops.map((stop) => stop.address || "").filter(Boolean));
+  const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (
     <main className="min-h-screen bg-background">
@@ -44,6 +47,18 @@ export default async function TodayRoutePage() {
           <Metric icon={Clock} label="예상 이동시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
           <Metric icon={Route} label="지역 묶음" value={`${routePlan.groups.length}개`} />
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              오늘 방문 지도
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <KakaoAddressMap markers={mapMarkers} />
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -126,4 +141,30 @@ function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function createRouteMapMarkers(originAddress: string, stops: Array<{ address?: string; name: string; order: number }>): KakaoMapMarker[] {
+  const routeStops = stops
+    .filter((stop) => stop.address)
+    .slice(0, 10)
+    .map((stop, index) => ({
+      address: stop.address || "",
+      label: String(stop.order || index + 1),
+      name: stop.name,
+      tone: "customer" as const,
+      x: 24 + ((index * 13) % 58),
+      y: 28 + ((index * 17) % 44)
+    }));
+
+  return [
+    {
+      address: originAddress,
+      label: "출발",
+      name: "물류 출발지",
+      tone: "origin",
+      x: 72,
+      y: 62
+    },
+    ...routeStops
+  ];
 }
