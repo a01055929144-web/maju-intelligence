@@ -214,6 +214,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
   const [deliveryViewMode, setDeliveryViewMode] = useState<DeliveryViewMode>("map");
   const [vehicleId, setVehicleId] = useState("truck-1");
+  const [selectedStoreIdsByVehicle, setSelectedStoreIdsByVehicle] = useState<Record<string, string[]>>({});
   const [region, setRegion] = useState("all");
   const regions = useMemo(() => routePlan.groups.map((group) => group.region), [routePlan.groups]);
   const filteredGroups = useMemo(
@@ -223,11 +224,32 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const filteredStops = filteredGroups.flatMap((group) => group.stops);
   const deliveryVehicles = useMemo(() => createDeliveryVehicles(filteredStops), [filteredStops]);
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleId) || deliveryVehicles[0];
-  const deliveryStops = selectedVehicle?.stops || [];
+  const allDeliveryStops = useMemo(() => deliveryVehicles.flatMap((vehicle) => vehicle.stops), [deliveryVehicles]);
+  const defaultDeliveryStoreIds = useMemo(() => selectedVehicle?.stops.map((stop) => stop.id).filter(Boolean) || [], [selectedVehicle]);
+  const selectedDeliveryStoreIds = selectedStoreIdsByVehicle[vehicleId] || defaultDeliveryStoreIds;
+  const selectedDeliveryStoreIdSet = useMemo(() => new Set(selectedDeliveryStoreIds), [selectedDeliveryStoreIds]);
+  const deliveryStops = allDeliveryStops.filter((stop) => selectedDeliveryStoreIdSet.has(stop.id));
   const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
   const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
   const deliveryMarkers = createDeliveryMarkers(mapMarkers, deliveryStops);
   const isSalesCourse = courseMode === "sales";
+
+  function updateSelectedStoreIds(nextStoreIds: string[]) {
+    setSelectedStoreIdsByVehicle((current) => ({
+      ...current,
+      [vehicleId]: nextStoreIds.slice(0, 15)
+    }));
+  }
+
+  function toggleDeliveryStore(storeId: string) {
+    if (selectedDeliveryStoreIdSet.has(storeId)) {
+      updateSelectedStoreIds(selectedDeliveryStoreIds.filter((id) => id !== storeId));
+      return;
+    }
+
+    if (selectedDeliveryStoreIds.length >= 15) return;
+    updateSelectedStoreIds([...selectedDeliveryStoreIds, storeId]);
+  }
 
   return (
     <Card>
@@ -311,7 +333,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                     <Truck className="h-4 w-4 text-primary" />
                     {vehicle.name}
                   </span>
-                  <Badge className="bg-muted text-foreground">{vehicle.stops.length}곳</Badge>
+                  <Badge className="bg-muted text-foreground">{getSelectedStoreCount(selectedStoreIdsByVehicle, vehicle)}곳 선택</Badge>
                 </div>
                 <p className="text-xs font-bold text-muted-foreground">{vehicle.driver} · {vehicle.area}</p>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] font-black">
@@ -337,14 +359,23 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
           <div className="space-y-3">
             <KakaoAddressMap markers={deliveryMarkers} />
             <p className="text-xs font-bold text-muted-foreground">
-              배송 지도에는 {selectedVehicle?.name || "선택 차량"}의 물류 출발지와 담당 거래처가 표시됩니다.
+              배송 지도에는 {selectedVehicle?.name || "선택 차량"}이 오늘 선택한 배송지가 표시됩니다.
             </p>
           </div>
         ) : null}
 
         {!isSalesCourse && deliveryViewMode === "route" ? (
           <div className="space-y-3">
-            {selectedVehicle ? <DeliveryStopList vehicle={selectedVehicle} /> : null}
+            {selectedVehicle ? (
+              <DeliveryStopList
+                allStores={allDeliveryStops}
+                onClear={() => updateSelectedStoreIds([])}
+                onSelectAssigned={() => updateSelectedStoreIds(defaultDeliveryStoreIds)}
+                onToggleStore={toggleDeliveryStore}
+                selectedStoreIds={selectedDeliveryStoreIds}
+                vehicle={selectedVehicle}
+              />
+            ) : null}
             <RouteBatchDistanceAction buttonLabel="배송 거리 전체 계산" destinations={destinations} />
             <RouteSequenceAction buttonLabel="배송 경유 도로 연결" destinations={destinations} resultTitle="티맵 실제 배송 도로 경로" />
           </div>
@@ -366,36 +397,90 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   );
 }
 
-function DeliveryStopList({ vehicle }: { readonly vehicle: DeliveryVehicle }) {
+function DeliveryStopList({
+  allStores,
+  onClear,
+  onSelectAssigned,
+  onToggleStore,
+  selectedStoreIds,
+  vehicle
+}: {
+  readonly allStores: RoutePlanStop[];
+  readonly onClear: () => void;
+  readonly onSelectAssigned: () => void;
+  readonly onToggleStore: (storeId: string) => void;
+  readonly selectedStoreIds: string[];
+  readonly vehicle: DeliveryVehicle;
+}) {
+  const selectedStoreIdSet = new Set(selectedStoreIds);
+  const selectedStores = allStores.filter((store) => selectedStoreIdSet.has(store.id));
+  const isSelectionFull = selectedStoreIds.length >= 15;
+
   return (
     <div className="rounded-md border border-border bg-muted/25 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-black">{vehicle.name} 담당 거래처</p>
-          <p className="text-xs text-muted-foreground">{vehicle.driver} · {vehicle.area}</p>
+          <p className="font-black">{vehicle.name} 배송지 선택</p>
+          <p className="text-xs text-muted-foreground">{vehicle.driver} · 전체 거래처 {allStores.length}곳 중 오늘 배송지 선택</p>
         </div>
-        <Badge className="bg-primary/10 text-primary">{vehicle.stops.length}곳 배정</Badge>
+        <Badge className="bg-primary/10 text-primary">{selectedStoreIds.length}/15곳 선택</Badge>
       </div>
-      <div className="grid gap-2 md:grid-cols-2">
-        {vehicle.stops.map((stop, index) => (
-          <div key={stop.id || `${vehicle.id}-${stop.name}`} className="rounded-md bg-white p-3 text-sm">
-            <div className="flex items-start gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-black text-white">
-                {index + 1}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button className="h-8 rounded-md border border-border bg-white px-3 text-xs font-black hover:bg-muted" onClick={onSelectAssigned} type="button">
+          기본 권역 15곳
+        </button>
+        <button className="h-8 rounded-md border border-border bg-white px-3 text-xs font-black hover:bg-muted" onClick={onClear} type="button">
+          선택 해제
+        </button>
+        {isSelectionFull ? <span className="self-center text-xs font-bold text-amber-700">티맵 경유 계산은 최대 15곳까지 선택합니다.</span> : null}
+      </div>
+
+      <div className="mb-3 rounded-md bg-white p-3">
+        <p className="mb-2 text-xs font-black text-muted-foreground">오늘 배송지</p>
+        {selectedStores.length ? (
+          <div className="flex flex-wrap gap-2">
+            {selectedStores.map((store, index) => (
+              <span key={store.id} className="rounded-md bg-primary/10 px-2 py-1 text-xs font-black text-primary">
+                {index + 1}. {store.name}
               </span>
-              <div>
-                <p className="font-black">{stop.name}</p>
-                <p className="text-xs text-muted-foreground">{stop.address || "주소 미등록"}</p>
-                <p className="mt-1 text-xs font-bold text-muted-foreground">
-                  {stop.distanceKm || 0}km · {formatMinutes(stop.durationMinutes || 0)} · 예상 월 {stop.expectedRevenue.toLocaleString()}만원
-                </p>
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
+        ) : (
+          <p className="text-xs font-bold text-muted-foreground">아래 거래처에서 오늘 배송할 매장을 선택하세요.</p>
+        )}
+      </div>
+
+      <div className="max-h-[420px] overflow-auto rounded-md border border-border bg-white">
+        <div className="grid gap-px bg-border md:grid-cols-2">
+          {allStores.map((stop) => {
+            const checked = selectedStoreIdSet.has(stop.id);
+            return (
+              <label key={stop.id} className={`flex cursor-pointer items-start gap-3 bg-white p-3 text-sm ${checked ? "bg-primary/5" : ""}`}>
+                <input
+                  checked={checked}
+                  className="mt-1 h-4 w-4 accent-primary"
+                  disabled={!checked && isSelectionFull}
+                  onChange={() => onToggleStore(stop.id)}
+                  type="checkbox"
+                />
+                <div>
+                  <p className="font-black">{stop.name}</p>
+                  <p className="text-xs text-muted-foreground">{stop.region} · {stop.address || "주소 미등록"}</p>
+                  <p className="mt-1 text-xs font-bold text-muted-foreground">
+                    {stop.distanceKm || 0}km · {formatMinutes(stop.durationMinutes || 0)} · 예상 월 {stop.expectedRevenue.toLocaleString()}만원
+                  </p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
+}
+
+function getSelectedStoreCount(selectedStoreIdsByVehicle: Record<string, string[]>, vehicle: DeliveryVehicle) {
+  return selectedStoreIdsByVehicle[vehicle.id]?.length ?? vehicle.stops.length;
 }
 
 function ViewButton({ active, label, onClick }: { readonly active: boolean; readonly label: string; readonly onClick: () => void }) {
