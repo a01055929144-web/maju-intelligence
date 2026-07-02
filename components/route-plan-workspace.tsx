@@ -209,11 +209,45 @@ const deliveryAddressGroups: ReadonlyArray<readonly string[]> = [
   ]
 ];
 
+const storeNamePool = [
+  "마루한식",
+  "담소식당",
+  "오늘국밥",
+  "정성반상",
+  "고운분식",
+  "성수면옥",
+  "바른김밥",
+  "서울돈까스",
+  "온기식탁",
+  "소담카페",
+  "브레드하우스",
+  "하루초밥",
+  "우리반찬",
+  "청담국수",
+  "미가손만두",
+  "라온비스트로",
+  "늘봄식당",
+  "가온족발",
+  "한그릇덮밥",
+  "모아치킨",
+  "다온갈비",
+  "새벽해장국",
+  "어반키친",
+  "달빛포차",
+  "푸른샐러드",
+  "더테이블",
+  "명가칼국수",
+  "제일냉면",
+  "풍년쌈밥",
+  "올리브델리"
+];
+
 export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspaceProps) {
   const [courseMode, setCourseMode] = useState<CourseMode>("sales");
   const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>("map");
   const [deliveryViewMode, setDeliveryViewMode] = useState<DeliveryViewMode>("map");
   const [vehicleId, setVehicleId] = useState("truck-1");
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [selectedStoreIdsByVehicle, setSelectedStoreIdsByVehicle] = useState<Record<string, string[]>>({});
   const [region, setRegion] = useState("all");
   const regions = useMemo(() => routePlan.groups.map((group) => group.region), [routePlan.groups]);
@@ -229,6 +263,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const selectedDeliveryStoreIds = selectedStoreIdsByVehicle[vehicleId] || defaultDeliveryStoreIds;
   const selectedDeliveryStoreIdSet = useMemo(() => new Set(selectedDeliveryStoreIds), [selectedDeliveryStoreIds]);
   const deliveryStops = allDeliveryStops.filter((stop) => selectedDeliveryStoreIdSet.has(stop.id));
+  const activeStore = allDeliveryStops.find((store) => store.id === activeStoreId) || deliveryStops[0] || allDeliveryStops[0];
   const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
   const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
   const deliveryMarkers = createDeliveryMarkers(mapMarkers, deliveryStops);
@@ -373,7 +408,9 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
             {selectedVehicle ? (
               <DeliveryStopList
                 allStores={allDeliveryStops}
+                activeStore={activeStore}
                 onClear={() => updateSelectedStoreIds([])}
+                onSelectStore={setActiveStoreId}
                 onSelectAssigned={() => updateSelectedStoreIds(defaultDeliveryStoreIds)}
                 onToggleStore={toggleDeliveryStore}
                 selectedStoreIds={selectedDeliveryStoreIds}
@@ -437,15 +474,19 @@ function SelectedDeliverySummary({
 }
 
 function DeliveryStopList({
+  activeStore,
   allStores,
   onClear,
+  onSelectStore,
   onSelectAssigned,
   onToggleStore,
   selectedStoreIds,
   vehicle
 }: {
+  readonly activeStore?: RoutePlanStop;
   readonly allStores: RoutePlanStop[];
   readonly onClear: () => void;
+  readonly onSelectStore: (storeId: string) => void;
   readonly onSelectAssigned: () => void;
   readonly onToggleStore: (storeId: string) => void;
   readonly selectedStoreIds: string[];
@@ -474,19 +515,47 @@ function DeliveryStopList({
         {isSelectionFull ? <span className="self-center text-xs font-bold text-amber-700">티맵 경유 계산은 최대 15곳까지 선택합니다.</span> : null}
       </div>
 
-      <div className="mb-3 rounded-md bg-white p-3">
-        <p className="mb-2 text-xs font-black text-muted-foreground">오늘 배송지</p>
-        {selectedStores.length ? (
-          <div className="flex flex-wrap gap-2">
-            {selectedStores.map((store, index) => (
-              <span key={store.id} className="rounded-md bg-primary/10 px-2 py-1 text-xs font-black text-primary">
-                {index + 1}. {store.name}
-              </span>
-            ))}
+      <div className="mb-3 grid gap-3 lg:grid-cols-[1fr_320px]">
+        <div className="rounded-md bg-white p-3">
+          <p className="mb-2 text-xs font-black text-muted-foreground">오늘 배송지</p>
+          {selectedStores.length ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedStores.map((store, index) => (
+                <button
+                  key={store.id}
+                  className="rounded-md bg-primary/10 px-2 py-1 text-left text-xs font-black text-primary hover:bg-primary/15"
+                  onClick={() => onSelectStore(store.id)}
+                  type="button"
+                >
+                  {index + 1}. {store.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-muted-foreground">아래 거래처에서 오늘 배송할 매장을 선택하세요.</p>
+          )}
+        </div>
+        {activeStore ? (
+          <div className="rounded-md border border-border bg-white p-3">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-black text-muted-foreground">매장 상세</p>
+                <p className="mt-1 text-base font-black">{activeStore.name}</p>
+              </div>
+              <Badge className={selectedStoreIdSet.has(activeStore.id) ? "bg-primary/10 text-primary" : "bg-muted text-foreground"}>
+                {selectedStoreIdSet.has(activeStore.id) ? "오늘 배송" : "미선택"}
+              </Badge>
+            </div>
+            <div className="space-y-2 text-xs">
+              <DetailRow label="주소" value={activeStore.address || "주소 미등록"} />
+              <DetailRow label="권역" value={activeStore.region} />
+              <DetailRow label="예상매출" value={`월 ${activeStore.expectedRevenue.toLocaleString()}만원`} />
+              <DetailRow label="거래점수" value={`${activeStore.score}점`} />
+              <DetailRow label="예상거리" value={`${activeStore.distanceKm || 0}km`} />
+              <DetailRow label="예상시간" value={formatMinutes(activeStore.durationMinutes || 0)} />
+            </div>
           </div>
-        ) : (
-          <p className="text-xs font-bold text-muted-foreground">아래 거래처에서 오늘 배송할 매장을 선택하세요.</p>
-        )}
+        ) : null}
       </div>
 
       <div className="max-h-[420px] overflow-auto rounded-md border border-border bg-white">
@@ -494,12 +563,25 @@ function DeliveryStopList({
           {allStores.map((stop) => {
             const checked = selectedStoreIdSet.has(stop.id);
             return (
-              <label key={stop.id} className={`flex cursor-pointer items-start gap-3 bg-white p-3 text-sm ${checked ? "bg-primary/5" : ""}`}>
+              <div
+                key={stop.id}
+                className={`flex cursor-pointer items-start gap-3 bg-white p-3 text-sm ${
+                  activeStore?.id === stop.id ? "ring-2 ring-inset ring-primary" : checked ? "bg-primary/5" : ""
+                }`}
+                onClick={() => onSelectStore(stop.id)}
+                role="button"
+                tabIndex={0}
+              >
                 <input
                   checked={checked}
                   className="mt-1 h-4 w-4 accent-primary"
                   disabled={!checked && isSelectionFull}
-                  onChange={() => onToggleStore(stop.id)}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    onToggleStore(stop.id);
+                    onSelectStore(stop.id);
+                  }}
+                  onClick={(event) => event.stopPropagation()}
                   type="checkbox"
                 />
                 <div>
@@ -509,11 +591,20 @@ function DeliveryStopList({
                     {stop.distanceKm || 0}km · {formatMinutes(stop.durationMinutes || 0)} · 예상 월 {stop.expectedRevenue.toLocaleString()}만원
                   </p>
                 </div>
-              </label>
+              </div>
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="grid grid-cols-[72px_1fr] gap-2">
+      <span className="font-black text-muted-foreground">{label}</span>
+      <span className="font-bold text-foreground">{value}</span>
     </div>
   );
 }
@@ -627,7 +718,7 @@ function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
         address,
         expectedRevenue: Math.max(80, source.expectedRevenue + ((stopIndex % 5) - 2) * 12),
         id: `${template.id}-store-${stopIndex + 1}`,
-        name: `${template.area} 거래처 ${String(stopIndex + 1).padStart(2, "0")}`,
+        name: createStoreName(vehicleIndex, stopIndex),
         order: stopIndex + 1,
         region: template.area,
         score: Math.max(50, Math.min(99, source.score - (stopIndex % 7)))
@@ -641,6 +732,12 @@ function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
       totalDurationMinutes: vehicleStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
     };
   });
+}
+
+function createStoreName(vehicleIndex: number, stopIndex: number) {
+  const baseName = storeNamePool[(vehicleIndex * 15 + stopIndex) % storeNamePool.length];
+  const district = ["성동", "강남", "송파", "하남", "성수", "마포", "용산", "종로", "판교", "구리"][vehicleIndex] || "서울";
+  return `${district} ${baseName} ${String(stopIndex + 1).padStart(2, "0")}`;
 }
 
 function createFallbackStop(): RoutePlanStop {
