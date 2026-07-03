@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 
 export type KakaoMapMarker = {
   readonly address: string;
+  readonly grade?: "A" | "B" | "C";
   readonly label: string;
   readonly name: string;
   readonly tone: "customer" | "lead" | "origin";
@@ -192,8 +193,9 @@ function loadKakaoMapSdk(appKey: string) {
 }
 
 function createMarkerOverlay(marker: KakaoMapMarker) {
-  const toneClass =
-    marker.tone === "origin"
+  const toneClass = marker.grade
+    ? gradeStyle(marker.grade)
+    : marker.tone === "origin"
       ? "background:#111827;color:#ffffff;"
       : marker.tone === "lead"
         ? "background:#059669;color:#ffffff;"
@@ -206,6 +208,12 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
       ${label} · ${name}
     </div>
   `;
+}
+
+function gradeStyle(grade: "A" | "B" | "C") {
+  if (grade === "A") return "background:#7c3aed;color:#ffffff;";
+  if (grade === "B") return "background:#2563eb;color:#ffffff;";
+  return "background:#64748b;color:#ffffff;";
 }
 
 function escapeHtml(value: string) {
@@ -235,7 +243,17 @@ function FallbackAddressMap({ mapClassName = defaultMapClassName, markers, route
           >
             <span
               className={`flex h-9 min-w-9 items-center justify-center rounded-full border-2 border-white px-2 text-xs font-black text-white shadow-lg ${
-                marker.tone === "origin" ? "bg-slate-950" : marker.tone === "lead" ? "bg-emerald-600" : "bg-primary"
+                marker.grade === "A"
+                  ? "bg-violet-700"
+                  : marker.grade === "B"
+                    ? "bg-blue-600"
+                    : marker.grade === "C"
+                      ? "bg-slate-500"
+                      : marker.tone === "origin"
+                        ? "bg-slate-950"
+                        : marker.tone === "lead"
+                          ? "bg-emerald-600"
+                          : "bg-primary"
               }`}
             >
               {marker.label}
@@ -259,8 +277,22 @@ function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarke
         <div key={`${marker.label}-${marker.name}`} className="rounded-md border border-border bg-white p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="min-w-0 truncate text-sm font-black">{marker.name}</p>
-            <Badge className={marker.tone === "origin" ? "bg-slate-950 text-white" : marker.tone === "lead" ? "bg-emerald-600 text-white" : ""}>
-              {marker.tone === "origin" ? "출발지" : marker.tone === "lead" ? "신규" : "거래처"}
+            <Badge
+              className={
+                marker.grade === "A"
+                  ? "bg-violet-700 text-white"
+                  : marker.grade === "B"
+                    ? "bg-blue-600 text-white"
+                    : marker.grade === "C"
+                      ? "bg-slate-500 text-white"
+                      : marker.tone === "origin"
+                        ? "bg-slate-950 text-white"
+                        : marker.tone === "lead"
+                          ? "bg-emerald-600 text-white"
+                          : ""
+              }
+            >
+              {marker.grade ? `${marker.grade}등급` : marker.tone === "origin" ? "출발지" : marker.tone === "lead" ? "신규" : "거래처"}
             </Badge>
           </div>
           <p className="mt-2 flex gap-1 text-xs leading-5 text-muted-foreground">

@@ -16,6 +16,9 @@ type RoutePlanWorkspaceProps = {
   readonly routePlan: RoutePlan;
 };
 
+type RevenueGrade = "A" | "B" | "C";
+type GradeFilter = "all" | RevenueGrade;
+
 type DeliveryVehicle = {
   id: string;
   name: string;
@@ -238,6 +241,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const [vehicleId, setVehicleId] = useState("truck-1");
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [deliverySequence, setDeliverySequence] = useState<RouteSequence | null>(null);
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [selectedStoreIdsByVehicle, setSelectedStoreIdsByVehicle] = useState<Record<string, string[]>>({});
   const [region, setRegion] = useState("all");
   const regions = useMemo(() => routePlan.groups.map((group) => group.region), [routePlan.groups]);
@@ -257,10 +261,13 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
   const destinations = deliveryStops.map((stop) => stop.address || "").filter(Boolean);
   const destinationsKey = destinations.join("|");
   const salesMarkers = filterMarkersForStops(mapMarkers, filteredStops, false);
-  const deliveryMarkers = createDeliveryMarkers(mapMarkers, deliveryStops);
+  const gradeFilteredDeliveryStops = filterStopsByGrade(allDeliveryStops, gradeFilter);
+  const gradeFilteredSalesStops = filterStopsByGrade(filteredStops, gradeFilter);
+  const deliveryMarkers = createDeliveryMarkers(mapMarkers, gradeFilteredDeliveryStops);
   const integratedDeliveryMarkers = deliverySequence ? createRouteMarkersFromSequence(deliverySequence, deliveryStops) : deliveryMarkers;
-  const unifiedMapMarkers = mergeRouteMarkers(integratedDeliveryMarkers, createSalesLeadMarkers(salesMarkers));
+  const unifiedMapMarkers = mergeRouteMarkers(integratedDeliveryMarkers, createSalesLeadMarkersFromStops(gradeFilteredSalesStops, salesMarkers));
   const deliveryRoutePath = deliverySequence?.path || [];
+  const gradeCounts = getGradeCounts([...allDeliveryStops, ...filteredStops]);
 
   useEffect(() => {
     setDeliverySequence(null);
@@ -295,7 +302,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
             <p className="mt-1 text-sm font-medium text-slate-500">영업 방문 후보와 배송지를 같은 지도에서 관리합니다.</p>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-black">
-            <Badge className="bg-emerald-50 text-emerald-700">배송지 {deliveryStops.length}곳</Badge>
+            <Badge className="bg-emerald-50 text-emerald-700">전체 매장 {allDeliveryStops.length}곳</Badge>
             <Badge className="bg-blue-50 text-blue-700">영업 후보 {filteredStops.length}곳</Badge>
             <Badge className={deliverySequence ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}>
               {deliverySequence ? "티맵 경로 반영" : "경로 계산 전"}
@@ -312,6 +319,18 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
             {regions.map((nextRegion) => (
               <FilterButton key={nextRegion} active={region === nextRegion} label={nextRegion} onClick={() => setRegion(nextRegion)} />
             ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-sm font-black text-slate-700">
+            <MapPin className="h-4 w-4 text-slate-500" />
+            매출 등급 필터
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <GradeButton active={gradeFilter === "all"} label={`전체 ${gradeCounts.total}`} onClick={() => setGradeFilter("all")} />
+            <GradeButton active={gradeFilter === "A"} label={`A ${gradeCounts.A}`} onClick={() => setGradeFilter("A")} tone="A" />
+            <GradeButton active={gradeFilter === "B"} label={`B ${gradeCounts.B}`} onClick={() => setGradeFilter("B")} tone="B" />
+            <GradeButton active={gradeFilter === "C"} label={`C ${gradeCounts.C}`} onClick={() => setGradeFilter("C")} tone="C" />
           </div>
         </div>
       </CardHeader>
@@ -337,7 +356,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                 vehicle={selectedVehicle}
               />
             ) : null}
-            <SalesLeadList groups={filteredGroups} />
+            <SalesLeadList gradeFilter={gradeFilter} groups={filteredGroups} />
           </aside>
 
           <section className="min-w-0 bg-slate-50 p-4">
@@ -349,12 +368,13 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                 <div>
                   <p className="text-sm font-black text-slate-950">통합 영업·배송 지도</p>
                   <p className="mt-1 text-xs font-medium text-slate-500">
-                    파란 마커는 영업 후보, 초록 마커는 오늘 배송지입니다. 티맵 경유 계산 후 같은 지도에 도로 경로가 표시됩니다.
+                    전체 매장을 매출 A/B/C 등급으로 구분합니다. 선택한 등급 필터에 맞는 매장만 지도에 표시됩니다.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-blue-50 text-blue-700">영업</Badge>
-                  <Badge className="bg-emerald-50 text-emerald-700">배송</Badge>
+                  <Badge className="bg-violet-50 text-violet-700">A 고매출</Badge>
+                  <Badge className="bg-blue-50 text-blue-700">B 안정</Badge>
+                  <Badge className="bg-slate-100 text-slate-700">C 육성</Badge>
                   <Badge className={deliverySequence ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}>
                     {deliverySequence ? "티맵 경로 반영" : "선택 지도"}
                   </Badge>
@@ -563,7 +583,7 @@ function DeliveryStopList({
                 <p className="mt-1 text-base font-black text-slate-950">{activeStore.name}</p>
               </div>
               <Badge className={selectedStoreIdSet.has(activeStore.id) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}>
-                {selectedStoreIdSet.has(activeStore.id) ? "오늘 배송" : "미선택"}
+                {getRevenueGrade(activeStore.expectedRevenue)}등급
               </Badge>
             </div>
             <div className="space-y-2 text-xs">
@@ -608,7 +628,10 @@ function DeliveryStopList({
                   {checked ? <Check className="h-3.5 w-3.5" /> : null}
                 </span>
                 <div>
-                  <p className="font-black text-slate-950">{stop.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-black text-slate-950">{stop.name}</p>
+                    <GradeBadge grade={getRevenueGrade(stop.expectedRevenue)} />
+                  </div>
                   <p className="text-xs font-medium text-slate-500">{stop.region} · {stop.address || "주소 미등록"}</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">
                     {stop.distanceKm || 0}km · {formatMinutes(stop.durationMinutes || 0)} · 예상 월 {stop.expectedRevenue.toLocaleString()}만원
@@ -623,8 +646,8 @@ function DeliveryStopList({
   );
 }
 
-function SalesLeadList({ groups }: { readonly groups: RoutePlan["groups"] }) {
-  const leads = groups.flatMap((group) => group.stops).slice(0, 12);
+function SalesLeadList({ gradeFilter, groups }: { readonly gradeFilter: GradeFilter; readonly groups: RoutePlan["groups"] }) {
+  const leads = filterStopsByGrade(groups.flatMap((group) => group.stops), gradeFilter).slice(0, 30);
 
   return (
     <div className="border-t border-slate-200 p-3">
@@ -645,7 +668,7 @@ function SalesLeadList({ groups }: { readonly groups: RoutePlan["groups"] }) {
                 </p>
                 <p className="mt-1 text-xs font-medium text-slate-500">{lead.region} · {lead.address || "주소 미등록"}</p>
               </div>
-              <Badge className="bg-blue-50 text-blue-700">{lead.score}점</Badge>
+              <GradeBadge grade={getRevenueGrade(lead.expectedRevenue)} />
             </div>
             <div className="mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-md bg-slate-200 text-[11px] font-black text-slate-600">
               <span className="bg-slate-50 px-2 py-1">{lead.distanceKm || 0}km</span>
@@ -734,9 +757,80 @@ function FilterButton({ active, label, onClick }: { readonly active: boolean; re
   );
 }
 
+function GradeButton({
+  active,
+  label,
+  onClick,
+  tone
+}: {
+  readonly active: boolean;
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly tone?: RevenueGrade;
+}) {
+  const activeClass =
+    tone === "A"
+      ? "border-violet-700 bg-violet-700 text-white"
+      : tone === "B"
+        ? "border-blue-600 bg-blue-600 text-white"
+        : tone === "C"
+          ? "border-slate-600 bg-slate-600 text-white"
+          : "border-slate-950 bg-slate-950 text-white";
+
+  return (
+    <button
+      className={`h-8 rounded-md border px-3 text-xs font-black transition ${
+        active ? activeClass : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function GradeBadge({ grade }: { readonly grade: RevenueGrade }) {
+  return (
+    <Badge
+      className={
+        grade === "A"
+          ? "bg-violet-50 text-violet-700"
+          : grade === "B"
+            ? "bg-blue-50 text-blue-700"
+            : "bg-slate-100 text-slate-700"
+      }
+    >
+      {grade}등급
+    </Badge>
+  );
+}
+
 function filterMarkersForStops(markers: KakaoMapMarker[], stops: RoutePlanStop[], includeOrigin: boolean) {
   const stopAddresses = new Set(stops.map((stop) => stop.address).filter(Boolean));
   return markers.filter((marker) => (includeOrigin && marker.tone === "origin") || stopAddresses.has(marker.address));
+}
+
+function filterStopsByGrade(stops: RoutePlanStop[], gradeFilter: GradeFilter) {
+  if (gradeFilter === "all") return stops;
+  return stops.filter((stop) => getRevenueGrade(stop.expectedRevenue) === gradeFilter);
+}
+
+function getGradeCounts(stops: RoutePlanStop[]) {
+  const uniqueStops = new Map(stops.map((stop) => [stop.id || `${stop.name}-${stop.address}`, stop]));
+  const counts = { A: 0, B: 0, C: 0, total: uniqueStops.size };
+
+  Array.from(uniqueStops.values()).forEach((stop) => {
+    counts[getRevenueGrade(stop.expectedRevenue)] += 1;
+  });
+
+  return counts;
+}
+
+function getRevenueGrade(expectedRevenue: number): RevenueGrade {
+  if (expectedRevenue >= 260) return "A";
+  if (expectedRevenue >= 180) return "B";
+  return "C";
 }
 
 function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
@@ -802,7 +896,8 @@ function createDeliveryMarkers(markers: KakaoMapMarker[], stops: RoutePlanStop[]
   const origin = markers.find((marker) => marker.tone === "origin");
   const stopMarkers = stops.map((stop, index) => ({
     address: stop.address || "",
-    label: String(index + 1),
+    grade: getRevenueGrade(stop.expectedRevenue),
+    label: `${getRevenueGrade(stop.expectedRevenue)}${index + 1}`,
     name: stop.name,
     tone: "customer" as const,
     x: 18 + ((index * 7) % 68),
@@ -812,15 +907,23 @@ function createDeliveryMarkers(markers: KakaoMapMarker[], stops: RoutePlanStop[]
   return origin ? [origin, ...stopMarkers] : stopMarkers;
 }
 
-function createSalesLeadMarkers(markers: KakaoMapMarker[]) {
-  return markers
-    .filter((marker) => marker.tone !== "origin")
-    .slice(0, 12)
-    .map((marker, index) => ({
-      ...marker,
-      label: `영업 ${index + 1}`,
-      tone: "lead" as const
-    }));
+function createSalesLeadMarkersFromStops(stops: RoutePlanStop[], markerFallbacks: KakaoMapMarker[]) {
+  const fallbackByAddress = new Map(markerFallbacks.map((marker) => [marker.address, marker]));
+
+  return stops.slice(0, 80).map((stop, index) => {
+    const fallback = fallbackByAddress.get(stop.address || "");
+    const grade = getRevenueGrade(stop.expectedRevenue);
+
+    return {
+      address: stop.address || "",
+      grade,
+      label: `${grade}${index + 1}`,
+      name: stop.name,
+      tone: "lead" as const,
+      x: fallback?.x ?? 18 + ((index * 9) % 68),
+      y: fallback?.y ?? 18 + ((index * 13) % 60)
+    };
+  });
 }
 
 function mergeRouteMarkers(primaryMarkers: KakaoMapMarker[], secondaryMarkers: KakaoMapMarker[]) {
@@ -839,7 +942,8 @@ function createRouteMarkersFromSequence(sequence: RouteSequence, stops: RoutePla
     const stop = stopByAddress.get(address);
     return {
       address,
-      label: String(index + 1),
+      grade: stop ? getRevenueGrade(stop.expectedRevenue) : undefined,
+      label: stop ? `${getRevenueGrade(stop.expectedRevenue)}${index + 1}` : String(index + 1),
       name: stop?.name || `경유 ${index + 1}`,
       tone: "customer" as const,
       x: 18 + ((index * 7) % 68),
