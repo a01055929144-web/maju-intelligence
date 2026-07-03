@@ -193,15 +193,23 @@ function loadKakaoMapSdk(appKey: string) {
 }
 
 function createMarkerOverlay(marker: KakaoMapMarker) {
-  const toneClass = marker.grade
-    ? gradeStyle(marker.grade)
-    : marker.tone === "origin"
+  const toneClass = marker.tone === "origin"
       ? "background:#111827;color:#ffffff;"
-      : marker.tone === "lead"
-        ? "background:#059669;color:#ffffff;"
-        : "background:#2563eb;color:#ffffff;";
+      : marker.grade
+        ? gradeStyle(marker.grade)
+        : marker.tone === "lead"
+          ? "background:#059669;color:#ffffff;"
+          : "background:#2563eb;color:#ffffff;";
   const label = escapeHtml(marker.label);
   const name = escapeHtml(marker.name);
+
+  if (marker.grade) {
+    return `
+      <div title="${name}" style="${toneClass}width:34px;height:34px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(15,23,42,.28);font-size:14px;font-weight:900;">
+        ${label}
+      </div>
+    `;
+  }
 
   return `
     <div style="${toneClass}border-radius:8px;padding:7px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:12px;font-weight:800;white-space:nowrap;">
