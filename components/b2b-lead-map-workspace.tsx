@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, Clock, MapPin, Navigation, RefreshCw, Search, Sheet, TrendingUp } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Navigation, RefreshCw, Search, Sheet } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
@@ -46,14 +46,14 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl">
-      <header className="flex flex-col gap-4 border-b border-slate-800 bg-slate-900 px-5 py-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
+      <header className="flex flex-col gap-4 border-b border-slate-200 bg-white px-5 py-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-4">
           <h2 className="whitespace-nowrap text-lg font-black">B2B 유통사 리드 관리</h2>
           <nav className="flex items-center gap-2">
             {["오늘 할 일", "유통사 목록", "지도"].map((item) => (
               <button
-                className={`h-9 rounded-md px-4 text-sm font-black transition ${item === "지도" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+                className={`h-9 rounded-md px-4 text-sm font-black transition ${item === "지도" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"}`}
                 key={item}
                 type="button"
               >
@@ -63,24 +63,21 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
           </nav>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="h-9 rounded-md border border-slate-700 px-3 text-sm font-black text-white hover:bg-slate-800" type="button">
+          <button className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             서비스 수수료
           </button>
-          <button className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-700 px-3 text-sm font-black text-white hover:bg-slate-800" type="button">
+          <button className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             <Sheet className="h-4 w-4" />
             Google Sheet
           </button>
-          <button className="h-9 rounded-md border border-slate-700 px-3 text-sm font-black text-white hover:bg-slate-800" type="button">
-            다크
-          </button>
-          <span className="text-xs font-bold text-slate-500">업데이트: 실시간 샘플</span>
-          <button className="grid h-9 w-9 place-items-center rounded-md border border-slate-700 text-slate-400 hover:bg-slate-800" type="button">
+          <span className="text-xs font-bold text-slate-400">업데이트: 기존 데이터 기준</span>
+          <button className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" type="button">
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-blue-600/80 bg-slate-900 md:grid-cols-6">
+      <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-6">
         <Kpi label="전체" tone="blue" value={`${routePlan.totalStops}곳`} />
         <Kpi label="A등급" tone="green" value={`${gradeCounts.A}곳`} />
         <Kpi label="B등급" tone="blue" value={`${gradeCounts.B}곳`} />
@@ -89,11 +86,11 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
         <Kpi label="예상시간" tone="red" value={formatMinutes(routePlan.totalDurationMinutes)} />
       </section>
 
-      <section className="flex flex-col gap-3 border-b border-slate-800 bg-slate-950 px-5 py-3 lg:flex-row lg:items-center">
+      <section className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-3 lg:flex-row lg:items-center">
         <label className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
-            className="h-10 w-full rounded-md border border-slate-700 bg-slate-800 pl-9 pr-3 text-sm font-bold text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+            className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="거래처명·지역·주소 검색..."
             value={query}
@@ -103,7 +100,7 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
           {gradeFilters.map((filter) => (
             <button
               className={`h-10 rounded-md border px-4 text-sm font-black transition ${
-                gradeFilter === filter.value ? "border-blue-500 bg-blue-600 text-white" : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                gradeFilter === filter.value ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
               key={filter.value}
               onClick={() => setGradeFilter(filter.value)}
@@ -112,13 +109,13 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
               {filter.label}
             </button>
           ))}
-          <button className="h-10 rounded-md border border-slate-700 bg-slate-800 px-4 text-sm font-black text-white hover:bg-slate-700" type="button">
+          <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             이탈 제외
           </button>
-          <button className="h-10 rounded-md border border-slate-700 bg-slate-800 px-4 text-sm font-black text-white hover:bg-slate-700" type="button">
+          <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             내 위치
           </button>
-          <span className="ml-2 text-sm font-black text-slate-400">{visibleStores.length}개</span>
+          <span className="ml-2 text-sm font-black text-slate-500">{visibleStores.length}개</span>
         </div>
       </section>
 
@@ -127,27 +124,27 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
           <KakaoAddressMap mapClassName="h-[760px] min-h-[680px] rounded-none border-0 xl:h-[calc(100vh-292px)]" markers={markers} showList={false} />
         </div>
 
-        <aside className="border-l border-slate-800 bg-slate-950">
-          <div className="border-b border-slate-800 px-4 py-4">
-            <p className="text-sm font-black text-white">유통사 목록</p>
+        <aside className="border-l border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-4">
+            <p className="text-sm font-black text-slate-950">유통사 목록</p>
             <p className="mt-1 text-xs font-bold text-slate-500">기존 영업·배송 후보 데이터 기준</p>
           </div>
           <div className="max-h-[720px] overflow-auto xl:max-h-[calc(100vh-365px)]">
             {visibleStores.map((store) => (
               <button
-                className={`block w-full border-b border-slate-800 px-4 py-4 text-left transition hover:bg-slate-900 ${
-                  store.id === selectedStore?.id ? "bg-blue-950/70 shadow-[inset_3px_0_0_#3b82f6]" : ""
+                className={`block w-full border-b border-slate-100 px-4 py-4 text-left transition hover:bg-slate-50 ${
+                  store.id === selectedStore?.id ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
                 }`}
                 key={store.id}
                 onClick={() => setSelectedId(store.id)}
                 type="button"
               >
                 <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 truncate text-sm font-black text-white">{store.name}</p>
+                  <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
                   <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                 </div>
-                <p className="mt-1 truncate text-xs font-bold text-slate-400">{store.address || store.region}</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">
+                <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
+                <p className="mt-1 text-xs font-bold text-slate-400">
                   {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 예상 {store.expectedRevenue.toLocaleString()}만원
                 </p>
               </button>
@@ -155,7 +152,7 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
           </div>
         </aside>
 
-        <aside className="border-l border-slate-800 bg-slate-900">{selectedStore ? <StoreDetail store={selectedStore} /> : null}</aside>
+        <aside className="border-l border-slate-200 bg-slate-50">{selectedStore ? <StoreDetail store={selectedStore} /> : null}</aside>
       </section>
     </div>
   );
@@ -164,11 +161,11 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
 function StoreDetail({ store }: { readonly store: StoreRow }) {
   return (
     <div className="max-h-[760px] overflow-auto xl:max-h-[calc(100vh-292px)]">
-      <div className="border-b border-slate-800 px-5 py-5">
+      <div className="border-b border-slate-200 bg-white px-5 py-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-lg font-black text-white">{store.name}</h3>
-            <p className="mt-1 text-xs font-bold text-slate-400">
+            <h3 className="truncate text-lg font-black text-slate-950">{store.name}</h3>
+            <p className="mt-1 text-xs font-bold text-slate-500">
               {store.grade}등급 · {store.region} · 점수 {store.score}점
             </p>
           </div>
@@ -193,7 +190,7 @@ function StoreDetail({ store }: { readonly store: StoreRow }) {
         <PanelTitle title="AI 추천 근거" />
         <div className="space-y-2">
           {(store.reasons?.length ? store.reasons : ["배송 반경", "예상 매출", "지역 확장성"]).map((reason) => (
-            <p className="rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm font-bold text-slate-300" key={reason}>
+            <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
               {reason}
             </p>
           ))}
@@ -201,7 +198,7 @@ function StoreDetail({ store }: { readonly store: StoreRow }) {
 
         <PanelTitle title="액션 메모" />
         <textarea
-          className="min-h-28 w-full rounded-md border border-slate-700 bg-slate-950 p-3 text-sm font-bold text-white outline-none"
+          className="min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
           defaultValue={`${store.region} ${store.name} 방문 후보. 예상 월매출 ${store.expectedRevenue.toLocaleString()}만원 기준 ${store.grade}등급으로 분류됨.`}
         />
       </div>
@@ -211,14 +208,14 @@ function StoreDetail({ store }: { readonly store: StoreRow }) {
 
 function Kpi({ label, tone, value }: { readonly label: string; readonly tone: "blue" | "green" | "purple" | "red"; readonly value: string }) {
   const valueClass = {
-    blue: "text-blue-400",
-    green: "text-emerald-400",
-    purple: "text-violet-400",
-    red: "text-rose-400"
+    blue: "text-blue-600",
+    green: "text-emerald-600",
+    purple: "text-violet-600",
+    red: "text-rose-600"
   }[tone];
 
   return (
-    <div className="border-r border-slate-800 px-5 py-3 last:border-r-0">
+    <div className="border-r border-slate-200 px-5 py-3 last:border-r-0">
       <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className={`mt-1 truncate text-2xl font-black ${valueClass}`}>{value}</p>
     </div>
@@ -226,14 +223,14 @@ function Kpi({ label, tone, value }: { readonly label: string; readonly tone: "b
 }
 
 function PanelTitle({ title }: { readonly title: string }) {
-  return <p className="border-b border-slate-800 pb-2 text-xs font-black text-slate-500">{title}</p>;
+  return <p className="border-b border-slate-200 pb-2 text-xs font-black text-slate-500">{title}</p>;
 }
 
 function InfoRow({ icon, label, value }: { readonly icon?: React.ReactNode; readonly label: string; readonly value: string }) {
   return (
     <div className="grid grid-cols-[86px_minmax(0,1fr)] gap-3 text-sm">
       <span className="font-bold text-slate-500">{label}</span>
-      <span className="flex min-w-0 items-center gap-2 font-black text-white">
+      <span className="flex min-w-0 items-center gap-2 font-black text-slate-950">
         {icon}
         <span className="min-w-0 break-words">{value}</span>
       </span>
@@ -243,12 +240,12 @@ function InfoRow({ icon, label, value }: { readonly icon?: React.ReactNode; read
 
 function MetricRow({ icon, label, value }: { readonly icon?: React.ReactNode; readonly label: string; readonly value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950 px-3 py-3 text-sm">
+    <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-3 text-sm">
       <span className="flex items-center gap-2 font-bold text-slate-500">
         {icon}
         {label}
       </span>
-      <span className="font-black text-white">{value}</span>
+      <span className="font-black text-slate-950">{value}</span>
     </div>
   );
 }
