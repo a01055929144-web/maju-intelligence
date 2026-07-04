@@ -453,23 +453,6 @@ function StoreDetail({
   readonly store: StoreRow;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
-  const [draftAddress, setDraftAddress] = useState(store.address || "");
-  const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
-  const [draftBirthDate, setDraftBirthDate] = useState(store.birthDate);
-  const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
-  const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
-  const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
-  const [draftEmail, setDraftEmail] = useState(store.email);
-  const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
-  const [draftIndustry, setDraftIndustry] = useState(store.industry);
-  const [draftMemo, setDraftMemo] = useState(store.memo);
-  const [draftName, setDraftName] = useState(store.name);
-  const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
-  const [draftPhone, setDraftPhone] = useState(store.phone);
-  const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
-  const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
-  const [draftStatus, setDraftStatus] = useState(store.status);
   const [historyMemo, setHistoryMemo] = useState("");
 
   return (
@@ -477,50 +460,14 @@ function StoreDetail({
       <div className="border-b border-slate-200 bg-white px-4 py-4">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-sm font-black text-slate-500">거래처 상세</p>
-          {editing ? (
-            <button
-              className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-black text-white"
-              onClick={() => {
-                onUpdateStore(store.id, {
-                  accountCopyStatus: draftAccountCopyStatus,
-                  address: draftAddress,
-                  bankAccount: draftBankAccount,
-                  birthDate: draftBirthDate,
-                  businessCertificateStatus: draftBusinessCertificateStatus,
-                  businessRegistrationNumber: draftBusinessNumber,
-                  businessStatus: draftBusinessStatus,
-                  email: draftEmail,
-                  expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
-                  grade: draftGrade,
-                  industry: draftIndustry,
-                  memo: draftMemo,
-                  name: draftName,
-                  openingDate: draftOpeningDate,
-                  phone: draftPhone,
-                  representativeName: draftRepresentativeName,
-                  status: draftStatus
-                });
-                setEditing(false);
-              }}
-              type="button"
-            >
-              <Check className="h-3.5 w-3.5" />
-              저장
-            </button>
-          ) : (
-            <button className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600" onClick={() => setEditing(true)} type="button">
-              <Edit3 className="h-3.5 w-3.5" />
-              매장 편집
-            </button>
-          )}
+          <button className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={() => setEditing(true)} type="button">
+            <Edit3 className="h-3.5 w-3.5" />
+            매장 편집
+          </button>
         </div>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {editing ? (
-              <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-black outline-none focus:border-blue-500" onChange={(event) => setDraftName(event.target.value)} value={draftName} />
-            ) : (
-              <h3 className="truncate text-lg font-black text-slate-950">{store.name}</h3>
-            )}
+            <h3 className="truncate text-lg font-black text-slate-950">{store.name}</h3>
             <p className="mt-1 text-xs font-bold text-slate-500">
               {store.grade}등급 · {store.deliveryVehicleName || store.region} · {store.deliveryDriver || "담당자 미지정"}
             </p>
@@ -531,89 +478,20 @@ function StoreDetail({
 
       <div className="space-y-5 px-4 py-4">
         <PanelTitle title="기본 정보" />
-        {editing ? (
-          <>
-            <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
-            <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
-            <EditRow label="연락처" onChange={setDraftPhone} value={draftPhone} />
-            <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
-            <EditRow label="개업일" onChange={setDraftOpeningDate} value={draftOpeningDate} />
-            <EditRow label="생년월일" onChange={setDraftBirthDate} value={draftBirthDate} />
-            <SelectRow
-              label="사업자상태"
-              onChange={(value) => setDraftBusinessStatus(value as StoreRow["businessStatus"])}
-              options={[
-                { label: "정상", value: "active" },
-                { label: "폐업", value: "closed" },
-                { label: "확인필요", value: "unknown" }
-              ]}
-              value={draftBusinessStatus}
-            />
-            <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
-            <EditRow label="업종" onChange={setDraftIndustry} value={draftIndustry} />
-            <EditRow label="계좌정보" onChange={setDraftBankAccount} value={draftBankAccount} />
-            <SelectRow
-              label="사업자등록증"
-              onChange={(value) => setDraftBusinessCertificateStatus(value as StoreRow["businessCertificateStatus"])}
-              options={[
-                { label: "수취", value: "received" },
-                { label: "미수취", value: "missing" }
-              ]}
-              value={draftBusinessCertificateStatus}
-            />
-            <SelectRow
-              label="통장사본"
-              onChange={(value) => setDraftAccountCopyStatus(value as StoreRow["accountCopyStatus"])}
-              options={[
-                { label: "수취", value: "received" },
-                { label: "미수취", value: "missing" }
-              ]}
-              value={draftAccountCopyStatus}
-            />
-            <EditRow label="예상매출" onChange={setDraftRevenue} value={draftRevenue} />
-            <SelectRow
-              label="매출등급"
-              onChange={(value) => setDraftGrade(value as RevenueGrade)}
-              options={[
-                { label: "A등급", value: "A" },
-                { label: "B등급", value: "B" },
-                { label: "C등급", value: "C" }
-              ]}
-              value={draftGrade}
-            />
-            <SelectRow
-              label="영업상태"
-              onChange={setDraftStatus}
-              options={[
-                { label: "오늘 추천", value: "today" },
-                { label: "방문 예정", value: "visit-planned" },
-                { label: "계약 가능성 높음", value: "high-probability" },
-                { label: "이번주 추천", value: "this-week" },
-                { label: "제외", value: "excluded" }
-              ]}
-              value={draftStatus}
-            />
-            <MemoEditRow label="기본메모" onChange={setDraftMemo} value={draftMemo} />
-          </>
-        ) : (
-          <>
-            <InfoRow label="사업자번호" value={store.businessRegistrationNumber} />
-            <InfoRow label="대표자명" value={store.representativeName} />
-            <InfoRow label="연락처" value={store.phone} />
-            <InfoRow label="이메일" value={store.email} />
-            <InfoRow label="개업일" value={store.openingDate} />
-            <InfoRow label="생년월일" value={store.birthDate} />
-            <InfoRow label="사업자상태" value={`${getBusinessStatusLabel(store.businessStatus)} · 매일 API 조회 예정`} />
-            <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
-            <InfoRow label="업종" value={store.industry} />
-            <InfoRow label="계좌정보" value={store.bankAccount} />
-            <InfoRow label="사업자등록증" value={getDocumentStatusLabel(store.businessCertificateStatus)} />
-            <InfoRow label="통장사본" value={getDocumentStatusLabel(store.accountCopyStatus)} />
-            <InfoRow label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
-            <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
-            <InfoRow label="기본메모" value={store.memo} />
-          </>
-        )}
+        <InfoRow label="사업자번호" value={store.businessRegistrationNumber} />
+        <InfoRow label="대표자명" value={store.representativeName} />
+        <InfoRow label="연락처" value={store.phone} />
+        <InfoRow label="이메일" value={store.email} />
+        <InfoRow label="개업일" value={store.openingDate} />
+        <InfoRow label="생년월일" value={store.birthDate} />
+        <InfoRow label="사업자상태" value={`${getBusinessStatusLabel(store.businessStatus)} · 매일 API 조회 예정`} />
+        <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
+        <InfoRow label="업종" value={store.industry} />
+        <InfoRow label="계좌정보" value={store.bankAccount} />
+        <InfoRow label="사업자등록증" value={getDocumentStatusLabel(store.businessCertificateStatus)} />
+        <InfoRow label="통장사본" value={getDocumentStatusLabel(store.accountCopyStatus)} />
+        <InfoRow label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
+        <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
         <InfoRow label="담당자" value={store.deliveryDriver || "미지정"} />
         <InfoRow label="배송권역" value={store.deliveryArea || store.region} />
         <InfoRow label="상태" value={getStatusLabel(store.status)} />
@@ -666,7 +544,166 @@ function StoreDetail({
           )}
         </div>
       </div>
+      {editing ? (
+        <StoreEditDrawer
+          onClose={() => setEditing(false)}
+          onSave={(edit) => {
+            onUpdateStore(store.id, edit);
+            setEditing(false);
+          }}
+          store={store}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function StoreEditDrawer({
+  onClose,
+  onSave,
+  store
+}: {
+  readonly onClose: () => void;
+  readonly onSave: (edit: StoreEdit) => void;
+  readonly store: StoreRow;
+}) {
+  const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
+  const [draftAddress, setDraftAddress] = useState(store.address || "");
+  const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
+  const [draftBirthDate, setDraftBirthDate] = useState(store.birthDate);
+  const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
+  const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
+  const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
+  const [draftEmail, setDraftEmail] = useState(store.email);
+  const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
+  const [draftIndustry, setDraftIndustry] = useState(store.industry);
+  const [draftName, setDraftName] = useState(store.name);
+  const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
+  const [draftPhone, setDraftPhone] = useState(store.phone);
+  const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
+  const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
+  const [draftStatus, setDraftStatus] = useState(store.status);
+
+  return (
+    <>
+      <button aria-label="매장 편집 닫기" className="fixed inset-0 z-40 bg-slate-950/20" onClick={onClose} type="button" />
+      <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <header className="border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-blue-700">매장 정보 편집</p>
+              <h3 className="mt-1 truncate text-lg font-black text-slate-950">{store.name}</h3>
+              <p className="mt-1 text-xs font-bold text-slate-500">저장하면 상세 정보와 지도 목록에 바로 반영됩니다.</p>
+            </div>
+            <button className="h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={onClose} type="button">
+              닫기
+            </button>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-auto px-5 py-5">
+          <PanelTitle title="사업자 기본정보" />
+          <EditRow label="매장명" onChange={setDraftName} value={draftName} />
+          <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
+          <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
+          <EditRow label="연락처" onChange={setDraftPhone} value={draftPhone} />
+          <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
+          <EditRow label="개업일" onChange={setDraftOpeningDate} value={draftOpeningDate} />
+          <EditRow label="생년월일" onChange={setDraftBirthDate} value={draftBirthDate} />
+          <SelectRow
+            label="사업자상태"
+            onChange={(value) => setDraftBusinessStatus(value as StoreRow["businessStatus"])}
+            options={[
+              { label: "정상", value: "active" },
+              { label: "폐업", value: "closed" },
+              { label: "확인필요", value: "unknown" }
+            ]}
+            value={draftBusinessStatus}
+          />
+
+          <PanelTitle title="배송·정산 정보" />
+          <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
+          <EditRow label="업종" onChange={setDraftIndustry} value={draftIndustry} />
+          <EditRow label="계좌정보" onChange={setDraftBankAccount} value={draftBankAccount} />
+          <SelectRow
+            label="사업자등록증"
+            onChange={(value) => setDraftBusinessCertificateStatus(value as StoreRow["businessCertificateStatus"])}
+            options={[
+              { label: "수취", value: "received" },
+              { label: "미수취", value: "missing" }
+            ]}
+            value={draftBusinessCertificateStatus}
+          />
+          <SelectRow
+            label="통장사본"
+            onChange={(value) => setDraftAccountCopyStatus(value as StoreRow["accountCopyStatus"])}
+            options={[
+              { label: "수취", value: "received" },
+              { label: "미수취", value: "missing" }
+            ]}
+            value={draftAccountCopyStatus}
+          />
+
+          <PanelTitle title="매출·등급 관리" />
+          <EditRow label="예상매출" onChange={setDraftRevenue} value={draftRevenue} />
+          <SelectRow
+            label="매출등급"
+            onChange={(value) => setDraftGrade(value as RevenueGrade)}
+            options={[
+              { label: "A등급", value: "A" },
+              { label: "B등급", value: "B" },
+              { label: "C등급", value: "C" }
+            ]}
+            value={draftGrade}
+          />
+          <SelectRow
+            label="영업상태"
+            onChange={setDraftStatus}
+            options={[
+              { label: "오늘 추천", value: "today" },
+              { label: "방문 예정", value: "visit-planned" },
+              { label: "계약 가능성 높음", value: "high-probability" },
+              { label: "이번주 추천", value: "this-week" },
+              { label: "제외", value: "excluded" }
+            ]}
+            value={draftStatus}
+          />
+        </div>
+
+        <footer className="flex gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <button
+            className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 text-sm font-black text-white hover:bg-blue-700"
+            onClick={() =>
+              onSave({
+                accountCopyStatus: draftAccountCopyStatus,
+                address: draftAddress,
+                bankAccount: draftBankAccount,
+                birthDate: draftBirthDate,
+                businessCertificateStatus: draftBusinessCertificateStatus,
+                businessRegistrationNumber: draftBusinessNumber,
+                businessStatus: draftBusinessStatus,
+                email: draftEmail,
+                expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
+                grade: draftGrade,
+                industry: draftIndustry,
+                name: draftName,
+                openingDate: draftOpeningDate,
+                phone: draftPhone,
+                representativeName: draftRepresentativeName,
+                status: draftStatus
+              })
+            }
+            type="button"
+          >
+            <Check className="h-4 w-4" />
+            저장
+          </button>
+          <button className="h-10 flex-1 rounded-md border border-slate-200 bg-white text-sm font-black text-slate-700 hover:bg-slate-50" onClick={onClose} type="button">
+            취소
+          </button>
+        </footer>
+      </aside>
+    </>
   );
 }
 
@@ -675,15 +712,6 @@ function EditRow({ label, onChange, value }: { readonly label: string; readonly 
     <label className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-3 text-sm">
       <span className="font-bold text-slate-500">{label}</span>
       <input className="h-9 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value} />
-    </label>
-  );
-}
-
-function MemoEditRow({ label, onChange, value }: { readonly label: string; readonly onChange: (value: string) => void; readonly value: string }) {
-  return (
-    <label className="grid gap-2 text-sm">
-      <span className="font-bold text-slate-500">{label}</span>
-      <textarea className="min-h-20 rounded-md border border-slate-200 bg-white px-3 py-2 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value} />
     </label>
   );
 }
