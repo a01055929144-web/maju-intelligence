@@ -10,6 +10,8 @@ type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 
 type StoreRow = RoutePlanStop & {
+  businessRegistrationNumber: string;
+  businessStatus: "active" | "closed" | "unknown";
   deliveryArea?: string;
   deliveryDriver?: string;
   deliveryVehicleId?: string;
@@ -19,7 +21,7 @@ type StoreRow = RoutePlanStop & {
   markerY: number;
 };
 
-type StoreEdit = Partial<Pick<StoreRow, "address" | "expectedRevenue" | "name">>;
+type StoreEdit = Partial<Pick<StoreRow, "address" | "businessRegistrationNumber" | "businessStatus" | "expectedRevenue" | "grade" | "name">>;
 type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver">>;
 
 type SalesRouteMapWorkspaceProps = {
@@ -51,7 +53,9 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         const keyword = query.trim().toLowerCase();
         const matchesQuery =
           !keyword ||
-          `${store.name} ${store.region} ${store.address || ""} ${store.deliveryDriver || ""} ${store.deliveryVehicleName || ""}`.toLowerCase().includes(keyword);
+          `${store.name} ${store.region} ${store.address || ""} ${store.businessRegistrationNumber} ${store.deliveryDriver || ""} ${store.deliveryVehicleName || ""}`
+            .toLowerCase()
+            .includes(keyword);
         const matchesGrade = gradeFilter === "all" || store.grade === gradeFilter;
         const matchesVehicle = vehicleFilterId === "all" || store.deliveryVehicleId === vehicleFilterId;
         return matchesQuery && matchesGrade && matchesVehicle;
@@ -133,7 +137,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </section>
 
-      <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_430px]" : "xl:grid-cols-[320px_minmax(0,1fr)_430px]"}`}>
+      <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_430px]" : "xl:grid-cols-[320px_minmax(0,1fr)_430px]"}`}>
         <DeliveryAssignmentPanel
           collapsed={leftCollapsed}
           onSelectVehicle={setVehicleFilterId}
@@ -347,9 +351,12 @@ function StoreManagementPanel({
                   <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                 </div>
                 <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                <p className="mt-1 text-xs font-bold text-slate-400">
-                  {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 예상 {store.expectedRevenue.toLocaleString()}만원
-                </p>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-slate-400">
+                    {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
+                  </p>
+                  <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                </div>
               </button>
             ))
           ) : (
@@ -371,6 +378,9 @@ function StoreManagementPanel({
 function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void; readonly store: StoreRow }) {
   const [editing, setEditing] = useState(false);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
+  const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
+  const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
+  const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
   const [draftName, setDraftName] = useState(store.name);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
 
@@ -383,7 +393,14 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
             <button
               className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-black text-white"
               onClick={() => {
-                onUpdateStore(store.id, { address: draftAddress, expectedRevenue: Number(draftRevenue) || store.expectedRevenue, name: draftName });
+                onUpdateStore(store.id, {
+                  address: draftAddress,
+                  businessRegistrationNumber: draftBusinessNumber,
+                  businessStatus: draftBusinessStatus,
+                  expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
+                  grade: draftGrade,
+                  name: draftName
+                });
                 setEditing(false);
               }}
               type="button"
@@ -417,13 +434,37 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
         <PanelTitle title="기본 정보" />
         {editing ? (
           <>
+            <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
+            <SelectRow
+              label="사업자상태"
+              onChange={(value) => setDraftBusinessStatus(value as StoreRow["businessStatus"])}
+              options={[
+                { label: "정상", value: "active" },
+                { label: "폐업", value: "closed" },
+                { label: "확인필요", value: "unknown" }
+              ]}
+              value={draftBusinessStatus}
+            />
             <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
             <EditRow label="예상매출" onChange={setDraftRevenue} value={draftRevenue} />
+            <SelectRow
+              label="매출등급"
+              onChange={(value) => setDraftGrade(value as RevenueGrade)}
+              options={[
+                { label: "A등급", value: "A" },
+                { label: "B등급", value: "B" },
+                { label: "C등급", value: "C" }
+              ]}
+              value={draftGrade}
+            />
           </>
         ) : (
           <>
+            <InfoRow label="사업자번호" value={store.businessRegistrationNumber} />
+            <InfoRow label="사업자상태" value={`${getBusinessStatusLabel(store.businessStatus)} · 매일 API 조회 예정`} />
             <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
             <InfoRow label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
+            <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
           </>
         )}
         <InfoRow label="담당자" value={store.deliveryDriver || "미지정"} />
@@ -461,6 +502,31 @@ function EditRow({ label, onChange, value }: { readonly label: string; readonly 
     <label className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-3 text-sm">
       <span className="font-bold text-slate-500">{label}</span>
       <input className="h-9 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value} />
+    </label>
+  );
+}
+
+function SelectRow({
+  label,
+  onChange,
+  options,
+  value
+}: {
+  readonly label: string;
+  readonly onChange: (value: string) => void;
+  readonly options: Array<{ label: string; value: string }>;
+  readonly value: string;
+}) {
+  return (
+    <label className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-3 text-sm">
+      <span className="font-bold text-slate-500">{label}</span>
+      <select className="h-9 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
@@ -516,6 +582,8 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
       const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
       return {
         ...store,
+        businessRegistrationNumber: createBusinessNumber(index),
+        businessStatus: getSampleBusinessStatus(index),
         grade: getRevenueGrade(store.expectedRevenue),
         markerX: marker?.x ?? 18 + ((index * 13) % 68),
         markerY: marker?.y ?? 20 + ((index * 17) % 58)
@@ -527,8 +595,11 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
   return vehicles.flatMap((vehicle, vehicleIndex) =>
     vehicle.stops.map((store, storeIndex) => {
       const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
+      const globalIndex = vehicleIndex * 15 + storeIndex;
       return {
         ...store,
+        businessRegistrationNumber: createBusinessNumber(globalIndex),
+        businessStatus: getSampleBusinessStatus(globalIndex),
         deliveryArea: vehicle.area,
         deliveryDriver: vehicle.driver,
         deliveryVehicleId: vehicle.id,
@@ -572,6 +643,18 @@ function getRevenueGrade(revenue: number): RevenueGrade {
   return "C";
 }
 
+function createBusinessNumber(index: number) {
+  const middle = String(10 + (index % 89)).padStart(2, "0");
+  const serial = String(10000 + ((index * 7919) % 89999)).padStart(5, "0");
+  return `123-${middle}-${serial}`;
+}
+
+function getSampleBusinessStatus(index: number): StoreRow["businessStatus"] {
+  if (index % 37 === 0) return "closed";
+  if (index % 11 === 0) return "unknown";
+  return "active";
+}
+
 function countGrades(stores: StoreRow[]) {
   return stores.reduce(
     (counts, store) => ({
@@ -590,7 +673,7 @@ function applyStoreEdits(stores: StoreRow[], edits: Record<string, StoreEdit>) {
       ...store,
       ...edit,
       expectedRevenue,
-      grade: getRevenueGrade(expectedRevenue)
+      grade: edit?.grade || getRevenueGrade(expectedRevenue)
     };
   });
 }
@@ -631,6 +714,18 @@ function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
   if (provider === "tmap") return "티맵";
   if (provider === "estimated") return "추정";
   return "샘플";
+}
+
+function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {
+  if (status === "active") return "정상";
+  if (status === "closed") return "폐업";
+  return "확인필요";
+}
+
+function businessStatusClass(status: StoreRow["businessStatus"]) {
+  if (status === "active") return "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700";
+  if (status === "closed") return "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700";
+  return "rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700";
 }
 
 function roundToOneDecimal(value: number) {
