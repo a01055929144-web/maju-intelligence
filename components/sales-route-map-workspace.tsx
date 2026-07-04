@@ -569,10 +569,10 @@ function StoreDetail({
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-6 py-5">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <EditRow label="매장명" onChange={setDraftName} value={draftName} />
                   <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
@@ -762,7 +762,7 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
         }}
         type="file"
       />
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+      <div className="grid gap-4">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
             <FileImage className="h-4 w-4" />
@@ -777,7 +777,7 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
             <p className="mt-2 text-xs font-black text-blue-700">사진/영상 추가</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {files.length ? (
             files.slice(0, 4).map((file, index) =>
               file.mediaType === "video" ? (
@@ -787,7 +787,7 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
               )
             )
           ) : (
-            <div className="col-span-2 grid h-24 place-items-center rounded-md border border-slate-200 bg-white text-center">
+            <div className="col-span-full grid h-24 place-items-center rounded-md border border-slate-200 bg-white text-center">
               <div>
                 <p className="text-xs font-black text-slate-600">자료 업로드</p>
                 <p className="mt-1 text-[11px] font-bold text-slate-400">이미지/동영상 여러 개</p>
@@ -862,7 +862,7 @@ function AttachmentBox({
   readonly onSave: (file: AttachmentFile) => void;
 }) {
   return (
-    <label className={`grid cursor-pointer gap-4 rounded-md border p-4 transition hover:border-blue-300 hover:bg-blue-50 md:grid-cols-[minmax(0,1fr)_220px] ${important ? "border-blue-300 bg-blue-50/60" : "border-dashed border-slate-300 bg-slate-50"}`}>
+    <label className={`grid cursor-pointer gap-4 rounded-md border p-4 transition hover:border-blue-300 hover:bg-blue-50 ${important ? "border-blue-300 bg-blue-50/60" : "border-dashed border-slate-300 bg-slate-50"}`}>
       <input
         accept="image/*,.pdf"
         className="sr-only"
@@ -925,9 +925,9 @@ function EditRow({
   readonly value: string;
 }) {
   return (
-    <label className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-3 text-sm">
-      <span className="font-bold text-slate-500">{label}</span>
-      <input className="h-9 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} type={type} value={value} />
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-xs font-black text-slate-500">{label}</span>
+      <input className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} type={type} value={value} />
     </label>
   );
 }
@@ -944,9 +944,9 @@ function SelectRow({
   readonly value: string;
 }) {
   return (
-    <label className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-3 text-sm">
-      <span className="font-bold text-slate-500">{label}</span>
-      <select className="h-9 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value}>
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-xs font-black text-slate-500">{label}</span>
+      <select className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -979,8 +979,8 @@ function PanelTitle({ title }: { readonly title: string }) {
 
 function InfoRow({ icon, label, value }: { readonly icon?: React.ReactNode; readonly label: string; readonly value: string }) {
   return (
-    <div className="grid grid-cols-[86px_minmax(0,1fr)] gap-3 text-sm">
-      <span className="font-bold text-slate-500">{label}</span>
+    <div className="grid gap-1.5 text-sm">
+      <span className="text-xs font-black text-slate-500">{label}</span>
       <span className="flex min-w-0 items-center gap-2 font-black text-slate-950">
         {icon}
         <span className="min-w-0 break-words">{value}</span>
