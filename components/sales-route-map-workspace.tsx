@@ -10,19 +10,56 @@ type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 
 type StoreRow = RoutePlanStop & {
+  accountCopyStatus: "missing" | "received";
+  bankAccount: string;
+  birthDate: string;
+  businessCertificateStatus: "missing" | "received";
   businessRegistrationNumber: string;
   businessStatus: "active" | "closed" | "unknown";
   deliveryArea?: string;
   deliveryDriver?: string;
   deliveryVehicleId?: string;
   deliveryVehicleName?: string;
+  email: string;
   grade: RevenueGrade;
+  industry: string;
   markerX: number;
   markerY: number;
+  memo: string;
+  openingDate: string;
+  phone: string;
+  representativeName: string;
 };
 
-type StoreEdit = Partial<Pick<StoreRow, "address" | "businessRegistrationNumber" | "businessStatus" | "expectedRevenue" | "grade" | "name">>;
+type StoreEdit = Partial<
+  Pick<
+    StoreRow,
+    | "accountCopyStatus"
+    | "address"
+    | "bankAccount"
+    | "birthDate"
+    | "businessCertificateStatus"
+    | "businessRegistrationNumber"
+    | "businessStatus"
+    | "email"
+    | "expectedRevenue"
+    | "grade"
+    | "industry"
+    | "memo"
+    | "name"
+    | "openingDate"
+    | "phone"
+    | "representativeName"
+    | "status"
+  >
+>;
 type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver">>;
+
+type StoreHistoryItem = {
+  id: string;
+  memo: string;
+  recordedAt: string;
+};
 
 type SalesRouteMapWorkspaceProps = {
   readonly mapMarkers: KakaoMapMarker[];
@@ -42,6 +79,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>({});
+  const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>({});
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>({});
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const routeSeedStores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
@@ -155,7 +193,21 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <StoreManagementPanel
           onSelectStore={setSelectedId}
           onUpdateStore={(storeId, edit) => setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], ...edit } }))}
+          onWriteHistory={(storeId, memo) =>
+            setStoreHistories((current) => ({
+              ...current,
+              [storeId]: [
+                {
+                  id: `${storeId}-${Date.now()}`,
+                  memo,
+                  recordedAt: new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })
+                },
+                ...(current[storeId] || [])
+              ]
+            }))
+          }
           selectedStore={selectedStore}
+          storeHistories={storeHistories}
           stores={visibleStores}
         />
       </section>
@@ -317,12 +369,16 @@ function VehicleEditForm({
 function StoreManagementPanel({
   onSelectStore,
   onUpdateStore,
+  onWriteHistory,
   selectedStore,
+  storeHistories,
   stores
 }: {
   readonly onSelectStore: (storeId: string) => void;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
+  readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly selectedStore?: StoreRow;
+  readonly storeHistories: Record<string, StoreHistoryItem[]>;
   readonly stores: StoreRow[];
 }) {
   return (
@@ -370,19 +426,51 @@ function StoreManagementPanel({
         </div>
       </section>
 
-      <section className="min-h-0 bg-slate-50">{selectedStore ? <StoreDetail key={selectedStore.id} onUpdateStore={onUpdateStore} store={selectedStore} /> : null}</section>
+      <section className="min-h-0 bg-slate-50">
+        {selectedStore ? (
+          <StoreDetail
+            history={storeHistories[selectedStore.id] || []}
+            key={selectedStore.id}
+            onUpdateStore={onUpdateStore}
+            onWriteHistory={onWriteHistory}
+            store={selectedStore}
+          />
+        ) : null}
+      </section>
     </aside>
   );
 }
 
-function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void; readonly store: StoreRow }) {
+function StoreDetail({
+  history,
+  onUpdateStore,
+  onWriteHistory,
+  store
+}: {
+  readonly history: StoreHistoryItem[];
+  readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
+  readonly onWriteHistory: (storeId: string, memo: string) => void;
+  readonly store: StoreRow;
+}) {
   const [editing, setEditing] = useState(false);
+  const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
+  const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
+  const [draftBirthDate, setDraftBirthDate] = useState(store.birthDate);
+  const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
   const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
+  const [draftEmail, setDraftEmail] = useState(store.email);
   const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
+  const [draftIndustry, setDraftIndustry] = useState(store.industry);
+  const [draftMemo, setDraftMemo] = useState(store.memo);
   const [draftName, setDraftName] = useState(store.name);
+  const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
+  const [draftPhone, setDraftPhone] = useState(store.phone);
+  const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
+  const [draftStatus, setDraftStatus] = useState(store.status);
+  const [historyMemo, setHistoryMemo] = useState("");
 
   return (
     <div className="h-full overflow-auto">
@@ -394,12 +482,23 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
               className="inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2 text-xs font-black text-white"
               onClick={() => {
                 onUpdateStore(store.id, {
+                  accountCopyStatus: draftAccountCopyStatus,
                   address: draftAddress,
+                  bankAccount: draftBankAccount,
+                  birthDate: draftBirthDate,
+                  businessCertificateStatus: draftBusinessCertificateStatus,
                   businessRegistrationNumber: draftBusinessNumber,
                   businessStatus: draftBusinessStatus,
+                  email: draftEmail,
                   expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
                   grade: draftGrade,
-                  name: draftName
+                  industry: draftIndustry,
+                  memo: draftMemo,
+                  name: draftName,
+                  openingDate: draftOpeningDate,
+                  phone: draftPhone,
+                  representativeName: draftRepresentativeName,
+                  status: draftStatus
                 });
                 setEditing(false);
               }}
@@ -435,6 +534,11 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
         {editing ? (
           <>
             <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
+            <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
+            <EditRow label="연락처" onChange={setDraftPhone} value={draftPhone} />
+            <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
+            <EditRow label="개업일" onChange={setDraftOpeningDate} value={draftOpeningDate} />
+            <EditRow label="생년월일" onChange={setDraftBirthDate} value={draftBirthDate} />
             <SelectRow
               label="사업자상태"
               onChange={(value) => setDraftBusinessStatus(value as StoreRow["businessStatus"])}
@@ -446,6 +550,26 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
               value={draftBusinessStatus}
             />
             <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
+            <EditRow label="업종" onChange={setDraftIndustry} value={draftIndustry} />
+            <EditRow label="계좌정보" onChange={setDraftBankAccount} value={draftBankAccount} />
+            <SelectRow
+              label="사업자등록증"
+              onChange={(value) => setDraftBusinessCertificateStatus(value as StoreRow["businessCertificateStatus"])}
+              options={[
+                { label: "수취", value: "received" },
+                { label: "미수취", value: "missing" }
+              ]}
+              value={draftBusinessCertificateStatus}
+            />
+            <SelectRow
+              label="통장사본"
+              onChange={(value) => setDraftAccountCopyStatus(value as StoreRow["accountCopyStatus"])}
+              options={[
+                { label: "수취", value: "received" },
+                { label: "미수취", value: "missing" }
+              ]}
+              value={draftAccountCopyStatus}
+            />
             <EditRow label="예상매출" onChange={setDraftRevenue} value={draftRevenue} />
             <SelectRow
               label="매출등급"
@@ -457,14 +581,37 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
               ]}
               value={draftGrade}
             />
+            <SelectRow
+              label="영업상태"
+              onChange={setDraftStatus}
+              options={[
+                { label: "오늘 추천", value: "today" },
+                { label: "방문 예정", value: "visit-planned" },
+                { label: "계약 가능성 높음", value: "high-probability" },
+                { label: "이번주 추천", value: "this-week" },
+                { label: "제외", value: "excluded" }
+              ]}
+              value={draftStatus}
+            />
+            <MemoEditRow label="기본메모" onChange={setDraftMemo} value={draftMemo} />
           </>
         ) : (
           <>
             <InfoRow label="사업자번호" value={store.businessRegistrationNumber} />
+            <InfoRow label="대표자명" value={store.representativeName} />
+            <InfoRow label="연락처" value={store.phone} />
+            <InfoRow label="이메일" value={store.email} />
+            <InfoRow label="개업일" value={store.openingDate} />
+            <InfoRow label="생년월일" value={store.birthDate} />
             <InfoRow label="사업자상태" value={`${getBusinessStatusLabel(store.businessStatus)} · 매일 API 조회 예정`} />
             <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
+            <InfoRow label="업종" value={store.industry} />
+            <InfoRow label="계좌정보" value={store.bankAccount} />
+            <InfoRow label="사업자등록증" value={getDocumentStatusLabel(store.businessCertificateStatus)} />
+            <InfoRow label="통장사본" value={getDocumentStatusLabel(store.accountCopyStatus)} />
             <InfoRow label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
             <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
+            <InfoRow label="기본메모" value={store.memo} />
           </>
         )}
         <InfoRow label="담당자" value={store.deliveryDriver || "미지정"} />
@@ -487,11 +634,37 @@ function StoreDetail({ onUpdateStore, store }: { readonly onUpdateStore: (storeI
           ))}
         </div>
 
-        <PanelTitle title="액션 메모" />
+        <PanelTitle title="메모 히스토리" />
         <textarea
           className="min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
-          defaultValue={`${store.region} ${store.name} 방문 후보. 예상 월매출 ${store.expectedRevenue.toLocaleString()}만원 기준 ${store.grade}등급으로 분류됨.`}
+          onChange={(event) => setHistoryMemo(event.target.value)}
+          placeholder="상담, 배송 특이사항, 대표 요청사항 등을 기록하세요."
+          value={historyMemo}
         />
+        <button
+          className="h-9 w-full rounded-md bg-slate-950 text-sm font-black text-white transition hover:bg-slate-800"
+          onClick={() => {
+            const memo = historyMemo.trim();
+            if (!memo) return;
+            onWriteHistory(store.id, memo);
+            setHistoryMemo("");
+          }}
+          type="button"
+        >
+          메모 기록
+        </button>
+        <div className="space-y-2">
+          {history.length ? (
+            history.map((item) => (
+              <div className="rounded-md border border-slate-200 bg-white p-3" key={item.id}>
+                <p className="text-xs font-black text-slate-400">{item.recordedAt}</p>
+                <p className="mt-1 text-sm font-bold leading-5 text-slate-700">{item.memo}</p>
+              </div>
+            ))
+          ) : (
+            <p className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -502,6 +675,15 @@ function EditRow({ label, onChange, value }: { readonly label: string; readonly 
     <label className="grid grid-cols-[86px_minmax(0,1fr)] items-center gap-3 text-sm">
       <span className="font-bold text-slate-500">{label}</span>
       <input className="h-9 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value} />
+    </label>
+  );
+}
+
+function MemoEditRow({ label, onChange, value }: { readonly label: string; readonly onChange: (value: string) => void; readonly value: string }) {
+  return (
+    <label className="grid gap-2 text-sm">
+      <span className="font-bold text-slate-500">{label}</span>
+      <textarea className="min-h-20 rounded-md border border-slate-200 bg-white px-3 py-2 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value} />
     </label>
   );
 }
@@ -582,11 +764,21 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
       const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
       return {
         ...store,
+        accountCopyStatus: getSampleDocumentStatus(index + 3),
+        bankAccount: createBankAccount(index),
+        birthDate: createSampleDate(1974 + (index % 18), (index % 12) + 1, (index % 27) + 1),
+        businessCertificateStatus: getSampleDocumentStatus(index),
         businessRegistrationNumber: createBusinessNumber(index),
         businessStatus: getSampleBusinessStatus(index),
+        email: createStoreEmail(store.name, index),
         grade: getRevenueGrade(store.expectedRevenue),
+        industry: getSampleIndustry(index),
         markerX: marker?.x ?? 18 + ((index * 13) % 68),
-        markerY: marker?.y ?? 20 + ((index * 17) % 58)
+        markerY: marker?.y ?? 20 + ((index * 17) % 58),
+        memo: "정기 납품 조건 확인 필요",
+        openingDate: createSampleDate(2015 + (index % 9), (index % 12) + 1, (index % 27) + 1),
+        phone: createPhoneNumber(index),
+        representativeName: createRepresentativeName(index)
       };
     });
 }
@@ -598,15 +790,25 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
       const globalIndex = vehicleIndex * 15 + storeIndex;
       return {
         ...store,
+        accountCopyStatus: getSampleDocumentStatus(globalIndex + 3),
+        bankAccount: createBankAccount(globalIndex),
+        birthDate: createSampleDate(1974 + (globalIndex % 18), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
+        businessCertificateStatus: getSampleDocumentStatus(globalIndex),
         businessRegistrationNumber: createBusinessNumber(globalIndex),
         businessStatus: getSampleBusinessStatus(globalIndex),
         deliveryArea: vehicle.area,
         deliveryDriver: vehicle.driver,
         deliveryVehicleId: vehicle.id,
         deliveryVehicleName: vehicle.name,
+        email: createStoreEmail(store.name, globalIndex),
         grade: getRevenueGrade(store.expectedRevenue),
+        industry: getSampleIndustry(globalIndex),
         markerX: marker?.x ?? 16 + (((vehicleIndex * 15 + storeIndex) * 7) % 70),
-        markerY: marker?.y ?? 18 + (((vehicleIndex * 15 + storeIndex) * 11) % 58)
+        markerY: marker?.y ?? 18 + (((vehicleIndex * 15 + storeIndex) * 11) % 58),
+        memo: "배송 시간대와 결제 조건 확인 필요",
+        openingDate: createSampleDate(2015 + (globalIndex % 9), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
+        phone: createPhoneNumber(globalIndex),
+        representativeName: createRepresentativeName(globalIndex)
       };
     })
   );
@@ -653,6 +855,39 @@ function getSampleBusinessStatus(index: number): StoreRow["businessStatus"] {
   if (index % 37 === 0) return "closed";
   if (index % 11 === 0) return "unknown";
   return "active";
+}
+
+function getSampleDocumentStatus(index: number): StoreRow["businessCertificateStatus"] {
+  return index % 5 === 0 ? "missing" : "received";
+}
+
+function createBankAccount(index: number) {
+  return `신한 ${110000000000 + index * 92831}`;
+}
+
+function createPhoneNumber(index: number) {
+  const middle = String(3100 + ((index * 37) % 6000)).padStart(4, "0");
+  const last = String(1000 + ((index * 53) % 8999)).padStart(4, "0");
+  return `010-${middle}-${last}`;
+}
+
+function createRepresentativeName(index: number) {
+  const names = ["김민준", "이서연", "박도윤", "최하린", "정우진", "한지아", "오현우", "서지훈", "문가은", "신유나"];
+  return names[index % names.length];
+}
+
+function createStoreEmail(name: string, index: number) {
+  const slug = name.replace(/[^0-9a-zA-Z가-힣]/g, "").slice(0, 10) || `store${index + 1}`;
+  return `${slug.toLowerCase()}${index + 1}@example.com`;
+}
+
+function createSampleDate(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getSampleIndustry(index: number) {
+  const industries = ["한식", "일식", "중식", "분식", "카페", "베이커리", "급식", "정육", "반찬", "주점"];
+  return industries[index % industries.length];
 }
 
 function countGrades(stores: StoreRow[]) {
@@ -720,6 +955,10 @@ function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {
   if (status === "active") return "정상";
   if (status === "closed") return "폐업";
   return "확인필요";
+}
+
+function getDocumentStatusLabel(status: StoreRow["businessCertificateStatus"]) {
+  return status === "received" ? "수취 완료" : "미수취";
 }
 
 function businessStatusClass(status: StoreRow["businessStatus"]) {
