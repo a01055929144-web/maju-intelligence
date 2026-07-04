@@ -76,6 +76,14 @@ type AttachmentFile = {
   name: string;
 };
 
+type BusinessOcrSuggestion = {
+  businessRegistrationNumber: string;
+  businessStatus: StoreRow["businessStatus"];
+  companyName: string;
+  openingDate: string;
+  representativeName: string;
+};
+
 type SalesRouteMapWorkspaceProps = {
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
@@ -203,7 +211,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         />
 
         <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-          <KakaoAddressMap mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
+          <KakaoAddressMap focusedMarkerId={selectedId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
         </div>
 
         <StoreManagementPanel
@@ -505,6 +513,7 @@ function StoreDetail({
   const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
   const [historyMemo, setHistoryMemo] = useState("");
+  const [ocrSuggestion, setOcrSuggestion] = useState<BusinessOcrSuggestion | null>(null);
 
   return (
     <>
@@ -622,8 +631,34 @@ function StoreDetail({
               <CollapsibleSection defaultOpen title="첨부자료">
                 <div className="mt-4 space-y-3">
                   <LoadingMediaBox files={attachments.loadingPositionMedia || []} onSave={onSaveLoadingMedia} />
-                  <AttachmentBox description="사업자 정보 확인용 증빙입니다." file={attachments.businessCertificate} label="사업자등록증" onSave={(file) => onSaveAttachment("businessCertificate", file)} />
-                  <AttachmentBox description="정산 및 결제 확인용 자료입니다." file={attachments.bankbookCopy} label="통장사본" onSave={(file) => onSaveAttachment("bankbookCopy", file)} />
+                  <AttachmentBox
+                    description="업로드하면 OCR 후보값을 읽어 기본정보와 비교합니다."
+                    file={attachments.businessCertificate}
+                    label="사업자등록증"
+                    onSave={(file) => {
+                      onSaveAttachment("businessCertificate", file);
+                      setOcrSuggestion(createBusinessOcrSuggestion(store, file.name));
+                    }}
+                  />
+                  {ocrSuggestion ? (
+                    <BusinessOcrPanel
+                      current={{
+                        businessRegistrationNumber: draftBusinessNumber,
+                        companyName: draftName,
+                        openingDate: draftOpeningDate,
+                        representativeName: draftRepresentativeName
+                      }}
+                      onApply={() => {
+                        setDraftBusinessNumber(ocrSuggestion.businessRegistrationNumber);
+                        setDraftBusinessStatus(ocrSuggestion.businessStatus);
+                        setDraftName(ocrSuggestion.companyName);
+                        setDraftOpeningDate(ocrSuggestion.openingDate);
+                        setDraftRepresentativeName(ocrSuggestion.representativeName);
+                      }}
+                      suggestion={ocrSuggestion}
+                    />
+                  ) : null}
+                  <AttachmentBox description="정산과 결제 확인용 자료입니다." file={attachments.bankbookCopy} label="통장사본" onSave={(file) => onSaveAttachment("bankbookCopy", file)} />
                 </div>
               </CollapsibleSection>
 
@@ -738,7 +773,7 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
               <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span>
               <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-200">{files.length}개</span>
             </div>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 가장 먼저 확인하는 위치 자료입니다. 여러 장의 사진과 짧은 동영상을 함께 저장할 수 있습니다.</p>
+            <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 확인하는 핵심 자료입니다. 적재 위치, 입구, 냉장/냉동 구분 사진과 짧은 영상을 여러 개 저장할 수 있습니다.</p>
             <p className="mt-2 text-xs font-black text-blue-700">사진/영상 추가</p>
           </div>
         </div>
@@ -762,6 +797,54 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
         </div>
       </div>
     </label>
+  );
+}
+
+function BusinessOcrPanel({
+  current,
+  onApply,
+  suggestion
+}: {
+  readonly current: Pick<BusinessOcrSuggestion, "businessRegistrationNumber" | "companyName" | "openingDate" | "representativeName">;
+  readonly onApply: () => void;
+  readonly suggestion: BusinessOcrSuggestion;
+}) {
+  const rows = [
+    { current: current.companyName, label: "상호명", value: suggestion.companyName },
+    { current: current.businessRegistrationNumber, label: "사업자번호", value: suggestion.businessRegistrationNumber },
+    { current: current.representativeName, label: "대표자명", value: suggestion.representativeName },
+    { current: current.openingDate, label: "개업일", value: suggestion.openingDate }
+  ];
+
+  return (
+    <div className="rounded-md border border-blue-200 bg-blue-50/70 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-slate-900">OCR 인식 결과 확인</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">사업자등록증에서 읽은 후보값입니다. 기존 값과 비교 후 반영하세요.</p>
+        </div>
+        <button className="h-9 rounded-md bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700" onClick={onApply} type="button">
+          기본정보에 반영
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {rows.map((row) => {
+          const matched = row.current === row.value;
+          return (
+            <div className="rounded-md border border-white bg-white/80 p-3" key={row.label}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black text-slate-500">{row.label}</p>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${matched ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                  {matched ? "일치" : "확인필요"}
+                </span>
+              </div>
+              <p className="mt-2 break-words text-sm font-black text-slate-950">{row.value}</p>
+              {!matched ? <p className="mt-1 break-words text-xs font-bold text-slate-400">현재값: {row.current || "미입력"}</p> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -977,17 +1060,54 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
 
 function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[]): KakaoMapMarker[] {
   const origin = existingMarkers.find((marker) => marker.tone === "origin");
-  const storeMarkers = stores.map((store, index) => ({
-    address: store.address || `${store.region} ${store.name}`,
-    grade: store.grade,
-    label: store.grade,
-    name: store.name,
-    tone: "lead" as const,
-    x: store.markerX,
-    y: store.markerY
-  }));
+  const storeMarkers = spreadMarkers(
+    stores.map((store) => ({
+      address: store.address || `${store.region} ${store.name}`,
+      grade: store.grade,
+      id: store.id,
+      label: store.grade,
+      name: store.name,
+      tone: "lead" as const,
+      x: store.markerX,
+      y: store.markerY
+    }))
+  );
 
   return mergeMarkers(origin ? [origin, ...storeMarkers] : storeMarkers);
+}
+
+function spreadMarkers(markers: KakaoMapMarker[]) {
+  const counts = new Map<string, number>();
+  return markers.map((marker) => {
+    const key = `${Math.round(marker.x / 3)}-${Math.round(marker.y / 3)}`;
+    const count = counts.get(key) || 0;
+    counts.set(key, count + 1);
+    if (count === 0) return marker;
+    const angle = count * 1.9;
+    const radius = 2.2 + (count % 4) * 0.7;
+    return {
+      ...marker,
+      x: clamp(marker.x + Math.cos(angle) * radius, 4, 96),
+      y: clamp(marker.y + Math.sin(angle) * radius, 6, 94)
+    };
+  });
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function createBusinessOcrSuggestion(store: StoreRow, fileName: string): BusinessOcrSuggestion {
+  const seed = fileName.length + store.name.length;
+  const currentNumber = store.businessRegistrationNumber;
+  const generatedNumber = currentNumber || createBusinessNumber(seed);
+  return {
+    businessRegistrationNumber: generatedNumber,
+    businessStatus: "active",
+    companyName: store.name,
+    openingDate: store.openingDate,
+    representativeName: store.representativeName
+  };
 }
 
 function mergeMarkers(markers: KakaoMapMarker[]) {

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 export type KakaoMapMarker = {
   readonly address: string;
   readonly grade?: "A" | "B" | "C";
+  readonly id?: string;
   readonly label: string;
   readonly name: string;
   readonly tone: "customer" | "lead" | "origin";
@@ -20,6 +21,7 @@ export type KakaoRoutePoint = {
 };
 
 type KakaoAddressMapProps = {
+  readonly focusedMarkerId?: string;
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
@@ -36,7 +38,7 @@ let kakaoScriptPromise: Promise<void> | null = null;
 const emptyRoutePath: ReadonlyArray<KakaoRoutePoint> = [];
 const defaultMapClassName = "h-[360px]";
 
-export function KakaoAddressMap({ mapClassName = defaultMapClassName, markers, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
+export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
@@ -63,6 +65,7 @@ export function KakaoAddressMap({ mapClassName = defaultMapClassName, markers, r
         });
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
+        let focusedPosition: any = null;
         let found = 0;
         const roadPath = routePath
           .map((point) => new kakao.maps.LatLng(point.lat, point.lng))
@@ -80,20 +83,18 @@ export function KakaoAddressMap({ mapClassName = defaultMapClassName, markers, r
 
                   if (geocodeStatus === kakao.maps.services.Status.OK && result[0]) {
                     const position = new kakao.maps.LatLng(Number(result[0].y), Number(result[0].x));
-                    const point = new kakao.maps.Marker({ map, position });
-                    const overlay = new kakao.maps.CustomOverlay({
+                    new kakao.maps.CustomOverlay({
                       content: createMarkerOverlay(marker),
                       map,
                       position,
                       yAnchor: 1.75
                     });
 
-                    kakao.maps.event.addListener(point, "click", () => {
-                      overlay.setMap(overlay.getMap() ? null : map);
-                    });
-
                     bounds.extend(position);
                     found += 1;
+                    if (focusedMarkerId && marker.id === focusedMarkerId) {
+                      focusedPosition = position;
+                    }
                   }
 
                   resolve();
@@ -109,7 +110,10 @@ export function KakaoAddressMap({ mapClassName = defaultMapClassName, markers, r
           return;
         }
 
-        if (found === 1) {
+        if (focusedPosition) {
+          map.setCenter(focusedPosition);
+          map.setLevel(5);
+        } else if (found === 1) {
           map.setCenter(bounds.getSouthWest());
           map.setLevel(5);
         } else {
@@ -129,10 +133,10 @@ export function KakaoAddressMap({ mapClassName = defaultMapClassName, markers, r
     return () => {
       ignore = true;
     };
-  }, [appKey, canUseKakao, markers, routePath]);
+  }, [appKey, canUseKakao, focusedMarkerId, markers, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap mapClassName={mapClassName} markers={markers} routePath={routePath} showList={showList} />;
+    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} routePath={routePath} showList={showList} />;
   }
 
   return (
@@ -205,7 +209,7 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
 
   if (marker.grade) {
     return `
-      <div title="${name}" style="${toneClass}width:34px;height:34px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(15,23,42,.28);font-size:14px;font-weight:900;">
+      <div title="${name}" style="${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;">
         ${label}
       </div>
     `;
@@ -233,7 +237,10 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function FallbackAddressMap({ mapClassName = defaultMapClassName, markers, routePath, showList }: KakaoAddressMapProps) {
+function FallbackAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, routePath, showList }: KakaoAddressMapProps) {
+  const focusedMarker = markers.find((marker) => marker.id === focusedMarkerId);
+  const displayMarkers = focusedMarker?.id ? prioritizeFocusedMarker(markers, focusedMarker.id) : markers;
+
   return (
     <div className="space-y-4">
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
@@ -243,14 +250,16 @@ function FallbackAddressMap({ mapClassName = defaultMapClassName, markers, route
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
           {routePath?.length ? "카카오맵 키 확인 후 실제 도로 경로가 표시됩니다." : "방문 후보 위치 샘플 화면"}
         </div>
-        {markers.map((marker) => (
+        {displayMarkers.map((marker) => {
+          const focused = focusedMarkerId && marker.id === focusedMarkerId;
+          return (
           <div
             key={`${marker.label}-${marker.address}`}
-            className="group absolute -translate-x-1/2 -translate-y-1/2"
+            className={`group absolute -translate-x-1/2 -translate-y-1/2 ${focused ? "z-20" : "z-10"}`}
             style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
           >
             <span
-              className={`flex h-9 min-w-9 items-center justify-center rounded-full border-2 border-white px-2 text-xs font-black text-white shadow-lg ${
+              className={`flex items-center justify-center rounded-full border-2 border-white text-xs font-black text-white shadow-lg ${focused ? "h-12 min-w-12 px-2 ring-4 ring-blue-200" : "h-7 min-w-7 px-1"} ${
                 marker.grade === "A"
                   ? "bg-violet-700"
                   : marker.grade === "B"
@@ -271,11 +280,16 @@ function FallbackAddressMap({ mapClassName = defaultMapClassName, markers, route
               <p className="mt-1 leading-5 text-muted-foreground">{marker.address}</p>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {showList && <MarkerList markers={markers} />}
     </div>
   );
+}
+
+function prioritizeFocusedMarker(markers: ReadonlyArray<KakaoMapMarker>, focusedId: string) {
+  return [...markers.filter((marker) => marker.id !== focusedId), ...markers.filter((marker) => marker.id === focusedId)];
 }
 
 function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarker> }) {
