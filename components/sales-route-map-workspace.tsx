@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, Check, Clock, Edit3, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Truck, UserRound } from "lucide-react";
+import { CalendarDays, Check, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { createDeliveryVehicles, DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
@@ -61,6 +61,17 @@ type StoreHistoryItem = {
   recordedAt: string;
 };
 
+type StoreAttachment = {
+  businessCertificate?: AttachmentFile;
+  bankbookCopy?: AttachmentFile;
+  loadingPositionPhoto?: AttachmentFile;
+};
+
+type AttachmentFile = {
+  dataUrl?: string;
+  name: string;
+};
+
 type SalesRouteMapWorkspaceProps = {
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
@@ -78,6 +89,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
+  const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>({});
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>({});
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>({});
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>({});
@@ -100,7 +112,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       }),
     [allStores, gradeFilter, query, vehicleFilterId]
   );
-  const selectedStore = visibleStores.find((store) => store.id === selectedId) || visibleStores[0] || allStores[0];
+  const selectedStore = allStores.find((store) => store.id === selectedId);
   const gradeCounts = useMemo(() => countGrades(allStores), [allStores]);
   const routeTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
@@ -175,7 +187,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </section>
 
-      <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_430px]" : "xl:grid-cols-[320px_minmax(0,1fr)_430px]"}`}>
+      <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_360px]" : "xl:grid-cols-[300px_minmax(0,1fr)_360px]"}`}>
         <DeliveryAssignmentPanel
           collapsed={leftCollapsed}
           onSelectVehicle={setVehicleFilterId}
@@ -192,6 +204,25 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
 
         <StoreManagementPanel
           onSelectStore={setSelectedId}
+          selectedStoreId={selectedId}
+          stores={visibleStores}
+        />
+      </section>
+      {selectedStore ? (
+        <StoreDetail
+          attachments={storeAttachments[selectedStore.id] || {}}
+          history={storeHistories[selectedStore.id] || []}
+          key={selectedStore.id}
+          onClose={() => setSelectedId("")}
+          onSaveAttachment={(slot, file) =>
+            setStoreAttachments((current) => ({
+              ...current,
+              [selectedStore.id]: {
+                ...current[selectedStore.id],
+                [slot]: file
+              }
+            }))
+          }
           onUpdateStore={(storeId, edit) => setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], ...edit } }))}
           onWriteHistory={(storeId, memo) =>
             setStoreHistories((current) => ({
@@ -206,11 +237,9 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               ]
             }))
           }
-          selectedStore={selectedStore}
-          storeHistories={storeHistories}
-          stores={visibleStores}
+          store={selectedStore}
         />
-      </section>
+      ) : null}
     </div>
   );
 }
@@ -257,9 +286,9 @@ function DeliveryAssignmentPanel({
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             <Truck className="h-4 w-4 text-emerald-700" />
-            전체 매장
+            배송 담당자
           </p>
-          <p className="mt-1 text-xs font-bold text-slate-500">배송담당자별 필터</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">차량별 담당 거래처 필터</p>
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
@@ -282,7 +311,7 @@ function DeliveryAssignmentPanel({
             <p className="text-sm font-black text-slate-950">전체 매장 보기</p>
             <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{totalStores}곳</span>
           </div>
-          <p className="mt-1 text-xs font-bold text-slate-500">배송담당자 전체 거래처</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">차량 필터 없이 전체 거래처 표시</p>
         </button>
       </div>
       <div className="max-h-[calc(100vh-520px)] min-h-[420px] space-y-2 overflow-auto p-3">
@@ -368,35 +397,29 @@ function VehicleEditForm({
 
 function StoreManagementPanel({
   onSelectStore,
-  onUpdateStore,
-  onWriteHistory,
-  selectedStore,
-  storeHistories,
+  selectedStoreId,
   stores
 }: {
   readonly onSelectStore: (storeId: string) => void;
-  readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
-  readonly onWriteHistory: (storeId: string, memo: string) => void;
-  readonly selectedStore?: StoreRow;
-  readonly storeHistories: Record<string, StoreHistoryItem[]>;
+  readonly selectedStoreId: string;
   readonly stores: StoreRow[];
 }) {
   return (
-    <aside className="grid min-h-0 grid-rows-[minmax(260px,42%)_minmax(0,1fr)] border-l border-slate-200 bg-white">
-      <section className="min-h-0 border-b border-slate-200">
+    <aside className="min-h-0 border-l border-slate-200 bg-white">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-black text-slate-950">거래처 목록</p>
-            <p className="mt-1 text-xs font-bold text-slate-500">매출 등급과 배송거리 기준</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
           </div>
-          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
+          <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
         </div>
-        <div className="h-full overflow-auto pb-16">
+        <div className="min-h-0 flex-1 overflow-auto">
           {stores.length ? (
             stores.map((store) => (
               <button
                 className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                  store.id === selectedStore?.id ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
+                  store.id === selectedStoreId ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
                 }`}
                 key={store.id}
                 onClick={() => onSelectStore(store.id)}
@@ -424,30 +447,27 @@ function StoreManagementPanel({
             </div>
           )}
         </div>
-      </section>
-
-      <section className="min-h-0 bg-slate-50">
-        {selectedStore ? (
-          <StoreDetail
-            history={storeHistories[selectedStore.id] || []}
-            key={selectedStore.id}
-            onUpdateStore={onUpdateStore}
-            onWriteHistory={onWriteHistory}
-            store={selectedStore}
-          />
-        ) : null}
-      </section>
+        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-bold leading-5 text-slate-500">상세 정보, 메모, 첨부자료는 매장 선택 후 우측 넓은 패널에서 관리합니다.</p>
+        </div>
+      </div>
     </aside>
   );
 }
 
 function StoreDetail({
+  attachments,
   history,
+  onClose,
+  onSaveAttachment,
   onUpdateStore,
   onWriteHistory,
   store
 }: {
+  readonly attachments: StoreAttachment;
   readonly history: StoreHistoryItem[];
+  readonly onClose: () => void;
+  readonly onSaveAttachment: (slot: keyof StoreAttachment, file: AttachmentFile) => void;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly store: StoreRow;
@@ -456,105 +476,185 @@ function StoreDetail({
   const [historyMemo, setHistoryMemo] = useState("");
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="border-b border-slate-200 bg-white px-4 py-4">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-sm font-black text-slate-500">거래처 상세</p>
-          <button className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={() => setEditing(true)} type="button">
-            <Edit3 className="h-3.5 w-3.5" />
-            매장 편집
-          </button>
-        </div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-lg font-black text-slate-950">{store.name}</h3>
-            <p className="mt-1 text-xs font-bold text-slate-500">
-              {store.grade}등급 · {store.deliveryVehicleName || store.region} · {store.deliveryDriver || "담당자 미지정"}
-            </p>
-          </div>
-          <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-        </div>
-      </div>
-
-      <div className="space-y-5 px-4 py-4">
-        <PanelTitle title="기본 정보" />
-        <InfoRow label="사업자번호" value={store.businessRegistrationNumber} />
-        <InfoRow label="대표자명" value={store.representativeName} />
-        <InfoRow label="연락처" value={store.phone} />
-        <InfoRow label="이메일" value={store.email} />
-        <InfoRow label="개업일" value={store.openingDate} />
-        <InfoRow label="생년월일" value={store.birthDate} />
-        <InfoRow label="사업자상태" value={`${getBusinessStatusLabel(store.businessStatus)} · 매일 API 조회 예정`} />
-        <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
-        <InfoRow label="업종" value={store.industry} />
-        <InfoRow label="계좌정보" value={store.bankAccount} />
-        <InfoRow label="사업자등록증" value={getDocumentStatusLabel(store.businessCertificateStatus)} />
-        <InfoRow label="통장사본" value={getDocumentStatusLabel(store.accountCopyStatus)} />
-        <InfoRow label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
-        <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
-        <InfoRow label="담당자" value={store.deliveryDriver || "미지정"} />
-        <InfoRow label="배송권역" value={store.deliveryArea || store.region} />
-        <InfoRow label="상태" value={getStatusLabel(store.status)} />
-        <InfoRow label="계약점수" value={`${store.score}점`} />
-
-        <PanelTitle title="배송·방문 정보" />
-        <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
-        <MetricRow icon={<Clock className="h-4 w-4" />} label="예상시간" value={formatMinutes(store.durationMinutes || 0)} />
-        <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
-        <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
-
-        <PanelTitle title="AI 추천 근거" />
-        <div className="space-y-2">
-          {(store.reasons?.length ? store.reasons : ["배송 반경", "예상 매출", "지역 확장성"]).map((reason) => (
-            <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
-              {reason}
-            </p>
-          ))}
-        </div>
-
-        <PanelTitle title="메모 히스토리" />
-        <textarea
-          className="min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
-          onChange={(event) => setHistoryMemo(event.target.value)}
-          placeholder="상담, 배송 특이사항, 대표 요청사항 등을 기록하세요."
-          value={historyMemo}
-        />
-        <button
-          className="h-9 w-full rounded-md bg-slate-950 text-sm font-black text-white transition hover:bg-slate-800"
-          onClick={() => {
-            const memo = historyMemo.trim();
-            if (!memo) return;
-            onWriteHistory(store.id, memo);
-            setHistoryMemo("");
-          }}
-          type="button"
-        >
-          메모 기록
-        </button>
-        <div className="space-y-2">
-          {history.length ? (
-            history.map((item) => (
-              <div className="rounded-md border border-slate-200 bg-white p-3" key={item.id}>
-                <p className="text-xs font-black text-slate-400">{item.recordedAt}</p>
-                <p className="mt-1 text-sm font-bold leading-5 text-slate-700">{item.memo}</p>
+    <>
+      <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
+      <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <header className="border-b border-slate-200 bg-white px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-blue-700">거래처 상세</p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                <h3 className="truncate text-2xl font-black text-slate-950">{store.name}</h3>
+                <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
               </div>
-            ))
-          ) : (
-            <p className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
-          )}
+              <p className="mt-2 text-sm font-bold text-slate-500">
+                {store.deliveryVehicleName || store.region} · {store.deliveryDriver || "담당자 미지정"} · {store.address || "주소 미등록"}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:bg-slate-50" onClick={() => setEditing(true)} type="button">
+                <Edit3 className="h-4 w-4" />
+                매장 편집
+              </button>
+              <button className="grid h-9 w-9 place-items-center rounded-md bg-slate-950 text-white hover:bg-slate-800" onClick={onClose} type="button">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-6 py-5">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-5">
+              <section className="rounded-md border border-slate-200 bg-white p-5">
+                <PanelTitle title="기본 정보" />
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <InfoRow label="사업자번호" value={store.businessRegistrationNumber} />
+                  <InfoRow label="대표자명" value={store.representativeName} />
+                  <InfoRow label="연락처" value={store.phone} />
+                  <InfoRow label="이메일" value={store.email} />
+                  <InfoRow label="개업일" value={store.openingDate} />
+                  <InfoRow label="생년월일" value={store.birthDate} />
+                  <InfoRow label="사업자상태" value={`${getBusinessStatusLabel(store.businessStatus)} · 매일 API 조회 예정`} />
+                  <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
+                  <InfoRow label="업종" value={store.industry} />
+                  <InfoRow label="계좌정보" value={store.bankAccount} />
+                  <InfoRow label="사업자등록증" value={getDocumentStatusLabel(store.businessCertificateStatus)} />
+                  <InfoRow label="통장사본" value={getDocumentStatusLabel(store.accountCopyStatus)} />
+                  <InfoRow label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
+                  <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
+                  <InfoRow label="담당자" value={store.deliveryDriver || "미지정"} />
+                  <InfoRow label="배송권역" value={store.deliveryArea || store.region} />
+                  <InfoRow label="상태" value={getStatusLabel(store.status)} />
+                  <InfoRow label="계약점수" value={`${store.score}점`} />
+                </div>
+              </section>
+
+              <section className="rounded-md border border-slate-200 bg-white p-5">
+                <PanelTitle title="첨부자료" />
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <AttachmentBox file={attachments.businessCertificate} label="사업자등록증" onSave={(file) => onSaveAttachment("businessCertificate", file)} />
+                  <AttachmentBox file={attachments.bankbookCopy} label="통장사본" onSave={(file) => onSaveAttachment("bankbookCopy", file)} />
+                  <AttachmentBox file={attachments.loadingPositionPhoto} label="배송 적재위치 사진" onSave={(file) => onSaveAttachment("loadingPositionPhoto", file)} />
+                </div>
+              </section>
+
+              <section className="rounded-md border border-slate-200 bg-white p-5">
+                <PanelTitle title="메모 히스토리" />
+                <textarea
+                  className="mt-4 min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
+                  onChange={(event) => setHistoryMemo(event.target.value)}
+                  placeholder="상담, 배송 특이사항, 대표 요청사항 등을 기록하세요."
+                  value={historyMemo}
+                />
+                <button
+                  className="mt-2 h-9 w-full rounded-md bg-slate-950 text-sm font-black text-white transition hover:bg-slate-800"
+                  onClick={() => {
+                    const memo = historyMemo.trim();
+                    if (!memo) return;
+                    onWriteHistory(store.id, memo);
+                    setHistoryMemo("");
+                  }}
+                  type="button"
+                >
+                  메모 저장
+                </button>
+                <div className="mt-4 space-y-2">
+                  {history.length ? (
+                    history.map((item) => (
+                      <div className="rounded-md border border-slate-200 bg-white p-3" key={item.id}>
+                        <p className="text-xs font-black text-slate-400">{item.recordedAt}</p>
+                        <p className="mt-1 text-sm font-bold leading-5 text-slate-700">{item.memo}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <div className="space-y-5">
+              <section className="rounded-md border border-slate-200 bg-white p-5">
+                <PanelTitle title="배송·방문 정보" />
+                <div className="mt-4 space-y-3">
+                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
+                  <MetricRow icon={<Clock className="h-4 w-4" />} label="예상시간" value={formatMinutes(store.durationMinutes || 0)} />
+                  <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
+                  <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
+                </div>
+              </section>
+
+              <section className="rounded-md border border-slate-200 bg-white p-5">
+                <PanelTitle title="AI 추천 근거" />
+                <div className="mt-4 space-y-2">
+                  {(store.reasons?.length ? store.reasons : ["배송 반경", "예상 매출", "지역 확장성"]).map((reason) => (
+                    <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
+                      {reason}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </div>
         </div>
+        {editing ? (
+          <StoreEditDrawer
+            onClose={() => setEditing(false)}
+            onSave={(edit) => {
+              onUpdateStore(store.id, edit);
+              setEditing(false);
+            }}
+            store={store}
+          />
+        ) : null}
+      </aside>
+    </>
+  );
+}
+
+function AttachmentBox({ file, label, onSave }: { readonly file?: AttachmentFile; readonly label: string; readonly onSave: (file: AttachmentFile) => void }) {
+  return (
+    <label className="block cursor-pointer rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 transition hover:border-blue-300 hover:bg-blue-50">
+      <input
+        accept="image/*,.pdf"
+        className="sr-only"
+        onChange={(event) => {
+          const selectedFile = event.target.files?.[0];
+          if (!selectedFile) return;
+          if (!selectedFile.type.startsWith("image/")) {
+            onSave({ name: selectedFile.name });
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => onSave({ dataUrl: String(reader.result || ""), name: selectedFile.name });
+          reader.readAsDataURL(selectedFile);
+        }}
+        type="file"
+      />
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-black text-slate-900">{label}</p>
+        <FileImage className="h-4 w-4 text-slate-400" />
       </div>
-      {editing ? (
-        <StoreEditDrawer
-          onClose={() => setEditing(false)}
-          onSave={(edit) => {
-            onUpdateStore(store.id, edit);
-            setEditing(false);
-          }}
-          store={store}
-        />
-      ) : null}
-    </div>
+      {file ? (
+        <div className="mt-3">
+          {file.dataUrl ? (
+            <img alt={label} className="h-28 w-full rounded-md border border-slate-200 object-cover" src={file.dataUrl} />
+          ) : (
+            <div className="grid h-28 place-items-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-500">파일 저장됨</div>
+          )}
+          <p className="mt-2 truncate text-xs font-bold text-slate-500">{file.name}</p>
+        </div>
+      ) : (
+        <div className="mt-3 grid h-28 place-items-center rounded-md border border-slate-200 bg-white text-center">
+          <div>
+            <p className="text-xs font-black text-slate-600">파일 업로드</p>
+            <p className="mt-1 text-[11px] font-bold text-slate-400">이미지/PDF</p>
+          </div>
+        </div>
+      )}
+    </label>
   );
 }
 
