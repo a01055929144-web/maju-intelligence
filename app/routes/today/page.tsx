@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { B2BLeadMapWorkspace } from "@/components/b2b-lead-map-workspace";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { KakaoMapMarker } from "@/components/kakao-address-map";
+import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 
@@ -33,7 +33,7 @@ export default async function TodayRoutePage() {
       userName={customerSession?.name || adminSession?.email || "관리자"}
     >
       <section className="mx-auto max-w-[1880px]">
-        <B2BLeadMapWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />
+        <SalesRouteMapWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />
       </section>
     </CustomerAppShell>
   );

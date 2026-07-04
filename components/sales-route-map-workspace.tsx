@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, Clock, MapPin, Navigation, RefreshCw, Search, Sheet } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Navigation, RefreshCw, Search } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
@@ -14,7 +14,7 @@ type StoreRow = RoutePlanStop & {
   markerY: number;
 };
 
-type B2BLeadMapWorkspaceProps = {
+type SalesRouteMapWorkspaceProps = {
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
 };
@@ -26,7 +26,7 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "C등급", value: "C" }
 ];
 
-export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapWorkspaceProps) {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [selectedId, setSelectedId] = useState("");
@@ -48,12 +48,15 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
   return (
     <div className="overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
       <header className="flex flex-col gap-4 border-b border-slate-200 bg-white px-5 py-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-4">
-          <h2 className="whitespace-nowrap text-lg font-black">B2B 유통사 리드 관리</h2>
-          <nav className="flex items-center gap-2">
-            {["오늘 할 일", "유통사 목록", "지도"].map((item) => (
+        <div className="min-w-0">
+          <h2 className="whitespace-nowrap text-lg font-black">영업·배송 통합 지도</h2>
+          <p className="mt-1 text-sm font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+            {["지도", "거래처 목록", "오늘 코스"].map((item) => (
               <button
-                className={`h-9 rounded-md px-4 text-sm font-black transition ${item === "지도" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"}`}
+                className={`h-8 rounded-md px-3 text-sm font-black transition ${item === "지도" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-950"}`}
                 key={item}
                 type="button"
               >
@@ -61,16 +64,7 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
               </button>
             ))}
           </nav>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
-            서비스 수수료
-          </button>
-          <button className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
-            <Sheet className="h-4 w-4" />
-            Google Sheet
-          </button>
-          <span className="text-xs font-bold text-slate-400">업데이트: 기존 데이터 기준</span>
+          <span className="text-xs font-bold text-slate-400">기존 영업·배송 데이터 기준</span>
           <button className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" type="button">
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -119,15 +113,15 @@ export function B2BLeadMapWorkspace({ mapMarkers, routePlan }: B2BLeadMapWorkspa
         </div>
       </section>
 
-      <section className="grid min-h-[760px] grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px_400px]">
+      <section className="grid min-h-[760px] grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px_380px]">
         <div className="min-w-0 bg-slate-100">
           <KakaoAddressMap mapClassName="h-[760px] min-h-[680px] rounded-none border-0 xl:h-[calc(100vh-292px)]" markers={markers} showList={false} />
         </div>
 
         <aside className="border-l border-slate-200 bg-white">
           <div className="border-b border-slate-200 px-4 py-4">
-            <p className="text-sm font-black text-slate-950">유통사 목록</p>
-            <p className="mt-1 text-xs font-bold text-slate-500">기존 영업·배송 후보 데이터 기준</p>
+            <p className="text-sm font-black text-slate-950">거래처 목록</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">매출 등급과 배송거리 기준</p>
           </div>
           <div className="max-h-[720px] overflow-auto xl:max-h-[calc(100vh-365px)]">
             {visibleStores.map((store) => (
@@ -162,6 +156,7 @@ function StoreDetail({ store }: { readonly store: StoreRow }) {
   return (
     <div className="max-h-[760px] overflow-auto xl:max-h-[calc(100vh-292px)]">
       <div className="border-b border-slate-200 bg-white px-5 py-5">
+        <p className="mb-3 text-sm font-black text-slate-500">거래처 상세</p>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-lg font-black text-slate-950">{store.name}</h3>
