@@ -19,7 +19,7 @@ type RoutePlanWorkspaceProps = {
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 
-type DeliveryVehicle = {
+export type DeliveryVehicle = {
   id: string;
   name: string;
   driver: string;
@@ -833,7 +833,7 @@ function getRevenueGrade(expectedRevenue: number): RevenueGrade {
   return "C";
 }
 
-function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
+export function createDeliveryVehicles(stops: RoutePlanStop[]): DeliveryVehicle[] {
   const templates = [
     { addresses: deliveryAddressGroups[0], area: "성동·광진권", driver: "김배송 매니저", id: "truck-1", name: "배송 1호차" },
     { addresses: deliveryAddressGroups[1], area: "강남·서초권", driver: "박배송 매니저", id: "truck-2", name: "배송 2호차" },

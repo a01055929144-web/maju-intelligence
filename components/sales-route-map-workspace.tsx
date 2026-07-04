@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, Clock, MapPin, Navigation, RefreshCw, Search } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Navigation, RefreshCw, Search, Truck, UserRound } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { createDeliveryVehicles, DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
@@ -30,7 +31,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [selectedId, setSelectedId] = useState("");
+  const [vehicleId, setVehicleId] = useState("truck-1");
   const stores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
+  const deliveryVehicles = useMemo(() => createDeliveryVehicles(stores), [stores]);
+  const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleId) || deliveryVehicles[0];
   const visibleStores = useMemo(
     () =>
       stores.filter((store) => {
@@ -43,7 +47,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   );
   const selectedStore = visibleStores.find((store) => store.id === selectedId) || visibleStores[0] || stores[0];
   const gradeCounts = useMemo(() => countGrades(stores), [stores]);
-  const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
+  const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, selectedVehicle?.stops || []), [mapMarkers, selectedVehicle, visibleStores]);
 
   return (
     <div className="overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
@@ -74,7 +78,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-6">
         <Kpi label="전체" tone="blue" value={`${routePlan.totalStops}곳`} />
         <Kpi label="A등급" tone="green" value={`${gradeCounts.A}곳`} />
-        <Kpi label="B등급" tone="blue" value={`${gradeCounts.B}곳`} />
+        <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
         <Kpi label="예상매출" tone="green" value={`${routePlan.totalExpectedRevenue.toLocaleString()}만원`} />
         <Kpi label="금일 총 km" tone="purple" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
         <Kpi label="예상시간" tone="red" value={formatMinutes(routePlan.totalDurationMinutes)} />
@@ -113,7 +117,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </section>
 
-      <section className="grid min-h-[760px] grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px_380px]">
+      <section className="grid min-h-[760px] grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_340px_380px]">
+        <DeliveryAssignmentPanel
+          onSelectVehicle={setVehicleId}
+          selectedVehicle={selectedVehicle}
+          selectedVehicleId={vehicleId}
+          vehicles={deliveryVehicles}
+        />
+
         <div className="min-w-0 bg-slate-100">
           <KakaoAddressMap mapClassName="h-[760px] min-h-[680px] rounded-none border-0 xl:h-[calc(100vh-292px)]" markers={markers} showList={false} />
         </div>
@@ -149,6 +160,87 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <aside className="border-l border-slate-200 bg-slate-50">{selectedStore ? <StoreDetail store={selectedStore} /> : null}</aside>
       </section>
     </div>
+  );
+}
+
+function DeliveryAssignmentPanel({
+  onSelectVehicle,
+  selectedVehicle,
+  selectedVehicleId,
+  vehicles
+}: {
+  readonly onSelectVehicle: (vehicleId: string) => void;
+  readonly selectedVehicle?: DeliveryVehicle;
+  readonly selectedVehicleId: string;
+  readonly vehicles: DeliveryVehicle[];
+}) {
+  return (
+    <aside className="border-r border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-4 py-4">
+        <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+          <Truck className="h-4 w-4 text-emerald-700" />
+          배송 담당자
+        </p>
+        <p className="mt-1 text-xs font-bold text-slate-500">차량별 담당자와 오늘 배송매장</p>
+      </div>
+      <div className="max-h-[286px] space-y-2 overflow-auto border-b border-slate-200 p-3">
+        {vehicles.map((vehicle) => {
+          const selected = vehicle.id === selectedVehicleId;
+          return (
+            <button
+              className={`w-full rounded-md border p-3 text-left transition ${
+                selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+              key={vehicle.id}
+              onClick={() => onSelectVehicle(vehicle.id)}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
+                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                  {vehicle.stops.length}곳
+                </span>
+              </div>
+              <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+                <UserRound className="h-3.5 w-3.5" />
+                {vehicle.driver}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-400">{vehicle.area}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="p-4">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-black text-slate-950">{selectedVehicle?.name || "배송차량"} 배송매장</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">
+              {selectedVehicle?.driver} · {selectedVehicle?.area}
+            </p>
+          </div>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">
+            {selectedVehicle?.stops.length || 0}곳
+          </span>
+        </div>
+        <div className="max-h-[360px] space-y-2 overflow-auto">
+          {(selectedVehicle?.stops || []).map((stop) => (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={stop.id}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-sm font-black text-slate-950">
+                  {stop.order}. {stop.name}
+                </p>
+                <span className={gradeBadgeClass(getRevenueGrade(stop.expectedRevenue))}>{getRevenueGrade(stop.expectedRevenue)}</span>
+              </div>
+              <p className="mt-1 truncate text-xs font-bold text-slate-500">{stop.address || stop.region}</p>
+              <p className="mt-1 text-xs font-bold text-slate-400">
+                {stop.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(stop.durationMinutes || 0)} · {stop.expectedRevenue.toLocaleString()}만원
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -259,9 +351,9 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
     });
 }
 
-function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[]): KakaoMapMarker[] {
+function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], deliveryStops: RoutePlanStop[]): KakaoMapMarker[] {
   const origin = existingMarkers.find((marker) => marker.tone === "origin");
-  const storeMarkers = stores.map((store) => ({
+  const storeMarkers = stores.map((store, index) => ({
     address: store.address || `${store.region} ${store.name}`,
     grade: store.grade,
     label: store.grade,
@@ -270,8 +362,30 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[]): K
     x: store.markerX,
     y: store.markerY
   }));
+  const deliveryMarkers = deliveryStops.map((stop, index) => {
+    const grade = getRevenueGrade(stop.expectedRevenue);
+    return {
+      address: stop.address || `${stop.region} ${stop.name}`,
+      grade,
+      label: grade,
+      name: stop.name,
+      tone: "customer" as const,
+      x: 16 + ((index * 7) % 70),
+      y: 18 + ((index * 11) % 58)
+    };
+  });
 
-  return origin ? [origin, ...storeMarkers] : storeMarkers;
+  return mergeMarkers(origin ? [origin, ...deliveryMarkers, ...storeMarkers] : [...deliveryMarkers, ...storeMarkers]);
+}
+
+function mergeMarkers(markers: KakaoMapMarker[]) {
+  const seen = new Set<string>();
+  return markers.filter((marker) => {
+    const key = `${marker.address}-${marker.name}-${marker.tone}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function getRevenueGrade(revenue: number): RevenueGrade {
