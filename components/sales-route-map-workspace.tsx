@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, Check, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
+import type { ReactNode } from "react";
+import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { createDeliveryVehicles, DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
@@ -41,6 +42,8 @@ type StoreEdit = Partial<
     | "businessCertificateStatus"
     | "businessRegistrationNumber"
     | "businessStatus"
+    | "deliveryArea"
+    | "deliveryDriver"
     | "email"
     | "expectedRevenue"
     | "grade"
@@ -64,11 +67,12 @@ type StoreHistoryItem = {
 type StoreAttachment = {
   businessCertificate?: AttachmentFile;
   bankbookCopy?: AttachmentFile;
-  loadingPositionPhoto?: AttachmentFile;
+  loadingPositionMedia?: AttachmentFile[];
 };
 
 type AttachmentFile = {
   dataUrl?: string;
+  mediaType?: "file" | "image" | "video";
   name: string;
 };
 
@@ -220,6 +224,15 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               [selectedStore.id]: {
                 ...current[selectedStore.id],
                 [slot]: file
+              }
+            }))
+          }
+          onSaveLoadingMedia={(files) =>
+            setStoreAttachments((current) => ({
+              ...current,
+              [selectedStore.id]: {
+                ...current[selectedStore.id],
+                loadingPositionMedia: [...(current[selectedStore.id]?.loadingPositionMedia || []), ...files]
               }
             }))
           }
@@ -460,6 +473,7 @@ function StoreDetail({
   history,
   onClose,
   onSaveAttachment,
+  onSaveLoadingMedia,
   onUpdateStore,
   onWriteHistory,
   store
@@ -467,7 +481,8 @@ function StoreDetail({
   readonly attachments: StoreAttachment;
   readonly history: StoreHistoryItem[];
   readonly onClose: () => void;
-  readonly onSaveAttachment: (slot: keyof StoreAttachment, file: AttachmentFile) => void;
+  readonly onSaveAttachment: (slot: "bankbookCopy" | "businessCertificate", file: AttachmentFile) => void;
+  readonly onSaveLoadingMedia: (files: AttachmentFile[]) => void;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly store: StoreRow;
@@ -479,6 +494,8 @@ function StoreDetail({
   const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
   const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
+  const [draftDeliveryArea, setDraftDeliveryArea] = useState(store.deliveryArea || store.region);
+  const [draftDeliveryDriver, setDraftDeliveryDriver] = useState(store.deliveryDriver || "");
   const [draftEmail, setDraftEmail] = useState(store.email);
   const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
   const [draftIndustry, setDraftIndustry] = useState(store.industry);
@@ -518,6 +535,8 @@ function StoreDetail({
                     businessCertificateStatus: draftBusinessCertificateStatus,
                     businessRegistrationNumber: draftBusinessNumber,
                     businessStatus: draftBusinessStatus,
+                    deliveryArea: draftDeliveryArea,
+                    deliveryDriver: draftDeliveryDriver,
                     email: draftEmail,
                     expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
                     grade: draftGrade,
@@ -543,8 +562,7 @@ function StoreDetail({
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-6 py-5">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="space-y-5">
-              <section className="rounded-md border border-slate-200 bg-white p-5">
-                <PanelTitle title="기본 정보" />
+              <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <EditRow label="매장명" onChange={setDraftName} value={draftName} />
                   <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
@@ -596,22 +614,20 @@ function StoreDetail({
                     value={draftGrade}
                   />
                   <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
-                  <InfoRow label="담당자" value={store.deliveryDriver || "미지정"} />
-                  <InfoRow label="배송권역" value={store.deliveryArea || store.region} />
+                  <EditRow label="담당자" onChange={setDraftDeliveryDriver} value={draftDeliveryDriver} />
+                  <EditRow label="배송권역" onChange={setDraftDeliveryArea} value={draftDeliveryArea} />
                 </div>
-              </section>
+              </CollapsibleSection>
 
-              <section className="rounded-md border border-slate-200 bg-white p-5">
-                <PanelTitle title="첨부자료" />
+              <CollapsibleSection defaultOpen title="첨부자료">
                 <div className="mt-4 space-y-3">
-                  <AttachmentBox description="기사님이 가장 먼저 확인해야 하는 위치 정보입니다." file={attachments.loadingPositionPhoto} important label="배송 적재위치 사진" onSave={(file) => onSaveAttachment("loadingPositionPhoto", file)} />
+                  <LoadingMediaBox files={attachments.loadingPositionMedia || []} onSave={onSaveLoadingMedia} />
                   <AttachmentBox description="사업자 정보 확인용 증빙입니다." file={attachments.businessCertificate} label="사업자등록증" onSave={(file) => onSaveAttachment("businessCertificate", file)} />
                   <AttachmentBox description="정산 및 결제 확인용 자료입니다." file={attachments.bankbookCopy} label="통장사본" onSave={(file) => onSaveAttachment("bankbookCopy", file)} />
                 </div>
-              </section>
+              </CollapsibleSection>
 
-              <section className="rounded-md border border-slate-200 bg-white p-5">
-                <PanelTitle title="메모 히스토리" />
+              <CollapsibleSection title="메모 히스토리">
                 <textarea
                   className="mt-4 min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
                   onChange={(event) => setHistoryMemo(event.target.value)}
@@ -642,22 +658,20 @@ function StoreDetail({
                     <p className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
                   )}
                 </div>
-              </section>
+              </CollapsibleSection>
             </div>
 
             <div className="space-y-5">
-              <section className="rounded-md border border-slate-200 bg-white p-5">
-                <PanelTitle title="배송·방문 정보" />
+              <CollapsibleSection defaultOpen title="배송·방문 정보">
                 <div className="mt-4 space-y-3">
                   <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
                   <MetricRow icon={<Clock className="h-4 w-4" />} label="예상시간" value={formatMinutes(store.durationMinutes || 0)} />
                   <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
                   <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
                 </div>
-              </section>
+              </CollapsibleSection>
 
-              <section className="rounded-md border border-slate-200 bg-white p-5">
-                <PanelTitle title="AI 추천 근거" />
+              <CollapsibleSection title="AI 추천 근거">
                 <div className="mt-4 space-y-2">
                   {(store.reasons?.length ? store.reasons : ["배송 반경", "예상 매출", "지역 확장성"]).map((reason) => (
                     <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
@@ -665,12 +679,89 @@ function StoreDetail({
                     </p>
                   ))}
                 </div>
-              </section>
+              </CollapsibleSection>
             </div>
           </div>
         </div>
       </aside>
     </>
+  );
+}
+
+function CollapsibleSection({ children, defaultOpen = false, title }: { readonly children: ReactNode; readonly defaultOpen?: boolean; readonly title: string }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className="rounded-md border border-slate-200 bg-white">
+      <button className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left" onClick={() => setOpen((value) => !value)} type="button">
+        <span className="text-sm font-black text-slate-900">{title}</span>
+        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? <div className="border-t border-slate-200 px-5 pb-5">{children}</div> : null}
+    </section>
+  );
+}
+
+function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; readonly onSave: (files: AttachmentFile[]) => void }) {
+  return (
+    <label className="block cursor-pointer rounded-md border border-blue-300 bg-blue-50/60 p-4 transition hover:border-blue-400 hover:bg-blue-50">
+      <input
+        accept="image/*,video/*"
+        className="sr-only"
+        multiple
+        onChange={(event) => {
+          const selectedFiles = Array.from(event.target.files || []);
+          if (!selectedFiles.length) return;
+          Promise.all(
+            selectedFiles.map(
+              (selectedFile) =>
+                new Promise<AttachmentFile>((resolve) => {
+                  const mediaType = selectedFile.type.startsWith("video/") ? "video" : "image";
+                  const reader = new FileReader();
+                  reader.onload = () => resolve({ dataUrl: String(reader.result || ""), mediaType, name: selectedFile.name });
+                  reader.readAsDataURL(selectedFile);
+                })
+            )
+          ).then(onSave);
+          event.target.value = "";
+        }}
+        type="file"
+      />
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
+            <FileImage className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-slate-900">배송 적재위치 사진/영상</p>
+              <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-200">{files.length}개</span>
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 가장 먼저 확인하는 위치 자료입니다. 여러 장의 사진과 짧은 동영상을 함께 저장할 수 있습니다.</p>
+            <p className="mt-2 text-xs font-black text-blue-700">사진/영상 추가</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {files.length ? (
+            files.slice(0, 4).map((file, index) =>
+              file.mediaType === "video" ? (
+                <video className="h-24 w-full rounded-md border border-slate-200 bg-white object-cover" controls key={`${file.name}-${index}`} src={file.dataUrl} />
+              ) : (
+                <img alt={file.name} className="h-24 w-full rounded-md border border-slate-200 bg-white object-cover" key={`${file.name}-${index}`} src={file.dataUrl} />
+              )
+            )
+          ) : (
+            <div className="col-span-2 grid h-24 place-items-center rounded-md border border-slate-200 bg-white text-center">
+              <div>
+                <p className="text-xs font-black text-slate-600">자료 업로드</p>
+                <p className="mt-1 text-[11px] font-bold text-slate-400">이미지/동영상 여러 개</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </label>
   );
 }
 
