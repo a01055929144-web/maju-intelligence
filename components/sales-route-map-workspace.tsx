@@ -50,8 +50,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, selectedVehicle?.stops || []), [mapMarkers, selectedVehicle, visibleStores]);
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
-      <header className="flex flex-col gap-4 border-b border-slate-200 bg-white px-5 py-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div className="flex h-[calc(100vh-178px)] min-h-[760px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
+      <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="min-w-0">
           <h2 className="whitespace-nowrap text-lg font-black">영업·배송 통합 지도</h2>
           <p className="mt-1 text-sm font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
@@ -84,7 +84,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi label="예상시간" tone="red" value={formatMinutes(routePlan.totalDurationMinutes)} />
       </section>
 
-      <section className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-3 lg:flex-row lg:items-center">
+      <section className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 lg:flex-row lg:items-center">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -117,7 +117,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </section>
 
-      <section className="grid min-h-[760px] grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_340px_380px]">
+      <section className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_430px]">
         <DeliveryAssignmentPanel
           onSelectVehicle={setVehicleId}
           selectedVehicle={selectedVehicle}
@@ -125,39 +125,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           vehicles={deliveryVehicles}
         />
 
-        <div className="min-w-0 bg-slate-100">
-          <KakaoAddressMap mapClassName="h-[760px] min-h-[680px] rounded-none border-0 xl:h-[calc(100vh-292px)]" markers={markers} showList={false} />
+        <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
+          <KakaoAddressMap mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
         </div>
 
-        <aside className="border-l border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-4 py-4">
-            <p className="text-sm font-black text-slate-950">거래처 목록</p>
-            <p className="mt-1 text-xs font-bold text-slate-500">매출 등급과 배송거리 기준</p>
-          </div>
-          <div className="max-h-[720px] overflow-auto xl:max-h-[calc(100vh-365px)]">
-            {visibleStores.map((store) => (
-              <button
-                className={`block w-full border-b border-slate-100 px-4 py-4 text-left transition hover:bg-slate-50 ${
-                  store.id === selectedStore?.id ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
-                }`}
-                key={store.id}
-                onClick={() => setSelectedId(store.id)}
-                type="button"
-              >
-                <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
-                  <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                </div>
-                <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                <p className="mt-1 text-xs font-bold text-slate-400">
-                  {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 예상 {store.expectedRevenue.toLocaleString()}만원
-                </p>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <aside className="border-l border-slate-200 bg-slate-50">{selectedStore ? <StoreDetail store={selectedStore} /> : null}</aside>
+        <StoreManagementPanel onSelectStore={setSelectedId} selectedStore={selectedStore} stores={visibleStores} />
       </section>
     </div>
   );
@@ -175,15 +147,15 @@ function DeliveryAssignmentPanel({
   readonly vehicles: DeliveryVehicle[];
 }) {
   return (
-    <aside className="border-r border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-4">
+    <aside className="min-h-0 border-r border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-4 py-3">
         <p className="flex items-center gap-2 text-sm font-black text-slate-950">
           <Truck className="h-4 w-4 text-emerald-700" />
           배송 담당자
         </p>
         <p className="mt-1 text-xs font-bold text-slate-500">차량별 담당자와 오늘 배송매장</p>
       </div>
-      <div className="max-h-[286px] space-y-2 overflow-auto border-b border-slate-200 p-3">
+      <div className="max-h-[250px] space-y-2 overflow-auto border-b border-slate-200 p-3">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           return (
@@ -211,7 +183,7 @@ function DeliveryAssignmentPanel({
         })}
       </div>
 
-      <div className="p-4">
+      <div className="min-h-0 p-3">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div>
             <p className="text-sm font-black text-slate-950">{selectedVehicle?.name || "배송차량"} 배송매장</p>
@@ -223,7 +195,7 @@ function DeliveryAssignmentPanel({
             {selectedVehicle?.stops.length || 0}곳
           </span>
         </div>
-        <div className="max-h-[360px] space-y-2 overflow-auto">
+        <div className="max-h-[calc(100vh-600px)] min-h-[260px] space-y-2 overflow-auto">
           {(selectedVehicle?.stops || []).map((stop) => (
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={stop.id}>
               <div className="flex items-center justify-between gap-2">
@@ -244,11 +216,67 @@ function DeliveryAssignmentPanel({
   );
 }
 
+function StoreManagementPanel({
+  onSelectStore,
+  selectedStore,
+  stores
+}: {
+  readonly onSelectStore: (storeId: string) => void;
+  readonly selectedStore?: StoreRow;
+  readonly stores: StoreRow[];
+}) {
+  return (
+    <aside className="grid min-h-0 grid-rows-[minmax(260px,42%)_minmax(0,1fr)] border-l border-slate-200 bg-white">
+      <section className="min-h-0 border-b border-slate-200">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <div>
+            <p className="text-sm font-black text-slate-950">거래처 목록</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">매출 등급과 배송거리 기준</p>
+          </div>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
+        </div>
+        <div className="h-full overflow-auto pb-16">
+          {stores.length ? (
+            stores.map((store) => (
+              <button
+                className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 ${
+                  store.id === selectedStore?.id ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
+                }`}
+                key={store.id}
+                onClick={() => onSelectStore(store.id)}
+                type="button"
+              >
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
+                  <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                </div>
+                <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
+                <p className="mt-1 text-xs font-bold text-slate-400">
+                  {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 예상 {store.expectedRevenue.toLocaleString()}만원
+                </p>
+              </button>
+            ))
+          ) : (
+            <div className="grid h-full min-h-[180px] place-items-center px-5 text-center">
+              <div>
+                <p className="text-sm font-black text-slate-700">조건에 맞는 거래처가 없습니다.</p>
+                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">등급 필터나 검색어를 조정해 주세요.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="min-h-0 bg-slate-50">{selectedStore ? <StoreDetail store={selectedStore} /> : null}</section>
+    </aside>
+  );
+}
+
 function StoreDetail({ store }: { readonly store: StoreRow }) {
   return (
-    <div className="max-h-[760px] overflow-auto xl:max-h-[calc(100vh-292px)]">
-      <div className="border-b border-slate-200 bg-white px-5 py-5">
-        <p className="mb-3 text-sm font-black text-slate-500">거래처 상세</p>
+    <div className="h-full overflow-auto">
+      <div className="border-b border-slate-200 bg-white px-4 py-4">
+        <p className="mb-2 text-sm font-black text-slate-500">거래처 상세</p>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-lg font-black text-slate-950">{store.name}</h3>
@@ -260,7 +288,7 @@ function StoreDetail({ store }: { readonly store: StoreRow }) {
         </div>
       </div>
 
-      <div className="space-y-6 px-5 py-5">
+      <div className="space-y-5 px-4 py-4">
         <PanelTitle title="기본 정보" />
         <InfoRow icon={<MapPin className="h-4 w-4" />} label="주소" value={store.address || "주소 미등록"} />
         <InfoRow label="지역" value={store.region} />
