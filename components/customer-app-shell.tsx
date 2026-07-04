@@ -26,6 +26,7 @@ type CustomerAppShellProps = {
   readonly active: "dashboard" | "customers" | "routes" | "revenue" | "assistant" | "settings" | "data";
   readonly children: ReactNode;
   readonly companyName: string;
+  readonly hidePageTitle?: boolean;
   readonly rightAction?: ReactNode;
   readonly title: string;
   readonly subtitle?: string;
@@ -70,7 +71,7 @@ const navigationGroups: NavigationGroup[] = [
   }
 ];
 
-export function CustomerAppShell({ active, children, companyName, rightAction, subtitle, title, userName }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, rightAction, subtitle, title, userName }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -139,16 +140,20 @@ export function CustomerAppShell({ active, children, companyName, rightAction, s
 
         <section className="min-w-0">
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-            <div className="flex flex-col gap-3 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
-              <div className="min-w-0">
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <Badge className="bg-slate-100 text-slate-700">고객사 작업공간</Badge>
-                  {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
+            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-3" : "py-4"}`}>
+              {!hidePageTitle ? (
+                <div className="min-w-0">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Badge className="bg-slate-100 text-slate-700">고객사 작업공간</Badge>
+                    {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
+                  </div>
+                  <h1 className="truncate text-xl font-black text-slate-950">{title}</h1>
+                  {subtitle ? <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p> : null}
                 </div>
-                <h1 className="truncate text-xl font-black text-slate-950">{title}</h1>
-                {subtitle ? <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p> : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+              ) : (
+                <div className="hidden xl:block" />
+              )}
+              <div className={`flex flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                   href="/dashboard/settings"
