@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { createDeliveryVehicles, DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
@@ -96,15 +96,22 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "C등급", value: "C" }
 ];
 
+const localStoreKeys = {
+  attachments: "maju:sales-route:attachments",
+  histories: "maju:sales-route:histories",
+  storeEdits: "maju:sales-route:store-edits",
+  vehicleEdits: "maju:sales-route:vehicle-edits"
+};
+
 export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapWorkspaceProps) {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
-  const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>({});
-  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>({});
-  const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>({});
-  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>({});
+  const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
+  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
+  const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
+  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const routeSeedStores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
   const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehicles(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
@@ -128,6 +135,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const gradeCounts = useMemo(() => countGrades(allStores), [allStores]);
   const routeTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
+
+  useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
+  useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
+  useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
+  useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
 
   return (
     <div className="flex h-[calc(100vh-178px)] min-h-[760px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
@@ -514,6 +526,29 @@ function StoreDetail({
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
   const [historyMemo, setHistoryMemo] = useState("");
   const [ocrSuggestion, setOcrSuggestion] = useState<BusinessOcrSuggestion | null>(null);
+  const [savedAt, setSavedAt] = useState("");
+  const saveDraft = () => {
+    onUpdateStore(store.id, {
+      accountCopyStatus: draftAccountCopyStatus,
+      address: draftAddress,
+      bankAccount: draftBankAccount,
+      birthDate: draftBirthDate,
+      businessCertificateStatus: draftBusinessCertificateStatus,
+      businessRegistrationNumber: draftBusinessNumber,
+      businessStatus: draftBusinessStatus,
+      deliveryArea: draftDeliveryArea,
+      deliveryDriver: draftDeliveryDriver,
+      email: draftEmail,
+      expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
+      grade: draftGrade,
+      industry: draftIndustry,
+      name: draftName,
+      openingDate: draftOpeningDate,
+      phone: draftPhone,
+      representativeName: draftRepresentativeName
+    });
+    setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }));
+  };
 
   return (
     <>
@@ -524,38 +559,19 @@ function StoreDetail({
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                <h3 className="truncate text-2xl font-black text-slate-950">{store.name}</h3>
-                <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                <h3 className="truncate text-2xl font-black text-slate-950">{draftName}</h3>
+                <span className={gradeBadgeClass(draftGrade)}>{draftGrade}</span>
+                <span className={businessStatusClass(draftBusinessStatus)}>{getBusinessStatusLabel(draftBusinessStatus)}</span>
               </div>
               <p className="mt-2 text-sm font-bold text-slate-500">
-                {store.deliveryVehicleName || store.region} · {store.deliveryDriver || "담당자 미지정"} · {store.address || "주소 미등록"}
+                {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
+              {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 저장됨 · {savedAt}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white hover:bg-blue-700"
-                onClick={() =>
-                  onUpdateStore(store.id, {
-                    accountCopyStatus: draftAccountCopyStatus,
-                    address: draftAddress,
-                    bankAccount: draftBankAccount,
-                    birthDate: draftBirthDate,
-                    businessCertificateStatus: draftBusinessCertificateStatus,
-                    businessRegistrationNumber: draftBusinessNumber,
-                    businessStatus: draftBusinessStatus,
-                    deliveryArea: draftDeliveryArea,
-                    deliveryDriver: draftDeliveryDriver,
-                    email: draftEmail,
-                    expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
-                    grade: draftGrade,
-                    industry: draftIndustry,
-                    name: draftName,
-                    openingDate: draftOpeningDate,
-                    phone: draftPhone,
-                    representativeName: draftRepresentativeName
-                  })
-                }
+                onClick={saveDraft}
                 type="button"
               >
                 <Check className="h-4 w-4" />
@@ -569,8 +585,7 @@ function StoreDetail({
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-6 py-5">
-          <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-5">
+          <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <EditRow label="매장명" onChange={setDraftName} value={draftName} />
@@ -694,11 +709,8 @@ function StoreDetail({
                   )}
                 </div>
               </CollapsibleSection>
-            </div>
-
-            <div className="space-y-5">
               <CollapsibleSection defaultOpen title="배송·방문 정보">
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
                   <MetricRow icon={<Clock className="h-4 w-4" />} label="예상시간" value={formatMinutes(store.durationMinutes || 0)} />
                   <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
@@ -707,7 +719,7 @@ function StoreDetail({
               </CollapsibleSection>
 
               <CollapsibleSection title="AI 추천 근거">
-                <div className="mt-4 space-y-2">
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
                   {(store.reasons?.length ? store.reasons : ["배송 반경", "예상 매출", "지역 확장성"]).map((reason) => (
                     <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
                       {reason}
@@ -715,7 +727,6 @@ function StoreDetail({
                   ))}
                 </div>
               </CollapsibleSection>
-            </div>
           </div>
         </div>
       </aside>
@@ -739,31 +750,9 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
 
 function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; readonly onSave: (files: AttachmentFile[]) => void }) {
   return (
-    <label className="block cursor-pointer rounded-md border border-blue-300 bg-blue-50/60 p-4 transition hover:border-blue-400 hover:bg-blue-50">
-      <input
-        accept="image/*,video/*"
-        className="sr-only"
-        multiple
-        onChange={(event) => {
-          const selectedFiles = Array.from(event.target.files || []);
-          if (!selectedFiles.length) return;
-          Promise.all(
-            selectedFiles.map(
-              (selectedFile) =>
-                new Promise<AttachmentFile>((resolve) => {
-                  const mediaType = selectedFile.type.startsWith("video/") ? "video" : "image";
-                  const reader = new FileReader();
-                  reader.onload = () => resolve({ dataUrl: String(reader.result || ""), mediaType, name: selectedFile.name });
-                  reader.readAsDataURL(selectedFile);
-                })
-            )
-          ).then(onSave);
-          event.target.value = "";
-        }}
-        type="file"
-      />
-      <div className="grid gap-4">
-        <div className="flex min-w-0 items-start gap-3">
+    <div className="rounded-md border border-blue-300 bg-blue-50/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
             <FileImage className="h-4 w-4" />
           </span>
@@ -774,29 +763,65 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
               <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-200">{files.length}개</span>
             </div>
             <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 확인하는 핵심 자료입니다. 적재 위치, 입구, 냉장/냉동 구분 사진과 짧은 영상을 여러 개 저장할 수 있습니다.</p>
-            <p className="mt-2 text-xs font-black text-blue-700">사진/영상 추가</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {files.length ? (
-            files.slice(0, 4).map((file, index) =>
-              file.mediaType === "video" ? (
-                <video className="h-24 w-full rounded-md border border-slate-200 bg-white object-cover" controls key={`${file.name}-${index}`} src={file.dataUrl} />
-              ) : (
-                <img alt={file.name} className="h-24 w-full rounded-md border border-slate-200 bg-white object-cover" key={`${file.name}-${index}`} src={file.dataUrl} />
-              )
-            )
-          ) : (
-            <div className="col-span-full grid h-24 place-items-center rounded-md border border-slate-200 bg-white text-center">
-              <div>
-                <p className="text-xs font-black text-slate-600">자료 업로드</p>
-                <p className="mt-1 text-[11px] font-bold text-slate-400">이미지/동영상 여러 개</p>
-              </div>
-            </div>
-          )}
-        </div>
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white shadow-sm hover:bg-blue-700">
+          <Plus className="h-4 w-4" />
+          추가
+          <input
+            accept="image/*,video/*"
+            className="sr-only"
+            multiple
+            onChange={(event) => {
+              const selectedFiles = Array.from(event.target.files || []);
+              if (!selectedFiles.length) return;
+              Promise.all(
+                selectedFiles.map(
+                  (selectedFile) =>
+                    new Promise<AttachmentFile>((resolve) => {
+                      const mediaType = selectedFile.type.startsWith("video/") ? "video" : "image";
+                      const reader = new FileReader();
+                      reader.onload = () => resolve({ dataUrl: String(reader.result || ""), mediaType, name: selectedFile.name });
+                      reader.readAsDataURL(selectedFile);
+                    })
+                )
+              ).then(onSave);
+              event.target.value = "";
+            }}
+            type="file"
+          />
+        </label>
       </div>
-    </label>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {files.length ? (
+          files.map((file, index) => (
+            <MediaPreview file={file} key={`${file.name}-${index}`} />
+          ))
+        ) : (
+          <div className="col-span-full grid h-28 place-items-center rounded-md border border-dashed border-blue-200 bg-white text-center">
+            <div>
+              <p className="text-xs font-black text-slate-600">아직 업로드된 적재위치 자료가 없습니다.</p>
+              <p className="mt-1 text-[11px] font-bold text-slate-400">오른쪽 + 버튼으로 사진/영상을 추가하세요.</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MediaPreview({ file }: { readonly file: AttachmentFile }) {
+  return (
+    <div className="min-w-0 rounded-md border border-slate-200 bg-white p-2">
+      {file.mediaType === "video" ? (
+        <video className="h-28 w-full rounded bg-slate-100 object-cover" controls src={file.dataUrl} />
+      ) : file.dataUrl ? (
+        <img alt={file.name} className="h-28 w-full rounded bg-slate-100 object-cover" src={file.dataUrl} />
+      ) : (
+        <div className="grid h-28 place-items-center rounded bg-slate-100 text-xs font-black text-slate-500">파일</div>
+      )}
+      <p className="mt-2 truncate text-xs font-bold text-slate-500">{file.name}</p>
+    </div>
   );
 }
 
@@ -862,54 +887,56 @@ function AttachmentBox({
   readonly onSave: (file: AttachmentFile) => void;
 }) {
   return (
-    <label className={`grid cursor-pointer gap-4 rounded-md border p-4 transition hover:border-blue-300 hover:bg-blue-50 ${important ? "border-blue-300 bg-blue-50/60" : "border-dashed border-slate-300 bg-slate-50"}`}>
-      <input
-        accept="image/*,.pdf"
-        className="sr-only"
-        onChange={(event) => {
-          const selectedFile = event.target.files?.[0];
-          if (!selectedFile) return;
-          if (!selectedFile.type.startsWith("image/")) {
-            onSave({ name: selectedFile.name });
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () => onSave({ dataUrl: String(reader.result || ""), name: selectedFile.name });
-          reader.readAsDataURL(selectedFile);
-        }}
-        type="file"
-      />
-      <div className="flex min-w-0 items-start gap-3">
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${important ? "bg-blue-600 text-white" : "bg-white text-slate-400"}`}>
-          <FileImage className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-black text-slate-900">{label}</p>
-            {important ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span> : null}
+    <div className={`rounded-md border p-4 ${important ? "border-blue-300 bg-blue-50/60" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${important ? "bg-blue-600 text-white" : "bg-white text-slate-400"}`}>
+            <FileImage className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-slate-900">{label}</p>
+              {important ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span> : null}
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
           </div>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
-          <p className="mt-2 text-xs font-black text-blue-700">파일 선택</p>
         </div>
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700">
+          <Plus className="h-4 w-4" />
+          추가
+          <input
+            accept="image/*,.pdf"
+            className="sr-only"
+            onChange={(event) => {
+              const selectedFile = event.target.files?.[0];
+              if (!selectedFile) return;
+              if (!selectedFile.type.startsWith("image/")) {
+                onSave({ mediaType: "file", name: selectedFile.name });
+                event.target.value = "";
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => onSave({ dataUrl: String(reader.result || ""), mediaType: "image", name: selectedFile.name });
+              reader.readAsDataURL(selectedFile);
+              event.target.value = "";
+            }}
+            type="file"
+          />
+        </label>
       </div>
-      {file ? (
-        <div>
-          {file.dataUrl ? (
-            <img alt={label} className="h-24 w-full rounded-md border border-slate-200 bg-white object-cover" src={file.dataUrl} />
-          ) : (
-            <div className="grid h-24 place-items-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-500">파일 저장됨</div>
-          )}
-          <p className="mt-2 truncate text-xs font-bold text-slate-500">{file.name}</p>
-        </div>
+      <div className="mt-4">
+        {file ? (
+          <MediaPreview file={file} />
       ) : (
-        <div className="grid h-24 place-items-center rounded-md border border-slate-200 bg-white text-center">
+          <div className="grid h-24 place-items-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-center">
           <div>
-            <p className="text-xs font-black text-slate-600">파일 업로드</p>
-            <p className="mt-1 text-[11px] font-bold text-slate-400">이미지/PDF</p>
+              <p className="text-xs font-black text-slate-600">아직 업로드된 자료가 없습니다.</p>
+              <p className="mt-1 text-[11px] font-bold text-slate-400">+ 버튼으로 이미지/PDF를 추가하세요.</p>
           </div>
         </div>
       )}
-    </label>
+      </div>
+    </div>
   );
 }
 
@@ -1199,6 +1226,25 @@ function applyVehicleEdits(vehicles: DeliveryVehicle[], edits: Record<string, Ve
     ...vehicle,
     ...edits[vehicle.id]
   }));
+}
+
+function readLocalJson<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveLocalJson(key: string, value: unknown) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Attachments can be large because MVP stores previews as data URLs.
+  }
 }
 
 function getStoreTotals(stores: StoreRow[]) {
