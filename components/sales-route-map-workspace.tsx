@@ -102,6 +102,7 @@ const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
   { label: "거래처 목록", value: "customers" },
   { label: "오늘 코스", value: "course" }
 ];
+const tmapWaypointLimit = 15;
 
 const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
@@ -642,39 +643,68 @@ function TodayCourseView({
   readonly vehicles: DeliveryVehicle[];
 }) {
   const [routeSequence, setRouteSequence] = useState<RouteSequence | null>(null);
+  const [routeBatchIndex, setRouteBatchIndex] = useState(0);
   const [routeQuery, setRouteQuery] = useState("");
   const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
   const selectedDriver = selectedVehicle?.driver || "전체 담당자";
   const orderedStores = [...stores].sort((a, b) => a.order - b.order);
   const orderedStoreIds = orderedStores.map((store) => store.id).join("|");
   const selectedRouteIdSet = new Set(selectedRouteStoreIds);
-  const selectedRouteStores = orderedStores.filter((store) => selectedRouteIdSet.has(store.id)).slice(0, 15);
+  const selectedRouteStoresAll = orderedStores.filter((store) => selectedRouteIdSet.has(store.id));
+  const routeBatchCount = Math.max(1, Math.ceil(selectedRouteStoresAll.length / tmapWaypointLimit));
+  const activeRouteBatchIndex = Math.min(routeBatchIndex, routeBatchCount - 1);
+  const routeBatchStart = activeRouteBatchIndex * tmapWaypointLimit;
+  const selectedRouteStores = selectedRouteStoresAll.slice(routeBatchStart, routeBatchStart + tmapWaypointLimit);
+  const activeRouteIdSet = new Set(selectedRouteStores.map((store) => store.id));
   const selectedRouteTotals = getStoreTotals(selectedRouteStores);
   const routeDistanceKm = routeSequence?.totalDistanceKm ?? selectedRouteTotals.distanceKm;
   const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? selectedRouteTotals.durationMinutes;
   const routeRevenue = selectedRouteTotals.expectedRevenue;
+  const inactiveSelectedCount = Math.max(0, selectedRouteStoresAll.length - selectedRouteStores.length);
   const routeCandidateStores = orderedStores.filter((store) => {
     const keyword = routeQuery.trim().toLowerCase();
     if (!keyword) return true;
     return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
   });
-  const routeMapMarkers = markers.filter((marker) => marker.tone === "origin" || (marker.id && selectedRouteIdSet.has(marker.id)));
+  const routeMapMarkers = markers.filter((marker) => marker.tone === "origin" || (marker.id && activeRouteIdSet.has(marker.id)));
 
   useEffect(() => {
     setRouteSequence(null);
-    setSelectedRouteStoreIds(orderedStores.slice(0, 15).map((store) => store.id));
+    setRouteBatchIndex(0);
+    setSelectedRouteStoreIds(orderedStores.slice(0, tmapWaypointLimit).map((store) => store.id));
   }, [orderedStoreIds, selectedVehicleId]);
 
   useEffect(() => {
     setRouteSequence(null);
+    setRouteBatchIndex((current) => Math.min(current, Math.max(0, Math.ceil(selectedRouteStoreIds.length / tmapWaypointLimit) - 1)));
   }, [selectedRouteStoreIds]);
 
   const toggleRouteStore = (storeId: string) => {
     setSelectedRouteStoreIds((current) => {
       if (current.includes(storeId)) return current.filter((id) => id !== storeId);
-      if (current.length >= 15) return current;
       return [...current, storeId];
     });
+  };
+  const selectDefaultRouteStores = () => {
+    setRouteBatchIndex(0);
+    setSelectedRouteStoreIds(orderedStores.slice(0, tmapWaypointLimit).map((store) => store.id));
+  };
+  const selectAllRouteStores = () => {
+    setRouteBatchIndex(0);
+    setSelectedRouteStoreIds(orderedStores.map((store) => store.id));
+  };
+  const clearRouteStores = () => {
+    setRouteSequence(null);
+    setRouteBatchIndex(0);
+    setSelectedRouteStoreIds([]);
+  };
+  const goToPreviousRouteBatch = () => {
+    setRouteSequence(null);
+    setRouteBatchIndex((current) => Math.max(0, current - 1));
+  };
+  const goToNextRouteBatch = () => {
+    setRouteSequence(null);
+    setRouteBatchIndex((current) => Math.min(routeBatchCount - 1, current + 1));
   };
 
   return (
@@ -720,12 +750,12 @@ function TodayCourseView({
         <div className="border-b border-slate-200 px-4 py-3">
           <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
           <p className="mt-1 text-xs font-bold text-slate-500">
-            선택 {selectedRouteStores.length}곳 · {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)} · {routeRevenue.toLocaleString()}만원
+            선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
           </p>
         </div>
         <div className="border-b border-slate-200 p-3">
           <RouteSequenceAction
-            buttonLabel="티맵 경유 도로 계산"
+            buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
             destinations={selectedRouteStores.map((store) => store.address || store.region).filter(Boolean)}
             onSequenceChange={setRouteSequence}
             showMap={false}
@@ -742,13 +772,45 @@ function TodayCourseView({
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white" onClick={() => setSelectedRouteStoreIds(orderedStores.slice(0, 15).map((store) => store.id))} type="button">
+            <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white" onClick={selectDefaultRouteStores} type="button">
               기본 15곳 선택
             </button>
-            <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={() => setSelectedRouteStoreIds([])} type="button">
+            <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={selectAllRouteStores} type="button">
+              전체 선택
+            </button>
+            <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={clearRouteStores} type="button">
               선택 해제
             </button>
-            <span className="inline-flex h-8 items-center rounded-md bg-blue-50 px-3 text-xs font-black text-blue-700">선택 {selectedRouteStores.length}/15곳</span>
+            <span className="inline-flex h-8 items-center rounded-md bg-blue-50 px-3 text-xs font-black text-blue-700">
+              {activeRouteBatchIndex + 1}/{routeBatchCount}묶음 · 계산 {selectedRouteStores.length}곳
+            </span>
+            {inactiveSelectedCount ? <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-600">다른 묶음 {inactiveSelectedCount}곳</span> : null}
+          </div>
+          {routeBatchCount > 1 ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={activeRouteBatchIndex === 0}
+                onClick={goToPreviousRouteBatch}
+                type="button"
+              >
+                이전 15곳
+              </button>
+              <button
+                className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={activeRouteBatchIndex >= routeBatchCount - 1}
+                onClick={goToNextRouteBatch}
+                type="button"
+              >
+                다음 15곳
+              </button>
+              <span className="inline-flex h-8 items-center rounded-md bg-amber-50 px-3 text-xs font-black text-amber-700">
+                티맵은 현재 묶음만 계산하고, 다음 묶음은 버튼으로 이어서 계산합니다.
+              </span>
+            </div>
+          ) : null}
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-500">
+            전체 선택 후에도 실제 도로 계산은 최대 {tmapWaypointLimit}곳씩 나눠 처리합니다. 지도에는 현재 계산 묶음의 마커와 티맵 경로만 표시됩니다.
           </div>
         </div>
         <div className="max-h-[calc(100vh-660px)] overflow-auto p-3">
@@ -763,10 +825,18 @@ function TodayCourseView({
           <div className="space-y-2">
             {routeCandidateStores.map((store, index) => {
               const selectedForRoute = selectedRouteIdSet.has(store.id);
+              const activeForRoute = activeRouteIdSet.has(store.id);
+              const selectedOrder = selectedRouteStoreIds.indexOf(store.id) + 1;
               return (
               <button
                 className={`w-full rounded-md border p-3 text-left transition hover:bg-slate-50 ${
-                  selectedForRoute ? "border-blue-300 bg-blue-50" : store.id === selectedStoreId ? "border-slate-300 bg-slate-50" : "border-slate-200 bg-white"
+                  activeForRoute
+                    ? "border-blue-300 bg-blue-50"
+                    : selectedForRoute
+                      ? "border-slate-300 bg-slate-50"
+                      : store.id === selectedStoreId
+                        ? "border-slate-300 bg-slate-50"
+                        : "border-slate-200 bg-white"
                 }`}
                 key={store.id}
                 onClick={() => {
@@ -776,15 +846,26 @@ function TodayCourseView({
                 type="button"
               >
                 <div className="flex items-start gap-3">
-                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${selectedForRoute ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
-                    {selectedForRoute ? selectedRouteStoreIds.indexOf(store.id) + 1 : index + 1}
+                  <span
+                    className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${
+                      activeForRoute ? "bg-blue-600 text-white" : selectedForRoute ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {selectedForRoute ? selectedOrder : index + 1}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                     <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                     <span className="mt-2 block text-xs font-bold text-slate-400">{store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원</span>
                   </span>
-                  <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                  <span className="flex shrink-0 flex-col items-end gap-2">
+                    <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                    {activeForRoute ? (
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-black text-blue-700">계산</span>
+                    ) : selectedForRoute ? (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">대기</span>
+                    ) : null}
+                  </span>
                 </div>
               </button>
             );
