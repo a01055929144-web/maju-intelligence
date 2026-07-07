@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { createDeliveryVehicles, DeliveryVehicle } from "@/components/route-plan-workspace";
+import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
@@ -640,8 +641,15 @@ function TodayCourseView({
   readonly stores: StoreRow[];
   readonly vehicles: DeliveryVehicle[];
 }) {
+  const [routeSequence, setRouteSequence] = useState<RouteSequence | null>(null);
   const selectedDriver = selectedVehicle?.driver || "전체 담당자";
   const orderedStores = [...stores].sort((a, b) => a.order - b.order);
+  const routeDistanceKm = routeSequence?.totalDistanceKm ?? routeTotals.distanceKm;
+  const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? routeTotals.durationMinutes;
+
+  useEffect(() => {
+    setRouteSequence(null);
+  }, [selectedVehicleId, stores]);
 
   return (
     <section className="grid min-h-0 flex-1 grid-cols-1 bg-slate-50 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
@@ -679,15 +687,33 @@ function TodayCourseView({
       </aside>
 
       <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-        <KakaoAddressMap focusedMarkerId={selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
+        <KakaoAddressMap focusedMarkerId={selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} routePath={routeSequence?.path || []} showList={false} />
       </div>
 
       <aside className="min-h-0 border-l border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-4 py-3">
           <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">{routeTotals.distanceKm.toLocaleString()}km · {formatMinutes(routeTotals.durationMinutes)} · {routeTotals.expectedRevenue.toLocaleString()}만원</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">
+            {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)} · {routeTotals.expectedRevenue.toLocaleString()}만원
+          </p>
         </div>
-        <div className="max-h-[calc(100vh-410px)] overflow-auto p-3">
+        <div className="border-b border-slate-200 p-3">
+          <RouteSequenceAction
+            buttonLabel="티맵 경유 도로 계산"
+            destinations={orderedStores.map((store) => store.address || store.region).filter(Boolean)}
+            onSequenceChange={setRouteSequence}
+            showMap={false}
+          />
+        </div>
+        <div className="max-h-[calc(100vh-560px)] overflow-auto p-3">
+          {routeSequence?.legs.length ? (
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-xs font-black text-emerald-800">티맵 경유 경로 반영됨</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-emerald-700">
+                총 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeSequence.path.length.toLocaleString()}개
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-2">
             {orderedStores.map((store, index) => (
               <button
