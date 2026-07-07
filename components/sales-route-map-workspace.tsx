@@ -135,6 +135,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const gradeCounts = useMemo(() => countGrades(allStores), [allStores]);
   const routeTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
+  const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
 
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
@@ -235,9 +236,23 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
+          areaOptions={deliveryDefaults.areas}
+          driverOptions={deliveryDefaults.drivers}
           history={storeHistories[selectedStore.id] || []}
           key={selectedStore.id}
           onClose={() => setSelectedId("")}
+          onClearHistory={(storeId) =>
+            setStoreHistories((current) => ({
+              ...current,
+              [storeId]: []
+            }))
+          }
+          onDeleteHistory={(storeId, historyId) =>
+            setStoreHistories((current) => ({
+              ...current,
+              [storeId]: (current[storeId] || []).filter((item) => item.id !== historyId)
+            }))
+          }
           onSaveAttachment={(slot, file) =>
             setStoreAttachments((current) => ({
               ...current,
@@ -489,18 +504,26 @@ function StoreManagementPanel({
 }
 
 function StoreDetail({
+  areaOptions,
   attachments,
+  driverOptions,
   history,
   onClose,
+  onClearHistory,
+  onDeleteHistory,
   onSaveAttachment,
   onSaveLoadingMedia,
   onUpdateStore,
   onWriteHistory,
   store
 }: {
+  readonly areaOptions: string[];
   readonly attachments: StoreAttachment;
+  readonly driverOptions: string[];
   readonly history: StoreHistoryItem[];
   readonly onClose: () => void;
+  readonly onClearHistory: (storeId: string) => void;
+  readonly onDeleteHistory: (storeId: string, historyId: string) => void;
   readonly onSaveAttachment: (slot: "bankbookCopy" | "businessCertificate", file: AttachmentFile) => void;
   readonly onSaveLoadingMedia: (files: AttachmentFile[]) => void;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
@@ -595,16 +618,6 @@ function StoreDetail({
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
-                  <SelectRow
-                    label="사업자상태"
-                    onChange={(value) => setDraftBusinessStatus(value as StoreRow["businessStatus"])}
-                    options={[
-                      { label: "정상", value: "active" },
-                      { label: "폐업", value: "closed" },
-                      { label: "확인필요", value: "unknown" }
-                    ]}
-                    value={draftBusinessStatus}
-                  />
                   <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
                   <EditRow label="업종" onChange={setDraftIndustry} value={draftIndustry} />
                   <EditRow label="계좌정보" onChange={setDraftBankAccount} value={draftBankAccount} />
@@ -638,8 +651,8 @@ function StoreDetail({
                     value={draftGrade}
                   />
                   <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
-                  <EditRow label="담당자" onChange={setDraftDeliveryDriver} value={draftDeliveryDriver} />
-                  <EditRow label="배송권역" onChange={setDraftDeliveryArea} value={draftDeliveryArea} />
+                  <SelectRow label="담당자" onChange={setDraftDeliveryDriver} options={driverOptions.map((driver) => ({ label: driver, value: driver }))} value={draftDeliveryDriver} />
+                  <SelectRow label="배송권역" onChange={setDraftDeliveryArea} options={areaOptions.map((area) => ({ label: area, value: area }))} value={draftDeliveryArea} />
                 </div>
               </CollapsibleSection>
 
@@ -678,6 +691,9 @@ function StoreDetail({
               </CollapsibleSection>
 
               <CollapsibleSection title="메모 히스토리">
+                <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
+                  메모는 상담·배송 이력이라 실서비스에서는 삭제 로그를 남기는 방식이 안전합니다. MVP에서는 개별 삭제와 전체 삭제를 제공하되, 전체 삭제는 확인 후 실행합니다.
+                </div>
                 <textarea
                   className="mt-4 min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
                   onChange={(event) => setHistoryMemo(event.target.value)}
@@ -696,11 +712,27 @@ function StoreDetail({
                 >
                   메모 저장
                 </button>
+                {history.length ? (
+                  <button
+                    className="mt-2 h-9 w-full rounded-md border border-rose-200 bg-white text-sm font-black text-rose-600 transition hover:bg-rose-50"
+                    onClick={() => {
+                      if (window.confirm("이 거래처의 메모 히스토리를 모두 삭제할까요?")) onClearHistory(store.id);
+                    }}
+                    type="button"
+                  >
+                    메모 전체 삭제
+                  </button>
+                ) : null}
                 <div className="mt-4 space-y-2">
                   {history.length ? (
                     history.map((item) => (
                       <div className="rounded-md border border-slate-200 bg-white p-3" key={item.id}>
-                        <p className="text-xs font-black text-slate-400">{item.recordedAt}</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-black text-slate-400">{item.recordedAt}</p>
+                          <button className="text-xs font-black text-rose-500 hover:text-rose-700" onClick={() => onDeleteHistory(store.id, item.id)} type="button">
+                            삭제
+                          </button>
+                        </div>
                         <p className="mt-1 text-sm font-bold leading-5 text-slate-700">{item.memo}</p>
                       </div>
                     ))
@@ -1226,6 +1258,12 @@ function applyVehicleEdits(vehicles: DeliveryVehicle[], edits: Record<string, Ve
     ...vehicle,
     ...edits[vehicle.id]
   }));
+}
+
+function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {
+  const drivers = Array.from(new Set(vehicles.map((vehicle) => vehicle.driver).filter(Boolean))).sort();
+  const areas = Array.from(new Set(vehicles.map((vehicle) => vehicle.area).filter(Boolean))).sort();
+  return { areas, drivers };
 }
 
 function readLocalJson<T>(key: string, fallback: T): T {
