@@ -265,31 +265,25 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       ) : null}
 
       {activeView === "customers" ? (
-        <section className="min-h-0 flex-1 bg-white">
-          <StoreManagementPanel
+        <CustomerDirectoryView
             onSelectStore={setSelectedId}
             selectedStoreId={selectedId}
-            title={selectedVehicle ? `${selectedVehicle.name} 거래처 목록` : "전체 거래처 목록"}
             stores={visibleStores}
-          />
-        </section>
+        />
       ) : null}
 
       {activeView === "course" ? (
-        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)]" : "xl:grid-cols-[300px_minmax(0,1fr)]"}`}>
-          <DeliveryAssignmentPanel
-            collapsed={leftCollapsed}
-            onSelectVehicle={selectVehicle}
-            onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
-            onUpdateVehicle={(vehicleId, edit) => setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }))}
-            selectedVehicleId={vehicleFilterId}
-            totalStores={allStores.length}
-            vehicles={deliveryVehicles}
-          />
-          <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-            <KakaoAddressMap focusedMarkerId={selectedId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
-          </div>
-        </section>
+        <TodayCourseView
+          markers={markers}
+          onSelectStore={setSelectedId}
+          onSelectVehicle={selectVehicle}
+          routeTotals={routeTotals}
+          selectedStoreId={selectedId}
+          selectedVehicle={selectedVehicle}
+          selectedVehicleId={vehicleFilterId}
+          stores={visibleStores}
+          vehicles={deliveryVehicles}
+        />
       ) : null}
       {selectedStore ? (
         <StoreDetail
@@ -560,6 +554,172 @@ function StoreManagementPanel({
         </div>
       </div>
     </aside>
+  );
+}
+
+function CustomerDirectoryView({
+  onSelectStore,
+  selectedStoreId,
+  stores
+}: {
+  readonly onSelectStore: (storeId: string) => void;
+  readonly selectedStoreId: string;
+  readonly stores: StoreRow[];
+}) {
+  const totals = getStoreTotals(stores);
+  const gradeCounts = countGrades(stores);
+  const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
+
+  return (
+    <section className="min-h-0 flex-1 overflow-auto bg-slate-50 p-4">
+      <div className="grid gap-3 lg:grid-cols-4">
+        <DirectoryStat label="거래처" value={`${stores.length}곳`} />
+        <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
+        <DirectoryStat label="예상매출" value={`${totals.expectedRevenue.toLocaleString()}만원`} />
+        <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+        <div className="grid grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-500">
+          <span>거래처</span>
+          <span>매출등급</span>
+          <span>담당자</span>
+          <span>예상매출</span>
+          <span>거리</span>
+          <span>상태</span>
+        </div>
+        <div className="max-h-[calc(100vh-430px)] overflow-auto">
+          {stores.map((store) => (
+            <button
+              className={`grid w-full grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] items-center gap-0 border-b border-slate-100 px-4 py-3 text-left text-sm transition hover:bg-blue-50/50 ${
+                store.id === selectedStoreId ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : "bg-white"
+              }`}
+              key={store.id}
+              onClick={() => onSelectStore(store.id)}
+              type="button"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-black text-slate-950">{store.name}</span>
+                <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
+              </span>
+              <span>
+                <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+              </span>
+              <span className="truncate font-bold text-slate-700">{store.deliveryDriver || "미지정"}</span>
+              <span className="font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</span>
+              <span className="font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</span>
+              <span>
+                <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TodayCourseView({
+  markers,
+  onSelectStore,
+  onSelectVehicle,
+  routeTotals,
+  selectedStoreId,
+  selectedVehicle,
+  selectedVehicleId,
+  stores,
+  vehicles
+}: {
+  readonly markers: KakaoMapMarker[];
+  readonly onSelectStore: (storeId: string) => void;
+  readonly onSelectVehicle: (vehicleId: string) => void;
+  readonly routeTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
+  readonly selectedStoreId: string;
+  readonly selectedVehicle?: DeliveryVehicle;
+  readonly selectedVehicleId: string;
+  readonly stores: StoreRow[];
+  readonly vehicles: DeliveryVehicle[];
+}) {
+  const selectedDriver = selectedVehicle?.driver || "전체 담당자";
+  const orderedStores = [...stores].sort((a, b) => a.order - b.order);
+
+  return (
+    <section className="grid min-h-0 flex-1 grid-cols-1 bg-slate-50 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
+      <aside className="min-h-0 border-r border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <p className="text-sm font-black text-slate-950">오늘 코스</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">배송담당자별 방문 코스를 선택합니다.</p>
+        </div>
+        <div className="space-y-2 p-3">
+          <button
+            className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+            onClick={() => onSelectVehicle("all")}
+            type="button"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-black text-slate-950">전체 담당자</p>
+              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
+            </div>
+          </button>
+          {vehicles.map((vehicle) => (
+            <button
+              className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === vehicle.id ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+              key={vehicle.id}
+              onClick={() => onSelectVehicle(vehicle.id)}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
+                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">{vehicle.stops.length}곳</span>
+              </div>
+              <p className="mt-1 text-xs font-bold text-slate-500">{vehicle.driver} · {vehicle.area}</p>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
+        <KakaoAddressMap focusedMarkerId={selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
+      </div>
+
+      <aside className="min-h-0 border-l border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{routeTotals.distanceKm.toLocaleString()}km · {formatMinutes(routeTotals.durationMinutes)} · {routeTotals.expectedRevenue.toLocaleString()}만원</p>
+        </div>
+        <div className="max-h-[calc(100vh-410px)] overflow-auto p-3">
+          <div className="space-y-2">
+            {orderedStores.map((store, index) => (
+              <button
+                className={`w-full rounded-md border p-3 text-left transition hover:bg-slate-50 ${store.id === selectedStoreId ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`}
+                key={store.id}
+                onClick={() => onSelectStore(store.id)}
+                type="button"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">{index + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
+                    <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
+                    <span className="mt-2 block text-xs font-bold text-slate-400">{store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원</span>
+                  </span>
+                  <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </aside>
+    </section>
+  );
+}
+
+function DirectoryStat({ label, tone = "slate", value }: { readonly label: string; readonly tone?: "rose" | "slate"; readonly value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
+      <p className="text-xs font-black text-slate-500">{label}</p>
+      <p className={`mt-1 text-2xl font-black ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    </div>
   );
 }
 
