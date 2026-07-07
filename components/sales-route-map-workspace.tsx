@@ -139,8 +139,15 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
+  const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
+  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 차량";
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
+  const selectVehicle = (vehicleId: string) => {
+    setVehicleFilterId(vehicleId);
+    setGradeFilter("all");
+    setSelectedId("");
+  };
 
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
@@ -215,6 +222,9 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             내 위치
           </button>
+          <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-700">
+            {selectedVehicleLabel}
+          </span>
           <span className="ml-2 text-sm font-black text-slate-500">
             {visibleStores.length}/{allStores.length}개
           </span>
@@ -224,7 +234,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_360px]" : "xl:grid-cols-[300px_minmax(0,1fr)_360px]"}`}>
         <DeliveryAssignmentPanel
           collapsed={leftCollapsed}
-          onSelectVehicle={setVehicleFilterId}
+          onSelectVehicle={selectVehicle}
           onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
           onUpdateVehicle={(vehicleId, edit) => setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }))}
           selectedVehicleId={vehicleFilterId}
@@ -239,6 +249,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <StoreManagementPanel
           onSelectStore={setSelectedId}
           selectedStoreId={selectedId}
+          title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "거래처 목록"}
           stores={visibleStores}
         />
       </section>
@@ -455,18 +466,20 @@ function VehicleEditForm({
 function StoreManagementPanel({
   onSelectStore,
   selectedStoreId,
-  stores
+  stores,
+  title
 }: {
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
   readonly stores: StoreRow[];
+  readonly title: string;
 }) {
   return (
     <aside className="min-h-0 border-l border-slate-200 bg-white">
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div className="min-w-0">
-            <p className="text-sm font-black text-slate-950">거래처 목록</p>
+            <p className="text-sm font-black text-slate-950">{title}</p>
             <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
           </div>
           <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
