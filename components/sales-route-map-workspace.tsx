@@ -885,6 +885,64 @@ function TodayCourseView({
                   전체 선택 후에도 실제 도로 계산은 최대 {tmapWaypointLimit}곳씩 나눠 처리합니다.
                 </div>
               </div>
+              <div className="border-b border-slate-200 bg-slate-50/80 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-black text-slate-950">선택한 경유지</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">현재 묶음 {selectedRouteStores.length}곳을 티맵 계산에 사용합니다.</p>
+                  </div>
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                    {activeRouteBatchIndex + 1}/{routeBatchCount}
+                  </span>
+                </div>
+                {selectedRouteStores.length ? (
+                  <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+                    {selectedRouteStores.map((store, index) => (
+                      <button
+                        className={`w-full rounded-md border p-3 text-left transition hover:bg-white ${
+                          store.id === routeSelectedStore?.id ? "border-blue-400 bg-white shadow-sm" : "border-slate-200 bg-white/80"
+                        }`}
+                        key={store.id}
+                        onClick={() => openRouteStore(store.id)}
+                        type="button"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-600 text-xs font-black text-white">{routeBatchStart + index + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
+                            <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
+                            <span className="mt-2 block text-xs font-bold text-slate-400">
+                              {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 flex-col items-end gap-2">
+                            <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                            <span
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleRouteStore(store.id);
+                              }}
+                            >
+                              해제
+                            </span>
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-slate-300 bg-white p-4 text-center">
+                    <p className="text-sm font-black text-slate-700">선택한 경유지가 없습니다.</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">아래 매장 목록에서 매장을 누른 뒤 경유지 추가를 선택하세요.</p>
+                  </div>
+                )}
+                {inactiveSelectedCount ? (
+                  <div className="mt-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-500 ring-1 ring-inset ring-slate-200">
+                    다른 묶음에 대기 중인 경유지 {inactiveSelectedCount}곳이 있습니다. 다음 15곳 버튼으로 이어서 계산합니다.
+                  </div>
+                ) : null}
+              </div>
               <div className="p-3">
                 {routeSequence?.legs.length ? (
                   <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
@@ -894,6 +952,13 @@ function TodayCourseView({
                     </p>
                   </div>
                 ) : null}
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-black text-slate-950">매장 선택</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">매장을 누르면 위 상세 패널에서 경유지 추가/해제합니다.</p>
+                  </div>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{routeCandidateStores.length}곳</span>
+                </div>
                 <div className="space-y-2">
                   {routeCandidateStores.map((store, index) => {
                     const selectedForRoute = selectedRouteIdSet.has(store.id);
