@@ -139,6 +139,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
+  const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
+  const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
 
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
@@ -171,11 +173,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-4 2xl:grid-cols-8">
-        <Kpi active={gradeFilter === "all"} label="전체" onClick={() => setGradeFilter("all")} tone="blue" value={`${gradeBaseStores.length}곳`} />
-        <Kpi active={gradeFilter === "A"} label="A등급" onClick={() => setGradeFilter("A")} tone="green" value={`${gradeCounts.A}곳`} />
-        <Kpi active={gradeFilter === "B"} label="B등급" onClick={() => setGradeFilter("B")} tone="blue" value={`${gradeCounts.B}곳`} />
-        <Kpi active={gradeFilter === "C"} label="C등급" onClick={() => setGradeFilter("C")} tone="purple" value={`${gradeCounts.C}곳`} />
+      <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-5">
+        <Kpi
+          helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
+          label={`등급 매장 · ${selectedGradeLabel}`}
+          tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
+          value={`${selectedGradeCount}곳`}
+        />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
         <Kpi label="예상매출" tone="green" value={`${routeTotals.expectedRevenue.toLocaleString()}만원`} />
         <Kpi label="금일 총 km" tone="purple" value={`${routeTotals.distanceKm.toLocaleString()}km`} />
@@ -1022,15 +1026,13 @@ function SelectRow({
 }
 
 function Kpi({
-  active = false,
+  helper,
   label,
-  onClick,
   tone,
   value
 }: {
-  readonly active?: boolean;
+  readonly helper?: string;
   readonly label: string;
-  readonly onClick?: () => void;
   readonly tone: "blue" | "green" | "purple" | "red";
   readonly value: string;
 }) {
@@ -1040,26 +1042,13 @@ function Kpi({
     purple: "text-violet-600",
     red: "text-rose-600"
   }[tone];
-  const content = (
-    <>
-      <p className="text-xs font-bold text-slate-500">{label}</p>
+  return (
+    <div className="border-r border-slate-200 px-5 py-3 last:border-r-0">
+      <p className="truncate text-xs font-bold text-slate-500">{label}</p>
       <p className={`mt-1 truncate text-2xl font-black ${valueClass}`}>{value}</p>
-    </>
+      {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-400">{helper}</p> : null}
+    </div>
   );
-
-  if (onClick) {
-    return (
-      <button
-        className={`border-r border-slate-200 px-5 py-3 text-left transition last:border-r-0 hover:bg-white ${active ? "bg-white shadow-[inset_0_-3px_0_#2563eb]" : ""}`}
-        onClick={onClick}
-        type="button"
-      >
-        {content}
-      </button>
-    );
-  }
-
-  return <div className="border-r border-slate-200 px-5 py-3 last:border-r-0">{content}</div>;
 }
 
 function PanelTitle({ title }: { readonly title: string }) {
