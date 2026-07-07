@@ -9,6 +9,7 @@ import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
+type WorkspaceView = "map" | "customers" | "course";
 
 type StoreRow = RoutePlanStop & {
   accountCopyStatus: "missing" | "received";
@@ -95,6 +96,11 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "B등급", value: "B" },
   { label: "C등급", value: "C" }
 ];
+const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
+  { label: "지도", value: "map" },
+  { label: "거래처 목록", value: "customers" },
+  { label: "오늘 코스", value: "course" }
+];
 
 const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
@@ -108,6 +114,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
+  const [activeView, setActiveView] = useState<WorkspaceView>("map");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
@@ -163,13 +170,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
-            {["지도", "거래처 목록", "오늘 코스"].map((item) => (
+            {workspaceViews.map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-sm font-black transition ${item === "지도" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-950"}`}
-                key={item}
+                className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-950"}`}
+                key={item.value}
+                onClick={() => setActiveView(item.value)}
                 type="button"
               >
-                {item}
+                {item.label}
               </button>
             ))}
           </nav>
@@ -231,28 +239,58 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </section>
 
-      <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_360px]" : "xl:grid-cols-[300px_minmax(0,1fr)_360px]"}`}>
-        <DeliveryAssignmentPanel
-          collapsed={leftCollapsed}
-          onSelectVehicle={selectVehicle}
-          onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
-          onUpdateVehicle={(vehicleId, edit) => setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }))}
-          selectedVehicleId={vehicleFilterId}
-          totalStores={allStores.length}
-          vehicles={deliveryVehicles}
-        />
+      {activeView === "map" ? (
+        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_360px]" : "xl:grid-cols-[300px_minmax(0,1fr)_360px]"}`}>
+          <DeliveryAssignmentPanel
+            collapsed={leftCollapsed}
+            onSelectVehicle={selectVehicle}
+            onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
+            onUpdateVehicle={(vehicleId, edit) => setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }))}
+            selectedVehicleId={vehicleFilterId}
+            totalStores={allStores.length}
+            vehicles={deliveryVehicles}
+          />
 
-        <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-          <KakaoAddressMap focusedMarkerId={selectedId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
-        </div>
+          <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
+            <KakaoAddressMap focusedMarkerId={selectedId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
+          </div>
 
-        <StoreManagementPanel
-          onSelectStore={setSelectedId}
-          selectedStoreId={selectedId}
-          title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 담당자 거래처"}
-          stores={visibleStores}
-        />
-      </section>
+          <StoreManagementPanel
+            onSelectStore={setSelectedId}
+            selectedStoreId={selectedId}
+            title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 담당자 거래처"}
+            stores={visibleStores}
+          />
+        </section>
+      ) : null}
+
+      {activeView === "customers" ? (
+        <section className="min-h-0 flex-1 bg-white">
+          <StoreManagementPanel
+            onSelectStore={setSelectedId}
+            selectedStoreId={selectedId}
+            title={selectedVehicle ? `${selectedVehicle.name} 거래처 목록` : "전체 거래처 목록"}
+            stores={visibleStores}
+          />
+        </section>
+      ) : null}
+
+      {activeView === "course" ? (
+        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)]" : "xl:grid-cols-[300px_minmax(0,1fr)]"}`}>
+          <DeliveryAssignmentPanel
+            collapsed={leftCollapsed}
+            onSelectVehicle={selectVehicle}
+            onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
+            onUpdateVehicle={(vehicleId, edit) => setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }))}
+            selectedVehicleId={vehicleFilterId}
+            totalStores={allStores.length}
+            vehicles={deliveryVehicles}
+          />
+          <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
+            <KakaoAddressMap focusedMarkerId={selectedId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
+          </div>
+        </section>
+      ) : null}
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
@@ -475,7 +513,7 @@ function StoreManagementPanel({
   readonly title: string;
 }) {
   return (
-    <aside className="min-h-0 border-l border-slate-200 bg-white">
+    <aside className="h-full min-h-0 border-l border-slate-200 bg-white">
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div className="min-w-0">

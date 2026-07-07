@@ -43,7 +43,6 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   const mapInstanceRef = useRef<any>(null);
   const boundsRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
-  const [locationStatus, setLocationStatus] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
 
@@ -146,11 +145,9 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
   const moveToCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setLocationStatus("위치 기능을 지원하지 않습니다.");
       return;
     }
 
-    setLocationStatus("현재 위치 확인 중");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const kakao = window.kakao;
@@ -165,9 +162,8 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
           position: current,
           yAnchor: 0.5
         });
-        setLocationStatus("현재 위치 표시됨");
       },
-      () => setLocationStatus("위치 권한을 확인해 주세요."),
+      () => undefined,
       { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
     );
   };
@@ -187,14 +183,11 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
       return;
     }
 
-    setLocationStatus("로드뷰 위치 확인 중");
     const client = new kakao.maps.RoadviewClient();
     client.getNearestPanoId(center, 180, (panoId: number | null) => {
       if (!panoId) {
-        setLocationStatus("주변 로드뷰가 없습니다.");
         return;
       }
-      setLocationStatus("로드뷰 새 창 열림");
       openPopup(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
     });
   };
@@ -210,7 +203,6 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
         <MapControls
-          locationStatus={locationStatus}
           onFitAll={fitAllMarkers}
           onLargeMap={openLargeMap}
           onLocation={moveToCurrentLocation}
@@ -228,13 +220,11 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 }
 
 function MapControls({
-  locationStatus,
   onFitAll,
   onLargeMap,
   onLocation,
   onRoadview
 }: {
-  readonly locationStatus?: string;
   readonly onFitAll: () => void;
   readonly onLargeMap: () => void;
   readonly onLocation: () => void;
@@ -258,7 +248,6 @@ function MapControls({
         <ExternalLink className="h-3.5 w-3.5" />
         큰 지도
       </button>
-      {locationStatus ? <span className="basis-full rounded-md bg-white/95 px-3 py-2 text-right text-xs font-bold text-slate-500 shadow-md ring-1 ring-slate-200">{locationStatus}</span> : null}
     </div>
   );
 }
