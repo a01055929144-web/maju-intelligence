@@ -140,7 +140,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
-  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 차량";
+  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 담당자";
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const selectVehicle = (vehicleId: string) => {
@@ -249,7 +249,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <StoreManagementPanel
           onSelectStore={setSelectedId}
           selectedStoreId={selectedId}
-          title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "거래처 목록"}
+          title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 담당자 거래처"}
           stores={visibleStores}
         />
       </section>
@@ -343,7 +343,7 @@ function DeliveryAssignmentPanel({
           <PanelLeftOpen className="h-4 w-4" />
         </button>
         <Truck className="h-5 w-5 text-emerald-700" />
-        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">배송필터</span>
+        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">담당자필터</span>
       </aside>
     );
   }
@@ -354,9 +354,9 @@ function DeliveryAssignmentPanel({
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             <Truck className="h-4 w-4 text-emerald-700" />
-            배송 담당자
+            배송담당자 필터
           </p>
-          <p className="mt-1 text-xs font-bold text-slate-500">차량별 담당 거래처 필터</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">담당자별 거래처만 지도에 표시합니다.</p>
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
@@ -367,7 +367,7 @@ function DeliveryAssignmentPanel({
           <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
-      <div className="space-y-2 border-b border-slate-200 p-3">
+      <div className="space-y-2 p-3 pb-0">
         <button
           className={`w-full rounded-md border p-3 text-left transition ${
             selectedVehicleId === "all" ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
@@ -376,13 +376,13 @@ function DeliveryAssignmentPanel({
           type="button"
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-black text-slate-950">전체 매장 보기</p>
+            <p className="text-sm font-black text-slate-950">전체 담당자</p>
             <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{totalStores}곳</span>
           </div>
-          <p className="mt-1 text-xs font-bold text-slate-500">차량 필터 없이 전체 거래처 표시</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
         </button>
       </div>
-      <div className="max-h-[calc(100vh-520px)] min-h-[420px] space-y-2 overflow-auto p-3">
+      <div className="max-h-[calc(100vh-520px)] min-h-[420px] space-y-2 overflow-auto p-3 pt-2">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
