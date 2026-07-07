@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin } from "lucide-react";
+import { Crosshair, Expand, MapPin, Minimize2, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export type KakaoMapMarker = {
@@ -40,9 +40,23 @@ const defaultMapClassName = "h-[360px]";
 
 export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const boundsRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [locationStatus, setLocationStatus] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const center = map.getCenter?.();
+    window.setTimeout(() => {
+      map.relayout?.();
+      if (center) map.setCenter(center);
+    }, 80);
+  }, [fullscreen]);
 
   useEffect(() => {
     let ignore = false;
@@ -63,8 +77,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
           center: initialCenter,
           level: 8
         });
+        mapInstanceRef.current = map;
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
+        boundsRef.current = bounds;
         let focusedPosition: any = null;
         let found = 0;
         const roadPath = routePath
@@ -136,13 +152,61 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   }, [appKey, canUseKakao, focusedMarkerId, markers, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} routePath={routePath} showList={showList} />;
+    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} fullscreen={fullscreen} mapClassName={mapClassName} markers={markers} onToggleFullscreen={() => setFullscreen((value) => !value)} routePath={routePath} showList={showList} />;
   }
+
+  const moveToCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("위치 기능을 지원하지 않습니다.");
+      return;
+    }
+
+    setLocationStatus("현재 위치 확인 중");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const kakao = window.kakao;
+        const map = mapInstanceRef.current;
+        if (!kakao?.maps || !map) return;
+        const current = new kakao.maps.LatLng(position.coords.latitude, position.coords.longitude);
+        map.setCenter(current);
+        map.setLevel(4);
+        new kakao.maps.CustomOverlay({
+          content: '<div style="background:#dc2626;color:#fff;border:2px solid #fff;border-radius:999px;padding:7px 9px;font-size:12px;font-weight:900;box-shadow:0 8px 18px rgba(15,23,42,.25);white-space:nowrap;">내 위치</div>',
+          map,
+          position: current,
+          yAnchor: 1.5
+        });
+        setLocationStatus("현재 위치 표시됨");
+      },
+      () => setLocationStatus("위치 권한을 확인해 주세요."),
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
+    );
+  };
+
+  const fitAllMarkers = () => {
+    if (mapInstanceRef.current && boundsRef.current) {
+      mapInstanceRef.current.setBounds(boundsRef.current);
+    }
+  };
+
+  const openRoadview = () => {
+    const center = mapInstanceRef.current?.getCenter?.();
+    if (!center) return;
+    window.open(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="space-y-4">
-      <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
+      <div className={`relative ${fullscreen ? "fixed inset-0 z-50 h-screen rounded-none border-0" : mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
+        <MapControls
+          fullscreen={fullscreen}
+          locationStatus={locationStatus}
+          onFitAll={fitAllMarkers}
+          onLocation={moveToCurrentLocation}
+          onRoadview={openRoadview}
+          onToggleFullscreen={() => setFullscreen((value) => !value)}
+        />
         {status === "loading" && (
           <div className="absolute inset-0 grid place-items-center bg-white/80 text-sm font-bold text-muted-foreground backdrop-blur-sm">
             카카오맵 주소 좌표를 불러오는 중입니다.
@@ -150,6 +214,44 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         )}
       </div>
       {showList && <MarkerList markers={markers} />}
+    </div>
+  );
+}
+
+function MapControls({
+  fullscreen,
+  locationStatus,
+  onFitAll,
+  onLocation,
+  onRoadview,
+  onToggleFullscreen
+}: {
+  readonly fullscreen: boolean;
+  readonly locationStatus?: string;
+  readonly onFitAll: () => void;
+  readonly onLocation: () => void;
+  readonly onRoadview: () => void;
+  readonly onToggleFullscreen: () => void;
+}) {
+  return (
+    <div className="absolute right-3 top-3 z-20 flex flex-wrap justify-end gap-2">
+      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onLocation} type="button">
+        <Crosshair className="h-3.5 w-3.5" />
+        내 위치
+      </button>
+      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onFitAll} type="button">
+        <RotateCcw className="h-3.5 w-3.5" />
+        전체 보기
+      </button>
+      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onRoadview} type="button">
+        <MapPin className="h-3.5 w-3.5" />
+        로드뷰
+      </button>
+      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-md hover:bg-slate-800" onClick={onToggleFullscreen} type="button">
+        {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
+        {fullscreen ? "축소" : "전체화면"}
+      </button>
+      {locationStatus ? <span className="basis-full rounded-md bg-white/95 px-3 py-2 text-right text-xs font-bold text-slate-500 shadow-md ring-1 ring-slate-200">{locationStatus}</span> : null}
     </div>
   );
 }
@@ -237,13 +339,27 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function FallbackAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, routePath, showList }: KakaoAddressMapProps) {
+function FallbackAddressMap({
+  focusedMarkerId,
+  fullscreen,
+  mapClassName = defaultMapClassName,
+  markers,
+  onToggleFullscreen,
+  routePath,
+  showList
+}: KakaoAddressMapProps & { readonly fullscreen: boolean; readonly onToggleFullscreen: () => void }) {
   const focusedMarker = markers.find((marker) => marker.id === focusedMarkerId);
   const displayMarkers = focusedMarker?.id ? prioritizeFocusedMarker(markers, focusedMarker.id) : markers;
 
   return (
     <div className="space-y-4">
-      <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
+      <div className={`relative ${fullscreen ? "fixed inset-0 z-50 h-screen rounded-none border-0" : mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
+        <div className="absolute right-3 top-3 z-30">
+          <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-md hover:bg-slate-800" onClick={onToggleFullscreen} type="button">
+            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
+            {fullscreen ? "축소" : "전체화면"}
+          </button>
+        </div>
         <div className="absolute left-[8%] top-[18%] h-[2px] w-[80%] rotate-12 bg-white shadow-sm" />
         <div className="absolute left-[20%] top-[70%] h-[2px] w-[68%] -rotate-12 bg-white shadow-sm" />
         <div className="absolute left-[52%] top-[8%] h-[82%] w-[2px] rotate-6 bg-white shadow-sm" />
