@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Crosshair, Expand, MapPin, Minimize2, RotateCcw } from "lucide-react";
+import { Crosshair, ExternalLink, MapPin, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export type KakaoMapMarker = {
@@ -43,20 +43,9 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   const mapInstanceRef = useRef<any>(null);
   const boundsRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
-  const [fullscreen, setFullscreen] = useState(false);
   const [locationStatus, setLocationStatus] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
-
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const center = map.getCenter?.();
-    window.setTimeout(() => {
-      map.relayout?.();
-      if (center) map.setCenter(center);
-    }, 80);
-  }, [fullscreen]);
 
   useEffect(() => {
     let ignore = false;
@@ -152,7 +141,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   }, [appKey, canUseKakao, focusedMarkerId, markers, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} fullscreen={fullscreen} mapClassName={mapClassName} markers={markers} onToggleFullscreen={() => setFullscreen((value) => !value)} routePath={routePath} showList={showList} />;
+    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} routePath={routePath} showList={showList} />;
   }
 
   const moveToCurrentLocation = () => {
@@ -171,10 +160,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         map.setCenter(current);
         map.setLevel(4);
         new kakao.maps.CustomOverlay({
-          content: '<div style="background:#dc2626;color:#fff;border:2px solid #fff;border-radius:999px;padding:7px 9px;font-size:12px;font-weight:900;box-shadow:0 8px 18px rgba(15,23,42,.25);white-space:nowrap;">내 위치</div>',
+          content: '<div title="내 위치" style="position:relative;width:22px;height:22px;border-radius:999px;background:rgba(37,99,235,.14);display:flex;align-items:center;justify-content:center;"><span style="width:12px;height:12px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 4px 12px rgba(37,99,235,.45);display:block;"></span></div>',
           map,
           position: current,
-          yAnchor: 1.5
+          yAnchor: 0.5
         });
         setLocationStatus("현재 위치 표시됨");
       },
@@ -192,20 +181,40 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   const openRoadview = () => {
     const center = mapInstanceRef.current?.getCenter?.();
     if (!center) return;
-    window.open(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "_blank", "noopener,noreferrer");
+    const kakao = window.kakao;
+    if (!kakao?.maps?.RoadviewClient) {
+      openPopup(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
+      return;
+    }
+
+    setLocationStatus("로드뷰 위치 확인 중");
+    const client = new kakao.maps.RoadviewClient();
+    client.getNearestPanoId(center, 180, (panoId: number | null) => {
+      if (!panoId) {
+        setLocationStatus("주변 로드뷰가 없습니다.");
+        return;
+      }
+      setLocationStatus("로드뷰 새 창 열림");
+      openPopup(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
+    });
+  };
+
+  const openLargeMap = () => {
+    const center = mapInstanceRef.current?.getCenter?.();
+    const url = center ? `https://map.kakao.com/link/map/MAJU%20지도,${center.getLat()},${center.getLng()}` : "https://map.kakao.com";
+    openPopup(url, "maju-kakao-large-map");
   };
 
   return (
     <div className="space-y-4">
-      <div className={`relative ${fullscreen ? "fixed inset-0 z-50 h-screen rounded-none border-0" : mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
+      <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
         <MapControls
-          fullscreen={fullscreen}
           locationStatus={locationStatus}
           onFitAll={fitAllMarkers}
+          onLargeMap={openLargeMap}
           onLocation={moveToCurrentLocation}
           onRoadview={openRoadview}
-          onToggleFullscreen={() => setFullscreen((value) => !value)}
         />
         {status === "loading" && (
           <div className="absolute inset-0 grid place-items-center bg-white/80 text-sm font-bold text-muted-foreground backdrop-blur-sm">
@@ -219,19 +228,17 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 }
 
 function MapControls({
-  fullscreen,
   locationStatus,
   onFitAll,
+  onLargeMap,
   onLocation,
-  onRoadview,
-  onToggleFullscreen
+  onRoadview
 }: {
-  readonly fullscreen: boolean;
   readonly locationStatus?: string;
   readonly onFitAll: () => void;
+  readonly onLargeMap: () => void;
   readonly onLocation: () => void;
   readonly onRoadview: () => void;
-  readonly onToggleFullscreen: () => void;
 }) {
   return (
     <div className="absolute right-3 top-3 z-20 flex flex-wrap justify-end gap-2">
@@ -247,13 +254,17 @@ function MapControls({
         <MapPin className="h-3.5 w-3.5" />
         로드뷰
       </button>
-      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-md hover:bg-slate-800" onClick={onToggleFullscreen} type="button">
-        {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
-        {fullscreen ? "축소" : "전체화면"}
+      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-md hover:bg-slate-800" onClick={onLargeMap} type="button">
+        <ExternalLink className="h-3.5 w-3.5" />
+        큰 지도
       </button>
       {locationStatus ? <span className="basis-full rounded-md bg-white/95 px-3 py-2 text-right text-xs font-bold text-slate-500 shadow-md ring-1 ring-slate-200">{locationStatus}</span> : null}
     </div>
   );
+}
+
+function openPopup(url: string, name: string) {
+  window.open(url, name, "popup=yes,width=1440,height=920,left=80,top=40,noopener,noreferrer");
 }
 
 function drawRoadRoutePolyline(kakao: any, map: any, roadPath: any[]) {
@@ -341,23 +352,26 @@ function escapeHtml(value: string) {
 
 function FallbackAddressMap({
   focusedMarkerId,
-  fullscreen,
   mapClassName = defaultMapClassName,
   markers,
-  onToggleFullscreen,
   routePath,
   showList
-}: KakaoAddressMapProps & { readonly fullscreen: boolean; readonly onToggleFullscreen: () => void }) {
+}: KakaoAddressMapProps) {
   const focusedMarker = markers.find((marker) => marker.id === focusedMarkerId);
   const displayMarkers = focusedMarker?.id ? prioritizeFocusedMarker(markers, focusedMarker.id) : markers;
+  const firstMarker = markers.find((marker) => marker.tone !== "origin") || markers[0];
 
   return (
     <div className="space-y-4">
-      <div className={`relative ${fullscreen ? "fixed inset-0 z-50 h-screen rounded-none border-0" : mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
+      <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
         <div className="absolute right-3 top-3 z-30">
-          <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-md hover:bg-slate-800" onClick={onToggleFullscreen} type="button">
-            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Expand className="h-3.5 w-3.5" />}
-            {fullscreen ? "축소" : "전체화면"}
+          <button
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-md hover:bg-slate-800"
+            onClick={() => openPopup(firstMarker ? `https://map.kakao.com/link/search/${encodeURIComponent(firstMarker.address)}` : "https://map.kakao.com", "maju-kakao-large-map")}
+            type="button"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            큰 지도
           </button>
         </div>
         <div className="absolute left-[8%] top-[18%] h-[2px] w-[80%] rotate-12 bg-white shadow-sm" />
