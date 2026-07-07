@@ -132,8 +132,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     [allStores, gradeFilter, query, vehicleFilterId]
   );
   const selectedStore = allStores.find((store) => store.id === selectedId);
-  const gradeCounts = useMemo(() => countGrades(allStores), [allStores]);
-  const routeTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
+  const gradeCounts = useMemo(() => countGrades(visibleStores), [visibleStores]);
+  const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
 
@@ -169,7 +169,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </header>
 
       <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-6">
-        <Kpi label="전체 매장" tone="blue" value={`${allStores.length}곳`} />
+        <Kpi label={gradeFilter === "all" && vehicleFilterId === "all" && !query.trim() ? "전체 매장" : "필터 매장"} tone="blue" value={`${visibleStores.length}곳`} />
         <Kpi label="A등급" tone="green" value={`${gradeCounts.A}곳`} />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
         <Kpi label="예상매출" tone="green" value={`${routeTotals.expectedRevenue.toLocaleString()}만원`} />
