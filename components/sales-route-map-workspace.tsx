@@ -642,14 +642,40 @@ function TodayCourseView({
   readonly vehicles: DeliveryVehicle[];
 }) {
   const [routeSequence, setRouteSequence] = useState<RouteSequence | null>(null);
+  const [routeQuery, setRouteQuery] = useState("");
+  const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
   const selectedDriver = selectedVehicle?.driver || "전체 담당자";
   const orderedStores = [...stores].sort((a, b) => a.order - b.order);
-  const routeDistanceKm = routeSequence?.totalDistanceKm ?? routeTotals.distanceKm;
-  const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? routeTotals.durationMinutes;
+  const orderedStoreIds = orderedStores.map((store) => store.id).join("|");
+  const selectedRouteIdSet = new Set(selectedRouteStoreIds);
+  const selectedRouteStores = orderedStores.filter((store) => selectedRouteIdSet.has(store.id)).slice(0, 15);
+  const selectedRouteTotals = getStoreTotals(selectedRouteStores);
+  const routeDistanceKm = routeSequence?.totalDistanceKm ?? selectedRouteTotals.distanceKm;
+  const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? selectedRouteTotals.durationMinutes;
+  const routeRevenue = selectedRouteTotals.expectedRevenue;
+  const routeCandidateStores = orderedStores.filter((store) => {
+    const keyword = routeQuery.trim().toLowerCase();
+    if (!keyword) return true;
+    return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
+  });
+  const routeMapMarkers = markers.filter((marker) => marker.tone === "origin" || (marker.id && selectedRouteIdSet.has(marker.id)));
 
   useEffect(() => {
     setRouteSequence(null);
-  }, [selectedVehicleId, stores]);
+    setSelectedRouteStoreIds(orderedStores.slice(0, 15).map((store) => store.id));
+  }, [orderedStoreIds, selectedVehicleId]);
+
+  useEffect(() => {
+    setRouteSequence(null);
+  }, [selectedRouteStoreIds]);
+
+  const toggleRouteStore = (storeId: string) => {
+    setSelectedRouteStoreIds((current) => {
+      if (current.includes(storeId)) return current.filter((id) => id !== storeId);
+      if (current.length >= 15) return current;
+      return [...current, storeId];
+    });
+  };
 
   return (
     <section className="grid min-h-0 flex-1 grid-cols-1 bg-slate-50 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
@@ -687,25 +713,45 @@ function TodayCourseView({
       </aside>
 
       <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-        <KakaoAddressMap focusedMarkerId={selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} routePath={routeSequence?.path || []} showList={false} />
+        <KakaoAddressMap focusedMarkerId={selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={routeMapMarkers.length ? routeMapMarkers : markers} routePath={routeSequence?.path || []} showList={false} />
       </div>
 
       <aside className="min-h-0 border-l border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-4 py-3">
           <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
           <p className="mt-1 text-xs font-bold text-slate-500">
-            {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)} · {routeTotals.expectedRevenue.toLocaleString()}만원
+            선택 {selectedRouteStores.length}곳 · {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)} · {routeRevenue.toLocaleString()}만원
           </p>
         </div>
         <div className="border-b border-slate-200 p-3">
           <RouteSequenceAction
             buttonLabel="티맵 경유 도로 계산"
-            destinations={orderedStores.map((store) => store.address || store.region).filter(Boolean)}
+            destinations={selectedRouteStores.map((store) => store.address || store.region).filter(Boolean)}
             onSequenceChange={setRouteSequence}
             showMap={false}
           />
         </div>
-        <div className="max-h-[calc(100vh-560px)] overflow-auto p-3">
+        <div className="space-y-2 border-b border-slate-200 p-3">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
+              onChange={(event) => setRouteQuery(event.target.value)}
+              placeholder="경유 매장 검색..."
+              value={routeQuery}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white" onClick={() => setSelectedRouteStoreIds(orderedStores.slice(0, 15).map((store) => store.id))} type="button">
+              기본 15곳 선택
+            </button>
+            <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={() => setSelectedRouteStoreIds([])} type="button">
+              선택 해제
+            </button>
+            <span className="inline-flex h-8 items-center rounded-md bg-blue-50 px-3 text-xs font-black text-blue-700">선택 {selectedRouteStores.length}/15곳</span>
+          </div>
+        </div>
+        <div className="max-h-[calc(100vh-660px)] overflow-auto p-3">
           {routeSequence?.legs.length ? (
             <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
               <p className="text-xs font-black text-emerald-800">티맵 경유 경로 반영됨</p>
@@ -715,15 +761,24 @@ function TodayCourseView({
             </div>
           ) : null}
           <div className="space-y-2">
-            {orderedStores.map((store, index) => (
+            {routeCandidateStores.map((store, index) => {
+              const selectedForRoute = selectedRouteIdSet.has(store.id);
+              return (
               <button
-                className={`w-full rounded-md border p-3 text-left transition hover:bg-slate-50 ${store.id === selectedStoreId ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`}
+                className={`w-full rounded-md border p-3 text-left transition hover:bg-slate-50 ${
+                  selectedForRoute ? "border-blue-300 bg-blue-50" : store.id === selectedStoreId ? "border-slate-300 bg-slate-50" : "border-slate-200 bg-white"
+                }`}
                 key={store.id}
-                onClick={() => onSelectStore(store.id)}
+                onClick={() => {
+                  toggleRouteStore(store.id);
+                  onSelectStore(store.id);
+                }}
                 type="button"
               >
                 <div className="flex items-start gap-3">
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">{index + 1}</span>
+                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${selectedForRoute ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {selectedForRoute ? selectedRouteStoreIds.indexOf(store.id) + 1 : index + 1}
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                     <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
@@ -732,7 +787,8 @@ function TodayCourseView({
                   <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                 </div>
               </button>
-            ))}
+            );
+            })}
           </div>
         </div>
       </aside>
