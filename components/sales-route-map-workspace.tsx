@@ -116,7 +116,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const routeSeedStores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
   const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehicles(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
-  const visibleStores = useMemo(
+  const gradeBaseStores = useMemo(
     () =>
       allStores.filter((store) => {
         const keyword = query.trim().toLowerCase();
@@ -125,14 +125,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           `${store.name} ${store.region} ${store.address || ""} ${store.businessRegistrationNumber} ${store.deliveryDriver || ""} ${store.deliveryVehicleName || ""}`
             .toLowerCase()
             .includes(keyword);
-        const matchesGrade = gradeFilter === "all" || store.grade === gradeFilter;
         const matchesVehicle = vehicleFilterId === "all" || store.deliveryVehicleId === vehicleFilterId;
-        return matchesQuery && matchesGrade && matchesVehicle;
+        return matchesQuery && matchesVehicle;
       }),
-    [allStores, gradeFilter, query, vehicleFilterId]
+    [allStores, query, vehicleFilterId]
+  );
+  const visibleStores = useMemo(
+    () => gradeBaseStores.filter((store) => gradeFilter === "all" || store.grade === gradeFilter),
+    [gradeBaseStores, gradeFilter]
   );
   const selectedStore = allStores.find((store) => store.id === selectedId);
-  const gradeCounts = useMemo(() => countGrades(visibleStores), [visibleStores]);
+  const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
@@ -168,9 +171,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-6">
-        <Kpi label={gradeFilter === "all" && vehicleFilterId === "all" && !query.trim() ? "전체 매장" : "필터 매장"} tone="blue" value={`${visibleStores.length}곳`} />
-        <Kpi label="A등급" tone="green" value={`${gradeCounts.A}곳`} />
+      <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-4 2xl:grid-cols-8">
+        <Kpi active={gradeFilter === "all"} label="전체" onClick={() => setGradeFilter("all")} tone="blue" value={`${gradeBaseStores.length}곳`} />
+        <Kpi active={gradeFilter === "A"} label="A등급" onClick={() => setGradeFilter("A")} tone="green" value={`${gradeCounts.A}곳`} />
+        <Kpi active={gradeFilter === "B"} label="B등급" onClick={() => setGradeFilter("B")} tone="blue" value={`${gradeCounts.B}곳`} />
+        <Kpi active={gradeFilter === "C"} label="C등급" onClick={() => setGradeFilter("C")} tone="purple" value={`${gradeCounts.C}곳`} />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
         <Kpi label="예상매출" tone="green" value={`${routeTotals.expectedRevenue.toLocaleString()}만원`} />
         <Kpi label="금일 총 km" tone="purple" value={`${routeTotals.distanceKm.toLocaleString()}km`} />
@@ -1016,20 +1021,45 @@ function SelectRow({
   );
 }
 
-function Kpi({ label, tone, value }: { readonly label: string; readonly tone: "blue" | "green" | "purple" | "red"; readonly value: string }) {
+function Kpi({
+  active = false,
+  label,
+  onClick,
+  tone,
+  value
+}: {
+  readonly active?: boolean;
+  readonly label: string;
+  readonly onClick?: () => void;
+  readonly tone: "blue" | "green" | "purple" | "red";
+  readonly value: string;
+}) {
   const valueClass = {
     blue: "text-blue-600",
     green: "text-emerald-600",
     purple: "text-violet-600",
     red: "text-rose-600"
   }[tone];
-
-  return (
-    <div className="border-r border-slate-200 px-5 py-3 last:border-r-0">
+  const content = (
+    <>
       <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className={`mt-1 truncate text-2xl font-black ${valueClass}`}>{value}</p>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        className={`border-r border-slate-200 px-5 py-3 text-left transition last:border-r-0 hover:bg-white ${active ? "bg-white shadow-[inset_0_-3px_0_#2563eb]" : ""}`}
+        onClick={onClick}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="border-r border-slate-200 px-5 py-3 last:border-r-0">{content}</div>;
 }
 
 function PanelTitle({ title }: { readonly title: string }) {
