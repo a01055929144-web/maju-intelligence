@@ -3,6 +3,7 @@ import { Banknote, Building2, FileText, PackageCheck, Phone, Route, Store } from
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 import { sampleCustomers } from "@/lib/sample-data";
 
 const resultLabels: Record<string, string> = {
@@ -17,7 +18,9 @@ export default async function CrmTimelinePage() {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
-  const timeline = sampleVisitTimeline;
+  const [timelineResult, systemResult] = await Promise.all([loadVisitTimeline(customerSession?.companyId), loadSystemDiagnostics()]);
+  const timeline = timelineResult.items;
+  const dbSummary = buildDatabaseSummary(systemResult);
   const enrichedCustomers = sampleCustomers.map((customer, index) => ({
     ...customer,
     businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
@@ -59,6 +62,21 @@ export default async function CrmTimelinePage() {
               <MiniMetric label="A등급" value={`${enrichedCustomers.filter((customer) => customer.grade === "A").length}곳`} />
               <MiniMetric label="확인" value={`${enrichedCustomers.filter((customer) => customer.businessStatus !== "정상").length}곳`} />
             </div>
+          </div>
+
+          <div className="rounded-md border border-slate-200 bg-white p-4">
+            <Badge className={dbSummary.tone === "ready" ? "mb-3 bg-emerald-100 text-emerald-800" : "mb-3 bg-amber-100 text-amber-800"}>{dbSummary.label}</Badge>
+            <h2 className="text-base font-black text-slate-950">DB 연결 상태</h2>
+            <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{dbSummary.description}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <MiniMetric label="정제 거래처" value={formatDbCount(dbSummary.normalizedCustomers)} />
+              <MiniMetric label="방문 결과" value={formatDbCount(dbSummary.visitResults)} />
+            </div>
+            {timelineResult.source === "fallback" ? (
+              <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
+                방문 히스토리 DB 조회 실패: {timelineResult.errorMessage}. 화면은 샘플 히스토리로 유지합니다.
+              </p>
+            ) : null}
           </div>
 
           <div className="max-h-[680px] space-y-2 overflow-auto pr-1">
@@ -194,6 +212,54 @@ export default async function CrmTimelinePage() {
       </section>
     </CustomerAppShell>
   );
+}
+
+async function loadVisitTimeline(companyId?: string) {
+  try {
+    const items = await getVisitTimeline(companyId);
+    return { errorMessage: "", items: items.length ? items : sampleVisitTimeline, source: "db" as const };
+  } catch (error) {
+    return {
+      errorMessage: error instanceof Error ? error.message : "알 수 없는 오류",
+      items: sampleVisitTimeline,
+      source: "fallback" as const
+    };
+  }
+}
+
+async function loadSystemDiagnostics() {
+  try {
+    return await getSystemDiagnostics();
+  } catch (error) {
+    return {
+      databaseChecks: [],
+      errorMessage: error instanceof Error ? error.message : "시스템 진단 실패",
+      mode: "local-fallback" as const
+    };
+  }
+}
+
+function buildDatabaseSummary(system: Awaited<ReturnType<typeof loadSystemDiagnostics>>) {
+  const normalizedCustomers = system.databaseChecks?.find((check) => check.name === "정제 거래처")?.count ?? null;
+  const visitResults = system.databaseChecks?.find((check) => check.name === "방문 결과")?.count ?? null;
+  const hasFailedCheck = system.databaseChecks?.some((check) => check.status !== "ready") ?? false;
+  const ready = system.mode === "production-db" && !hasFailedCheck;
+
+  return {
+    description: ready
+      ? "Supabase 실 DB가 연결되어 있고 주요 테이블 조회가 가능합니다."
+      : system.mode === "production-db"
+        ? "Supabase 환경변수는 있으나 일부 테이블 조회를 확인해야 합니다."
+        : "Supabase 환경변수가 없거나 미완성이라 샘플 fallback과 함께 표시합니다.",
+    label: ready ? "실 DB 연결" : system.mode === "production-db" ? "DB 점검 필요" : "Local fallback",
+    normalizedCustomers,
+    tone: ready ? "ready" : "fallback",
+    visitResults
+  };
+}
+
+function formatDbCount(value: number | null) {
+  return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
 }
 
 function MiniMetric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
