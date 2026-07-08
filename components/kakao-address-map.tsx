@@ -71,9 +71,8 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         boundsRef.current = bounds;
         let focusedPosition: any = null;
         let found = 0;
-        const roadPath = routePath
-          .map((point) => new kakao.maps.LatLng(point.lat, point.lng))
-          .filter((point) => Number.isFinite(point.getLat()) && Number.isFinite(point.getLng()));
+        const roadPathSegments = splitRoutePath(routePath).map((segment) => segment.map((point) => new kakao.maps.LatLng(point.lat, point.lng)));
+        const hasRoadPath = roadPathSegments.some((segment) => segment.length >= 2);
 
         await Promise.all(
           markers.map(
@@ -109,14 +108,14 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
         if (ignore) return;
 
-        if (found === 0 && roadPath.length < 2) {
+        if (found === 0 && !hasRoadPath) {
           setStatus("fallback");
           return;
         }
 
-        if (roadPath.length >= 2) {
-          drawRoadRoutePolyline(kakao, map, roadPath);
-          roadPath.forEach((point) => bounds.extend(point));
+        if (hasRoadPath) {
+          drawRoadRoutePolylines(kakao, map, roadPathSegments);
+          roadPathSegments.flat().forEach((point) => bounds.extend(point));
           map.setBounds(bounds);
         } else if (focusedPosition) {
           map.setCenter(focusedPosition);
@@ -258,18 +257,36 @@ function openPopup(url: string, name: string) {
   window.open(url, name, "popup=yes,width=1440,height=920,left=80,top=40,noopener,noreferrer");
 }
 
-function drawRoadRoutePolyline(kakao: any, map: any, roadPath: any[]) {
-  if (roadPath.length < 2) return;
-
-  new kakao.maps.Polyline({
-    endArrow: true,
-    map,
-    path: roadPath,
-    strokeColor: "#0f766e",
-    strokeOpacity: 0.9,
-    strokeStyle: "solid",
-    strokeWeight: 5
+function drawRoadRoutePolylines(kakao: any, map: any, roadPathSegments: any[][]) {
+  roadPathSegments.forEach((roadPath) => {
+    if (roadPath.length < 2) return;
+    new kakao.maps.Polyline({
+      endArrow: true,
+      map,
+      path: roadPath,
+      strokeColor: "#0f766e",
+      strokeOpacity: 0.9,
+      strokeStyle: "solid",
+      strokeWeight: 5
+    });
   });
+}
+
+function splitRoutePath(routePath: ReadonlyArray<KakaoRoutePoint>) {
+  const segments: KakaoRoutePoint[][] = [];
+  let current: KakaoRoutePoint[] = [];
+
+  routePath.forEach((point) => {
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
+      if (current.length) segments.push(current);
+      current = [];
+      return;
+    }
+    current.push(point);
+  });
+
+  if (current.length) segments.push(current);
+  return segments;
 }
 
 function loadKakaoMapSdk(appKey: string) {

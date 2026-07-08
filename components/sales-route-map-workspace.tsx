@@ -91,6 +91,13 @@ type SalesRouteMapWorkspaceProps = {
   readonly routePlan: RoutePlan;
 };
 
+type CourseSummary = {
+  distanceKm: number;
+  durationMinutes: number;
+  expectedRevenue: number;
+  selectedCount: number;
+};
+
 const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "전체", value: "all" },
   { label: "A등급", value: "A" },
@@ -121,6 +128,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
+  const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const routeSeedStores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
   const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehicles(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
@@ -152,6 +160,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 담당자";
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
+  const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -193,14 +202,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
-          label={`등급 매장 · ${selectedGradeLabel}`}
+          label={kpiSummary ? "오늘 코스 선택" : `등급 매장 · ${selectedGradeLabel}`}
           tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
-          value={`${selectedGradeCount}곳`}
+          value={`${kpiSummary?.selectedCount ?? selectedGradeCount}곳`}
         />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
-        <Kpi label="예상매출" tone="green" value={`${routeTotals.expectedRevenue.toLocaleString()}만원`} />
-        <Kpi label="금일 총 km" tone="purple" value={`${routeTotals.distanceKm.toLocaleString()}km`} />
-        <Kpi label="예상시간" tone="red" value={formatMinutes(routeTotals.durationMinutes)} />
+        <Kpi label="예상매출" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
+        <Kpi label="금일 총 km" tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
+        <Kpi label="예상시간" tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
       <section className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 lg:flex-row lg:items-center">
@@ -277,6 +286,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       {activeView === "course" ? (
         <TodayCourseView
           markers={markers}
+          onSummaryChange={setCourseSummary}
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
           routeTotals={routeTotals}
@@ -623,6 +633,7 @@ function CustomerDirectoryView({
 
 function TodayCourseView({
   markers,
+  onSummaryChange,
   onSelectStore,
   onSelectVehicle,
   routeTotals,
@@ -633,6 +644,7 @@ function TodayCourseView({
   vehicles
 }: {
   readonly markers: KakaoMapMarker[];
+  readonly onSummaryChange: (summary: CourseSummary) => void;
   readonly onSelectStore: (storeId: string) => void;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly routeTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
@@ -662,6 +674,8 @@ function TodayCourseView({
   const routeDistanceKm = routeSequence?.totalDistanceKm ?? selectedRouteTotals.distanceKm;
   const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? selectedRouteTotals.durationMinutes;
   const routeRevenue = selectedRouteTotals.expectedRevenue;
+  const routeRoadPointCount = routeSequence ? countFiniteRoutePoints(routeSequence.path) : 0;
+  const tmapLegCount = routeSequence?.legs.filter((leg) => leg.provider === "tmap").length || 0;
   const inactiveSelectedCount = Math.max(0, selectedRouteStoresAll.length - selectedRouteStores.length);
   const routeCandidateStores = orderedStores.filter((store) => {
     const keyword = routeQuery.trim().toLowerCase();
@@ -710,6 +724,15 @@ function TodayCourseView({
     setRouteSequence(null);
     setRouteBatchIndex((current) => Math.min(current, Math.max(0, Math.ceil(selectedRouteStoreIds.length / tmapWaypointLimit) - 1)));
   }, [selectedRouteStoreIds]);
+
+  useEffect(() => {
+    onSummaryChange({
+      distanceKm: routeDistanceKm,
+      durationMinutes: routeDurationMinutes,
+      expectedRevenue: routeRevenue,
+      selectedCount: selectedRouteStores.length
+    });
+  }, [onSummaryChange, routeDistanceKm, routeDurationMinutes, routeRevenue, selectedRouteStores.length]);
 
   const toggleRouteStore = (storeId: string) => {
     setSelectedRouteStoreIds((current) => {
@@ -931,14 +954,14 @@ function TodayCourseView({
               </div>
               <div className="p-3">
                 {routeSequence?.legs.length ? (
-                  <div className={`mb-3 rounded-md border p-3 ${routeSequence.path.length ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                    <p className={`text-xs font-black ${routeSequence.path.length ? "text-emerald-800" : "text-amber-800"}`}>
-                      {routeSequence.path.length ? "티맵 경유 경로 반영됨" : "거리·시간 계산됨 · 도로 경로 좌표 없음"}
+                  <div className={`mb-3 rounded-md border p-3 ${routeRoadPointCount ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                    <p className={`text-xs font-black ${routeRoadPointCount ? "text-emerald-800" : "text-amber-800"}`}>
+                      {routeRoadPointCount ? "티맵 경유 경로 반영됨" : "거리·시간 계산됨 · 도로 경로 좌표 없음"}
                     </p>
-                    <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence.path.length ? "text-emerald-700" : "text-amber-800"}`}>
-                      경유지 {routeSequence.stops.length}곳 · 총 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeSequence.path.length.toLocaleString()}개
+                    <p className={`mt-1 text-xs font-bold leading-5 ${routeRoadPointCount ? "text-emerald-700" : "text-amber-800"}`}>
+                      경유지 {routeSequence.stops.length}곳 · 실도로 {tmapLegCount}/{routeSequence.legs.length}구간 · 총 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeRoadPointCount.toLocaleString()}개
                     </p>
-                    {!routeSequence.path.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">티맵 키, 주소 지오코딩, 또는 요청 제한 때문에 실제 도로 선 대신 거리·시간 추정값만 표시된 상태입니다.</p> : null}
+                    {tmapLegCount < routeSequence.legs.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">일부 구간은 티맵 주소 지오코딩이 실패해 도로선 없이 거리·시간 추정값만 반영됐습니다.</p> : null}
                   </div>
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -1025,6 +1048,10 @@ function DirectoryStat({ label, tone = "slate", value }: { readonly label: strin
 
 function getRouteStopAddress(store: StoreRow) {
   return store.address || store.region;
+}
+
+function countFiniteRoutePoints(path: RouteSequence["path"]) {
+  return path.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)).length;
 }
 
 function StoreDetail({

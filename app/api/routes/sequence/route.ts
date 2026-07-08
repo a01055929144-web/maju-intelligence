@@ -39,7 +39,10 @@ export async function POST(request: Request) {
     provider: result.provider,
     toAddress: destinationAddress
   }));
-  const path = optimizedLegs.flatMap(({ result }) => extractRoutePath(result.routeGeometry));
+  const path = optimizedLegs.flatMap(({ result }, index) => {
+    const legPath = extractRoutePath(result.routeGeometry);
+    return index ? [{ lat: Number.NaN, lng: Number.NaN }, ...legPath] : legPath;
+  });
   const optimizedStops = optimizedLegs.map(({ destinationAddress }) => destinationAddress);
 
   const totalDistanceKm = Math.round(legs.reduce((total, leg) => total + Number(leg.distanceKm || 0), 0) * 10) / 10;
@@ -124,7 +127,9 @@ function coordinatesToPoints(coordinates: unknown): RoutePoint[] {
 
 function dedupePath(path: RoutePoint[]) {
   return path.filter((point, index) => {
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return true;
     const previous = path[index - 1];
+    if (!previous || !Number.isFinite(previous.lat) || !Number.isFinite(previous.lng)) return true;
     return !previous || previous.lat !== point.lat || previous.lng !== point.lng;
   });
 }

@@ -68,7 +68,7 @@ export function RouteSequenceAction({
     const nextSequence = payload?.routeSequence || null;
     setSequence(nextSequence);
     onSequenceChange?.(nextSequence);
-    const routePathCount = Number(payload?.routeSequence?.path?.length || 0);
+    const routePathCount = countFiniteRoutePoints(payload?.routeSequence?.path || []);
     setMessage(routePathCount ? "티맵 도로 경로 계산됨" : "거리/시간 계산됨 · 도로 좌표 없음");
     setIsLoading(false);
   }
@@ -94,6 +94,7 @@ export function RouteSequenceAction({
             <span className="rounded-md bg-muted px-2 py-1">총 {sequence.totalDistanceKm.toLocaleString()}km</span>
             <span className="rounded-md bg-muted px-2 py-1">총 {formatMinutes(sequence.totalDurationMinutes)}</span>
             <span className="rounded-md bg-muted px-2 py-1">최적 순서 {sequence.legs.length}개 구간</span>
+            <span className="rounded-md bg-muted px-2 py-1">도로 좌표 {countFiniteRoutePoints(sequence.path).toLocaleString()}개</span>
           </div>
           <div className="space-y-1">
             {sequence.legs.map((leg) => (
@@ -137,6 +138,10 @@ function formatMinutes(minutes: number) {
 function shortenAddress(address: string) {
   const words = address.split(/\s+/).filter(Boolean);
   return words.slice(0, 3).join(" ") || address;
+}
+
+function countFiniteRoutePoints(path: KakaoRoutePoint[]) {
+  return path.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)).length;
 }
 
 function createRouteMarkers(sequence: RouteSequence): KakaoMapMarker[] {
