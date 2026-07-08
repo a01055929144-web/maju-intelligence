@@ -778,7 +778,7 @@ function TodayCourseView({
       </aside>
 
       <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-        <KakaoAddressMap focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={routeMapMarkers.length ? routeMapMarkers : markers} routePath={routeSequence?.path || []} showList={false} />
+        <KakaoAddressMap focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={routeMapMarkers} routePath={routeSequence?.path || []} showList={false} />
       </div>
 
       <aside className="min-h-0 border-l border-slate-200 bg-white">

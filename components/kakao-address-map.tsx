@@ -109,7 +109,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
         if (ignore) return;
 
-        if (found === 0) {
+        if (found === 0 && roadPath.length < 2) {
           setStatus("fallback");
           return;
         }
@@ -319,6 +319,14 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
     `;
   }
 
+  if (marker.tone === "customer" && /^\d+$/.test(marker.label)) {
+    return `
+      <div title="${name}" style="background:#2563eb;color:#ffffff;width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
+        ${label}
+      </div>
+    `;
+  }
+
   if (marker.grade) {
     return `
       <div title="${name}" style="${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;">
@@ -373,11 +381,8 @@ function FallbackAddressMap({
             큰 지도
           </button>
         </div>
-        <div className="absolute left-[8%] top-[18%] h-[2px] w-[80%] rotate-12 bg-white shadow-sm" />
-        <div className="absolute left-[20%] top-[70%] h-[2px] w-[68%] -rotate-12 bg-white shadow-sm" />
-        <div className="absolute left-[52%] top-[8%] h-[82%] w-[2px] rotate-6 bg-white shadow-sm" />
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
-          {routePath?.length ? "카카오맵 키 확인 후 실제 도로 경로가 표시됩니다." : "방문 후보 위치 샘플 화면"}
+          {routePath?.length ? "카카오맵 로딩 후 티맵 도로 경로가 표시됩니다." : "지도 좌표를 불러오지 못해 마커 위치만 표시합니다."}
         </div>
         {displayMarkers.map((marker) => {
           const focused = focusedMarkerId && marker.id === focusedMarkerId;
