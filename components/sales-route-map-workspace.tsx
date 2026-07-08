@@ -669,8 +669,6 @@ function TodayCourseView({
     return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
   });
   const routeSelectedStore = orderedStores.find((store) => store.id === routeSelectedStoreId) || routeCandidateStores[0] || orderedStores[0];
-  const routeSelectedStoreSelected = routeSelectedStore ? selectedRouteIdSet.has(routeSelectedStore.id) : false;
-  const routeSelectedStoreActive = routeSelectedStore ? activeRouteIdSet.has(routeSelectedStore.id) : false;
   const routeMapMarkers = markers.filter((marker) => marker.tone === "origin" || (marker.id && activeRouteIdSet.has(marker.id)));
 
   useEffect(() => {
@@ -796,45 +794,6 @@ function TodayCourseView({
                   showMap={false}
                 />
               </div>
-              {routeSelectedStore ? (
-                <div className="border-b border-slate-200 bg-blue-50/50 p-3">
-                  <div className="rounded-md border border-blue-100 bg-white p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-950">{routeSelectedStore.name}</p>
-                        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{routeSelectedStore.address || routeSelectedStore.region}</p>
-                      </div>
-                      <span className={gradeBadgeClass(routeSelectedStore.grade)}>{routeSelectedStore.grade}</span>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                      <div className="rounded-md bg-slate-50 p-2">
-                        <p className="font-bold text-slate-400">거리</p>
-                        <p className="mt-1 font-black text-slate-950">{routeSelectedStore.distanceKm?.toLocaleString() || "-"}km</p>
-                      </div>
-                      <div className="rounded-md bg-slate-50 p-2">
-                        <p className="font-bold text-slate-400">시간</p>
-                        <p className="mt-1 font-black text-slate-950">{formatMinutes(routeSelectedStore.durationMinutes || 0)}</p>
-                      </div>
-                      <div className="rounded-md bg-slate-50 p-2">
-                        <p className="font-bold text-slate-400">매출</p>
-                        <p className="mt-1 font-black text-slate-950">{routeSelectedStore.expectedRevenue.toLocaleString()}만원</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        className={`h-9 flex-1 rounded-md px-3 text-xs font-black ${routeSelectedStoreSelected ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-                        onClick={() => toggleRouteStore(routeSelectedStore.id)}
-                        type="button"
-                      >
-                        {routeSelectedStoreSelected ? "경유지 해제" : "경유지 추가"}
-                      </button>
-                      <span className={`inline-flex h-9 items-center rounded-md px-3 text-xs font-black ${routeSelectedStoreActive ? "bg-blue-100 text-blue-700" : routeSelectedStoreSelected ? "bg-slate-100 text-slate-700" : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200"}`}>
-                        {routeSelectedStoreActive ? "현재 계산 묶음" : routeSelectedStoreSelected ? "다른 묶음 대기" : "미선택"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
               <div className="space-y-2 border-b border-slate-200 p-3">
                 <label className="relative block">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -933,7 +892,7 @@ function TodayCourseView({
                 ) : (
                   <div className="rounded-md border border-dashed border-slate-300 bg-white p-4 text-center">
                     <p className="text-sm font-black text-slate-700">선택한 경유지가 없습니다.</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">아래 매장 목록에서 매장을 누른 뒤 경유지 추가를 선택하세요.</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">아래 매장 목록에서 추가 버튼을 누르세요.</p>
                   </div>
                 )}
                 {inactiveSelectedCount ? (
@@ -954,7 +913,7 @@ function TodayCourseView({
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-black text-slate-950">매장 선택</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">매장을 누르면 위 상세 패널에서 경유지 추가/해제합니다.</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">매장을 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다.</p>
                   </div>
                   <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{routeCandidateStores.length}곳</span>
                 </div>
@@ -998,6 +957,17 @@ function TodayCourseView({
                           ) : selectedForRoute ? (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">대기</span>
                           ) : null}
+                          <span
+                            className={`rounded-md px-2 py-1 text-[11px] font-black ${
+                              selectedForRoute ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"
+                            }`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleRouteStore(store.id);
+                            }}
+                          >
+                            {selectedForRoute ? "해제" : "추가"}
+                          </span>
                         </span>
                       </div>
                     </button>
