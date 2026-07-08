@@ -46,6 +46,7 @@ export default function CrmTimelinePage() {
   const [timeline, setTimeline] = useState<TimelineItem[]>(sampleVisitTimeline);
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -89,7 +90,7 @@ export default function CrmTimelinePage() {
       })),
     []
   );
-  const selectedCustomer = enrichedCustomers[0];
+  const selectedCustomer = enrichedCustomers[selectedIndex] || enrichedCustomers[0];
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
 
@@ -109,160 +110,166 @@ export default function CrmTimelinePage() {
       title="거래처 히스토리"
       userName="관리자"
     >
-      <section className="mx-auto grid max-w-[1880px] gap-4 xl:grid-cols-[360px_minmax(0,1fr)_420px]">
-        <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-          <div className="rounded-md border border-slate-200 bg-white p-4">
-            <Badge className="mb-3 bg-emerald-50 text-emerald-800">거래처 원장</Badge>
-            <h2 className="text-lg font-black text-slate-950">전체 거래처</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">매출 등급과 사업자 상태 기준으로 먼저 확인합니다.</p>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <MiniMetric label="전체" value={`${enrichedCustomers.length}곳`} />
-              <MiniMetric label="A등급" value={`${enrichedCustomers.filter((customer) => customer.grade === "A").length}곳`} />
-              <MiniMetric label="확인" value={`${enrichedCustomers.filter((customer) => customer.businessStatus !== "정상").length}곳`} />
+      <section className="mx-auto max-w-[1760px] space-y-4">
+        <div className="grid gap-3 lg:grid-cols-4">
+          <SummaryCard label="전체 거래처" value={`${enrichedCustomers.length}곳`} helper="기초 등록된 매장" />
+          <SummaryCard label="A등급 거래처" value={`${enrichedCustomers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
+          <SummaryCard label="방문 기록" value={`${timeline.length}건`} helper={`${quoteRequests}건 견적 요청`} tone="blue" />
+          <SummaryCard label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} helper="최근 액션 기준" tone="violet" />
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={dbSummary.tone === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{dbSummary.label}</Badge>
+              <p className="text-sm font-bold leading-6 text-slate-600">{dbSummary.description}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs font-black text-slate-500">
+              <span className="rounded-md bg-slate-100 px-3 py-2">정제 거래처 {formatDbCount(dbSummary.normalizedCustomers)}</span>
+              <span className="rounded-md bg-slate-100 px-3 py-2">방문 결과 {formatDbCount(dbSummary.visitResults)}</span>
             </div>
           </div>
+          {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+        </div>
 
-          <div className="rounded-md border border-slate-200 bg-white p-4">
-            <Badge className={dbSummary.tone === "ready" ? "mb-3 bg-emerald-100 text-emerald-800" : "mb-3 bg-amber-100 text-amber-800"}>{dbSummary.label}</Badge>
-            <h2 className="text-base font-black text-slate-950">DB 연결 상태</h2>
-            <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{dbSummary.description}</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <MiniMetric label="정제 거래처" value={formatDbCount(dbSummary.normalizedCustomers)} />
-              <MiniMetric label="방문 결과" value={formatDbCount(dbSummary.visitResults)} />
+        <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+          <aside className="rounded-md border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
+                  <p className="mt-1 text-sm font-medium text-slate-500">매장을 누르면 상세 정보가 오른쪽에 표시됩니다.</p>
+                </div>
+                <Badge className="bg-slate-100 text-slate-700">{enrichedCustomers.length}곳</Badge>
+              </div>
             </div>
-            {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
-          </div>
-
-          <div className="max-h-[680px] space-y-2 overflow-auto pr-1">
-            {enrichedCustomers.map((customer, index) => (
-              <a
-                key={`${customer.customerName}-${customer.address}`}
-                className={`block rounded-md border p-4 transition ${index === 0 ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                href={`#customer-${index}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
-                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{customer.address}</p>
+            <div className="max-h-[calc(100vh-280px)] space-y-2 overflow-auto p-3">
+              {enrichedCustomers.map((customer, index) => (
+                <button
+                  key={`${customer.customerName}-${customer.address}`}
+                  className={`w-full rounded-md border p-4 text-left transition ${
+                    index === selectedIndex ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                  onClick={() => setSelectedIndex(index)}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
+                      <p className="mt-1 truncate text-xs font-bold text-slate-500">{customer.region} · {customer.address}</p>
+                    </div>
+                    <Badge className={gradeClassName(customer.grade)}>{customer.grade}</Badge>
                   </div>
-                  <Badge className={gradeClassName(customer.grade)}>{customer.grade}</Badge>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-bold text-slate-500">
-                  <span>{customer.industry}</span>
-                  <span>{customer.deliveryKm}km</span>
-                  <span>{customer.monthlyRevenue}만원</span>
-                </div>
-              </a>
-            ))}
-          </div>
-        </aside>
-
-        <div className="space-y-4">
-          <div className="rounded-md border border-slate-200 bg-white p-5" id="customer-0">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <Badge className="mb-3 bg-blue-50 text-blue-700">선택 거래처</Badge>
-                <h2 className="text-2xl font-black text-slate-950">{selectedCustomer.customerName}</h2>
-                <p className="mt-1 text-sm font-bold text-slate-500">
-                  {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge className={gradeClassName(selectedCustomer.grade)}>매출 {selectedCustomer.grade}등급</Badge>
-                <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}>
-                  사업자 {selectedCustomer.businessStatus}
-                </Badge>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-              <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber} />
-              <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone} />
-              <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
-              <InfoTile icon={Route} label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
-            </div>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <h3 className="text-base font-black text-slate-950">기본 정보</h3>
-              <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
-                <DetailRow label="상호명" value={selectedCustomer.customerName} />
-                <DetailRow label="업종" value={selectedCustomer.industry} />
-                <DetailRow label="지역" value={selectedCustomer.region} />
-                <DetailRow label="주소" value={selectedCustomer.address} />
-                <DetailRow label="사업자상태" value={`${selectedCustomer.businessStatus} · 매일 API 조회 예정`} />
-                <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
-                <DetailRow label="월 방문 횟수" value={`${selectedCustomer.visitCount}회`} />
-                <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
-              </div>
-            </div>
-
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <h3 className="text-base font-black text-slate-950">배송 적재위치</h3>
-              <p className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black text-blue-800">{selectedCustomer.loadingPosition}</p>
-              <div className="mt-4 grid gap-2">
-                <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="3개 등록 예정" />
-                <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
-                <AttachmentRow icon={FileText} label="통장사본" value="수취 완료" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-md border border-slate-200 bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-black text-slate-950">거래처별 메모 히스토리</h3>
-                <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 거래처 단위로 누적합니다.</p>
-              </div>
-              <Badge className="bg-slate-100 text-slate-700">{selectedCustomer.memoCount}건</Badge>
-            </div>
-            <div className="mt-4 space-y-3">
-              {[
-                ["배송", "오전 10시 전 입고 요청. 후문 적재 시 직원 호출 필요."],
-                ["상담", "7월 단가표 재전달 필요. 다음 방문 시 냉동 품목 샘플 제안."],
-                ["정산", "월말 결제 유지. 통장사본 확인 완료."]
-              ].map(([label, memo], index) => (
-                <div key={memo} className="rounded-md border border-slate-200 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge className="bg-slate-100 text-slate-700">{label}</Badge>
-                    <span className="text-xs font-bold text-slate-400">2026-07-{String(index + 1).padStart(2, "0")}</span>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                    <span className="rounded bg-slate-100 px-2 py-1">{customer.industry}</span>
+                    <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryKm}km</span>
+                    <span className="rounded bg-slate-100 px-2 py-1">{customer.monthlyRevenue}만원</span>
                   </div>
-                  <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{memo}</p>
-                </div>
+                </button>
               ))}
+            </div>
+          </aside>
+
+          <div className="min-w-0 space-y-4">
+            <div className="rounded-md border border-slate-200 bg-white p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0">
+                  <Badge className="mb-3 bg-blue-50 text-blue-700">선택 거래처</Badge>
+                  <h2 className="truncate text-2xl font-black text-slate-950">{selectedCustomer.customerName}</h2>
+                  <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
+                    {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Badge className={gradeClassName(selectedCustomer.grade)}>매출 {selectedCustomer.grade}등급</Badge>
+                  <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}>
+                    사업자 {selectedCustomer.businessStatus}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber} />
+                <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone} />
+                <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
+                <InfoTile icon={Route} label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="rounded-md border border-slate-200 bg-white p-5">
+                <h3 className="text-base font-black text-slate-950">기본 정보</h3>
+                <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
+                  <DetailRow label="상호명" value={selectedCustomer.customerName} />
+                  <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
+                  <DetailRow label="대표자명" value={selectedIndex % 2 === 0 ? "김민준" : "이서연"} />
+                  <DetailRow label="업종" value={selectedCustomer.industry} />
+                  <DetailRow label="지역" value={selectedCustomer.region} />
+                  <DetailRow label="주소" value={selectedCustomer.address} />
+                  <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
+                  <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-200 bg-white p-5">
+                <h3 className="text-base font-black text-slate-950">배송 적재위치</h3>
+                <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
+                <div className="mt-4 grid gap-2">
+                  <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="3개 등록 예정" />
+                  <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
+                  <AttachmentRow icon={FileText} label="통장사본" value="수취 완료" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="rounded-md border border-slate-200 bg-white p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-black text-slate-950">메모 히스토리</h3>
+                    <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 누적합니다.</p>
+                  </div>
+                  <Badge className="bg-slate-100 text-slate-700">{selectedCustomer.memoCount}건</Badge>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {[
+                    ["배송", "오전 10시 전 입고 요청. 후문 적재 시 직원 호출 필요."],
+                    ["상담", "7월 단가표 재전달 필요. 다음 방문 시 냉동 품목 샘플 제안."],
+                    ["정산", "월말 결제 유지. 통장사본 확인 완료."]
+                  ].map(([label, memo], index) => (
+                    <div key={memo} className="rounded-md border border-slate-200 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <Badge className="bg-slate-100 text-slate-700">{label}</Badge>
+                        <span className="text-xs font-bold text-slate-400">2026-07-{String(index + 1).padStart(2, "0")}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{memo}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-200 bg-white p-5">
+                <Badge className="mb-3 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
+                <h3 className="text-base font-black text-slate-950">최근 액션</h3>
+                <div className="mt-4 space-y-3">
+                  {timeline.map((item) => (
+                    <div key={item.id} className="rounded-md border border-slate-200 p-4">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <p className="font-black text-slate-950">{item.leadName}</p>
+                        <Badge className="bg-blue-50 text-blue-700">{resultLabels[item.result] || item.result}</Badge>
+                      </div>
+                      <p className="text-sm font-medium leading-6 text-slate-600">{item.memo || "메모 없음"}</p>
+                      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs font-bold text-slate-500">
+                        <span>다음 액션: {item.nextAction || "미정"}</span>
+                        <span>{item.visitedAt}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-          <div className="rounded-md border border-slate-200 bg-white p-4">
-            <Badge className="mb-3 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
-            <h2 className="text-lg font-black text-slate-950">최근 액션</h2>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <MiniMetric label="방문 기록" value={`${timeline.length}건`} />
-              <MiniMetric label="견적 요청" value={`${quoteRequests}건`} />
-              <MiniMetric label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} wide />
-            </div>
-          </div>
-
-          <div className="max-h-[760px] space-y-3 overflow-auto pr-1">
-            {timeline.map((item) => (
-              <div key={item.id} className="rounded-md border border-slate-200 bg-white p-4">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <p className="font-black text-slate-950">{item.leadName}</p>
-                  <Badge className="bg-slate-100 text-slate-700">{item.region}</Badge>
-                  <Badge className="bg-blue-50 text-blue-700">{resultLabels[item.result] || item.result}</Badge>
-                </div>
-                <p className="text-sm font-medium leading-6 text-slate-600">{item.memo || "메모 없음"}</p>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
-                  <span>다음 액션: {item.nextAction || "미정"}</span>
-                  <span className="text-right">{item.visitedAt}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
       </section>
     </CustomerAppShell>
   );
@@ -277,12 +284,31 @@ function MiniMetric({ label, value, wide = false }: { label: string; value: stri
   );
 }
 
+function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string; label: string; tone?: "slate" | "emerald" | "blue" | "violet"; value: string }) {
+  const toneClassName = {
+    blue: "text-blue-700",
+    emerald: "text-emerald-700",
+    slate: "text-slate-950",
+    violet: "text-violet-700"
+  }[tone];
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4">
+      <p className="text-xs font-black text-slate-500">{label}</p>
+      <p className={`mt-2 whitespace-nowrap text-2xl font-black ${toneClassName}`}>{value}</p>
+      <p className="mt-1 truncate text-xs font-bold text-slate-400">{helper}</p>
+    </div>
+  );
+}
+
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: string; value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+    <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-4">
       <Icon className="mb-3 h-4 w-4 text-blue-700" />
       <p className="text-xs font-black text-slate-500">{label}</p>
-      <p className="mt-1 break-keep text-sm font-black text-slate-950">{value}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950" title={value}>
+        {value}
+      </p>
     </div>
   );
 }
