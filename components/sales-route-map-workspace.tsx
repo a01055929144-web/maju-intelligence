@@ -669,7 +669,35 @@ function TodayCourseView({
     return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
   });
   const routeSelectedStore = orderedStores.find((store) => store.id === routeSelectedStoreId) || routeCandidateStores[0] || orderedStores[0];
-  const routeMapMarkers = markers.filter((marker) => marker.tone === "origin" || (marker.id && activeRouteIdSet.has(marker.id)));
+  const originMarker = markers.find((marker) => marker.tone === "origin");
+  const sequencedRouteStores = routeSequence?.stops.length
+    ? routeSequence.stops
+        .map((address) => selectedRouteStores.find((store) => getRouteStopAddress(store) === address))
+        .filter((store): store is StoreRow => Boolean(store))
+    : selectedRouteStores;
+  const routeMapMarkers = [
+    ...(originMarker
+      ? [
+          {
+            ...originMarker,
+            label: "🚚",
+            name: "물류 출발지"
+          }
+        ]
+      : []),
+    ...sequencedRouteStores.map((store, index) => {
+      const marker = markers.find((item) => item.id === store.id);
+      return {
+        address: marker?.address || store.address || store.region,
+        id: store.id,
+        label: String(index + 1),
+        name: `${index + 1}. ${store.name}`,
+        tone: "customer" as const,
+        x: marker?.x ?? store.markerX,
+        y: marker?.y ?? store.markerY
+      };
+    })
+  ];
 
   useEffect(() => {
     setRouteSequence(null);
@@ -789,7 +817,7 @@ function TodayCourseView({
               <div className="border-b border-slate-200 p-3">
                 <RouteSequenceAction
                   buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
-                  destinations={selectedRouteStores.map((store) => store.address || store.region).filter(Boolean)}
+                  destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
                   onSequenceChange={setRouteSequence}
                   showMap={false}
                 />
@@ -903,11 +931,14 @@ function TodayCourseView({
               </div>
               <div className="p-3">
                 {routeSequence?.legs.length ? (
-                  <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-                    <p className="text-xs font-black text-emerald-800">티맵 경유 경로 반영됨</p>
-                    <p className="mt-1 text-xs font-bold leading-5 text-emerald-700">
-                      총 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeSequence.path.length.toLocaleString()}개
+                  <div className={`mb-3 rounded-md border p-3 ${routeSequence.path.length ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                    <p className={`text-xs font-black ${routeSequence.path.length ? "text-emerald-800" : "text-amber-800"}`}>
+                      {routeSequence.path.length ? "티맵 경유 경로 반영됨" : "거리·시간 계산됨 · 도로 경로 좌표 없음"}
                     </p>
+                    <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence.path.length ? "text-emerald-700" : "text-amber-800"}`}>
+                      경유지 {routeSequence.stops.length}곳 · 총 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeSequence.path.length.toLocaleString()}개
+                    </p>
+                    {!routeSequence.path.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">티맵 키, 주소 지오코딩, 또는 요청 제한 때문에 실제 도로 선 대신 거리·시간 추정값만 표시된 상태입니다.</p> : null}
                   </div>
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -990,6 +1021,10 @@ function DirectoryStat({ label, tone = "slate", value }: { readonly label: strin
       <p className={`mt-1 text-2xl font-black ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
     </div>
   );
+}
+
+function getRouteStopAddress(store: StoreRow) {
+  return store.address || store.region;
 }
 
 function StoreDetail({

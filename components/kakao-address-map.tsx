@@ -114,15 +114,17 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
           return;
         }
 
-        if (focusedPosition) {
+        if (roadPath.length >= 2) {
+          drawRoadRoutePolyline(kakao, map, roadPath);
+          roadPath.forEach((point) => bounds.extend(point));
+          map.setBounds(bounds);
+        } else if (focusedPosition) {
           map.setCenter(focusedPosition);
           map.setLevel(5);
         } else if (found === 1) {
           map.setCenter(bounds.getSouthWest());
           map.setLevel(5);
         } else {
-          drawRoadRoutePolyline(kakao, map, roadPath);
-          roadPath.forEach((point) => bounds.extend(point));
           map.setBounds(bounds);
         }
 
@@ -308,6 +310,14 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
           : "background:#2563eb;color:#ffffff;";
   const label = escapeHtml(marker.label);
   const name = escapeHtml(marker.name);
+
+  if (marker.tone === "origin") {
+    return `
+      <div title="${name}" style="background:#111827;color:#ffffff;width:36px;height:36px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(15,23,42,.28);font-size:17px;font-weight:900;">
+        ${label || "🚚"}
+      </div>
+    `;
+  }
 
   if (marker.grade) {
     return `
