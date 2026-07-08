@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Banknote, Building2, FileText, PackageCheck, Phone, Route, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 import { sampleCustomers } from "@/lib/sample-data";
 
@@ -15,10 +14,7 @@ const resultLabels: Record<string, string> = {
 };
 
 export default async function CrmTimelinePage() {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
-
-  const [timelineResult, systemResult] = await Promise.all([loadVisitTimeline(customerSession?.companyId), loadSystemDiagnostics()]);
+  const [timelineResult, systemResult] = await Promise.all([loadVisitTimeline(), loadSystemDiagnostics()]);
   const timeline = timelineResult.items;
   const dbSummary = buildDatabaseSummary(systemResult);
   const enrichedCustomers = sampleCustomers.map((customer, index) => ({
@@ -38,7 +34,7 @@ export default async function CrmTimelinePage() {
   return (
     <CustomerAppShell
       active="customers"
-      companyName={customerSession?.companyName || "관리자 미리보기"}
+      companyName="관리자 미리보기"
       rightAction={
         <Link
           className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
@@ -49,7 +45,7 @@ export default async function CrmTimelinePage() {
       }
       subtitle="매장 기본정보, 사업자 상태, 배송 적재위치, 메모와 방문 기록을 거래처별로 관리합니다."
       title="거래처 히스토리"
-      userName={customerSession?.name || adminSession?.email || "관리자"}
+      userName="관리자"
     >
       <section className="mx-auto grid max-w-[1880px] gap-4 xl:grid-cols-[360px_minmax(0,1fr)_420px]">
         <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
