@@ -3,7 +3,6 @@ import { Banknote, Building2, FileText, PackageCheck, Phone, Route, Store } from
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
-import { getVisitTimeline } from "@/lib/store";
 import { sampleCustomers } from "@/lib/sample-data";
 
 const resultLabels: Record<string, string> = {
@@ -18,7 +17,7 @@ export default async function CrmTimelinePage() {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
-  const timeline = await getVisitTimeline(customerSession?.companyId);
+  const timeline = sampleVisitTimeline;
   const enrichedCustomers = sampleCustomers.map((customer, index) => ({
     ...customer,
     businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
@@ -248,3 +247,36 @@ function gradeClassName(grade: string) {
   if (grade === "B") return "bg-blue-100 text-blue-800";
   return "bg-slate-100 text-slate-700";
 }
+
+const sampleVisitTimeline = [
+  {
+    id: "history-001",
+    expectedRevenue: 320,
+    leadName: "성수 온반",
+    memo: "대표가 단가표 재요청. 다음 방문 때 냉동 품목 샘플 제안 예정.",
+    nextAction: "단가표 발송",
+    region: "성수동",
+    result: "quote-requested",
+    visitedAt: "2026-07-08"
+  },
+  {
+    id: "history-002",
+    expectedRevenue: 210,
+    leadName: "성수 국밥집",
+    memo: "오전 입고 선호. 배송 적재위치는 후문 냉장창고 앞.",
+    nextAction: "배송시간 조율",
+    region: "성수동",
+    result: "visited",
+    visitedAt: "2026-07-07"
+  },
+  {
+    id: "history-003",
+    expectedRevenue: 480,
+    leadName: "강남 정식",
+    memo: "한식 주력 품목 반응 좋음. 월 단위 견적 비교 요청.",
+    nextAction: "월 견적서 작성",
+    region: "강남구",
+    result: "interested",
+    visitedAt: "2026-07-06"
+  }
+];
