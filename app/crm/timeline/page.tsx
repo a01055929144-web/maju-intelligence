@@ -1,9 +1,30 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { Banknote, Building2, FileText, PackageCheck, Phone, Route, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 import { sampleCustomers } from "@/lib/sample-data";
+
+type TimelineItem = {
+  id: string;
+  expectedRevenue: number;
+  leadName: string;
+  memo: string;
+  nextAction: string;
+  region: string;
+  result: string;
+  visitedAt: string;
+};
+
+type DbSummary = {
+  description: string;
+  label: string;
+  normalizedCustomers: number | null;
+  tone: "ready" | "fallback";
+  visitResults: number | null;
+};
 
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
@@ -13,20 +34,61 @@ const resultLabels: Record<string, string> = {
   failed: "실패"
 };
 
-export default async function CrmTimelinePage() {
-  const [timelineResult, systemResult] = await Promise.all([loadVisitTimeline(), loadSystemDiagnostics()]);
-  const timeline = timelineResult.items;
-  const dbSummary = buildDatabaseSummary(systemResult);
-  const enrichedCustomers = sampleCustomers.map((customer, index) => ({
-    ...customer,
-    businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
-    businessStatus: index % 7 === 0 ? "확인 필요" : "정상",
-    deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
-    grade: revenueGrade(customer.monthlyRevenue),
-    memoCount: 2 + (index % 4),
-    phone: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
-    loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역"
-  }));
+const defaultDbSummary: DbSummary = {
+  description: "DB 상태를 확인 중입니다. 실패해도 화면은 샘플 데이터로 유지됩니다.",
+  label: "DB 확인 중",
+  normalizedCustomers: null,
+  tone: "fallback",
+  visitResults: null
+};
+
+export default function CrmTimelinePage() {
+  const [timeline, setTimeline] = useState<TimelineItem[]>(sampleVisitTimeline);
+  const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
+  const [dbError, setDbError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/customer/history-status", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!active) return;
+        if (payload?.timeline?.length) setTimeline(payload.timeline);
+        if (payload?.dbSummary) setDbSummary(payload.dbSummary);
+        if (payload?.errorMessage) setDbError(payload.errorMessage);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
+        setDbSummary({
+          description: "DB 상태 API 호출에 실패했습니다. 화면은 샘플 데이터로 유지합니다.",
+          label: "DB 확인 실패",
+          normalizedCustomers: null,
+          tone: "fallback",
+          visitResults: null
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const enrichedCustomers = useMemo(
+    () =>
+      sampleCustomers.map((customer, index) => ({
+        ...customer,
+        businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
+        businessStatus: index % 7 === 0 ? "확인 필요" : "정상",
+        deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
+        grade: revenueGrade(customer.monthlyRevenue),
+        memoCount: 2 + (index % 4),
+        phone: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
+        loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역"
+      })),
+    []
+  );
   const selectedCustomer = enrichedCustomers[0];
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
@@ -68,20 +130,14 @@ export default async function CrmTimelinePage() {
               <MiniMetric label="정제 거래처" value={formatDbCount(dbSummary.normalizedCustomers)} />
               <MiniMetric label="방문 결과" value={formatDbCount(dbSummary.visitResults)} />
             </div>
-            {timelineResult.source === "fallback" ? (
-              <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
-                방문 히스토리 DB 조회 실패: {timelineResult.errorMessage}. 화면은 샘플 히스토리로 유지합니다.
-              </p>
-            ) : null}
+            {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
           </div>
 
           <div className="max-h-[680px] space-y-2 overflow-auto pr-1">
             {enrichedCustomers.map((customer, index) => (
               <a
                 key={`${customer.customerName}-${customer.address}`}
-                className={`block rounded-md border p-4 transition ${
-                  index === 0 ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
+                className={`block rounded-md border p-4 transition ${index === 0 ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
                 href={`#customer-${index}`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -107,7 +163,9 @@ export default async function CrmTimelinePage() {
               <div>
                 <Badge className="mb-3 bg-blue-50 text-blue-700">선택 거래처</Badge>
                 <h2 className="text-2xl font-black text-slate-950">{selectedCustomer.customerName}</h2>
-                <p className="mt-1 text-sm font-bold text-slate-500">{selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}</p>
+                <p className="mt-1 text-sm font-bold text-slate-500">
+                  {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge className={gradeClassName(selectedCustomer.grade)}>매출 {selectedCustomer.grade}등급</Badge>
@@ -210,54 +268,6 @@ export default async function CrmTimelinePage() {
   );
 }
 
-async function loadVisitTimeline(companyId?: string) {
-  try {
-    const items = await getVisitTimeline(companyId);
-    return { errorMessage: "", items: items.length ? items : sampleVisitTimeline, source: "db" as const };
-  } catch (error) {
-    return {
-      errorMessage: error instanceof Error ? error.message : "알 수 없는 오류",
-      items: sampleVisitTimeline,
-      source: "fallback" as const
-    };
-  }
-}
-
-async function loadSystemDiagnostics() {
-  try {
-    return await getSystemDiagnostics();
-  } catch (error) {
-    return {
-      databaseChecks: [],
-      errorMessage: error instanceof Error ? error.message : "시스템 진단 실패",
-      mode: "local-fallback" as const
-    };
-  }
-}
-
-function buildDatabaseSummary(system: Awaited<ReturnType<typeof loadSystemDiagnostics>>) {
-  const normalizedCustomers = system.databaseChecks?.find((check) => check.name === "정제 거래처")?.count ?? null;
-  const visitResults = system.databaseChecks?.find((check) => check.name === "방문 결과")?.count ?? null;
-  const hasFailedCheck = system.databaseChecks?.some((check) => check.status !== "ready") ?? false;
-  const ready = system.mode === "production-db" && !hasFailedCheck;
-
-  return {
-    description: ready
-      ? "Supabase 실 DB가 연결되어 있고 주요 테이블 조회가 가능합니다."
-      : system.mode === "production-db"
-        ? "Supabase 환경변수는 있으나 일부 테이블 조회를 확인해야 합니다."
-        : "Supabase 환경변수가 없거나 미완성이라 샘플 fallback과 함께 표시합니다.",
-    label: ready ? "실 DB 연결" : system.mode === "production-db" ? "DB 점검 필요" : "Local fallback",
-    normalizedCustomers,
-    tone: ready ? "ready" : "fallback",
-    visitResults
-  };
-}
-
-function formatDbCount(value: number | null) {
-  return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
-}
-
 function MiniMetric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
   return (
     <div className={`rounded-md border border-slate-200 bg-slate-50 p-3 ${wide ? "col-span-2" : ""}`}>
@@ -310,7 +320,11 @@ function gradeClassName(grade: string) {
   return "bg-slate-100 text-slate-700";
 }
 
-const sampleVisitTimeline = [
+function formatDbCount(value: number | null) {
+  return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
+}
+
+const sampleVisitTimeline: TimelineItem[] = [
   {
     id: "history-001",
     expectedRevenue: 320,
