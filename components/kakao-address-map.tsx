@@ -330,8 +330,9 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
 
   if (marker.tone === "origin") {
     return `
-      <div title="${name}" style="background:#111827;color:#ffffff;width:36px;height:36px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(15,23,42,.28);font-size:17px;font-weight:900;">
-        ${label || "🚚"}
+      <div title="${name}" style="background:#0f172a;color:#ffffff;border:1px solid rgba(255,255,255,.92);border-radius:999px;display:flex;align-items:center;gap:6px;padding:6px 10px;box-shadow:0 10px 22px rgba(15,23,42,.30);font-size:12px;font-weight:900;letter-spacing:0;">
+        <span style="width:7px;height:7px;border-radius:999px;background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.18);display:block;"></span>
+        ${label || "출발"}
       </div>
     `;
   }
