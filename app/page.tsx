@@ -11,6 +11,7 @@ import {
   Check,
   ClipboardList,
   Database,
+  Download,
   FileSpreadsheet,
   HeartPulse,
   MapPin,
@@ -64,6 +65,26 @@ export default function Home() {
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
   const currentTemplate = uploadTemplates[uploadType];
+
+  function downloadTemplate(type: UploadTemplateType) {
+    const templateRows = buildTemplateWorkbookRows(type);
+    downloadWorkbook(`maju_${uploadTemplates[type].label}_양식_${dateStamp()}.xlsx`, [
+      { name: "입력 양식", rows: templateRows.dataRows },
+      { name: "컬럼 가이드", rows: templateRows.guideRows }
+    ]);
+  }
+
+  function downloadCustomerExport() {
+    downloadWorkbook(`maju_거래처_마스터_내보내기_${dateStamp()}.xlsx`, [
+      { name: "거래처 마스터", rows: buildCustomerExportRows(customers) }
+    ]);
+  }
+
+  function downloadSalesExport() {
+    downloadWorkbook(`maju_매출_거래내역_내보내기_${dateStamp()}.xlsx`, [
+      { name: "매출 거래내역", rows: buildSalesExportRows(customers, uploadType === "sales-analysis" ? rawRows : []) }
+    ]);
+  }
 
   function startUploadFlow(nextType: UploadTemplateType) {
     setUploadType(nextType);
@@ -203,6 +224,9 @@ export default function Home() {
           onManualSave={saveManualEntry}
           onAnalyze={analyzeUploadedRows}
           onSample={startSampleReport}
+          onDownloadTemplate={downloadTemplate}
+          onDownloadCustomerExport={downloadCustomerExport}
+          onDownloadSalesExport={downloadSalesExport}
         />
       )}
       {screen === "report" && <Report analysis={analysis} onReset={() => setScreen("onboarding")} />}
@@ -505,7 +529,10 @@ function Onboarding({
   onManualChange,
   onManualSave,
   onAnalyze,
-  onSample
+  onSample,
+  onDownloadTemplate,
+  onDownloadCustomerExport,
+  onDownloadSalesExport
 }: {
   headers: string[];
   fieldMap: FieldMap;
@@ -524,6 +551,9 @@ function Onboarding({
   onManualSave: () => void;
   onAnalyze: () => void;
   onSample: () => void;
+  onDownloadTemplate: (type: UploadTemplateType) => void;
+  onDownloadCustomerExport: () => void;
+  onDownloadSalesExport: () => void;
 }) {
   const complete = template.fields.filter((field) => field.required).every((field) => fieldMap[field.key]);
   const manualComplete = template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim());
@@ -569,6 +599,33 @@ function Onboarding({
           <div className="rounded-md border border-border bg-white p-4 text-sm leading-6 text-muted-foreground">
             <p className="font-bold text-foreground">{template.label}에서 하는 일</p>
             <p className="mt-1">{uploadHint}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-black">양식 다운로드 · 데이터 내보내기</p>
+                <p className="mt-1 text-sm text-muted-foreground">기초 등록과 매출 거래내역은 각각 다른 엑셀 양식으로 관리합니다.</p>
+              </div>
+              <Badge className="border border-border bg-white text-muted-foreground">Excel</Badge>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("customer-master")}>
+                <Download size={16} />
+                거래처 마스터 양식
+              </Button>
+              <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("sales-analysis")}>
+                <Download size={16} />
+                매출 거래내역 양식
+              </Button>
+              <Button variant="outline" className="justify-start gap-2" onClick={onDownloadCustomerExport}>
+                <FileSpreadsheet size={16} />
+                현재 거래처 내보내기
+              </Button>
+              <Button variant="outline" className="justify-start gap-2" onClick={onDownloadSalesExport}>
+                <FileSpreadsheet size={16} />
+                매출 거래내역 내보내기
+              </Button>
+            </div>
           </div>
           <div className="rounded-lg border border-border bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -981,6 +1038,103 @@ function createIdentityFieldMap(fields: readonly UploadTemplateField[]): FieldMa
     map[field.key] = field.key;
     return map;
   }, {});
+}
+
+function downloadWorkbook(filename: string, sheets: { name: string; rows: RawRow[] }[]) {
+  const workbook = XLSX.utils.book_new();
+
+  sheets.forEach((sheet) => {
+    const worksheet = XLSX.utils.json_to_sheet(sheet.rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
+  });
+
+  XLSX.writeFile(workbook, filename);
+}
+
+function buildTemplateWorkbookRows(type: UploadTemplateType) {
+  const fields = uploadTemplates[type].fields;
+  const dataRow = fields.reduce<RawRow>((row, field) => {
+    row[field.label] = templateSampleValue(field.key);
+    return row;
+  }, {});
+  const guideRows = fields.map((field) => ({
+    컬럼명: field.label,
+    필수여부: field.required ? "필수" : "선택",
+    시스템키: field.key,
+    인식가능헤더: field.aliases.join(", "),
+    설명: field.description || ""
+  }));
+
+  return { dataRows: [dataRow], guideRows };
+}
+
+function buildCustomerExportRows(customers: CustomerRow[]): RawRow[] {
+  return customers.map((customer, index) => ({
+    회사명: customer.companyName,
+    "거래처/매장 상호명": customer.customerName,
+    사업자등록번호: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
+    대표자명: ["김민준", "이서연", "박지훈", "최하린"][index % 4],
+    개업일: `201${index % 10}-0${(index % 9) + 1}-0${(index % 8) + 1}`,
+    배송주소: customer.address,
+    지역: customer.region,
+    업종: customer.industry,
+    매출등급: revenueGrade(customer.monthlyRevenue),
+    월매출: customer.monthlyRevenue,
+    최근주문일수: customer.lastOrderDays,
+    월방문횟수: customer.visitCount,
+    "기존 계산거리(km)": customer.deliveryKm,
+    연락처: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
+    이메일: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`
+  }));
+}
+
+function buildSalesExportRows(customers: CustomerRow[], uploadedRows: RawRow[]): RawRow[] {
+  if (uploadedRows.length) return uploadedRows;
+
+  return customers.flatMap((customer, customerIndex) =>
+    Array.from({ length: 3 }, (_, index) => ({
+      "거래처/매장 상호명": customer.customerName,
+      사업자등록번호: `123-${String(10 + customerIndex).padStart(2, "0")}-${String(10000 + customerIndex).padStart(5, "0")}`,
+      매출일자: `2026-07-${String(index + 1).padStart(2, "0")}`,
+      품목명: ["육류", "소스", "냉동식품"][index % 3],
+      수량: 8 + index + customerIndex,
+      매출금액: Math.round((customer.monthlyRevenue * 10000) / 3),
+      지역: customer.region,
+      주소: customer.address
+    }))
+  );
+}
+
+function templateSampleValue(key: string) {
+  const samples: RawRow = {
+    customerName: "성동 마루한식 01",
+    businessRegistrationNumber: "123-45-67890",
+    representativeName: "김민준",
+    openingDate: "2016-02-02",
+    address: "서울 성동구 왕십리로 63",
+    deliveryKm: 7.4,
+    phone: "010-3100-1000",
+    email: "sample@example.com",
+    birthDate: "1974-01-01",
+    region: "성동구",
+    industry: "한식",
+    salesDate: "2026-07-01",
+    salesAmount: 2340000,
+    productName: "육류",
+    quantity: 12
+  };
+
+  return samples[key] ?? "";
+}
+
+function revenueGrade(monthlyRevenue: number) {
+  if (monthlyRevenue >= 350) return "A등급";
+  if (monthlyRevenue >= 180) return "B등급";
+  return "C등급";
+}
+
+function dateStamp() {
+  return new Date().toISOString().slice(0, 10).replace(/-/g, "");
 }
 
 function fieldLabelForHeader(header: string, fields: readonly UploadTemplateField[]) {
