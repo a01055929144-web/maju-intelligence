@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Banknote, Building2, FileText, PackageCheck, Phone, Route, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -18,8 +17,6 @@ const resultLabels: Record<string, string> = {
 export default async function CrmTimelinePage() {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
-
-  if (!customerSession && !adminSession) redirect("/dashboard/login");
 
   const timeline = await getVisitTimeline(customerSession?.companyId);
   const enrichedCustomers = sampleCustomers.map((customer, index) => ({
