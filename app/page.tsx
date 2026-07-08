@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
@@ -50,7 +51,7 @@ const initialPipelineSteps: PipelineStep[] = [
 ];
 
 export default function Home() {
-  const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("briefing");
+  const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("onboarding");
   const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
   const [manualDraft, setManualDraft] = useState<RawRow>({});
@@ -198,39 +199,84 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen">
-      <TopNav active={screen} onMove={setScreen} />
-      {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onSample={startSampleReport} />}
-      {screen === "onboarding" && (
-        <Onboarding
-          headers={headers}
-          fieldMap={fieldMap}
-          uploadType={uploadType}
-          template={currentTemplate}
-          manualDraft={manualDraft}
-          rawRows={rawRows}
-          isAnalyzing={isAnalyzing}
-          pipelineMeta={pipelineMeta}
-          pipelineSteps={pipelineSteps}
-          usingSample={usingSample}
-          onFile={handleFile}
-          onMap={setFieldMap}
-          onUploadType={(nextType) => {
-            setUploadType(nextType);
-            setFieldMap(autoMapHeaders(headers, uploadTemplates[nextType].fields));
-            setManualDraft({});
-          }}
-          onManualChange={setManualDraft}
-          onManualSave={saveManualEntry}
-          onAnalyze={analyzeUploadedRows}
-          onSample={startSampleReport}
-          onDownloadTemplate={downloadTemplate}
-          onDownloadCustomerExport={downloadCustomerExport}
-          onDownloadSalesExport={downloadSalesExport}
-        />
-      )}
-      {screen === "report" && <Report analysis={analysis} onReset={() => setScreen("onboarding")} />}
-    </main>
+    <CustomerAppShell
+      active="data"
+      companyName="마주식자재"
+      rightAction={
+        <Link
+          className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
+          href="/routes/today"
+        >
+          영업·배송 코스
+        </Link>
+      }
+      subtitle="거래처 마스터와 매출 거래내역을 등록하고, 업로드 양식과 현재 데이터를 내려받습니다."
+      title="데이터 등록"
+      userName="정두영"
+    >
+      <div className="mx-auto max-w-[1880px] space-y-4">
+        <WorkspaceModeTabs active={screen} onMove={setScreen} />
+        {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onSample={startSampleReport} />}
+        {screen === "onboarding" && (
+          <Onboarding
+            headers={headers}
+            fieldMap={fieldMap}
+            uploadType={uploadType}
+            template={currentTemplate}
+            manualDraft={manualDraft}
+            rawRows={rawRows}
+            isAnalyzing={isAnalyzing}
+            pipelineMeta={pipelineMeta}
+            pipelineSteps={pipelineSteps}
+            usingSample={usingSample}
+            onFile={handleFile}
+            onMap={setFieldMap}
+            onUploadType={(nextType) => {
+              setUploadType(nextType);
+              setFieldMap(autoMapHeaders(headers, uploadTemplates[nextType].fields));
+              setManualDraft({});
+            }}
+            onManualChange={setManualDraft}
+            onManualSave={saveManualEntry}
+            onAnalyze={analyzeUploadedRows}
+            onSample={startSampleReport}
+            onDownloadTemplate={downloadTemplate}
+            onDownloadCustomerExport={downloadCustomerExport}
+            onDownloadSalesExport={downloadSalesExport}
+          />
+        )}
+        {screen === "report" && <Report analysis={analysis} onReset={() => setScreen("onboarding")} />}
+      </div>
+    </CustomerAppShell>
+  );
+}
+
+function WorkspaceModeTabs({ active, onMove }: { active: string; onMove: (screen: "briefing" | "onboarding" | "report") => void }) {
+  const tabs = [
+    ["onboarding", "데이터 등록"],
+    ["briefing", "등록 가이드"],
+    ["report", "AI 리포트"]
+  ] as const;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3">
+      <div>
+        <p className="text-sm font-black text-slate-950">매장 기본정보 · 매출 거래내역</p>
+        <p className="mt-1 text-xs font-bold text-slate-500">거래처 마스터는 1회 등록 후 수정하고, 매출 거래내역은 주기적으로 업데이트합니다.</p>
+      </div>
+      <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+        {tabs.map(([key, label]) => (
+          <button
+            key={key}
+            className={`h-9 rounded-md px-3 text-sm font-black transition ${active === key ? "bg-white text-blue-700 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-950"}`}
+            onClick={() => onMove(key)}
+            type="button"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
