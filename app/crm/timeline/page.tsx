@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Building2, FileText, PackageCheck, Pencil, Phone, Route, Save, Store } from "lucide-react";
+import { Banknote, Building2, FileText, LinkIcon, PackageCheck, Pencil, Phone, Plus, Route, Save, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { sampleCustomers } from "@/lib/sample-data";
@@ -158,9 +158,13 @@ export default function CrmTimelinePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [newMemo, setNewMemo] = useState("");
   const [newNextAction, setNewNextAction] = useState("");
+  const [newAttachmentTitle, setNewAttachmentTitle] = useState("배송 적재위치 사진/영상");
+  const [newAttachmentType, setNewAttachmentType] = useState("loading_position");
+  const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isNoteSaving, setIsNoteSaving] = useState(false);
+  const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
@@ -168,6 +172,9 @@ export default function CrmTimelinePage() {
     setSaveMessage("");
     setNewMemo("");
     setNewNextAction("");
+    setNewAttachmentTitle("배송 적재위치 사진/영상");
+    setNewAttachmentType("loading_position");
+    setNewAttachmentUrl("");
   }, [selectedCustomer]);
 
   useEffect(() => {
@@ -269,6 +276,33 @@ export default function CrmTimelinePage() {
       setNewNextAction("");
     } finally {
       setIsNoteSaving(false);
+    }
+  }
+
+  async function saveAttachment() {
+    if (!selectedCustomer?.id || !newAttachmentTitle.trim()) return;
+    setIsAttachmentSaving(true);
+
+    try {
+      const response = await fetch("/api/customer-operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "attachment",
+          attachmentType: newAttachmentType,
+          customerId: selectedCustomer.id,
+          fileUrl: newAttachmentUrl,
+          mimeType: guessMimeType(newAttachmentUrl),
+          title: newAttachmentTitle
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
+      if (payload?.attachment) setCustomerAttachments((current) => [payload.attachment, ...current]);
+      setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
+      setNewAttachmentUrl("");
+    } finally {
+      setIsAttachmentSaving(false);
     }
   }
 
@@ -435,6 +469,44 @@ export default function CrmTimelinePage() {
               <div className="rounded-md border border-slate-200 bg-white p-5">
                 <h3 className="text-base font-black text-slate-950">배송 적재위치</h3>
                 <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
+                <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="grid gap-2">
+                    <select
+                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      onChange={(event) => {
+                        setNewAttachmentType(event.target.value);
+                        setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
+                      }}
+                      value={newAttachmentType}
+                    >
+                      <option value="loading_position">배송 적재위치 사진/영상</option>
+                      <option value="business_license">사업자등록증</option>
+                      <option value="bank_account">통장사본</option>
+                      <option value="etc">기타 첨부자료</option>
+                    </select>
+                    <input
+                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      onChange={(event) => setNewAttachmentTitle(event.target.value)}
+                      placeholder="자료명"
+                      value={newAttachmentTitle}
+                    />
+                    <input
+                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      onChange={(event) => setNewAttachmentUrl(event.target.value)}
+                      placeholder="파일 링크 또는 Supabase Storage URL"
+                      value={newAttachmentUrl}
+                    />
+                    <button
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                      disabled={!newAttachmentTitle.trim() || isAttachmentSaving}
+                      onClick={saveAttachment}
+                      type="button"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {isAttachmentSaving ? "등록 중" : "첨부자료 등록"}
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-4 grid gap-2">
                   {customerAttachments.length ? (
                     customerAttachments.map((attachment) => (
@@ -442,6 +514,7 @@ export default function CrmTimelinePage() {
                         key={attachment.id}
                         icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
                         label={attachmentLabel(attachment.attachmentType, attachment.title)}
+                        url={attachment.fileUrl}
                         value={attachment.fileUrl ? `등록 완료 · ${attachment.createdAt}` : `파일 연결 대기 · ${attachment.createdAt}`}
                       />
                     ))
@@ -600,14 +673,25 @@ function EditableField({
   );
 }
 
-function AttachmentRow({ icon: Icon, label, value }: { icon: typeof PackageCheck; label: string; value: string }) {
+function AttachmentRow({ icon: Icon, label, url = "", value }: { icon: typeof PackageCheck; label: string; url?: string; value: string }) {
   return (
     <div className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
       <Icon className="h-4 w-4 text-slate-400" />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-black text-slate-800">{label}</p>
         <p className="text-xs font-bold text-slate-500">{value}</p>
       </div>
+      {url ? (
+        <a
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+          href={url}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <LinkIcon className="h-3.5 w-3.5" />
+          열기
+        </a>
+      ) : null}
     </div>
   );
 }
@@ -624,6 +708,24 @@ function noteTypeLabel(type: string) {
   if (type === "sales") return "상담";
   if (type === "settlement") return "정산";
   return "메모";
+}
+
+function attachmentTitleFromType(type: string) {
+  if (type === "business_license") return "사업자등록증";
+  if (type === "bank_account") return "통장사본";
+  if (type === "loading_position") return "배송 적재위치 사진/영상";
+  return "기타 첨부자료";
+}
+
+function guessMimeType(url: string) {
+  const normalized = url.toLowerCase().split("?")[0];
+  if (normalized.endsWith(".pdf")) return "application/pdf";
+  if (normalized.endsWith(".mp4")) return "video/mp4";
+  if (normalized.endsWith(".mov")) return "video/quicktime";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
+  return "";
 }
 
 function revenueGrade(monthlyRevenue: number) {
