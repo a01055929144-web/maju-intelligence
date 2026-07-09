@@ -107,6 +107,9 @@ create table if not exists public.normalized_customers (
   visit_count integer not null default 0,
   delivery_km numeric not null default 0,
   delivery_minutes integer,
+  delivery_manager text,
+  delivery_zone text,
+  loading_position text,
   route_calculated_at timestamptz,
   business_status text,
   business_status_checked_at timestamptz,
@@ -114,6 +117,31 @@ create table if not exists public.normalized_customers (
   bank_account_file_url text,
   normalized_key text not null,
   duplicate_of uuid references public.normalized_customers(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.customer_notes (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  customer_id uuid not null references public.normalized_customers(id) on delete cascade,
+  note_type text not null default 'general',
+  memo text not null,
+  next_action text,
+  created_by_name text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.customer_attachments (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  customer_id uuid not null references public.normalized_customers(id) on delete cascade,
+  attachment_type text not null,
+  title text not null,
+  file_url text,
+  storage_path text,
+  mime_type text,
+  size_bytes bigint,
+  created_by_name text,
   created_at timestamptz not null default now()
 );
 
@@ -218,6 +246,8 @@ create unique index if not exists idx_excel_mapping_presets_company_type_name on
 create index if not exists idx_raw_customer_rows_import on public.raw_customer_rows(import_id);
 create index if not exists idx_normalized_customers_company_key on public.normalized_customers(company_id, normalized_key);
 create unique index if not exists idx_normalized_customers_company_key_unique on public.normalized_customers(company_id, normalized_key);
+create index if not exists idx_customer_notes_customer_created on public.customer_notes(customer_id, created_at desc);
+create index if not exists idx_customer_attachments_customer_created on public.customer_attachments(customer_id, created_at desc);
 create unique index if not exists idx_route_distance_cache_company_destination on public.route_distance_cache(company_id, destination_address);
 create index if not exists idx_route_distance_cache_company_calculated on public.route_distance_cache(company_id, calculated_at desc);
 create index if not exists idx_sales_transactions_company_date on public.sales_transactions(company_id, sales_date desc);
@@ -237,6 +267,8 @@ alter table public.column_mappings enable row level security;
 alter table public.excel_mapping_presets enable row level security;
 alter table public.raw_customer_rows enable row level security;
 alter table public.normalized_customers enable row level security;
+alter table public.customer_notes enable row level security;
+alter table public.customer_attachments enable row level security;
 alter table public.route_distance_cache enable row level security;
 alter table public.sales_transactions enable row level security;
 alter table public.ai_reports enable row level security;

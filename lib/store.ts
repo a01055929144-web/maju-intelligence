@@ -35,6 +35,7 @@ export type CompanySettingsInput = {
 export type CustomerMasterItem = {
   id: string;
   address: string;
+  bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
   businessNumber: string;
@@ -44,6 +45,7 @@ export type CustomerMasterItem = {
   deliveryKm: number;
   deliveryManager: string;
   deliveryMinutes?: number;
+  deliveryZone?: string;
   email: string;
   grade: "A" | "B" | "C";
   industry: string;
@@ -59,6 +61,7 @@ export type CustomerMasterItem = {
 };
 export type CustomerMasterInput = {
   address?: string;
+  bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
   businessNumber?: string;
@@ -67,6 +70,7 @@ export type CustomerMasterInput = {
   deliveryKm?: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
+  deliveryZone?: string;
   email?: string;
   industry?: string;
   lastOrderDays?: number;
@@ -77,6 +81,22 @@ export type CustomerMasterInput = {
   region?: string;
   representativeName?: string;
   visitCount?: number;
+};
+export type CustomerNoteItem = {
+  id: string;
+  createdAt: string;
+  createdByName: string;
+  memo: string;
+  nextAction: string;
+  noteType: string;
+};
+export type CustomerAttachmentItem = {
+  id: string;
+  attachmentType: "business_license" | "bank_account" | "loading_position" | "etc" | string;
+  createdAt: string;
+  fileUrl: string;
+  mimeType: string;
+  title: string;
 };
 export type LeadStatus = "today" | "reviewing" | "visit-planned" | "high-probability" | "excluded" | "this-week";
 export type LeadItem = {
@@ -318,6 +338,7 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
     Array<{
       id: string;
       address: string | null;
+      bank_account_file_url: string | null;
       birth_date: string | null;
       business_license_file_url: string | null;
       business_registration_number: string | null;
@@ -325,7 +346,9 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
       business_status_checked_at: string | null;
       customer_name: string;
       delivery_km: number | string | null;
+      delivery_manager: string | null;
       delivery_minutes: number | null;
+      delivery_zone: string | null;
       email: string | null;
       industry: string | null;
       last_order_days: number | null;
@@ -335,9 +358,10 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
       region: string | null;
       representative_name: string | null;
       visit_count: number | null;
+      loading_position: string | null;
     }>
   >(
-    `normalized_customers?select=id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,business_status,business_status_checked_at,business_license_file_url&company_id=eq.${encodeURIComponent(
+    `normalized_customers?select=id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url&company_id=eq.${encodeURIComponent(
       id
     )}&order=created_at.desc&limit=1000`
   );
@@ -366,6 +390,7 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
         visitCount: input.visitCount || 0
       })}`,
       address: input.address || "",
+      bank_account_file_url: input.bankAccountFileUrl || null,
       birth_date: input.birthDate || null,
       business_license_file_url: input.businessLicenseFileUrl || null,
       business_registration_number: normalizeBusinessNumber(input.businessNumber || ""),
@@ -373,7 +398,9 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       business_status_checked_at: null,
       customer_name: customerName,
       delivery_km: input.deliveryKm || 0,
+      delivery_manager: input.deliveryManager || null,
       delivery_minutes: input.deliveryMinutes || null,
+      delivery_zone: input.deliveryZone || null,
       email: input.email || null,
       industry: input.industry || "미분류",
       last_order_days: input.lastOrderDays || 0,
@@ -382,7 +409,8 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       phone: input.phone || null,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
-      visit_count: input.visitCount || 0
+      visit_count: input.visitCount || 0,
+      loading_position: input.loadingPosition || null
     },
     0
   );
@@ -408,6 +436,7 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     body: JSON.stringify([
       {
         address: input.address || null,
+        bank_account_file_url: input.bankAccountFileUrl || null,
         birth_date: toPostgresDate(input.birthDate),
         business_license_file_url: input.businessLicenseFileUrl || null,
         business_registration_number: businessNumber || null,
@@ -416,7 +445,9 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
         company_id: id,
         customer_name: customerName,
         delivery_km: input.deliveryKm || 0,
+        delivery_manager: input.deliveryManager || null,
         delivery_minutes: input.deliveryMinutes || null,
+        delivery_zone: input.deliveryZone || null,
         email: input.email || null,
         import_id: importId,
         industry: input.industry || "미분류",
@@ -427,13 +458,171 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
         phone: input.phone || null,
         region: input.region || "미분류",
         representative_name: input.representativeName || null,
-        visit_count: input.visitCount || 0
+        visit_count: input.visitCount || 0,
+        loading_position: input.loadingPosition || null
       }
     ])
   });
 
   return {
     customer: toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0),
+    persisted: true
+  };
+}
+
+export async function getCustomerOperations(customerId: string, companyId?: string) {
+  const id = companyId || getDefaultCompanyId();
+
+  if (!isProductionStoreConfigured() || customerId.startsWith("sample-") || customerId.startsWith("local-")) {
+    return {
+      attachments: getSampleCustomerAttachments(customerId),
+      notes: getSampleCustomerNotes(),
+      source: "sample" as const
+    };
+  }
+
+  const [notes, attachments] = await Promise.all([
+    supabaseRequest<
+      Array<{
+        id: string;
+        created_at: string;
+        created_by_name: string | null;
+        memo: string;
+        next_action: string | null;
+        note_type: string;
+      }>
+    >(
+      `customer_notes?select=id,note_type,memo,next_action,created_by_name,created_at&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(
+        customerId
+      )}&order=created_at.desc&limit=50`
+    ),
+    supabaseRequest<
+      Array<{
+        id: string;
+        attachment_type: string;
+        created_at: string;
+        file_url: string | null;
+        mime_type: string | null;
+        title: string;
+      }>
+    >(
+      `customer_attachments?select=id,attachment_type,title,file_url,mime_type,created_at&company_id=eq.${encodeURIComponent(
+        id
+      )}&customer_id=eq.${encodeURIComponent(customerId)}&order=created_at.desc&limit=50`
+    )
+  ]);
+
+  return {
+    attachments: attachments.map(toCustomerAttachmentItem),
+    notes: notes.map(toCustomerNoteItem),
+    source: "supabase" as const
+  };
+}
+
+export async function addCustomerNote(
+  input: { customerId: string; memo: string; nextAction?: string; noteType?: string; createdByName?: string },
+  companyId?: string
+) {
+  const memo = input.memo.trim();
+  if (!memo) throw new Error("메모 내용은 필수입니다.");
+
+  if (!isProductionStoreConfigured() || input.customerId.startsWith("sample-") || input.customerId.startsWith("local-")) {
+    return {
+      note: {
+        id: `local-note-${Date.now()}`,
+        createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        createdByName: input.createdByName || "현장 사용자",
+        memo,
+        nextAction: input.nextAction || "",
+        noteType: input.noteType || "general"
+      },
+      persisted: false
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      created_at: string;
+      created_by_name: string | null;
+      memo: string;
+      next_action: string | null;
+      note_type: string;
+    }>
+  >("customer_notes", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        company_id: companyId || getDefaultCompanyId(),
+        customer_id: input.customerId,
+        created_by_name: input.createdByName || "현장 사용자",
+        memo,
+        next_action: input.nextAction || null,
+        note_type: input.noteType || "general"
+      }
+    ])
+  });
+
+  return {
+    note: toCustomerNoteItem(rows[0]),
+    persisted: true
+  };
+}
+
+export async function addCustomerAttachment(
+  input: {
+    attachmentType: string;
+    customerId: string;
+    fileUrl?: string;
+    mimeType?: string;
+    title: string;
+    createdByName?: string;
+  },
+  companyId?: string
+) {
+  const title = input.title.trim();
+  if (!title) throw new Error("첨부자료명은 필수입니다.");
+
+  if (!isProductionStoreConfigured() || input.customerId.startsWith("sample-") || input.customerId.startsWith("local-")) {
+    return {
+      attachment: {
+        id: `local-attachment-${Date.now()}`,
+        attachmentType: input.attachmentType || "etc",
+        createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        fileUrl: input.fileUrl || "",
+        mimeType: input.mimeType || "",
+        title
+      },
+      persisted: false
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      attachment_type: string;
+      created_at: string;
+      file_url: string | null;
+      mime_type: string | null;
+      title: string;
+    }>
+  >("customer_attachments", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        attachment_type: input.attachmentType || "etc",
+        company_id: companyId || getDefaultCompanyId(),
+        created_by_name: input.createdByName || "현장 사용자",
+        customer_id: input.customerId,
+        file_url: input.fileUrl || null,
+        mime_type: input.mimeType || null,
+        title
+      }
+    ])
+  });
+
+  return {
+    attachment: toCustomerAttachmentItem(rows[0]),
     persisted: true
   };
 }
@@ -1552,6 +1741,7 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
   return {
     id: String(row.id || ""),
     address: asNullableString(row.address),
+    bank_account_file_url: asNullableString(row.bank_account_file_url),
     birth_date: asNullableString(row.birth_date),
     business_license_file_url: asNullableString(row.business_license_file_url),
     business_registration_number: asNullableString(row.business_registration_number),
@@ -1559,7 +1749,9 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     business_status_checked_at: asNullableString(row.business_status_checked_at),
     customer_name: String(row.customer_name || ""),
     delivery_km: row.delivery_km as number | string | null,
+    delivery_manager: asNullableString(row.delivery_manager),
     delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
+    delivery_zone: asNullableString(row.delivery_zone),
     email: asNullableString(row.email),
     industry: asNullableString(row.industry),
     last_order_days: typeof row.last_order_days === "number" ? row.last_order_days : 0,
@@ -1568,7 +1760,8 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     phone: asNullableString(row.phone),
     region: asNullableString(row.region),
     representative_name: asNullableString(row.representative_name),
-    visit_count: typeof row.visit_count === "number" ? row.visit_count : 0
+    visit_count: typeof row.visit_count === "number" ? row.visit_count : 0,
+    loading_position: asNullableString(row.loading_position)
   };
 }
 
@@ -1576,6 +1769,7 @@ function toCustomerMasterItem(
   row: {
     id: string;
     address: string | null;
+    bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
     business_registration_number: string | null;
@@ -1583,7 +1777,9 @@ function toCustomerMasterItem(
     business_status_checked_at: string | null;
     customer_name: string;
     delivery_km: number | string | null;
+    delivery_manager: string | null;
     delivery_minutes: number | null;
+    delivery_zone: string | null;
     email: string | null;
     industry: string | null;
     last_order_days: number | null;
@@ -1593,6 +1789,7 @@ function toCustomerMasterItem(
     region: string | null;
     representative_name: string | null;
     visit_count: number | null;
+    loading_position: string | null;
   },
   index: number
 ): CustomerMasterItem {
@@ -1601,6 +1798,7 @@ function toCustomerMasterItem(
   return {
     id: row.id,
     address: row.address || "",
+    bankAccountFileUrl: row.bank_account_file_url || undefined,
     birthDate: row.birth_date || undefined,
     businessLicenseFileUrl: row.business_license_file_url || undefined,
     businessNumber: row.business_registration_number || `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
@@ -1608,13 +1806,14 @@ function toCustomerMasterItem(
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
     deliveryKm: Number(row.delivery_km || 0),
-    deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
+    deliveryManager: row.delivery_manager || ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
     deliveryMinutes: row.delivery_minutes || undefined,
+    deliveryZone: row.delivery_zone || undefined,
     email: row.email || `${row.customer_name.replace(/\s/g, "").toLowerCase()}@example.com`,
     grade: getRevenueGrade(monthlyRevenue),
     industry: row.industry || "미분류",
     lastOrderDays: Number(row.last_order_days || 0),
-    loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역",
+    loadingPosition: row.loading_position || (index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역"),
     memoCount: 2 + (index % 4),
     monthlyRevenue,
     openingDate: row.opening_date || undefined,
@@ -1631,6 +1830,7 @@ function getSampleCustomerMaster(): CustomerMasterItem[] {
       {
         id: `sample-${index + 1}`,
         address: customer.address,
+        bank_account_file_url: null,
         birth_date: null,
         business_license_file_url: null,
         business_registration_number: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
@@ -1638,7 +1838,9 @@ function getSampleCustomerMaster(): CustomerMasterItem[] {
         business_status_checked_at: null,
         customer_name: customer.customerName,
         delivery_km: customer.deliveryKm,
+        delivery_manager: null,
         delivery_minutes: null,
+        delivery_zone: null,
         email: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
         industry: customer.industry,
         last_order_days: customer.lastOrderDays,
@@ -1647,11 +1849,98 @@ function getSampleCustomerMaster(): CustomerMasterItem[] {
         phone: null,
         region: customer.region,
         representative_name: null,
-        visit_count: customer.visitCount
+        visit_count: customer.visitCount,
+        loading_position: null
       },
       index
     )
   );
+}
+
+function toCustomerNoteItem(row: {
+  id: string;
+  created_at: string;
+  created_by_name: string | null;
+  memo: string;
+  next_action: string | null;
+  note_type: string;
+}): CustomerNoteItem {
+  return {
+    id: row.id,
+    createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+    createdByName: row.created_by_name || "현장 사용자",
+    memo: row.memo,
+    nextAction: row.next_action || "",
+    noteType: row.note_type
+  };
+}
+
+function toCustomerAttachmentItem(row: {
+  id: string;
+  attachment_type: string;
+  created_at: string;
+  file_url: string | null;
+  mime_type: string | null;
+  title: string;
+}): CustomerAttachmentItem {
+  return {
+    id: row.id,
+    attachmentType: row.attachment_type,
+    createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+    fileUrl: row.file_url || "",
+    mimeType: row.mime_type || "",
+    title: row.title
+  };
+}
+
+function getSampleCustomerNotes(): CustomerNoteItem[] {
+  return [
+    {
+      id: "sample-note-001",
+      createdAt: "2026. 7. 8. 오전 10:20",
+      createdByName: "김배송 매니저",
+      memo: "오전 입고 선호. 배송 적재위치는 후문 냉장창고 앞이며 도착 전 연락 필요.",
+      nextAction: "다음 배송 전 연락",
+      noteType: "delivery"
+    },
+    {
+      id: "sample-note-002",
+      createdAt: "2026. 7. 6. 오후 2:12",
+      createdByName: "정두영",
+      memo: "단가표 재요청. 한식 주력 품목 위주로 견적서 발송 예정.",
+      nextAction: "견적서 발송",
+      noteType: "sales"
+    }
+  ];
+}
+
+function getSampleCustomerAttachments(customerId: string): CustomerAttachmentItem[] {
+  return [
+    {
+      id: `${customerId}-attachment-license`,
+      attachmentType: "business_license",
+      createdAt: "2026. 7. 1. 오전 9:10",
+      fileUrl: "",
+      mimeType: "image/png",
+      title: "사업자등록증"
+    },
+    {
+      id: `${customerId}-attachment-bank`,
+      attachmentType: "bank_account",
+      createdAt: "2026. 7. 1. 오전 9:12",
+      fileUrl: "",
+      mimeType: "image/png",
+      title: "통장사본"
+    },
+    {
+      id: `${customerId}-attachment-loading`,
+      attachmentType: "loading_position",
+      createdAt: "2026. 7. 2. 오후 4:30",
+      fileUrl: "",
+      mimeType: "video/mp4",
+      title: "배송 적재위치 사진/영상"
+    }
+  ];
 }
 
 function getRevenueGrade(monthlyRevenue: number): "A" | "B" | "C" {

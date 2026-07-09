@@ -45,6 +45,22 @@ type CustomerView = {
   representativeName: string;
   visitCount: number;
 };
+type CustomerNoteView = {
+  id: string;
+  createdAt: string;
+  createdByName: string;
+  memo: string;
+  nextAction: string;
+  noteType: string;
+};
+type CustomerAttachmentView = {
+  id: string;
+  attachmentType: string;
+  createdAt: string;
+  fileUrl: string;
+  mimeType: string;
+  title: string;
+};
 
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
@@ -100,6 +116,7 @@ export default function CrmTimelinePage() {
     () =>
       sampleCustomers.map((customer, index) => ({
         ...customer,
+        id: `sample-${index + 1}`,
         businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
         businessStatus: index % 7 === 0 ? "확인 필요" : "정상",
         deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
@@ -136,15 +153,44 @@ export default function CrmTimelinePage() {
 
   const selectedCustomer = customers[selectedIndex] || customers[0];
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
+  const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
+  const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [newMemo, setNewMemo] = useState("");
+  const [newNextAction, setNewNextAction] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isNoteSaving, setIsNoteSaving] = useState(false);
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
     setIsEditing(false);
     setSaveMessage("");
+    setNewMemo("");
+    setNewNextAction("");
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!selectedCustomer?.id) return;
+    let active = true;
+
+    fetch(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!active || !payload) return;
+        setCustomerAttachments(payload.attachments || []);
+        setCustomerNotes(payload.notes || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustomerAttachments([]);
+        setCustomerNotes([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedCustomer?.id]);
 
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
@@ -197,6 +243,32 @@ export default function CrmTimelinePage() {
       setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function saveNote() {
+    if (!selectedCustomer?.id || !newMemo.trim()) return;
+    setIsNoteSaving(true);
+
+    try {
+      const response = await fetch("/api/customer-operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "note",
+          customerId: selectedCustomer.id,
+          memo: newMemo,
+          nextAction: newNextAction,
+          noteType: "general"
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "메모 저장에 실패했습니다.");
+      if (payload?.note) setCustomerNotes((current) => [payload.note, ...current]);
+      setNewMemo("");
+      setNewNextAction("");
+    } finally {
+      setIsNoteSaving(false);
     }
   }
 
@@ -364,9 +436,22 @@ export default function CrmTimelinePage() {
                 <h3 className="text-base font-black text-slate-950">배송 적재위치</h3>
                 <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
                 <div className="mt-4 grid gap-2">
-                  <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="3개 등록 예정" />
-                  <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
-                  <AttachmentRow icon={FileText} label="통장사본" value="수취 완료" />
+                  {customerAttachments.length ? (
+                    customerAttachments.map((attachment) => (
+                      <AttachmentRow
+                        key={attachment.id}
+                        icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
+                        label={attachmentLabel(attachment.attachmentType, attachment.title)}
+                        value={attachment.fileUrl ? `등록 완료 · ${attachment.createdAt}` : `파일 연결 대기 · ${attachment.createdAt}`}
+                      />
+                    ))
+                  ) : (
+                    <>
+                      <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="등록 대기" />
+                      <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
+                      <AttachmentRow icon={FileText} label="통장사본" value="등록 대기" />
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -378,20 +463,41 @@ export default function CrmTimelinePage() {
                     <h3 className="text-base font-black text-slate-950">메모 히스토리</h3>
                     <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 누적합니다.</p>
                   </div>
-                  <Badge className="bg-slate-100 text-slate-700">{selectedCustomer.memoCount}건</Badge>
+                  <Badge className="bg-slate-100 text-slate-700">{customerNotes.length || selectedCustomer.memoCount}건</Badge>
+                </div>
+                <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <textarea
+                    className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    onChange={(event) => setNewMemo(event.target.value)}
+                    placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
+                    value={newMemo}
+                  />
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      onChange={(event) => setNewNextAction(event.target.value)}
+                      placeholder="다음 액션 예: 견적서 발송"
+                      value={newNextAction}
+                    />
+                    <button
+                      className="h-10 rounded-md bg-slate-950 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                      disabled={!newMemo.trim() || isNoteSaving}
+                      onClick={saveNote}
+                      type="button"
+                    >
+                      {isNoteSaving ? "저장 중" : "메모 저장"}
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {[
-                    ["배송", "오전 10시 전 입고 요청. 후문 적재 시 직원 호출 필요."],
-                    ["상담", "7월 단가표 재전달 필요. 다음 방문 시 냉동 품목 샘플 제안."],
-                    ["정산", "월말 결제 유지. 통장사본 확인 완료."]
-                  ].map(([label, memo], index) => (
-                    <div key={memo} className="rounded-md border border-slate-200 p-4">
+                  {customerNotes.map((note) => (
+                    <div key={note.id} className="rounded-md border border-slate-200 p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <Badge className="bg-slate-100 text-slate-700">{label}</Badge>
-                        <span className="text-xs font-bold text-slate-400">2026-07-{String(index + 1).padStart(2, "0")}</span>
+                        <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
+                        <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
                       </div>
-                      <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{memo}</p>
+                      <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{note.memo}</p>
+                      {note.nextAction ? <p className="mt-2 text-xs font-black text-blue-700">다음 액션: {note.nextAction}</p> : null}
                     </div>
                   ))}
                 </div>
@@ -504,6 +610,20 @@ function AttachmentRow({ icon: Icon, label, value }: { icon: typeof PackageCheck
       </div>
     </div>
   );
+}
+
+function attachmentLabel(type: string, title: string) {
+  if (type === "business_license") return "사업자등록증";
+  if (type === "bank_account") return "통장사본";
+  if (type === "loading_position") return "배송 적재위치 사진/영상";
+  return title || "첨부자료";
+}
+
+function noteTypeLabel(type: string) {
+  if (type === "delivery") return "배송";
+  if (type === "sales") return "상담";
+  if (type === "settlement") return "정산";
+  return "메모";
 }
 
 function revenueGrade(monthlyRevenue: number) {
