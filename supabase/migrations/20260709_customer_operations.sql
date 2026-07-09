@@ -33,3 +33,17 @@ create index if not exists idx_customer_attachments_customer_created on public.c
 
 alter table public.customer_notes enable row level security;
 alter table public.customer_attachments enable row level security;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'customer-attachments',
+  'customer-attachments',
+  false,
+  52428800,
+  array['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime']
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;

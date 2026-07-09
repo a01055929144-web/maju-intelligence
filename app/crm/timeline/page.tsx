@@ -161,6 +161,7 @@ export default function CrmTimelinePage() {
   const [newAttachmentTitle, setNewAttachmentTitle] = useState("배송 적재위치 사진/영상");
   const [newAttachmentType, setNewAttachmentType] = useState("loading_position");
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
+  const [newAttachmentFile, setNewAttachmentFile] = useState<File | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isNoteSaving, setIsNoteSaving] = useState(false);
@@ -175,6 +176,7 @@ export default function CrmTimelinePage() {
     setNewAttachmentTitle("배송 적재위치 사진/영상");
     setNewAttachmentType("loading_position");
     setNewAttachmentUrl("");
+    setNewAttachmentFile(null);
   }, [selectedCustomer]);
 
   useEffect(() => {
@@ -284,23 +286,39 @@ export default function CrmTimelinePage() {
     setIsAttachmentSaving(true);
 
     try {
-      const response = await fetch("/api/customer-operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "attachment",
-          attachmentType: newAttachmentType,
-          customerId: selectedCustomer.id,
-          fileUrl: newAttachmentUrl,
-          mimeType: guessMimeType(newAttachmentUrl),
-          title: newAttachmentTitle
-        })
-      });
+      let response: Response;
+
+      if (newAttachmentFile) {
+        const formData = new FormData();
+        formData.append("attachmentType", newAttachmentType);
+        formData.append("customerId", selectedCustomer.id);
+        formData.append("file", newAttachmentFile);
+        formData.append("title", newAttachmentTitle);
+        response = await fetch("/api/customer-attachments/upload", {
+          method: "POST",
+          body: formData
+        });
+      } else {
+        response = await fetch("/api/customer-operations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "attachment",
+            attachmentType: newAttachmentType,
+            customerId: selectedCustomer.id,
+            fileUrl: newAttachmentUrl,
+            mimeType: guessMimeType(newAttachmentUrl),
+            title: newAttachmentTitle
+          })
+        });
+      }
+
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
       if (payload?.attachment) setCustomerAttachments((current) => [payload.attachment, ...current]);
       setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
       setNewAttachmentUrl("");
+      setNewAttachmentFile(null);
     } finally {
       setIsAttachmentSaving(false);
     }
@@ -493,12 +511,22 @@ export default function CrmTimelinePage() {
                     <input
                       className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       onChange={(event) => setNewAttachmentUrl(event.target.value)}
-                      placeholder="파일 링크 또는 Supabase Storage URL"
+                      placeholder="파일 링크 또는 외부 URL"
                       value={newAttachmentUrl}
                     />
+                    <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-white p-3 text-center text-sm font-black text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50">
+                      <span>{newAttachmentFile ? newAttachmentFile.name : "파일 직접 선택"}</span>
+                      <span className="mt-1 text-xs font-bold text-slate-400">이미지/PDF/영상, 최대 50MB</span>
+                      <input
+                        accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
+                        className="hidden"
+                        onChange={(event) => setNewAttachmentFile(event.target.files?.[0] || null)}
+                        type="file"
+                      />
+                    </label>
                     <button
                       className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                      disabled={!newAttachmentTitle.trim() || isAttachmentSaving}
+                      disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFile) || isAttachmentSaving}
                       onClick={saveAttachment}
                       type="button"
                     >

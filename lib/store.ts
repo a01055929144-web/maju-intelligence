@@ -96,6 +96,7 @@ export type CustomerAttachmentItem = {
   createdAt: string;
   fileUrl: string;
   mimeType: string;
+  storagePath?: string;
   title: string;
 };
 export type LeadStatus = "today" | "reviewing" | "visit-planned" | "high-probability" | "excluded" | "this-week";
@@ -183,6 +184,7 @@ type SupabaseConfig = {
 
 type SupabaseRow = Record<string, unknown>;
 const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
+const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -211,6 +213,29 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
   if (!response.ok) {
     const message = await response.text();
     throw new Error(`Supabase request failed: ${response.status} ${message}`);
+  }
+
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+async function supabaseStorageRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+
+  const response = await fetch(`${config.url}/storage/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: config.serviceRoleKey,
+      Authorization: `Bearer ${config.serviceRoleKey}`,
+      ...(init.headers || {})
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Supabase storage request failed: ${response.status} ${message}`);
   }
 
   if (response.status === 204) return undefined as T;
@@ -503,10 +528,11 @@ export async function getCustomerOperations(customerId: string, companyId?: stri
         created_at: string;
         file_url: string | null;
         mime_type: string | null;
+        storage_path: string | null;
         title: string;
       }>
     >(
-      `customer_attachments?select=id,attachment_type,title,file_url,mime_type,created_at&company_id=eq.${encodeURIComponent(
+      `customer_attachments?select=id,attachment_type,title,file_url,mime_type,storage_path,created_at&company_id=eq.${encodeURIComponent(
         id
       )}&customer_id=eq.${encodeURIComponent(customerId)}&order=created_at.desc&limit=50`
     )
@@ -575,6 +601,7 @@ export async function addCustomerAttachment(
     customerId: string;
     fileUrl?: string;
     mimeType?: string;
+    storagePath?: string;
     title: string;
     createdByName?: string;
   },
@@ -591,6 +618,7 @@ export async function addCustomerAttachment(
         createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
         fileUrl: input.fileUrl || "",
         mimeType: input.mimeType || "",
+        storagePath: input.storagePath,
         title
       },
       persisted: false
@@ -604,6 +632,7 @@ export async function addCustomerAttachment(
       created_at: string;
       file_url: string | null;
       mime_type: string | null;
+      storage_path: string | null;
       title: string;
     }>
   >("customer_attachments", {
@@ -616,6 +645,7 @@ export async function addCustomerAttachment(
         customer_id: input.customerId,
         file_url: input.fileUrl || null,
         mime_type: input.mimeType || null,
+        storage_path: input.storagePath || null,
         title
       }
     ])
@@ -625,6 +655,85 @@ export async function addCustomerAttachment(
     attachment: toCustomerAttachmentItem(rows[0]),
     persisted: true
   };
+}
+
+export async function uploadCustomerAttachmentFile(
+  input: {
+    attachmentType: string;
+    bytes: ArrayBuffer;
+    companyId?: string;
+    contentType: string;
+    createdByName?: string;
+    customerId: string;
+    filename: string;
+    title: string;
+  }
+) {
+  const companyId = input.companyId || getDefaultCompanyId();
+  const title = input.title.trim() || input.filename;
+
+  if (!isProductionStoreConfigured() || input.customerId.startsWith("sample-") || input.customerId.startsWith("local-")) {
+    return {
+      attachment: {
+        id: `local-upload-${Date.now()}`,
+        attachmentType: input.attachmentType || "etc",
+        createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        fileUrl: "",
+        mimeType: input.contentType,
+        storagePath: undefined,
+        title
+      },
+      persisted: false,
+      uploaded: false
+    };
+  }
+
+  const storagePath = `${companyId}/${input.customerId}/${Date.now()}-${sanitizeStorageFilename(input.filename)}`;
+  await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": input.contentType || "application/octet-stream",
+      "x-upsert": "true"
+    },
+    body: input.bytes
+  });
+
+  const result = await addCustomerAttachment(
+    {
+      attachmentType: input.attachmentType || "etc",
+      createdByName: input.createdByName,
+      customerId: input.customerId,
+      fileUrl: `/api/customer-attachments/file?path=${encodeURIComponent(storagePath)}`,
+      mimeType: input.contentType,
+      storagePath,
+      title
+    },
+    companyId
+  );
+
+  return {
+    ...result,
+    uploaded: true
+  };
+}
+
+export async function createCustomerAttachmentSignedUrl(storagePath: string) {
+  if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
+  const cleanPath = storagePath.replace(/^\/+/, "");
+  const result = await supabaseStorageRequest<{ signedURL: string }>(
+    `object/sign/${CUSTOMER_ATTACHMENT_BUCKET}/${encodeStoragePath(cleanPath)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ expiresIn: 60 * 10 })
+    }
+  );
+
+  const config = getSupabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
 }
 
 async function countTableRows(table: string, name: string, description: string): Promise<DatabaseCheck> {
@@ -1881,14 +1990,16 @@ function toCustomerAttachmentItem(row: {
   created_at: string;
   file_url: string | null;
   mime_type: string | null;
+  storage_path?: string | null;
   title: string;
 }): CustomerAttachmentItem {
   return {
     id: row.id,
     attachmentType: row.attachment_type,
     createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-    fileUrl: row.file_url || "",
+    fileUrl: row.file_url || (row.storage_path ? `/api/customer-attachments/file?path=${encodeURIComponent(row.storage_path)}` : ""),
     mimeType: row.mime_type || "",
+    storagePath: row.storage_path || undefined,
     title: row.title
   };
 }
@@ -1922,6 +2033,7 @@ function getSampleCustomerAttachments(customerId: string): CustomerAttachmentIte
       createdAt: "2026. 7. 1. 오전 9:10",
       fileUrl: "",
       mimeType: "image/png",
+      storagePath: undefined,
       title: "사업자등록증"
     },
     {
@@ -1930,6 +2042,7 @@ function getSampleCustomerAttachments(customerId: string): CustomerAttachmentIte
       createdAt: "2026. 7. 1. 오전 9:12",
       fileUrl: "",
       mimeType: "image/png",
+      storagePath: undefined,
       title: "통장사본"
     },
     {
@@ -1938,6 +2051,7 @@ function getSampleCustomerAttachments(customerId: string): CustomerAttachmentIte
       createdAt: "2026. 7. 2. 오후 4:30",
       fileUrl: "",
       mimeType: "video/mp4",
+      storagePath: undefined,
       title: "배송 적재위치 사진/영상"
     }
   ];
@@ -1951,6 +2065,24 @@ function getRevenueGrade(monthlyRevenue: number): "A" | "B" | "C" {
 
 function asNullableString(value: unknown) {
   return typeof value === "string" && value ? value : null;
+}
+
+function sanitizeStorageFilename(filename: string) {
+  const fallback = "attachment";
+  const safe = filename
+    .normalize("NFKC")
+    .replace(/[\\/:*?"<>|#%{}[\]^~`]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return safe || fallback;
+}
+
+function encodeStoragePath(path: string) {
+  return path
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
 }
 
 function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {
