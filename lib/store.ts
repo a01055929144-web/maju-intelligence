@@ -32,6 +32,52 @@ export type CompanySettingsInput = {
   originAddress?: string;
   ownerName?: string;
 };
+export type CustomerMasterItem = {
+  id: string;
+  address: string;
+  birthDate?: string;
+  businessLicenseFileUrl?: string;
+  businessNumber: string;
+  businessStatus: string;
+  businessStatusCheckedAt?: string;
+  customerName: string;
+  deliveryKm: number;
+  deliveryManager: string;
+  deliveryMinutes?: number;
+  email: string;
+  grade: "A" | "B" | "C";
+  industry: string;
+  lastOrderDays: number;
+  loadingPosition: string;
+  memoCount: number;
+  monthlyRevenue: number;
+  openingDate?: string;
+  phone: string;
+  region: string;
+  representativeName: string;
+  visitCount: number;
+};
+export type CustomerMasterInput = {
+  address?: string;
+  birthDate?: string;
+  businessLicenseFileUrl?: string;
+  businessNumber?: string;
+  businessStatus?: string;
+  customerName: string;
+  deliveryKm?: number;
+  deliveryManager?: string;
+  deliveryMinutes?: number;
+  email?: string;
+  industry?: string;
+  lastOrderDays?: number;
+  loadingPosition?: string;
+  monthlyRevenue?: number;
+  openingDate?: string;
+  phone?: string;
+  region?: string;
+  representativeName?: string;
+  visitCount?: number;
+};
 export type LeadStatus = "today" | "reviewing" | "visit-planned" | "high-probability" | "excluded" | "this-week";
 export type LeadItem = {
   id: string;
@@ -255,6 +301,140 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
   return {
     ...system,
     databaseChecks: checks
+  };
+}
+
+export async function getCustomerMaster(companyId?: string): Promise<{ customers: CustomerMasterItem[]; source: "sample" | "supabase" }> {
+  const id = companyId || getDefaultCompanyId();
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      customers: getSampleCustomerMaster(),
+      source: "sample"
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      address: string | null;
+      birth_date: string | null;
+      business_license_file_url: string | null;
+      business_registration_number: string | null;
+      business_status: string | null;
+      business_status_checked_at: string | null;
+      customer_name: string;
+      delivery_km: number | string | null;
+      delivery_minutes: number | null;
+      email: string | null;
+      industry: string | null;
+      last_order_days: number | null;
+      monthly_revenue: number | string | null;
+      opening_date: string | null;
+      phone: string | null;
+      region: string | null;
+      representative_name: string | null;
+      visit_count: number | null;
+    }>
+  >(
+    `normalized_customers?select=id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,business_status,business_status_checked_at,business_license_file_url&company_id=eq.${encodeURIComponent(
+      id
+    )}&order=created_at.desc&limit=1000`
+  );
+
+  return {
+    customers: rows.map((row, index) => toCustomerMasterItem(row, index)),
+    source: "supabase"
+  };
+}
+
+export async function upsertCustomerMaster(input: CustomerMasterInput, companyId?: string) {
+  const customerName = input.customerName.trim();
+  if (!customerName) throw new Error("거래처명은 필수입니다.");
+
+  const fallbackItem = toCustomerMasterItem(
+    {
+      id: `local-${makeNormalizedKey({
+        address: input.address || "",
+        companyName: "마주식자재",
+        customerName,
+        deliveryKm: input.deliveryKm || 0,
+        industry: input.industry || "미분류",
+        lastOrderDays: input.lastOrderDays || 0,
+        monthlyRevenue: input.monthlyRevenue || 0,
+        region: input.region || "미분류",
+        visitCount: input.visitCount || 0
+      })}`,
+      address: input.address || "",
+      birth_date: input.birthDate || null,
+      business_license_file_url: input.businessLicenseFileUrl || null,
+      business_registration_number: normalizeBusinessNumber(input.businessNumber || ""),
+      business_status: input.businessStatus || "확인 예정",
+      business_status_checked_at: null,
+      customer_name: customerName,
+      delivery_km: input.deliveryKm || 0,
+      delivery_minutes: input.deliveryMinutes || null,
+      email: input.email || null,
+      industry: input.industry || "미분류",
+      last_order_days: input.lastOrderDays || 0,
+      monthly_revenue: input.monthlyRevenue || 0,
+      opening_date: input.openingDate || null,
+      phone: input.phone || null,
+      region: input.region || "미분류",
+      representative_name: input.representativeName || null,
+      visit_count: input.visitCount || 0
+    },
+    0
+  );
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      customer: fallbackItem,
+      persisted: false
+    };
+  }
+
+  const id = companyId || getDefaultCompanyId();
+  await upsertCompany(id, "마주식자재");
+  const importId = await createManualCustomerImport(id);
+  const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
+  const normalizedKey = businessNumber || makeCustomerKey(customerName, input.address || "");
+
+  const rows = await supabaseRequest<Array<Record<string, unknown>>>("normalized_customers?on_conflict=company_id,normalized_key", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        address: input.address || null,
+        birth_date: toPostgresDate(input.birthDate),
+        business_license_file_url: input.businessLicenseFileUrl || null,
+        business_registration_number: businessNumber || null,
+        business_status: input.businessStatus || "확인 예정",
+        business_status_checked_at: null,
+        company_id: id,
+        customer_name: customerName,
+        delivery_km: input.deliveryKm || 0,
+        delivery_minutes: input.deliveryMinutes || null,
+        email: input.email || null,
+        import_id: importId,
+        industry: input.industry || "미분류",
+        last_order_days: input.lastOrderDays || 0,
+        monthly_revenue: input.monthlyRevenue || 0,
+        normalized_key: normalizedKey,
+        opening_date: toPostgresDate(input.openingDate),
+        phone: input.phone || null,
+        region: input.region || "미분류",
+        representative_name: input.representativeName || null,
+        visit_count: input.visitCount || 0
+      }
+    ])
+  });
+
+  return {
+    customer: toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0),
+    persisted: true
   };
 }
 
@@ -1335,6 +1515,153 @@ async function getNormalizedCustomersForAnalysis(companyId: string): Promise<Cus
     visitCount: Number(row.visit_count || 0),
     deliveryKm: Number(row.delivery_km || 0)
   }));
+}
+
+async function createManualCustomerImport(companyId: string) {
+  const files = await supabaseRequest<Array<{ id: string }>>("uploaded_files", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        company_id: companyId,
+        original_filename: "manual-customer-master",
+        status: "processed"
+      }
+    ])
+  });
+
+  const imports = await supabaseRequest<Array<{ id: string }>>("customer_imports", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        company_id: companyId,
+        completed_at: new Date().toISOString(),
+        duplicate_count: 0,
+        quality_score: 100,
+        row_count: 1,
+        source: "manual-customer-master",
+        status: "completed",
+        uploaded_file_id: files[0]?.id || null
+      }
+    ])
+  });
+
+  return imports[0].id;
+}
+
+function toNormalizedCustomerRow(row: Record<string, unknown>) {
+  return {
+    id: String(row.id || ""),
+    address: asNullableString(row.address),
+    birth_date: asNullableString(row.birth_date),
+    business_license_file_url: asNullableString(row.business_license_file_url),
+    business_registration_number: asNullableString(row.business_registration_number),
+    business_status: asNullableString(row.business_status),
+    business_status_checked_at: asNullableString(row.business_status_checked_at),
+    customer_name: String(row.customer_name || ""),
+    delivery_km: row.delivery_km as number | string | null,
+    delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
+    email: asNullableString(row.email),
+    industry: asNullableString(row.industry),
+    last_order_days: typeof row.last_order_days === "number" ? row.last_order_days : 0,
+    monthly_revenue: row.monthly_revenue as number | string | null,
+    opening_date: asNullableString(row.opening_date),
+    phone: asNullableString(row.phone),
+    region: asNullableString(row.region),
+    representative_name: asNullableString(row.representative_name),
+    visit_count: typeof row.visit_count === "number" ? row.visit_count : 0
+  };
+}
+
+function toCustomerMasterItem(
+  row: {
+    id: string;
+    address: string | null;
+    birth_date: string | null;
+    business_license_file_url: string | null;
+    business_registration_number: string | null;
+    business_status: string | null;
+    business_status_checked_at: string | null;
+    customer_name: string;
+    delivery_km: number | string | null;
+    delivery_minutes: number | null;
+    email: string | null;
+    industry: string | null;
+    last_order_days: number | null;
+    monthly_revenue: number | string | null;
+    opening_date: string | null;
+    phone: string | null;
+    region: string | null;
+    representative_name: string | null;
+    visit_count: number | null;
+  },
+  index: number
+): CustomerMasterItem {
+  const monthlyRevenue = Number(row.monthly_revenue || 0);
+
+  return {
+    id: row.id,
+    address: row.address || "",
+    birthDate: row.birth_date || undefined,
+    businessLicenseFileUrl: row.business_license_file_url || undefined,
+    businessNumber: row.business_registration_number || `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
+    businessStatus: row.business_status || (index % 7 === 0 ? "확인 필요" : "정상"),
+    businessStatusCheckedAt: row.business_status_checked_at || undefined,
+    customerName: row.customer_name,
+    deliveryKm: Number(row.delivery_km || 0),
+    deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
+    deliveryMinutes: row.delivery_minutes || undefined,
+    email: row.email || `${row.customer_name.replace(/\s/g, "").toLowerCase()}@example.com`,
+    grade: getRevenueGrade(monthlyRevenue),
+    industry: row.industry || "미분류",
+    lastOrderDays: Number(row.last_order_days || 0),
+    loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역",
+    memoCount: 2 + (index % 4),
+    monthlyRevenue,
+    openingDate: row.opening_date || undefined,
+    phone: row.phone || `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
+    region: row.region || "미분류",
+    representativeName: row.representative_name || (index % 2 === 0 ? "김민준" : "이서연"),
+    visitCount: Number(row.visit_count || 0)
+  };
+}
+
+function getSampleCustomerMaster(): CustomerMasterItem[] {
+  return sampleCustomers.map((customer, index) =>
+    toCustomerMasterItem(
+      {
+        id: `sample-${index + 1}`,
+        address: customer.address,
+        birth_date: null,
+        business_license_file_url: null,
+        business_registration_number: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
+        business_status: index % 7 === 0 ? "확인 필요" : "정상",
+        business_status_checked_at: null,
+        customer_name: customer.customerName,
+        delivery_km: customer.deliveryKm,
+        delivery_minutes: null,
+        email: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
+        industry: customer.industry,
+        last_order_days: customer.lastOrderDays,
+        monthly_revenue: customer.monthlyRevenue,
+        opening_date: null,
+        phone: null,
+        region: customer.region,
+        representative_name: null,
+        visit_count: customer.visitCount
+      },
+      index
+    )
+  );
+}
+
+function getRevenueGrade(monthlyRevenue: number): "A" | "B" | "C" {
+  if (monthlyRevenue >= 350) return "A";
+  if (monthlyRevenue >= 180) return "B";
+  return "C";
+}
+
+function asNullableString(value: unknown) {
+  return typeof value === "string" && value ? value : null;
 }
 
 function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {

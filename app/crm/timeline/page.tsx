@@ -25,6 +25,25 @@ type DbSummary = {
   tone: "ready" | "fallback";
   visitResults: number | null;
 };
+type CustomerView = {
+  address: string;
+  businessNumber: string;
+  businessStatus: string;
+  customerName: string;
+  deliveryKm: number;
+  deliveryManager: string;
+  email: string;
+  grade: "A" | "B" | "C";
+  industry: string;
+  lastOrderDays: number;
+  loadingPosition: string;
+  memoCount: number;
+  monthlyRevenue: number;
+  phone: string;
+  region: string;
+  representativeName: string;
+  visitCount: number;
+};
 
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
@@ -76,21 +95,45 @@ export default function CrmTimelinePage() {
     };
   }, []);
 
-  const enrichedCustomers = useMemo(
+  const sampleCustomerViews = useMemo(
     () =>
       sampleCustomers.map((customer, index) => ({
         ...customer,
         businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
         businessStatus: index % 7 === 0 ? "확인 필요" : "정상",
         deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
-        grade: revenueGrade(customer.monthlyRevenue),
+        grade: revenueGrade(customer.monthlyRevenue) as "A" | "B" | "C",
         memoCount: 2 + (index % 4),
         phone: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
-        loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역"
+        email: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
+        loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역",
+        representativeName: index % 2 === 0 ? "김민준" : "이서연"
       })),
     []
   );
-  const selectedCustomer = enrichedCustomers[selectedIndex] || enrichedCustomers[0];
+  const [customers, setCustomers] = useState<CustomerView[]>(sampleCustomerViews);
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/customers", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((payload) => {
+        if (!active || !payload?.customers?.length) return;
+        setCustomers(payload.customers);
+        setSelectedIndex(0);
+      })
+      .catch(() => null);
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const selectedCustomer = customers[selectedIndex] || customers[0];
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
 
@@ -112,8 +155,8 @@ export default function CrmTimelinePage() {
     >
       <section className="mx-auto max-w-[1760px] space-y-4">
         <div className="grid gap-3 lg:grid-cols-4">
-          <SummaryCard label="전체 거래처" value={`${enrichedCustomers.length}곳`} helper="기초 등록된 매장" />
-          <SummaryCard label="A등급 거래처" value={`${enrichedCustomers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
+          <SummaryCard label="전체 거래처" value={`${customers.length}곳`} helper="기초 등록된 매장" />
+          <SummaryCard label="A등급 거래처" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
           <SummaryCard label="방문 기록" value={`${timeline.length}건`} helper={`${quoteRequests}건 견적 요청`} tone="blue" />
           <SummaryCard label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} helper="최근 액션 기준" tone="violet" />
         </div>
@@ -140,11 +183,11 @@ export default function CrmTimelinePage() {
                   <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
                   <p className="mt-1 text-sm font-medium text-slate-500">매장을 누르면 상세 정보가 오른쪽에 표시됩니다.</p>
                 </div>
-                <Badge className="bg-slate-100 text-slate-700">{enrichedCustomers.length}곳</Badge>
+                <Badge className="bg-slate-100 text-slate-700">{customers.length}곳</Badge>
               </div>
             </div>
             <div className="max-h-[calc(100vh-280px)] space-y-2 overflow-auto p-3">
-              {enrichedCustomers.map((customer, index) => (
+              {customers.map((customer, index) => (
                 <button
                   key={`${customer.customerName}-${customer.address}`}
                   className={`w-full rounded-md border p-4 text-left transition ${
@@ -202,7 +245,7 @@ export default function CrmTimelinePage() {
                 <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
                   <DetailRow label="상호명" value={selectedCustomer.customerName} />
                   <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
-                  <DetailRow label="대표자명" value={selectedIndex % 2 === 0 ? "김민준" : "이서연"} />
+                  <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
                   <DetailRow label="업종" value={selectedCustomer.industry} />
                   <DetailRow label="지역" value={selectedCustomer.region} />
                   <DetailRow label="주소" value={selectedCustomer.address} />
