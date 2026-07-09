@@ -169,6 +169,7 @@ export type SystemStatus = {
   requiredEnvironment: Array<{ key: string; present: boolean; scope: "server" | "client" }>;
   services: Array<{ name: string; status: "ready" | "fallback" | "missing"; description: string }>;
   databaseChecks: DatabaseCheck[];
+  storageChecks: DatabaseCheck[];
 };
 export type DatabaseCheck = {
   name: string;
@@ -308,9 +309,17 @@ export function getSystemStatus(): SystemStatus {
         description: routeConfigured
           ? "회사 출발지와 Tmap API 키가 설정되어 거리/시간/경로 계산을 붙일 수 있습니다."
           : "회사 출발지 또는 Tmap API 키가 없어 주소 텍스트/기존 캐시 기준으로 동작합니다."
+      },
+      {
+        name: "Customer Attachment Storage",
+        status: supabaseConfigured ? "ready" : "fallback",
+        description: supabaseConfigured
+          ? "사업자등록증, 통장사본, 배송 적재위치 사진/영상 업로드 API가 실 Storage를 사용합니다."
+          : "Supabase 환경변수가 없어 첨부 업로드는 샘플 응답으로만 동작합니다."
       }
     ],
-    databaseChecks: []
+    databaseChecks: [],
+    storageChecks: []
   };
 }
 
@@ -327,25 +336,41 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
           count: null,
           description: "환경변수가 없어 DB 조회를 건너뛰고 샘플 데이터 모드로 동작합니다."
         }
+      ],
+      storageChecks: [
+        {
+          name: "customer-attachments 버킷",
+          status: "fallback",
+          count: null,
+          description: "환경변수가 없어 Storage 버킷 조회를 건너뛰었습니다."
+        }
       ]
     };
   }
 
-  const checks = await Promise.all([
+  const [checks, storageChecks] = await Promise.all([
+    Promise.all([
     countTableRows("companies", "고객사", "등록된 고객사 수입니다."),
     countTableRows("customer_imports", "업로드/분석 이력", "엑셀 업로드 후 생성되는 import job입니다."),
     countTableRows("normalized_customers", "정제 거래처", "정제되어 저장된 거래처 row입니다."),
+    countTableRows("customer_notes", "거래처 메모", "거래처별 상담, 배송 특이사항, 후속 액션 기록입니다."),
+    countTableRows("customer_attachments", "거래처 첨부자료", "사업자등록증, 통장사본, 배송 적재위치 사진/영상 기록입니다."),
     countTableRows("sales_transactions", "매출 거래내역", "ERP 엑셀에서 적재된 일자/품목/금액 단위 거래내역입니다."),
     countTableRows("route_distance_cache", "티맵 경로 캐시", "회사 출발지에서 거래처 도착지까지 계산된 거리/시간/경로입니다."),
     countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
     checkDemoCompany()
+    ]),
+    Promise.all([
+      checkStorageBucket(CUSTOMER_ATTACHMENT_BUCKET, "첨부자료 Storage", "사업자등록증, 통장사본, 배송 적재위치 파일이 저장되는 비공개 버킷입니다.")
+    ])
   ]);
 
   return {
     ...system,
-    databaseChecks: checks
+    databaseChecks: checks,
+    storageChecks
   };
 }
 
@@ -775,6 +800,25 @@ async function checkDemoCompany(): Promise<DatabaseCheck> {
       status: "missing",
       count: null,
       description: getErrorMessage(error)
+    };
+  }
+}
+
+async function checkStorageBucket(bucketId: string, name: string, description: string): Promise<DatabaseCheck> {
+  try {
+    const bucket = await supabaseStorageRequest<{ id: string; name: string; public: boolean }>(`bucket/${encodeURIComponent(bucketId)}`);
+    return {
+      name,
+      status: "ready",
+      count: null,
+      description: `${description} 현재 ${bucket.public ? "공개" : "비공개"} 버킷으로 설정되어 있습니다.`
+    };
+  } catch (error) {
+    return {
+      name,
+      status: "missing",
+      count: null,
+      description: `${description} ${getErrorMessage(error)}`
     };
   }
 }

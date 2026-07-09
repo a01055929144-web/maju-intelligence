@@ -104,6 +104,25 @@ export default async function AdminSystemPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Supabase Storage 점검</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {system.storageChecks.map((check) => (
+              <div key={check.name} className="rounded-md border border-border p-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="font-black">{check.name}</p>
+                  <Badge className={check.status === "ready" ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}>
+                    {statusLabels[check.status]}
+                  </Badge>
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">{check.description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-primary" />
               실서버 전환 체크리스트
@@ -114,6 +133,7 @@ export default async function AdminSystemPage() {
               "Supabase 프로젝트 생성",
               "supabase/schema.sql 실행",
               "Vercel 환경변수 등록",
+              "customer-attachments Storage 버킷 생성",
               "GitHub 저장소 연결",
               "관리자 비밀번호 교체",
               "고객사 로그인 정책 확정",
