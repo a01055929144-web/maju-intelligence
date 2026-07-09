@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Building2, FileText, PackageCheck, Phone, Route, Store } from "lucide-react";
+import { Banknote, Building2, FileText, PackageCheck, Pencil, Phone, Route, Save, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { sampleCustomers } from "@/lib/sample-data";
@@ -26,6 +26,7 @@ type DbSummary = {
   visitResults: number | null;
 };
 type CustomerView = {
+  id?: string;
   address: string;
   businessNumber: string;
   businessStatus: string;
@@ -134,8 +135,70 @@ export default function CrmTimelinePage() {
   }, []);
 
   const selectedCustomer = customers[selectedIndex] || customers[0];
+  const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
+    setIsEditing(false);
+    setSaveMessage("");
+  }, [selectedCustomer]);
+
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
+
+  function updateDraft(field: keyof CustomerView, value: string) {
+    setDraftCustomer((current) => {
+      if (!current) return current;
+      if (field === "deliveryKm" || field === "lastOrderDays" || field === "monthlyRevenue" || field === "visitCount") {
+        return { ...current, [field]: Number(value.replace(/[^0-9.]/g, "")) || 0 };
+      }
+      return { ...current, [field]: value };
+    });
+  }
+
+  async function saveCustomer() {
+    if (!draftCustomer) return;
+    setIsSaving(true);
+    setSaveMessage("");
+
+    try {
+      const response = await fetch("/api/customers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: draftCustomer.address,
+          businessNumber: draftCustomer.businessNumber,
+          businessStatus: draftCustomer.businessStatus,
+          customerName: draftCustomer.customerName,
+          deliveryKm: draftCustomer.deliveryKm,
+          email: draftCustomer.email,
+          industry: draftCustomer.industry,
+          lastOrderDays: draftCustomer.lastOrderDays,
+          monthlyRevenue: draftCustomer.monthlyRevenue,
+          phone: draftCustomer.phone,
+          region: draftCustomer.region,
+          representativeName: draftCustomer.representativeName,
+          visitCount: draftCustomer.visitCount
+        })
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
+
+      const saved = payload?.customer ? { ...draftCustomer, ...payload.customer } : draftCustomer;
+      setCustomers((current) => current.map((customer, index) => (index === selectedIndex ? saved : customer)));
+      setDraftCustomer(saved);
+      setIsEditing(false);
+      setSaveMessage(payload?.persisted === false ? "현재 Vercel DB 환경변수가 없어 화면에만 반영되었습니다." : "거래처 정보가 저장되었습니다.");
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <CustomerAppShell
@@ -228,6 +291,14 @@ export default function CrmTimelinePage() {
                   <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}>
                     사업자 {selectedCustomer.businessStatus}
                   </Badge>
+                  <button
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50"
+                    onClick={() => setIsEditing((value) => !value)}
+                    type="button"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    {isEditing ? "보기" : "편집"}
+                  </button>
                 </div>
               </div>
 
@@ -241,17 +312,52 @@ export default function CrmTimelinePage() {
 
             <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
               <div className="rounded-md border border-slate-200 bg-white p-5">
-                <h3 className="text-base font-black text-slate-950">기본 정보</h3>
-                <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
-                  <DetailRow label="상호명" value={selectedCustomer.customerName} />
-                  <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
-                  <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
-                  <DetailRow label="업종" value={selectedCustomer.industry} />
-                  <DetailRow label="지역" value={selectedCustomer.region} />
-                  <DetailRow label="주소" value={selectedCustomer.address} />
-                  <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
-                  <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-black text-slate-950">기본 정보</h3>
+                    <p className="mt-1 text-sm font-medium text-slate-500">현장에서 바로 수정하고 저장하는 거래처 원장입니다.</p>
+                  </div>
+                  {isEditing ? (
+                    <button
+                      className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      disabled={isSaving}
+                      onClick={saveCustomer}
+                      type="button"
+                    >
+                      <Save className="h-4 w-4" />
+                      {isSaving ? "저장 중" : "변경 저장"}
+                    </button>
+                  ) : null}
                 </div>
+                {saveMessage ? (
+                  <p className={`mt-3 rounded-md p-3 text-xs font-bold ${saveMessage.includes("실패") || saveMessage.includes("오류") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                    {saveMessage}
+                  </p>
+                ) : null}
+                {isEditing && draftCustomer ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
+                    <EditableField label="사업자번호" value={draftCustomer.businessNumber} onChange={(value) => updateDraft("businessNumber", value)} />
+                    <EditableField label="대표자명" value={draftCustomer.representativeName} onChange={(value) => updateDraft("representativeName", value)} />
+                    <EditableField label="연락처" value={draftCustomer.phone} onChange={(value) => updateDraft("phone", value)} />
+                    <EditableField label="이메일" value={draftCustomer.email} onChange={(value) => updateDraft("email", value)} />
+                    <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
+                    <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
+                    <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
+                    <EditableField className="md:col-span-2" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
+                  </div>
+                ) : (
+                  <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
+                    <DetailRow label="상호명" value={selectedCustomer.customerName} />
+                    <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
+                    <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
+                    <DetailRow label="업종" value={selectedCustomer.industry} />
+                    <DetailRow label="지역" value={selectedCustomer.region} />
+                    <DetailRow label="주소" value={selectedCustomer.address} />
+                    <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
+                    <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
+                  </div>
+                )}
               </div>
 
               <div className="rounded-md border border-slate-200 bg-white p-5">
@@ -362,6 +468,29 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <p className="font-black text-slate-400">{label}</p>
       <p className="font-black text-slate-800">{value}</p>
     </div>
+  );
+}
+
+function EditableField({
+  className = "",
+  label,
+  onChange,
+  value
+}: {
+  className?: string;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className={`block min-w-0 ${className}`}>
+      <span className="mb-1.5 block text-xs font-black text-slate-500">{label}</span>
+      <input
+        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
   );
 }
 
