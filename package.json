@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "ops:check-env": "node scripts/check-production-env.mjs",
-    "ops:migrate": "node scripts/apply-supabase-migrations.mjs"
+    "ops:migrate": "node scripts/apply-supabase-migrations.mjs",
+    "ops:verify-persisted": "node scripts/verify-production-persistence.mjs"
   },
   "dependencies": {
     "@types/node": "^20.14.10",
