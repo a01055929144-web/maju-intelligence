@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const env = readEnvFile(path.join(process.cwd(), ".env.production.local"));
-const appUrl = (env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://maju-intelligence-v2-deploy.vercel.app").replace(/\/$/, "");
+const appUrl = (env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://maju-intelligence.vercel.app").replace(/\/$/, "");
 const email = env.CUSTOMER_EMAIL || process.env.CUSTOMER_EMAIL || "owner@maju.local";
 const password = env.CUSTOMER_PASSWORD || process.env.CUSTOMER_PASSWORD || "maju-owner-2026";
 

@@ -1,10 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    outputFileTracingIncludes: {
-      "/api/admin/migrate": ["./supabase/**/*.sql"]
-    }
-  }
-};
+const nextConfig = {};
 
 export default nextConfig;
