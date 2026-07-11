@@ -31,7 +31,7 @@ export async function POST() {
 
   const { Client } = pg;
   const client = new Client({
-    connectionString,
+    connectionString: normalizePostgresUrl(connectionString),
     ssl: { rejectUnauthorized: false }
   });
 
@@ -58,5 +58,15 @@ export async function POST() {
     );
   } finally {
     await client.end().catch(() => undefined);
+  }
+}
+
+function normalizePostgresUrl(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    ["sslmode", "sslrootcert", "sslcert", "sslkey"].forEach((key) => url.searchParams.delete(key));
+    return url.toString();
+  } catch {
+    return connectionString;
   }
 }
