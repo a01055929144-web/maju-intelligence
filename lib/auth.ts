@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "crypto";
+import { getAuthCredentials } from "./store";
 
 export type AdminSession = {
   email: string;
@@ -70,9 +71,10 @@ export function requireAdminSession() {
   return session;
 }
 
-export function validateAdminCredentials(email: string, password: string): AdminSession | null {
-  const adminEmail = process.env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {
+  const credentials = await getAuthCredentials();
+  const adminEmail = credentials.adminEmail || DEFAULT_ADMIN_EMAIL;
+  const adminPassword = credentials.adminPassword || DEFAULT_ADMIN_PASSWORD;
 
   if (email.trim().toLowerCase() !== adminEmail.toLowerCase()) return null;
   if (password !== adminPassword) return null;
@@ -84,15 +86,16 @@ export function validateAdminCredentials(email: string, password: string): Admin
   };
 }
 
-export function validateCustomerCredentials(email: string, password: string): CustomerSession | null {
-  const customerEmail = process.env.CUSTOMER_EMAIL || DEFAULT_CUSTOMER_EMAIL;
-  const customerPassword = process.env.CUSTOMER_PASSWORD || DEFAULT_CUSTOMER_PASSWORD;
+export async function validateCustomerCredentials(email: string, password: string): Promise<CustomerSession | null> {
+  const credentials = await getAuthCredentials();
+  const customerEmail = credentials.customerEmail || DEFAULT_CUSTOMER_EMAIL;
+  const customerPassword = credentials.customerPassword || DEFAULT_CUSTOMER_PASSWORD;
 
   if (email.trim().toLowerCase() !== customerEmail.toLowerCase()) return null;
   if (password !== customerPassword) return null;
 
   return {
-    companyId: process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
+    companyId: credentials.customerCompanyId || process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
     companyName: "마주식자재",
     email: customerEmail,
     role: "owner",

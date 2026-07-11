@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("admin@maju.local");
-  const [password, setPassword] = useState("maju-admin-2026");
+  const [email, setEmail] = useState("a01055929144@gmail.com");
+  const [password, setPassword] = useState("0000");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -75,4 +75,3 @@ export default function AdminLoginPage() {
     </main>
   );
 }
-

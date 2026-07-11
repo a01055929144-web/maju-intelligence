@@ -63,6 +63,13 @@ export default async function AdminPage() {
             </Link>
             <Link
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
+              href="/admin/accounts"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              계정 관리
+            </Link>
+            <Link
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
               href="/admin/system"
             >
               <ServerCog className="h-4 w-4" />

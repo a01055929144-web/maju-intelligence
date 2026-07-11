@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function CustomerLoginPage() {
-  const [email, setEmail] = useState("owner@maju.local");
-  const [password, setPassword] = useState("maju-owner-2026");
+  const [email, setEmail] = useState("dyoung456@naver.com");
+  const [password, setPassword] = useState("0000");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,8 +38,8 @@ export default function CustomerLoginPage() {
   }
 
   async function handleDemoLogin() {
-    const demoEmail = "owner@maju.local";
-    const demoPassword = "maju-owner-2026";
+    const demoEmail = "dyoung456@naver.com";
+    const demoPassword = "0000";
     setEmail(demoEmail);
     setPassword(demoPassword);
     await login(demoEmail, demoPassword);
@@ -55,7 +55,7 @@ export default function CustomerLoginPage() {
           </Badge>
           <CardTitle className="text-2xl">고객사 로그인</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            관리자가 생성한 고객사 계정으로 로그인합니다. 데모에서는 아래 기본 계정으로 바로 확인할 수 있습니다.
+            관리자가 생성한 고객사 계정으로 로그인합니다. 어드민의 계정 관리 화면에서 아이디와 비밀번호를 수정할 수 있습니다.
           </p>
         </CardHeader>
         <CardContent>
@@ -80,16 +80,16 @@ export default function CustomerLoginPage() {
             </label>
             {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
             <div className="rounded-md border border-border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
-              <p className="font-bold text-foreground">데모 고객사 계정</p>
-              <p>이메일: owner@maju.local</p>
-              <p>비밀번호: maju-owner-2026</p>
+              <p className="font-bold text-foreground">현재 고객사 계정</p>
+              <p>이메일: dyoung456@naver.com</p>
+              <p>비밀번호: 0000</p>
             </div>
             <Button className="w-full" disabled={loading}>
               {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
               로그인
             </Button>
             <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleDemoLogin}>
-              데모 계정으로 로그인
+              현재 계정으로 로그인
             </Button>
           </form>
         </CardContent>

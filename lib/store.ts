@@ -171,6 +171,14 @@ export type SystemStatus = {
   databaseChecks: DatabaseCheck[];
   storageChecks: DatabaseCheck[];
 };
+export type AuthCredentials = {
+  adminEmail: string;
+  adminPassword: string;
+  customerEmail: string;
+  customerPassword: string;
+  customerCompanyId: string;
+  updatedAt?: string;
+};
 export type DatabaseCheck = {
   name: string;
   status: "ready" | "fallback" | "missing";
@@ -186,6 +194,7 @@ type SupabaseConfig = {
 type SupabaseRow = Record<string, unknown>;
 const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
+const AUTH_CREDENTIALS_ID = "maju-default";
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -249,6 +258,101 @@ export function isProductionStoreConfigured() {
 
 function getDefaultCompanyId() {
   return process.env.CUSTOMER_COMPANY_ID || DEFAULT_COMPANY_ID;
+}
+
+export function getFallbackAuthCredentials(): AuthCredentials {
+  return {
+    adminEmail: process.env.ADMIN_EMAIL || "admin@maju.local",
+    adminPassword: process.env.ADMIN_PASSWORD || "maju-admin-2026",
+    customerEmail: process.env.CUSTOMER_EMAIL || "owner@maju.local",
+    customerPassword: process.env.CUSTOMER_PASSWORD || "maju-owner-2026",
+    customerCompanyId: getDefaultCompanyId()
+  };
+}
+
+export async function getAuthCredentials(): Promise<AuthCredentials> {
+  const fallback = getFallbackAuthCredentials();
+  if (!isProductionStoreConfigured()) return fallback;
+
+  try {
+    const rows = await supabaseRequest<
+      Array<{
+        admin_email: string | null;
+        admin_password: string | null;
+        customer_company_id: string | null;
+        customer_email: string | null;
+        customer_password: string | null;
+        updated_at: string | null;
+      }>
+    >(`auth_credentials?select=admin_email,admin_password,customer_email,customer_password,customer_company_id,updated_at&id=eq.${AUTH_CREDENTIALS_ID}&limit=1`);
+
+    const row = rows[0];
+    if (!row) return fallback;
+
+    return {
+      adminEmail: row.admin_email || fallback.adminEmail,
+      adminPassword: row.admin_password || fallback.adminPassword,
+      customerEmail: row.customer_email || fallback.customerEmail,
+      customerPassword: row.customer_password || fallback.customerPassword,
+      customerCompanyId: row.customer_company_id || fallback.customerCompanyId,
+      updatedAt: row.updated_at || undefined
+    };
+  } catch (error) {
+    console.error("Auth credentials fallback:", error);
+    return fallback;
+  }
+}
+
+export async function upsertAuthCredentials(input: Partial<AuthCredentials>): Promise<{ credentials: AuthCredentials; persisted: boolean }> {
+  const fallback = await getAuthCredentials();
+  const credentials: AuthCredentials = {
+    adminEmail: input.adminEmail?.trim() || fallback.adminEmail,
+    adminPassword: input.adminPassword || fallback.adminPassword,
+    customerEmail: input.customerEmail?.trim() || fallback.customerEmail,
+    customerPassword: input.customerPassword || fallback.customerPassword,
+    customerCompanyId: input.customerCompanyId || fallback.customerCompanyId
+  };
+
+  if (!isProductionStoreConfigured()) return { credentials, persisted: false };
+
+  const rows = await supabaseRequest<
+    Array<{
+      admin_email: string;
+      admin_password: string;
+      customer_company_id: string;
+      customer_email: string;
+      customer_password: string;
+      updated_at: string;
+    }>
+  >("auth_credentials?on_conflict=id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        id: AUTH_CREDENTIALS_ID,
+        admin_email: credentials.adminEmail,
+        admin_password: credentials.adminPassword,
+        customer_company_id: credentials.customerCompanyId,
+        customer_email: credentials.customerEmail,
+        customer_password: credentials.customerPassword,
+        updated_at: new Date().toISOString()
+      }
+    ])
+  });
+
+  return {
+    credentials: {
+      adminEmail: rows[0]?.admin_email || credentials.adminEmail,
+      adminPassword: rows[0]?.admin_password || credentials.adminPassword,
+      customerEmail: rows[0]?.customer_email || credentials.customerEmail,
+      customerPassword: rows[0]?.customer_password || credentials.customerPassword,
+      customerCompanyId: rows[0]?.customer_company_id || credentials.customerCompanyId,
+      updatedAt: rows[0]?.updated_at
+    },
+    persisted: true
+  };
 }
 
 export function getSystemStatus(): SystemStatus {
