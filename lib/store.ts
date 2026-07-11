@@ -179,6 +179,32 @@ export type AuthCredentials = {
   customerCompanyId: string;
   updatedAt?: string;
 };
+export type ManagedCompanyAccount = {
+  id: string;
+  name: string;
+  businessType: string;
+  ownerName: string;
+  originAddress: string;
+  status: string;
+  customerEmail: string;
+  customerPassword: string;
+  customerCount: number;
+  updatedAt?: string;
+};
+export type ManagedCompanyAccountInput = {
+  id?: string;
+  name: string;
+  businessType?: string;
+  ownerName?: string;
+  originAddress?: string;
+  status?: string;
+  customerEmail: string;
+  customerPassword: string;
+};
+export type CustomerLoginCredentials = AuthCredentials & {
+  companyName: string;
+  ownerName?: string;
+};
 export type DatabaseCheck = {
   name: string;
   status: "ready" | "fallback" | "missing";
@@ -352,6 +378,250 @@ export async function upsertAuthCredentials(input: Partial<AuthCredentials>): Pr
       updatedAt: rows[0]?.updated_at
     },
     persisted: true
+  };
+}
+
+export async function getCustomerLoginCredentials(email: string): Promise<CustomerLoginCredentials | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return null;
+
+  if (!isProductionStoreConfigured()) {
+    const fallback = getFallbackAuthCredentials();
+    if (fallback.customerEmail.toLowerCase() !== normalizedEmail) return null;
+    return {
+      ...fallback,
+      companyName: "마주식자재",
+      ownerName: "정두영"
+    };
+  }
+
+  try {
+    const rows = await supabaseRequest<
+      Array<{
+        admin_email: string | null;
+        admin_password: string | null;
+        customer_company_id: string | null;
+        customer_email: string | null;
+        customer_password: string | null;
+        updated_at: string | null;
+      }>
+    >(`auth_credentials?select=admin_email,admin_password,customer_email,customer_password,customer_company_id,updated_at&customer_email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`);
+
+    const row = rows[0];
+    if (!row?.customer_email || !row.customer_company_id) return null;
+
+    const fallback = getFallbackAuthCredentials();
+    const company = await getCompanySettings(row.customer_company_id, "고객사").catch(() => null);
+
+    return {
+      adminEmail: row.admin_email || fallback.adminEmail,
+      adminPassword: row.admin_password || fallback.adminPassword,
+      customerEmail: row.customer_email,
+      customerPassword: row.customer_password || fallback.customerPassword,
+      customerCompanyId: row.customer_company_id,
+      updatedAt: row.updated_at || undefined,
+      companyName: company?.name || "고객사",
+      ownerName: company?.ownerName
+    };
+  } catch (error) {
+    console.error("Customer credential lookup fallback:", error);
+    const fallback = getFallbackAuthCredentials();
+    if (fallback.customerEmail.toLowerCase() !== normalizedEmail) return null;
+    return {
+      ...fallback,
+      companyName: "마주식자재",
+      ownerName: "정두영"
+    };
+  }
+}
+
+export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedCompanyAccount[]; source: "sample" | "supabase" }> {
+  const fallbackCredentials = getFallbackAuthCredentials();
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      source: "sample",
+      companies: [
+        {
+          id: fallbackCredentials.customerCompanyId,
+          name: "마주식자재",
+          businessType: "식자재 유통",
+          ownerName: "정두영",
+          originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+          status: "active",
+          customerEmail: fallbackCredentials.customerEmail,
+          customerPassword: fallbackCredentials.customerPassword,
+          customerCount: getSampleCustomerMaster().length,
+          updatedAt: "샘플 기준"
+        }
+      ]
+    };
+  }
+
+  try {
+    const [companies, credentialRows, customerRows] = await Promise.all([
+      supabaseRequest<
+        Array<{
+          id: string;
+          name: string;
+          business_type: string | null;
+          owner_name: string | null;
+          origin_address: string | null;
+          status: string;
+          updated_at: string;
+        }>
+      >("companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&order=created_at.desc"),
+      supabaseRequest<
+        Array<{
+          customer_company_id: string | null;
+          customer_email: string | null;
+          customer_password: string | null;
+          updated_at: string | null;
+        }>
+      >("auth_credentials?select=customer_company_id,customer_email,customer_password,updated_at"),
+      supabaseRequest<Array<{ company_id: string }>>("normalized_customers?select=company_id")
+    ]);
+
+    const credentialsByCompany = new Map(
+      credentialRows
+        .filter((row) => row.customer_company_id)
+        .map((row) => [row.customer_company_id as string, row])
+    );
+    const customerCountByCompany = customerRows.reduce<Map<string, number>>((map, row) => {
+      map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
+      return map;
+    }, new Map());
+
+    return {
+      source: "supabase",
+      companies: companies.map((company) => {
+        const credentials = credentialsByCompany.get(company.id);
+        return {
+          id: company.id,
+          name: company.name,
+          businessType: company.business_type || "",
+          ownerName: company.owner_name || "",
+          originAddress: company.origin_address || "",
+          status: company.status,
+          customerEmail: credentials?.customer_email || "",
+          customerPassword: credentials?.customer_password || "",
+          customerCount: customerCountByCompany.get(company.id) || 0,
+          updatedAt: new Date(credentials?.updated_at || company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+        };
+      })
+    };
+  } catch (error) {
+    console.error("Managed company accounts fallback:", error);
+    return {
+      source: "sample",
+      companies: [
+        {
+          id: fallbackCredentials.customerCompanyId,
+          name: "마주식자재",
+          businessType: "식자재 유통",
+          ownerName: "정두영",
+          originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+          status: "fallback",
+          customerEmail: fallbackCredentials.customerEmail,
+          customerPassword: fallbackCredentials.customerPassword,
+          customerCount: getSampleCustomerMaster().length,
+          updatedAt: "fallback"
+        }
+      ]
+    };
+  }
+}
+
+export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountInput): Promise<{ company: ManagedCompanyAccount; persisted: boolean }> {
+  const companyId = input.id || globalThis.crypto.randomUUID();
+  const companyName = input.name.trim();
+  const customerEmail = input.customerEmail.trim().toLowerCase();
+
+  if (!companyName) throw new Error("고객사명은 필수입니다.");
+  if (!customerEmail || !input.customerPassword) throw new Error("고객사 이메일과 비밀번호는 필수입니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      company: {
+        id: companyId,
+        name: companyName,
+        businessType: input.businessType || "",
+        ownerName: input.ownerName || "",
+        originAddress: input.originAddress || "",
+        status: input.status || "active",
+        customerEmail,
+        customerPassword: input.customerPassword,
+        customerCount: 0,
+        updatedAt: "로컬 샘플"
+      }
+    };
+  }
+
+  const adminCredentials = await getAuthCredentials();
+  const now = new Date().toISOString();
+
+  const companyRows = await supabaseRequest<
+    Array<{
+      id: string;
+      name: string;
+      business_type: string | null;
+      owner_name: string | null;
+      origin_address: string | null;
+      status: string;
+      updated_at: string;
+    }>
+  >("companies?on_conflict=id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        id: companyId,
+        name: companyName,
+        business_type: input.businessType?.trim() || null,
+        owner_name: input.ownerName?.trim() || null,
+        origin_address: input.originAddress?.trim() || null,
+        status: input.status || "active",
+        updated_at: now
+      }
+    ])
+  });
+
+  await supabaseRequest("auth_credentials?on_conflict=id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        id: companyId,
+        admin_email: adminCredentials.adminEmail,
+        admin_password: adminCredentials.adminPassword,
+        customer_company_id: companyId,
+        customer_email: customerEmail,
+        customer_password: input.customerPassword,
+        updated_at: now
+      }
+    ])
+  });
+
+  const company = companyRows[0];
+  return {
+    persisted: true,
+    company: {
+      id: company.id,
+      name: company.name,
+      businessType: company.business_type || "",
+      ownerName: company.owner_name || "",
+      originAddress: company.origin_address || "",
+      status: company.status,
+      customerEmail,
+      customerPassword: input.customerPassword,
+      customerCount: 0,
+      updatedAt: new Date(company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+    }
   };
 }
 

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "crypto";
-import { getAuthCredentials } from "./store";
+import { getAuthCredentials, getCustomerLoginCredentials } from "./store";
 
 export type AdminSession = {
   email: string;
@@ -87,7 +87,9 @@ export async function validateAdminCredentials(email: string, password: string):
 }
 
 export async function validateCustomerCredentials(email: string, password: string): Promise<CustomerSession | null> {
-  const credentials = await getAuthCredentials();
+  const credentials = await getCustomerLoginCredentials(email);
+  if (!credentials) return null;
+
   const customerEmail = credentials.customerEmail || DEFAULT_CUSTOMER_EMAIL;
   const customerPassword = credentials.customerPassword || DEFAULT_CUSTOMER_PASSWORD;
 
@@ -96,10 +98,10 @@ export async function validateCustomerCredentials(email: string, password: strin
 
   return {
     companyId: credentials.customerCompanyId || process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
-    companyName: "마주식자재",
+    companyName: credentials.companyName,
     email: customerEmail,
     role: "owner",
-    name: "정두영"
+    name: credentials.ownerName || credentials.companyName
   };
 }
 
