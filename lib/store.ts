@@ -189,7 +189,7 @@ const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
   if (!url || !serviceRoleKey) return null;
   return { url: url.replace(/\/$/, ""), serviceRoleKey };
@@ -267,7 +267,7 @@ export function getSystemStatus(): SystemStatus {
       { key: "NEXT_PUBLIC_APP_URL", present: appUrlConfigured, scope: "client" },
       { key: "NEXT_PUBLIC_SUPABASE_URL", present: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL), scope: "client" },
       { key: "SUPABASE_URL", present: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL), scope: "server" },
-      { key: "SUPABASE_SERVICE_ROLE_KEY", present: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY), scope: "server" },
+      { key: "SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY", present: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY), scope: "server" },
       { key: "ADMIN_EMAIL", present: Boolean(process.env.ADMIN_EMAIL), scope: "server" },
       { key: "ADMIN_PASSWORD", present: Boolean(process.env.ADMIN_PASSWORD), scope: "server" },
       { key: "ADMIN_SESSION_SECRET", present: Boolean(process.env.ADMIN_SESSION_SECRET), scope: "server" },

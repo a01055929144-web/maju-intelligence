@@ -6,6 +6,7 @@ const required = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_SECRET_KEY",
   "POSTGRES_URL_NON_POOLING",
   "POSTGRES_URL",
   "TMAP_API_KEY",
@@ -28,6 +29,11 @@ console.table(rows);
 if (!rows.some((row) => row.key.startsWith("POSTGRES_URL") && row.present)) {
   process.exitCode = 1;
   console.error("POSTGRES_URL_NON_POOLING 또는 POSTGRES_URL이 필요합니다.");
+}
+
+if (!env.SUPABASE_SERVICE_ROLE_KEY && !env.SUPABASE_SECRET_KEY) {
+  process.exitCode = 1;
+  console.error("SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY가 필요합니다.");
 }
 
 function readEnvFile(filePath) {
