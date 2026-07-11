@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/auth";
+// @ts-expect-error pg ships without local type declarations in this project.
+import pg from "pg";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,7 +29,7 @@ export async function POST() {
       .map((file) => path.join(root, "supabase", "migrations", file))
   ];
 
-  const { Client } = eval("require")("pg");
+  const { Client } = pg;
   const client = new Client({
     connectionString,
     ssl: { rejectUnauthorized: false }
