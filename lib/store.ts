@@ -1097,11 +1097,16 @@ export async function saveAnalysis(
 export async function getLatestReport(companyId?: string): Promise<AnalysisResult> {
   if (!isProductionStoreConfigured()) return analyzeCompany(sampleCustomers);
 
-  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
-  const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-    `ai_reports?select=report${companyFilter}&order=created_at.desc&limit=1`
-  );
-  return reports[0]?.report || analyzeCompany(sampleCustomers);
+  try {
+    const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+    const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
+      `ai_reports?select=report${companyFilter}&order=created_at.desc&limit=1`
+    );
+    return reports[0]?.report || analyzeCompany(sampleCustomers);
+  } catch (error) {
+    console.error("Latest report fallback:", error);
+    return analyzeCompany(sampleCustomers);
+  }
 }
 
 export async function getReportById(reportId: string, companyId?: string): Promise<AnalysisResult | null> {
@@ -1149,18 +1154,23 @@ function getSampleBriefing() {
 export async function getLatestLeads(companyId?: string) {
   if (!isProductionStoreConfigured()) return getLeadPayload();
 
-  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
-  const rows = await supabaseRequest<
-    Array<{ id: string; name: string; region: string; score: number; reasons: string[]; status: LeadStatus | string }>
-  >(`lead_recommendations?select=id,name,region,score,reasons,status${companyFilter}&order=score.desc&limit=50`);
+  try {
+    const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+    const rows = await supabaseRequest<
+      Array<{ id: string; name: string; region: string; score: number; reasons: string[]; status: LeadStatus | string }>
+    >(`lead_recommendations?select=id,name,region,score,reasons,status${companyFilter}&order=score.desc&limit=50`);
 
-  return {
-    total: rows.length,
-    leads: rows.map((lead) => ({
-      ...lead,
-      expectedRevenue: Math.round(lead.score * 2.8)
-    }))
-  };
+    return {
+      total: rows.length,
+      leads: rows.map((lead) => ({
+        ...lead,
+        expectedRevenue: Math.round(lead.score * 2.8)
+      }))
+    };
+  } catch (error) {
+    console.error("Latest leads fallback:", error);
+    return getLeadPayload();
+  }
 }
 
 export async function updateLeadStatus(leadId: string, status: LeadStatus, companyId?: string) {
