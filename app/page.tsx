@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import {
   Activity,
   ArrowRight,
+  Banknote,
   BarChart3,
   Building2,
   Check,
@@ -49,6 +50,11 @@ const initialPipelineSteps: PipelineStep[] = [
   { key: "score", label: "Health Score 계산", description: "영업력, 배송효율, 리스크 점수를 계산합니다.", status: "pending" },
   { key: "report", label: "AI 리포트 생성", description: "대표가 볼 진단 리포트와 추천 리드를 생성합니다.", status: "pending" }
 ];
+
+function getAdminCompanyIdFromUrl() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("companyId") || "";
+}
 
 export default function Home() {
   const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("onboarding");
@@ -167,6 +173,7 @@ export default function Home() {
       body: JSON.stringify({
         actorName: "정두영",
         columnMapping: nextFieldMap,
+        companyId: getAdminCompanyIdFromUrl(),
         companyName: nextRows[0]?.companyName || "업로드 고객사",
         originalFilename: nextFilename,
         rawRows: nextRawRows,
@@ -666,6 +673,13 @@ function Onboarding({
               <FileSpreadsheet size={16} />
               매출 거래내역 내보내기
             </Button>
+            <Link
+              className="inline-flex h-10 items-center justify-start gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              href={getAdminCompanyIdFromUrl() ? `/revenue/transactions?companyId=${encodeURIComponent(getAdminCompanyIdFromUrl())}` : "/revenue/transactions"}
+            >
+              <Banknote size={16} />
+              저장된 매출 원장 보기
+            </Link>
           </div>
         </div>
       </aside>

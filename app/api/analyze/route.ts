@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { CustomerRow, sampleCustomers } from "@/lib/sample-data";
 import { ColumnMapping, RawUploadRow, saveAnalysis } from "@/lib/store";
 
@@ -8,17 +8,19 @@ export async function POST(request: NextRequest) {
     actorName?: string;
     columnMapping?: ColumnMapping;
     companyName?: string;
+    companyId?: string;
     originalFilename?: string;
     rawRows?: RawUploadRow[];
     rows?: CustomerRow[];
     uploadType?: "customer-master" | "sales-analysis";
   } | null;
   const customerSession = getCustomerSession();
+  const adminSession = getAdminSession();
   const rows = body?.rows?.length ? body.rows : sampleCustomers;
   const result = await saveAnalysis(rows, body?.companyName, {
     actorName: body?.actorName,
     columnMapping: body?.columnMapping,
-    companyId: customerSession?.companyId,
+    companyId: customerSession?.companyId || (adminSession ? body?.companyId : undefined),
     originalFilename: body?.originalFilename,
     rawRows: body?.rawRows,
     uploadType: body?.uploadType

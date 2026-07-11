@@ -230,6 +230,18 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               >
                 이 고객사 거래처 보기
               </Link>
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                href={`/?companyId=${encodeURIComponent(form.id)}`}
+              >
+                매출/거래처 업로드
+              </Link>
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                href={`/revenue/transactions?companyId=${encodeURIComponent(form.id)}`}
+              >
+                매출 원장 보기
+              </Link>
             </div>
           ) : null}
 

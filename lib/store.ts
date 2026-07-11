@@ -152,6 +152,23 @@ export type RevenuePipeline = {
   conversionRate: number;
   items: Array<VisitTimelineItem & { probability: number; weightedRevenue: number }>;
 };
+export type SalesTransactionItem = {
+  id: string;
+  customerName: string;
+  businessRegistrationNumber?: string;
+  salesDate?: string;
+  productName?: string;
+  quantity: number;
+  salesAmount: number;
+  createdAt: string;
+};
+export type SalesTransactionSummary = {
+  totalAmount: number;
+  transactionCount: number;
+  customerCount: number;
+  latestSalesDate?: string;
+  items: SalesTransactionItem[];
+};
 export type SalesAssistantDraft = {
   id: string;
   leadName: string;
@@ -1820,6 +1837,65 @@ export async function getRevenuePipeline(companyId?: string): Promise<RevenuePip
     expectedRevenue,
     weightedRevenue,
     conversionRate,
+    items
+  };
+}
+
+export async function getSalesTransactions(companyId?: string): Promise<SalesTransactionSummary> {
+  const id = companyId || getDefaultCompanyId();
+
+  if (!isProductionStoreConfigured()) {
+    const items = sampleCustomers.slice(0, 12).map((customer, index) => ({
+      id: `sample-sales-${index + 1}`,
+      customerName: customer.customerName,
+      businessRegistrationNumber: `123${String(10 + index).padStart(2, "0")}${String(10000 + index).padStart(5, "0")}`,
+      salesDate: `2026-07-${String(1 + (index % 10)).padStart(2, "0")}`,
+      productName: ["쌀 20kg", "식용유", "돈육", "김치", "야채믹스"][index % 5],
+      quantity: 1 + (index % 8),
+      salesAmount: customer.monthlyRevenue * 10000,
+      createdAt: "샘플 기준"
+    }));
+    return summarizeSalesTransactions(items);
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      customer_name: string;
+      business_registration_number: string | null;
+      sales_date: string | null;
+      product_name: string | null;
+      quantity: number | null;
+      sales_amount: number | null;
+      created_at: string;
+    }>
+  >(
+    `sales_transactions?select=id,customer_name,business_registration_number,sales_date,product_name,quantity,sales_amount,created_at&company_id=eq.${encodeURIComponent(
+      id
+    )}&order=sales_date.desc,created_at.desc&limit=200`
+  ).catch(() => []);
+
+  return summarizeSalesTransactions(
+    rows.map((row) => ({
+      id: row.id,
+      customerName: row.customer_name,
+      businessRegistrationNumber: row.business_registration_number || undefined,
+      salesDate: row.sales_date || undefined,
+      productName: row.product_name || undefined,
+      quantity: Number(row.quantity || 0),
+      salesAmount: Number(row.sales_amount || 0),
+      createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+    }))
+  );
+}
+
+function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransactionSummary {
+  const customerNames = new Set(items.map((item) => item.customerName).filter(Boolean));
+  return {
+    totalAmount: items.reduce((total, item) => total + item.salesAmount, 0),
+    transactionCount: items.length,
+    customerCount: customerNames.size,
+    latestSalesDate: items.find((item) => item.salesDate)?.salesDate,
     items
   };
 }
