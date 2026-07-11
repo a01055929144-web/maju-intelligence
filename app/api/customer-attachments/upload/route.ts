@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
   const customerId = String(formData?.get("customerId") || "");
   const attachmentType = String(formData?.get("attachmentType") || "etc");
   const title = String(formData?.get("title") || "");
+  const adminCompanyId = String(formData?.get("companyId") || "") || undefined;
 
   if (!customerId) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   const result = await uploadCustomerAttachmentFile({
     attachmentType,
     bytes: await file.arrayBuffer(),
-    companyId: customerSession?.companyId,
+    companyId: customerSession?.companyId || adminCompanyId,
     contentType: file.type || "application/octet-stream",
     createdByName: customerSession?.name || adminSession?.name,
     customerId,

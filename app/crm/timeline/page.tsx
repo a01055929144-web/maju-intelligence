@@ -78,6 +78,17 @@ const defaultDbSummary: DbSummary = {
   visitResults: null
 };
 
+function getAdminCompanyIdFromUrl() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("companyId") || "";
+}
+
+function withCompanyQuery(path: string) {
+  const companyId = getAdminCompanyIdFromUrl();
+  if (!companyId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
+}
+
 export default function CrmTimelinePage() {
   const [timeline, setTimeline] = useState<TimelineItem[]>(sampleVisitTimeline);
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
@@ -134,7 +145,7 @@ export default function CrmTimelinePage() {
   useEffect(() => {
     let active = true;
 
-    fetch("/api/customers", { cache: "no-store" })
+    fetch(withCompanyQuery("/api/customers"), { cache: "no-store" })
       .then((response) => {
         if (!response.ok) return null;
         return response.json();
@@ -183,7 +194,7 @@ export default function CrmTimelinePage() {
     if (!selectedCustomer?.id) return;
     let active = true;
 
-    fetch(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`, { cache: "no-store" })
+    fetch(withCompanyQuery(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`), { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!active || !payload) return;
@@ -220,7 +231,7 @@ export default function CrmTimelinePage() {
     setSaveMessage("");
 
     try {
-      const response = await fetch("/api/customers", {
+      const response = await fetch(withCompanyQuery("/api/customers"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -236,7 +247,8 @@ export default function CrmTimelinePage() {
           phone: draftCustomer.phone,
           region: draftCustomer.region,
           representativeName: draftCustomer.representativeName,
-          visitCount: draftCustomer.visitCount
+          visitCount: draftCustomer.visitCount,
+          companyId: getAdminCompanyIdFromUrl()
         })
       });
 
@@ -266,6 +278,7 @@ export default function CrmTimelinePage() {
         body: JSON.stringify({
           action: "note",
           customerId: selectedCustomer.id,
+          companyId: getAdminCompanyIdFromUrl(),
           memo: newMemo,
           nextAction: newNextAction,
           noteType: "general"
@@ -291,6 +304,7 @@ export default function CrmTimelinePage() {
       if (newAttachmentFile) {
         const formData = new FormData();
         formData.append("attachmentType", newAttachmentType);
+        formData.append("companyId", getAdminCompanyIdFromUrl());
         formData.append("customerId", selectedCustomer.id);
         formData.append("file", newAttachmentFile);
         formData.append("title", newAttachmentTitle);
@@ -305,6 +319,7 @@ export default function CrmTimelinePage() {
           body: JSON.stringify({
             action: "attachment",
             attachmentType: newAttachmentType,
+            companyId: getAdminCompanyIdFromUrl(),
             customerId: selectedCustomer.id,
             fileUrl: newAttachmentUrl,
             mimeType: guessMimeType(newAttachmentUrl),

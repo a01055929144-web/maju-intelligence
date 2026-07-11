@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
   }
 
-  const result = await getCustomerOperations(customerId, customerSession?.companyId);
+  const adminCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
+  const result = await getCustomerOperations(customerId, customerSession?.companyId || adminCompanyId);
   return NextResponse.json(result);
 }
 
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
         nextAction?: string;
         noteType?: string;
         title?: string;
+        companyId?: string;
       }
     | null;
 
@@ -50,6 +52,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (body.action === "attachment") {
+    const companyId = customerSession?.companyId || body.companyId;
     const result = await addCustomerAttachment(
       {
         attachmentType: body.attachmentType || "etc",
@@ -59,11 +62,12 @@ export async function POST(request: NextRequest) {
         title: body.title || "첨부자료",
         createdByName: customerSession?.name || adminSession?.name
       },
-      customerSession?.companyId
+      companyId
     );
     return NextResponse.json(result);
   }
 
+  const companyId = customerSession?.companyId || body.companyId;
   const result = await addCustomerNote(
     {
       customerId: body.customerId,
@@ -72,7 +76,7 @@ export async function POST(request: NextRequest) {
       noteType: body.noteType || "general",
       createdByName: customerSession?.name || adminSession?.name
     },
-    customerSession?.companyId
+    companyId
   );
   return NextResponse.json(result);
 }

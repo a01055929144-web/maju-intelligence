@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { Building2, Eye, EyeOff, Plus, Save, Search, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -219,8 +220,16 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           </div>
 
           {form.id ? (
-            <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
-              회사 ID: <span className="font-mono font-bold text-slate-700">{form.id}</span>
+            <div className="flex flex-col gap-3 rounded-md bg-slate-50 px-3 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                회사 ID: <span className="font-mono font-bold text-slate-700">{form.id}</span>
+              </span>
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                href={`/crm/timeline?companyId=${encodeURIComponent(form.id)}`}
+              >
+                이 고객사 거래처 보기
+              </Link>
             </div>
           ) : null}
 
