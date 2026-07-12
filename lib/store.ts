@@ -206,6 +206,9 @@ export type ManagedCompanyAccount = {
   customerEmail: string;
   customerPassword: string;
   customerCount: number;
+  salesTransactionCount: number;
+  uploadCount: number;
+  lastUploadAt?: string;
   updatedAt?: string;
 };
 export type ManagedCompanyAccountInput = {
@@ -469,6 +472,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerEmail: fallbackCredentials.customerEmail,
           customerPassword: fallbackCredentials.customerPassword,
           customerCount: getSampleCustomerMaster().length,
+          salesTransactionCount: 0,
+          uploadCount: 0,
           updatedAt: "샘플 기준"
         }
       ]
@@ -476,7 +481,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
   }
 
   try {
-    const [companies, credentialRows, customerRows] = await Promise.all([
+    const [companies, credentialRows, customerRows, salesRows, importRows] = await Promise.all([
       supabaseRequest<
         Array<{
           id: string;
@@ -496,7 +501,9 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           updated_at: string | null;
         }>
       >("auth_credentials?select=customer_company_id,customer_email,customer_password,updated_at"),
-      supabaseRequest<Array<{ company_id: string }>>("normalized_customers?select=company_id")
+      supabaseRequest<Array<{ company_id: string }>>("normalized_customers?select=company_id"),
+      supabaseRequest<Array<{ company_id: string }>>("sales_transactions?select=company_id"),
+      supabaseRequest<Array<{ company_id: string; created_at: string }>>("customer_imports?select=company_id,created_at&order=created_at.desc")
     ]);
 
     const credentialsByCompany = new Map(
@@ -508,11 +515,24 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
       return map;
     }, new Map());
+    const salesCountByCompany = salesRows.reduce<Map<string, number>>((map, row) => {
+      map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
+      return map;
+    }, new Map());
+    const uploadStatsByCompany = importRows.reduce<Map<string, { count: number; latest?: string }>>((map, row) => {
+      const current = map.get(row.company_id) || { count: 0 };
+      map.set(row.company_id, {
+        count: current.count + 1,
+        latest: current.latest || row.created_at
+      });
+      return map;
+    }, new Map());
 
     return {
       source: "supabase",
       companies: companies.map((company) => {
         const credentials = credentialsByCompany.get(company.id);
+        const uploadStats = uploadStatsByCompany.get(company.id);
         return {
           id: company.id,
           name: company.name,
@@ -523,6 +543,9 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerEmail: credentials?.customer_email || "",
           customerPassword: credentials?.customer_password || "",
           customerCount: customerCountByCompany.get(company.id) || 0,
+          salesTransactionCount: salesCountByCompany.get(company.id) || 0,
+          uploadCount: uploadStats?.count || 0,
+          lastUploadAt: uploadStats?.latest ? new Date(uploadStats.latest).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined,
           updatedAt: new Date(credentials?.updated_at || company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
         };
       })
@@ -542,6 +565,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerEmail: fallbackCredentials.customerEmail,
           customerPassword: fallbackCredentials.customerPassword,
           customerCount: getSampleCustomerMaster().length,
+          salesTransactionCount: 0,
+          uploadCount: 0,
           updatedAt: "fallback"
         }
       ]
@@ -570,6 +595,8 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         customerEmail,
         customerPassword: input.customerPassword,
         customerCount: 0,
+        salesTransactionCount: 0,
+        uploadCount: 0,
         updatedAt: "로컬 샘플"
       }
     };
@@ -637,6 +664,8 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       customerEmail,
       customerPassword: input.customerPassword,
       customerCount: 0,
+      salesTransactionCount: 0,
+      uploadCount: 0,
       updatedAt: new Date(company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };

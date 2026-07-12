@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { Building2, Eye, EyeOff, Plus, Save, Search, Users } from "lucide-react";
+import { Building2, Eye, EyeOff, FileSpreadsheet, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ManagedCompanyAccount, ManagedCompanyAccountInput } from "@/lib/store";
@@ -157,6 +157,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   <Users className="h-3.5 w-3.5" />
                   거래처 {company.customerCount}곳
                 </span>
+                <span className="inline-flex items-center gap-1">
+                  <ReceiptText className="h-3.5 w-3.5" />
+                  매출 {company.salesTransactionCount}건
+                </span>
                 <span>{company.ownerName || "대표자 미입력"}</span>
               </div>
             </button>
@@ -177,6 +181,15 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
         </div>
 
         <form className="space-y-6 p-5" onSubmit={handleSubmit}>
+          {selectedCompany ? (
+            <div className="grid gap-3 md:grid-cols-4">
+              <DataMetric icon={Users} label="거래처" value={`${selectedCompany.customerCount.toLocaleString()}곳`} />
+              <DataMetric icon={ReceiptText} label="매출 거래" value={`${selectedCompany.salesTransactionCount.toLocaleString()}건`} />
+              <DataMetric icon={UploadCloud} label="업로드" value={`${selectedCompany.uploadCount.toLocaleString()}회`} />
+              <DataMetric icon={FileSpreadsheet} label="마지막 업로드" value={selectedCompany.lastUploadAt || "-"} compact />
+            </div>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="고객사명" required value={form.name} onChange={(value) => update("name", value)} />
             <Field label="대표자/담당자명" value={form.ownerName || ""} onChange={(value) => update("ownerName", value)} />
@@ -263,6 +276,26 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           </div>
         </form>
       </section>
+    </div>
+  );
+}
+
+function DataMetric({
+  compact,
+  icon: Icon,
+  label,
+  value
+}: {
+  compact?: boolean;
+  icon: typeof Users;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <Icon className="mb-3 h-4 w-4 text-primary" />
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className={`${compact ? "text-sm leading-5" : "text-2xl"} mt-1 font-black text-slate-950`}>{value}</p>
     </div>
   );
 }
