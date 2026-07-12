@@ -173,17 +173,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
 
   return (
-    <div className="flex h-[calc(100vh-178px)] min-h-[760px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white text-slate-950 shadow-sm">
-      <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div className="flex h-[calc(100vh-166px)] min-h-[760px] flex-col overflow-hidden rounded-md border border-slate-200/80 bg-white text-slate-950 shadow-sm">
+      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="min-w-0">
-          <h2 className="whitespace-nowrap text-lg font-black">영업·배송 통합 지도</h2>
-          <p className="mt-1 text-sm font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
+          <h2 className="whitespace-nowrap text-[20px] font-black leading-tight">영업·배송 통합 지도</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
             {workspaceViews.map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-950"}`}
+                className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-slate-950 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-950"}`}
                 key={item.value}
                 onClick={() => setActiveView(item.value)}
                 type="button"
@@ -199,7 +199,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-blue-500 bg-slate-50 md:grid-cols-5">
+      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/70 md:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "오늘 코스 선택" : `등급 매장 · ${selectedGradeLabel}`}
@@ -212,11 +212,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi label="예상시간" tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
-      <section className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 lg:flex-row lg:items-center">
+      <section className="flex flex-col gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:flex-row lg:items-center">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
-            className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:bg-white"
+            className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="거래처명·지역·주소 검색..."
             value={query}
@@ -226,7 +226,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           {gradeFilters.map((filter) => (
             <button
               className={`h-10 rounded-md border px-4 text-sm font-black transition ${
-                gradeFilter === filter.value ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                gradeFilter === filter.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
               key={filter.value}
               onClick={() => setGradeFilter(filter.value)}
@@ -241,7 +241,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             내 위치
           </button>
-          <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-700">
+          <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-black text-slate-700">
             {selectedVehicleLabel}
           </span>
           <span className="ml-2 text-sm font-black text-slate-500">
@@ -251,7 +251,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_360px]" : "xl:grid-cols-[300px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_380px]" : "xl:grid-cols-[320px_minmax(0,1fr)_380px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -377,7 +377,7 @@ function DeliveryAssignmentPanel({
 
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-3 border-r border-slate-200 bg-white py-3">
+      <aside className="flex min-h-0 flex-col items-center gap-3 border-r border-slate-200/80 bg-white py-3">
         <button
           aria-label="배송 담당자 패널 펼치기"
           className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -386,18 +386,18 @@ function DeliveryAssignmentPanel({
         >
           <PanelLeftOpen className="h-4 w-4" />
         </button>
-        <Truck className="h-5 w-5 text-emerald-700" />
+        <Truck className="h-5 w-5 text-slate-500" />
         <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">담당자필터</span>
       </aside>
     );
   }
 
   return (
-    <aside className="min-h-0 border-r border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
+    <aside className="min-h-0 border-r border-slate-200/80 bg-white">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
-            <Truck className="h-4 w-4 text-emerald-700" />
+            <Truck className="h-4 w-4 text-slate-500" />
             배송담당자 필터
           </p>
           <p className="mt-1 text-xs font-bold text-slate-500">담당자별 거래처만 지도에 표시합니다.</p>
@@ -414,14 +414,14 @@ function DeliveryAssignmentPanel({
       <div className="space-y-2 p-3 pb-0">
         <button
           className={`w-full rounded-md border p-3 text-left transition ${
-            selectedVehicleId === "all" ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+            selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
           onClick={() => onSelectVehicle("all")}
           type="button"
         >
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-black text-slate-950">전체 담당자</p>
-            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{totalStores}곳</span>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">{totalStores}곳</span>
           </div>
           <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
         </button>
@@ -433,7 +433,7 @@ function DeliveryAssignmentPanel({
           return (
             <div
               className={`w-full rounded-md border p-3 text-left transition ${
-                selected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                selected ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
               key={vehicle.id}
             >
@@ -446,7 +446,7 @@ function DeliveryAssignmentPanel({
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
                       {vehicle.stops.length}곳
                     </span>
                   </div>
@@ -457,7 +457,7 @@ function DeliveryAssignmentPanel({
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
                     <span
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 hover:bg-slate-50"
                       onClick={(event) => {
                         event.stopPropagation();
                         setEditingVehicleId(vehicle.id);
@@ -493,10 +493,10 @@ function VehicleEditForm({
   return (
     <div className="space-y-2">
       <p className="text-sm font-black text-slate-950">{vehicle.name} 편집</p>
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none focus:border-emerald-500" onChange={(event) => setDriver(event.target.value)} value={driver} />
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none focus:border-emerald-500" onChange={(event) => setArea(event.target.value)} value={area} />
+      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
+      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" onChange={(event) => setArea(event.target.value)} value={area} />
       <div className="flex gap-2">
-        <button className="h-8 flex-1 rounded-md bg-emerald-700 text-xs font-black text-white" onClick={() => onSave({ area, driver })} type="button">
+        <button className="h-8 flex-1 rounded-md bg-slate-950 text-xs font-black text-white hover:bg-slate-800" onClick={() => onSave({ area, driver })} type="button">
           저장
         </button>
         <button className="h-8 flex-1 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-600" onClick={onCancel} type="button">
@@ -519,9 +519,9 @@ function StoreManagementPanel({
   readonly title: string;
 }) {
   return (
-    <aside className="h-full min-h-0 border-l border-slate-200 bg-white">
+    <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm font-black text-slate-950">{title}</p>
             <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
@@ -533,7 +533,7 @@ function StoreManagementPanel({
             stores.map((store) => (
               <button
                 className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                  store.id === selectedStoreId ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
+                  store.id === selectedStoreId ? "bg-slate-50 shadow-[inset_3px_0_0_#0f172a]" : ""
                 }`}
                 key={store.id}
                 onClick={() => onSelectStore(store.id)}
@@ -583,7 +583,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-0 flex-1 overflow-auto bg-slate-50 p-4">
+    <section className="min-h-0 flex-1 overflow-auto bg-[#f6f8fb] p-4">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -591,8 +591,8 @@ function CustomerDirectoryView({
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
-        <div className="grid grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-500">
+      <div className="mt-4 overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+        <div className="grid grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs font-black text-slate-500">
           <span>거래처</span>
           <span>매출등급</span>
           <span>담당자</span>
@@ -603,8 +603,8 @@ function CustomerDirectoryView({
         <div className="max-h-[calc(100vh-430px)] overflow-auto">
           {stores.map((store) => (
             <button
-              className={`grid w-full grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] items-center gap-0 border-b border-slate-100 px-4 py-3 text-left text-sm transition hover:bg-blue-50/50 ${
-                store.id === selectedStoreId ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : "bg-white"
+              className={`grid w-full grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] items-center gap-0 border-b border-slate-100 px-4 py-3 text-left text-sm transition hover:bg-slate-50 ${
+                store.id === selectedStoreId ? "bg-slate-50 shadow-[inset_3px_0_0_#0f172a]" : "bg-white"
               }`}
               key={store.id}
               onClick={() => onSelectStore(store.id)}
@@ -766,15 +766,15 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-slate-50 ${routePanelCollapsed ? "xl:grid-cols-[320px_minmax(0,1fr)_60px]" : "xl:grid-cols-[320px_minmax(0,1fr)_430px]"}`}>
-      <aside className="min-h-0 border-r border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-3">
+    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[320px_minmax(0,1fr)_60px]" : "xl:grid-cols-[320px_minmax(0,1fr)_460px]"}`}>
+      <aside className="min-h-0 border-r border-slate-200/80 bg-white">
+        <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">오늘 코스</p>
           <p className="mt-1 text-xs font-bold text-slate-500">배송담당자별 방문 코스를 선택합니다.</p>
         </div>
         <div className="space-y-2 p-3">
           <button
-            className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+            className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
             onClick={() => onSelectVehicle("all")}
             type="button"
           >
@@ -804,7 +804,7 @@ function TodayCourseView({
         <KakaoAddressMap focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={routeMapMarkers} routePath={routeSequence?.path || []} showList={false} />
       </div>
 
-      <aside className="min-h-0 border-l border-slate-200 bg-white">
+      <aside className="min-h-0 border-l border-slate-200/80 bg-white">
         {routePanelCollapsed ? (
           <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
             <button
@@ -816,11 +816,11 @@ function TodayCourseView({
               <PanelLeftOpen className="h-4 w-4" />
             </button>
             <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">오늘 코스</div>
-            <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">{selectedRouteStores.length}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{selectedRouteStores.length}</span>
           </div>
         ) : (
           <div className="flex h-full min-h-0 flex-col">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
                 <p className="mt-1 text-xs font-bold text-slate-500">
@@ -837,7 +837,7 @@ function TodayCourseView({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <div className="border-b border-slate-200 p-3">
+              <div className="border-b border-slate-200/80 p-3">
                 <RouteSequenceAction
                   buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
                   destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
@@ -845,11 +845,11 @@ function TodayCourseView({
                   showMap={false}
                 />
               </div>
-              <div className="space-y-2 border-b border-slate-200 p-3">
+              <div className="space-y-2 border-b border-slate-200/80 p-3">
                 <label className="relative block">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
-                    className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
+                    className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
                     onChange={(event) => setRouteQuery(event.target.value)}
                     placeholder="경유 매장 검색..."
                     value={routeQuery}
@@ -865,7 +865,7 @@ function TodayCourseView({
                   <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={clearRouteStores} type="button">
                     선택 해제
                   </button>
-                  <span className="inline-flex h-8 items-center rounded-md bg-blue-50 px-3 text-xs font-black text-blue-700">
+                  <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-700">
                     {activeRouteBatchIndex + 1}/{routeBatchCount}묶음 · 계산 {selectedRouteStores.length}곳
                   </span>
                   {inactiveSelectedCount ? <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-600">다른 묶음 {inactiveSelectedCount}곳</span> : null}
@@ -909,14 +909,14 @@ function TodayCourseView({
                     {selectedRouteStores.map((store, index) => (
                       <button
                         className={`w-full rounded-md border p-3 text-left transition hover:bg-white ${
-                          store.id === routeSelectedStore?.id ? "border-blue-400 bg-white shadow-sm" : "border-slate-200 bg-white/80"
+                          store.id === routeSelectedStore?.id ? "border-slate-900 bg-white shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white/80"
                         }`}
                         key={store.id}
                         onClick={() => openRouteStore(store.id)}
                         type="button"
                       >
                         <div className="flex items-start gap-3">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-600 text-xs font-black text-white">{routeBatchStart + index + 1}</span>
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-950 text-xs font-black text-white">{routeBatchStart + index + 1}</span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
@@ -980,9 +980,9 @@ function TodayCourseView({
                     <button
                       className={`w-full rounded-md border p-3 text-left transition hover:bg-slate-50 ${
                         store.id === routeSelectedStore?.id
-                          ? "border-blue-400 bg-blue-50"
+                          ? "border-slate-900 bg-slate-50"
                           : activeForRoute
-                            ? "border-blue-200 bg-blue-50/70"
+                            ? "border-slate-300 bg-slate-50/80"
                             : selectedForRoute
                               ? "border-slate-300 bg-slate-50"
                               : "border-slate-200 bg-white"
@@ -994,7 +994,7 @@ function TodayCourseView({
                       <div className="flex items-start gap-3">
                         <span
                           className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${
-                            activeForRoute ? "bg-blue-600 text-white" : selectedForRoute ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-500"
+                            activeForRoute ? "bg-slate-950 text-white" : selectedForRoute ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-500"
                           }`}
                         >
                           {selectedForRoute ? selectedOrder : index + 1}
@@ -1007,13 +1007,13 @@ function TodayCourseView({
                         <span className="flex shrink-0 flex-col items-end gap-2">
                           <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                           {activeForRoute ? (
-                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-black text-blue-700">계산</span>
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">계산</span>
                           ) : selectedForRoute ? (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">대기</span>
                           ) : null}
                           <span
                             className={`rounded-md px-2 py-1 text-[11px] font-black ${
-                              selectedForRoute ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"
+                              selectedForRoute ? "bg-slate-900 text-white" : "bg-slate-700 text-white hover:bg-slate-900"
                             }`}
                             onClick={(event) => {
                               event.stopPropagation();
@@ -1039,9 +1039,9 @@ function TodayCourseView({
 
 function DirectoryStat({ label, tone = "slate", value }: { readonly label: string; readonly tone?: "rose" | "slate"; readonly value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
-      <p className="text-xs font-black text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-black ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+      <p className="text-xs font-black uppercase text-slate-400">{label}</p>
+      <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
     </div>
   );
 }
@@ -1579,16 +1579,16 @@ function Kpi({
   readonly value: string;
 }) {
   const valueClass = {
-    blue: "text-blue-600",
-    green: "text-emerald-600",
-    purple: "text-violet-600",
+    blue: "text-slate-950",
+    green: "text-emerald-700",
+    purple: "text-violet-700",
     red: "text-rose-600"
   }[tone];
   return (
-    <div className="border-r border-slate-200 px-5 py-3 last:border-r-0">
-      <p className="truncate text-xs font-bold text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-2xl font-black ${valueClass}`}>{value}</p>
-      {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-400">{helper}</p> : null}
+    <div className="border-r border-slate-200/80 px-5 py-3 last:border-r-0">
+      <p className="truncate text-[11px] font-black uppercase text-slate-400">{label}</p>
+      <p className={`mt-1 truncate text-[24px] font-black leading-none ${valueClass}`}>{value}</p>
+      {helper ? <p className="mt-2 truncate text-[11px] font-semibold text-slate-500">{helper}</p> : null}
     </div>
   );
 }
@@ -1890,6 +1890,6 @@ function roundToOneDecimal(value: number) {
 
 function gradeBadgeClass(grade: RevenueGrade) {
   if (grade === "A") return "rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-black text-white";
-  if (grade === "B") return "rounded-full bg-blue-500 px-2.5 py-1 text-xs font-black text-white";
+  if (grade === "B") return "rounded-full bg-slate-700 px-2.5 py-1 text-xs font-black text-white";
   return "rounded-full bg-slate-500 px-2.5 py-1 text-xs font-black text-white";
 }
