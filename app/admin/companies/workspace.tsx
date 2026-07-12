@@ -190,6 +190,57 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </div>
           ) : null}
 
+          {selectedCompany ? (
+            <div className="rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
+                <div>
+                  <p className="font-black">최근 업로드 이력</p>
+                  <p className="mt-1 text-xs font-bold text-muted-foreground">회사별 엑셀 업로드 성공/실패와 처리 품질을 확인합니다.</p>
+                </div>
+                <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
+                  최근 {selectedCompany.recentUploads.length}건
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
+                  <thead>
+                    <tr className="text-left text-xs font-black text-slate-500">
+                      <th className="border-b border-slate-100 px-4 py-3">파일명</th>
+                      <th className="border-b border-slate-100 px-4 py-3">상태</th>
+                      <th className="border-b border-slate-100 px-4 py-3 text-right">처리 행</th>
+                      <th className="border-b border-slate-100 px-4 py-3 text-right">품질</th>
+                      <th className="border-b border-slate-100 px-4 py-3 text-right">중복</th>
+                      <th className="border-b border-slate-100 px-4 py-3">업로드 시점</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedCompany.recentUploads.map((upload) => (
+                      <tr key={upload.id} className="font-bold text-slate-800">
+                        <td className="border-b border-slate-100 px-4 py-3">{upload.filename}</td>
+                        <td className="border-b border-slate-100 px-4 py-3">
+                          <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
+                            {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
+                          </span>
+                        </td>
+                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.rows.toLocaleString()}</td>
+                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.qualityScore}%</td>
+                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.duplicateCount.toLocaleString()}</td>
+                        <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{upload.createdAt}</td>
+                      </tr>
+                    ))}
+                    {!selectedCompany.recentUploads.length ? (
+                      <tr>
+                        <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={6}>
+                          아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="고객사명" required value={form.name} onChange={(value) => update("name", value)} />
             <Field label="대표자/담당자명" value={form.ownerName || ""} onChange={(value) => update("ownerName", value)} />

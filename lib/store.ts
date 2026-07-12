@@ -209,6 +209,7 @@ export type ManagedCompanyAccount = {
   salesTransactionCount: number;
   uploadCount: number;
   lastUploadAt?: string;
+  recentUploads: UploadHistoryItem[];
   updatedAt?: string;
 };
 export type ManagedCompanyAccountInput = {
@@ -474,6 +475,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerCount: getSampleCustomerMaster().length,
           salesTransactionCount: 0,
           uploadCount: 0,
+          recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
           updatedAt: "샘플 기준"
         }
       ]
@@ -503,7 +505,19 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       >("auth_credentials?select=customer_company_id,customer_email,customer_password,updated_at"),
       supabaseRequest<Array<{ company_id: string }>>("normalized_customers?select=company_id"),
       supabaseRequest<Array<{ company_id: string }>>("sales_transactions?select=company_id"),
-      supabaseRequest<Array<{ company_id: string; created_at: string }>>("customer_imports?select=company_id,created_at&order=created_at.desc")
+      supabaseRequest<
+        Array<{
+          id: string;
+          company_id: string;
+          row_count: number;
+          status: "completed" | "running" | "failed";
+          quality_score: number;
+          duplicate_count: number;
+          created_at: string;
+          uploaded_files: { original_filename: string } | null;
+          ai_reports: Array<{ id: string; health_score: number }>;
+        }>
+      >("customer_imports?select=id,company_id,row_count,status,quality_score,duplicate_count,created_at,uploaded_files(original_filename),ai_reports(id,health_score)&order=created_at.desc")
     ]);
 
     const credentialsByCompany = new Map(
@@ -527,6 +541,25 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       });
       return map;
     }, new Map());
+    const recentUploadsByCompany = importRows.reduce<Map<string, UploadHistoryItem[]>>((map, row) => {
+      const uploads = map.get(row.company_id) || [];
+      if (uploads.length < 5) {
+        uploads.push({
+          id: row.id,
+          company: "",
+          filename: row.uploaded_files?.original_filename || "업로드 파일",
+          reportId: row.ai_reports?.[0]?.id || "",
+          rows: row.row_count,
+          status: row.status,
+          qualityScore: row.quality_score,
+          duplicateCount: row.duplicate_count,
+          healthScore: row.ai_reports?.[0]?.health_score || 0,
+          createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+        });
+      }
+      map.set(row.company_id, uploads);
+      return map;
+    }, new Map());
 
     return {
       source: "supabase",
@@ -546,6 +579,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           salesTransactionCount: salesCountByCompany.get(company.id) || 0,
           uploadCount: uploadStats?.count || 0,
           lastUploadAt: uploadStats?.latest ? new Date(uploadStats.latest).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined,
+          recentUploads: recentUploadsByCompany.get(company.id) || [],
           updatedAt: new Date(credentials?.updated_at || company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
         };
       })
@@ -567,6 +601,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerCount: getSampleCustomerMaster().length,
           salesTransactionCount: 0,
           uploadCount: 0,
+          recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
           updatedAt: "fallback"
         }
       ]
@@ -597,6 +632,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         customerCount: 0,
         salesTransactionCount: 0,
         uploadCount: 0,
+        recentUploads: [],
         updatedAt: "로컬 샘플"
       }
     };
@@ -666,6 +702,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       customerCount: 0,
       salesTransactionCount: 0,
       uploadCount: 0,
+      recentUploads: [],
       updatedAt: new Date(company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };
