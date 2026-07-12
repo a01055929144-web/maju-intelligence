@@ -77,7 +77,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-[#f6f8fb] text-slate-950">
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-200 ${collapsed ? "lg:grid-cols-[76px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
@@ -141,7 +141,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </aside>
 
         <section className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
             <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-3" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -149,8 +149,8 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                     <Badge className="bg-slate-100 text-slate-700">고객사 작업공간</Badge>
                     {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
-                  <h1 className="truncate text-xl font-black text-slate-950">{title}</h1>
-                  {subtitle ? <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p> : null}
+                  <h1 className="truncate text-[22px] font-black tracking-normal text-slate-950">{title}</h1>
+                  {subtitle ? <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p> : null}
                 </div>
               ) : (
                 <div className="hidden xl:block" />

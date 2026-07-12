@@ -382,7 +382,7 @@ export default function CrmTimelinePage() {
       title="거래처 히스토리"
       userName="관리자"
     >
-      <section className="mx-auto max-w-[1760px] space-y-4">
+      <section className="mx-auto max-w-[1720px] space-y-5">
         <div className="grid gap-3 lg:grid-cols-4">
           <SummaryCard label="전체 거래처" value={`${customers.length}곳`} helper="기초 등록된 매장" />
           <SummaryCard label="A등급 거래처" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
@@ -390,7 +390,7 @@ export default function CrmTimelinePage() {
           <SummaryCard label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} helper="최근 액션 기준" tone="violet" />
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-4">
+        <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={dbSummary.tone === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{dbSummary.label}</Badge>
@@ -405,18 +405,18 @@ export default function CrmTimelinePage() {
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
-          <aside className="overflow-hidden rounded-md border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 p-4">
+          <aside className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+            <div className="border-b border-slate-200/80 p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
-                  <p className="mt-1 text-sm font-medium text-slate-500">매장을 누르면 상세 정보가 오른쪽에 표시됩니다.</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">검색, 등급, 담당자 기준으로 빠르게 찾습니다.</p>
                 </div>
                 <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
               </div>
             </div>
-            <div className="border-b border-slate-200 bg-slate-50 p-3">
-              <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3">
+            <div className="border-b border-slate-200/80 bg-slate-50/70 p-4">
+              <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
                 <Search className="h-4 w-4 text-slate-400" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
@@ -429,7 +429,7 @@ export default function CrmTimelinePage() {
                 {(["all", "A", "B", "C"] as const).map((grade) => (
                   <button
                     className={`h-9 rounded-md border text-xs font-black transition ${
-                      gradeFilter === grade ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50"
+                      gradeFilter === grade ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100"
                     }`}
                     key={grade}
                     onClick={() => setGradeFilter(grade)}
@@ -440,12 +440,12 @@ export default function CrmTimelinePage() {
                 ))}
               </div>
             </div>
-            <div className="max-h-[calc(100vh-370px)] space-y-2 overflow-auto p-3">
+            <div className="max-h-[calc(100vh-390px)] space-y-2 overflow-auto p-3">
               {filteredCustomers.map(({ customer, index }) => (
                 <button
                   key={`${customer.customerName}-${customer.address}`}
                   className={`w-full rounded-md border p-4 text-left transition ${
-                    index === selectedIndex ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    index === selectedIndex ? "border-slate-900 bg-slate-50 shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                   }`}
                   onClick={() => setSelectedIndex(index)}
                   type="button"
@@ -475,11 +475,11 @@ export default function CrmTimelinePage() {
           </aside>
 
           <div className="min-w-0 space-y-4">
-            <div className="rounded-md border border-slate-200 bg-white p-5">
+            <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <Badge className="mb-3 bg-blue-50 text-blue-700">선택 거래처</Badge>
-                  <h2 className="truncate text-2xl font-black text-slate-950">{selectedCustomer.customerName}</h2>
+                  <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>
+                  <h2 className="truncate text-[26px] font-black leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
                   </p>
@@ -520,8 +520,8 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="rounded-md border border-slate-200 bg-white p-5">
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_440px]">
+              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-black text-slate-950">기본 정보</h3>
@@ -570,13 +570,13 @@ export default function CrmTimelinePage() {
                 )}
               </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-5">
+              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <h3 className="text-base font-black text-slate-950">배송 적재위치</h3>
                 <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
-                <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
                   <div className="grid gap-2">
                     <select
-                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                       onChange={(event) => {
                         setNewAttachmentType(event.target.value);
                         setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
@@ -589,18 +589,18 @@ export default function CrmTimelinePage() {
                       <option value="etc">기타 첨부자료</option>
                     </select>
                     <input
-                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                       onChange={(event) => setNewAttachmentTitle(event.target.value)}
                       placeholder="자료명"
                       value={newAttachmentTitle}
                     />
                     <input
-                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                       onChange={(event) => setNewAttachmentUrl(event.target.value)}
                       placeholder="파일 링크 또는 외부 URL"
                       value={newAttachmentUrl}
                     />
-                    <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-white p-3 text-center text-sm font-black text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50">
+                    <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-white p-3 text-center text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">
                       <span>{newAttachmentFile ? newAttachmentFile.name : "파일 직접 선택"}</span>
                       <span className="mt-1 text-xs font-bold text-slate-400">이미지/PDF/영상, 최대 50MB</span>
                       <input
@@ -643,8 +643,8 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="rounded-md border border-slate-200 bg-white p-5">
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_440px]">
+              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-black text-slate-950">메모 히스토리</h3>
@@ -652,16 +652,16 @@ export default function CrmTimelinePage() {
                   </div>
                   <Badge className="bg-slate-100 text-slate-700">{customerNotes.length || selectedCustomer.memoCount}건</Badge>
                 </div>
-                <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
                   <textarea
-                    className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     onChange={(event) => setNewMemo(event.target.value)}
                     placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
                     value={newMemo}
                   />
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
-                      className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                       onChange={(event) => setNewNextAction(event.target.value)}
                       placeholder="다음 액션 예: 견적서 발송"
                       value={newNextAction}
@@ -690,7 +690,7 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-5">
+              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <Badge className="mb-3 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
                 <h3 className="text-base font-black text-slate-950">최근 액션</h3>
                 <div className="mt-4 space-y-3">
@@ -719,8 +719,8 @@ export default function CrmTimelinePage() {
 
 function MiniMetric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
   return (
-    <div className={`rounded-md border border-slate-200 bg-slate-50 p-3 ${wide ? "col-span-2" : ""}`}>
-      <p className="text-xs font-black text-slate-500">{label}</p>
+    <div className={`rounded-md border border-slate-200/80 bg-slate-50/70 p-3 ${wide ? "col-span-2" : ""}`}>
+      <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
     </div>
   );
@@ -735,20 +735,22 @@ function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string;
   }[tone];
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <p className="text-xs font-black text-slate-500">{label}</p>
-      <p className={`mt-2 whitespace-nowrap text-2xl font-black ${toneClassName}`}>{value}</p>
-      <p className="mt-1 truncate text-xs font-bold text-slate-400">{helper}</p>
+    <div className="rounded-md border border-slate-200/80 bg-white p-4 shadow-sm">
+      <p className="text-[11px] font-black uppercase text-slate-400">{label}</p>
+      <p className={`mt-2 whitespace-nowrap text-[24px] font-black leading-none ${toneClassName}`}>{value}</p>
+      <p className="mt-2 truncate text-xs font-semibold text-slate-500">{helper}</p>
     </div>
   );
 }
 
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 p-4">
-      <Icon className="mb-3 h-4 w-4 text-blue-700" />
-      <p className="text-xs font-black text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-950" title={value}>
+    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/70 p-4">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-slate-400" />
+        <p className="text-xs font-black text-slate-500">{label}</p>
+      </div>
+      <p className="mt-2 truncate text-sm font-black text-slate-950" title={value}>
         {value}
       </p>
     </div>
@@ -767,9 +769,9 @@ function PriorityTile({
   value: string;
 }) {
   const toneClassName = {
-    blue: "border-blue-100 bg-blue-50 text-blue-800",
-    emerald: "border-emerald-100 bg-emerald-50 text-emerald-800",
-    slate: "border-slate-200 bg-slate-50 text-slate-800"
+    blue: "border-blue-100 bg-blue-50/80 text-blue-800",
+    emerald: "border-emerald-100 bg-emerald-50/80 text-emerald-800",
+    slate: "border-slate-200 bg-slate-50/80 text-slate-800"
   }[tone];
 
   return (
@@ -785,8 +787,8 @@ function PriorityTile({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 text-sm">
-      <p className="font-black text-slate-400">{label}</p>
+    <div className="grid grid-cols-[108px_minmax(0,1fr)] gap-4 border-b border-slate-100 py-2.5 text-sm last:border-b-0">
+      <p className="font-bold text-slate-400">{label}</p>
       <p className="font-black text-slate-800">{value}</p>
     </div>
   );
@@ -807,7 +809,7 @@ function EditableField({
     <label className={`block min-w-0 ${className}`}>
       <span className="mb-1.5 block text-xs font-black text-slate-500">{label}</span>
       <input
-        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />

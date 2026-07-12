@@ -80,11 +80,11 @@ export default async function DashboardPage() {
       title="대시보드"
       userName={session.name}
     >
-      <section className="mx-auto max-w-[1680px] space-y-6">
-        <div className="grid gap-6 rounded-lg border border-border bg-white p-6 shadow-sm lg:grid-cols-[1fr_360px] lg:items-stretch">
+      <section className="mx-auto max-w-[1680px] space-y-5">
+        <div className="grid gap-5 rounded-md border border-slate-200/80 bg-white p-5 shadow-sm lg:grid-cols-[1fr_360px] lg:items-stretch">
           <div className="min-w-0">
-            <Badge className="mb-4 bg-primary/10 text-primary">MAJU 운영 지휘판</Badge>
-            <h1 className="max-w-3xl text-3xl font-black leading-tight sm:text-4xl">
+            <Badge className="mb-4 bg-slate-100 text-slate-700">MAJU 운영 지휘판</Badge>
+            <h1 className="max-w-3xl text-[28px] font-black leading-tight sm:text-[34px]">
               거래처 히스토리와 배송 동선을 기준으로
               <span className="block text-primary">오늘 공략할 매장을 정리했습니다.</span>
             </h1>
@@ -108,7 +108,7 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:opacity-90"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800"
                 href="/routes/today"
               >
                 오늘 영업 시작
@@ -152,7 +152,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card>
+          <Card className="border-slate-200/80 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-slate-200/80 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-primary" />
@@ -212,7 +212,7 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="border-slate-200/80 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Truck className="h-5 w-5 text-primary" />
@@ -258,7 +258,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-slate-200/80 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-primary" />
@@ -409,11 +409,13 @@ export default async function DashboardPage() {
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
-    <Card className="shadow-none">
+    <Card className="border-slate-200/80 bg-white shadow-sm">
       <CardContent className="p-5">
-        <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-3xl font-black">{value}</p>
+        <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-500">
+          <Icon className="h-4 w-4" />
+        </div>
+        <p className="text-xs font-black uppercase text-muted-foreground">{label}</p>
+        <p className="mt-2 text-[26px] font-black leading-none">{value}</p>
       </CardContent>
     </Card>
   );
@@ -421,15 +423,15 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
 
 function NextAction({ description, href, label, value }: { description: string; href: string; label: string; value: string }) {
   return (
-    <Link className="group rounded-md border border-border bg-muted/25 p-4 transition hover:border-primary/40 hover:bg-primary/5" href={href}>
+    <Link className="group rounded-md border border-slate-200/80 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-black">{label}</p>
-          <p className="mt-2 text-2xl font-black text-primary">{value}</p>
+          <p className="text-sm font-black text-slate-900">{label}</p>
+          <p className="mt-2 text-[22px] font-black leading-none text-slate-950">{value}</p>
         </div>
-        <ArrowRight className="h-4 w-4 text-primary transition group-hover:translate-x-0.5" />
+        <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
       </div>
-      <p className="mt-3 text-xs font-bold leading-5 text-muted-foreground">{description}</p>
+      <p className="mt-3 text-xs font-bold leading-5 text-slate-500">{description}</p>
     </Link>
   );
 }
