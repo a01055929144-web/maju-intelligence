@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,13 @@ const sampleTimeline = [
 ];
 
 export async function GET() {
+  const customerSession = getCustomerSession();
+  const adminSession = getAdminSession();
+
+  if (!customerSession && !adminSession) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
   const errors: string[] = [];
   let system = null;
   let timeline = sampleTimeline;
@@ -28,7 +36,7 @@ export async function GET() {
   }
 
   try {
-    const rows = await getVisitTimeline();
+    const rows = await getVisitTimeline(customerSession?.companyId);
     if (rows.length) timeline = rows;
   } catch (error) {
     errors.push(`방문 히스토리 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
