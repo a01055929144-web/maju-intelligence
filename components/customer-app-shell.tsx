@@ -16,6 +16,7 @@ import {
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
+  ReceiptText,
   Route,
   Settings,
   Sparkles
@@ -57,6 +58,7 @@ const navigationGroups: NavigationGroup[] = [
     label: "성장",
     items: [
       { active: "revenue", href: "/revenue/pipeline", icon: BarChart3, label: "매출 파이프라인" },
+      { active: "revenue", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
       { active: "assistant", href: "/assistant", icon: Sparkles, label: "AI 영업 도우미" },
       { active: "data", href: "/", icon: FileSpreadsheet, label: "데이터 등록" }
     ]

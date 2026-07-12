@@ -13,6 +13,7 @@ import {
   Lightbulb,
   MapPin,
   MessageSquareText,
+  ReceiptText,
   Route,
   Settings,
   Sparkles,
@@ -40,6 +41,12 @@ export default async function DashboardPage() {
   const estimatedFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
+  const latestUpload = uploadHistory[0];
+  const dataReadiness = [
+    { label: "거래처 마스터", ready: briefing.currentCustomers > 0, detail: `${briefing.currentCustomers.toLocaleString()}개 거래처` },
+    { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
+    { label: "오늘 코스", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 방문/배송` }
+  ];
   const scoreRows = [
     ["영업력", report.health.salesPower],
     ["배송효율", report.health.deliveryEfficiency],
@@ -51,6 +58,7 @@ export default async function DashboardPage() {
   const quickActions = [
     { href: "/routes/today", label: "오늘 방문 계획", icon: Route, description: "추천 리드를 지역별로 묶어 방문 순서를 봅니다." },
     { href: "/revenue/pipeline", label: "매출 파이프라인", icon: TrendingUp, description: "방문 결과가 예상 매출로 얼마나 전환되는지 봅니다." },
+    { href: "/revenue/transactions", label: "매출 거래내역", icon: ReceiptText, description: "ERP 엑셀에서 누적된 일자·품목·금액 원장을 확인합니다." },
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
     { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
@@ -141,6 +149,67 @@ export default async function DashboardPage() {
           <Metric icon={ClipboardList} label="오늘 추천" value={`${briefing.todayRecommendations}곳`} />
           <Metric icon={Lightbulb} label="고확률 리드" value={`${briefing.highProbability}곳`} />
           <Metric icon={Route} label="동선 내 리드" value={`${briefing.routeLeads}곳`} />
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                오늘 실행 순서
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">고객사가 로그인 후 바로 따라갈 수 있는 운영 순서입니다.</p>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <NextAction
+                description="전체 거래처와 사업자/배송 정보를 먼저 확인합니다."
+                href="/crm/timeline"
+                label="1. 거래처 확인"
+                value={`${briefing.currentCustomers.toLocaleString()}개`}
+              />
+              <NextAction
+                description="오늘 방문·배송할 매장을 선택하고 동선을 계산합니다."
+                href="/routes/today"
+                label="2. 오늘 코스"
+                value={`${routePlan.totalStops.toLocaleString()}곳`}
+              />
+              <NextAction
+                description="매출 원장을 확인하고 추가 업로드가 필요한지 봅니다."
+                href="/revenue/transactions"
+                label="3. 매출 점검"
+                value={latestUpload ? "업데이트됨" : "업로드 필요"}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+                데이터 준비 상태
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dataReadiness.map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                  <div>
+                    <p className="font-black">{item.label}</p>
+                    <p className="mt-1 text-xs font-bold text-muted-foreground">{item.detail}</p>
+                  </div>
+                  <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
+                    {item.ready ? "준비됨" : "필요"}
+                  </Badge>
+                </div>
+              ))}
+              <Link
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-white text-sm font-black transition hover:bg-muted"
+                href="/"
+              >
+                <Upload className="h-4 w-4" />
+                거래처/매출 데이터 등록
+              </Link>
+            </CardContent>
+          </Card>
         </div>
 
         <Card>
@@ -347,6 +416,21 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
         <p className="mt-1 text-3xl font-black">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function NextAction({ description, href, label, value }: { description: string; href: string; label: string; value: string }) {
+  return (
+    <Link className="group rounded-md border border-border bg-muted/25 p-4 transition hover:border-primary/40 hover:bg-primary/5" href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black">{label}</p>
+          <p className="mt-2 text-2xl font-black text-primary">{value}</p>
+        </div>
+        <ArrowRight className="h-4 w-4 text-primary transition group-hover:translate-x-0.5" />
+      </div>
+      <p className="mt-3 text-xs font-bold leading-5 text-muted-foreground">{description}</p>
+    </Link>
   );
 }
 
