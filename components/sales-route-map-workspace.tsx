@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
-import { createDeliveryVehicles, DeliveryVehicle } from "@/components/route-plan-workspace";
+import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
@@ -131,7 +131,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const routeSeedStores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
-  const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehicles(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
+  const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehiclesFromStores(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
   const gradeBaseStores = useMemo(
     () =>
@@ -263,7 +263,16 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           />
 
           <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-            <KakaoAddressMap focusedMarkerId={selectedId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={markers} showList={false} />
+            <KakaoAddressMap
+              focusedMarkerId={selectedId || undefined}
+              mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
+              markers={markers}
+              onMarkerClick={(marker) => {
+                if (!marker.id || marker.tone === "origin") return;
+                setSelectedId(marker.id);
+              }}
+              showList={false}
+            />
           </div>
 
           <StoreManagementPanel
@@ -801,7 +810,18 @@ function TodayCourseView({
       </aside>
 
       <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-        <KakaoAddressMap focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined} mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full" markers={routeMapMarkers} routePath={routeSequence?.path || []} showList={false} />
+        <KakaoAddressMap
+          focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
+          mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
+          markers={routeMapMarkers}
+          onMarkerClick={(marker) => {
+            if (!marker.id || marker.tone === "origin") return;
+            openRouteStore(marker.id);
+            onSelectStore(marker.id);
+          }}
+          routePath={routeSequence?.path || []}
+          showList={false}
+        />
       </div>
 
       <aside className="min-h-0 border-l border-slate-200/80 bg-white">
@@ -1634,6 +1654,8 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
         businessCertificateStatus: getSampleDocumentStatus(index),
         businessRegistrationNumber: createBusinessNumber(index),
         businessStatus: getSampleBusinessStatus(index),
+        deliveryArea: (store as RoutePlanStop & { deliveryArea?: string }).deliveryArea || store.region,
+        deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || defaultDriverByIndex(index),
         email: createStoreEmail(store.name, index),
         grade: getRevenueGrade(store.expectedRevenue),
         industry: getSampleIndustry(index),
@@ -1676,6 +1698,45 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
       };
     })
   );
+}
+
+function createDeliveryVehiclesFromStores(stores: StoreRow[]): DeliveryVehicle[] {
+  const groups = new Map<string, StoreRow[]>();
+
+  stores.forEach((store, index) => {
+    const driver = store.deliveryDriver || defaultDriverByIndex(index);
+    const area = store.deliveryArea || store.region || "미분류";
+    groups.set(driver, [...(groups.get(driver) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
+  });
+
+  return Array.from(groups.entries()).map(([driver, stops], index) => {
+    const orderedStops = stops.map((stop, stopIndex) => ({
+      ...stop,
+      order: stopIndex + 1
+    }));
+
+    return {
+      addresses: orderedStops.map((stop) => stop.address || stop.region),
+      area: summarizeVehicleArea(orderedStops),
+      driver,
+      expectedRevenue: orderedStops.reduce((total, stop) => total + Number(stop.expectedRevenue || 0), 0),
+      id: `vehicle-${index + 1}`,
+      name: `배송 ${index + 1}호차`,
+      stops: orderedStops,
+      totalDistanceKm: roundToOneDecimal(orderedStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
+      totalDurationMinutes: orderedStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
+    };
+  });
+}
+
+function summarizeVehicleArea(stops: StoreRow[]) {
+  const areas = Array.from(new Set(stops.map((stop) => stop.deliveryArea || stop.region).filter(Boolean))).slice(0, 3);
+  if (areas.length === 0) return "미분류";
+  return areas.join("·");
+}
+
+function defaultDriverByIndex(index: number) {
+  return ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저", "정배송 매니저", "한배송 매니저", "오배송 매니저", "서배송 매니저", "신배송 매니저", "문배송 매니저"][index % 10];
 }
 
 function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[]): KakaoMapMarker[] {

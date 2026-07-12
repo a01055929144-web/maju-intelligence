@@ -1578,11 +1578,15 @@ export async function getReportById(reportId: string, companyId?: string): Promi
 }
 
 export async function getLatestBriefing(companyId?: string) {
-  const report = await getLatestReport(companyId);
+  const [report, customerMaster] = await Promise.all([
+    getLatestReport(companyId),
+    getCustomerMaster(companyId).catch(() => ({ customers: getSampleCustomerMaster(), source: "sample" as const }))
+  ]);
+  const currentCustomers = customerMaster.customers.length || report.customers;
 
   return {
     greeting: "안녕하세요 정두영님.",
-    currentCustomers: report.customers,
+    currentCustomers,
     weeklyOpportunities: report.newOpportunities,
     todayRecommendations: Math.min(12, report.leadRecommendations.length),
     highProbability: report.highProbabilityCount,
@@ -1645,23 +1649,28 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
 }
 
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
-  const leadPayload = await getLatestLeads(companyId).catch(() => getLeadPayload());
   const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
-  const planned = (leadPayload.leads as LeadItem[])
-    .filter((lead) => lead.status === "visit-planned" || lead.status === "today" || lead.status === "high-probability")
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 12)
-    .map((lead, index) => {
-      const sample = findSampleCustomerForLead(lead);
-      const address = sample?.address || `${lead.region || "서울"} ${lead.name}`;
+  const customerMaster = await getCustomerMaster(companyId).catch(() => ({ customers: getSampleCustomerMaster(), source: "sample" as const }));
+  const planned = customerMaster.customers
+    .map((customer, index) => {
+      const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
       const cached = routeCache.get(address);
-      const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : "sample";
+      const distanceKm = cached?.distanceKm ?? customer.deliveryKm;
+      const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : customerMaster.source === "supabase" ? "estimated" : "sample";
 
       return {
-        ...lead,
+        id: customer.id || `customer-${index + 1}`,
+        name: customer.customerName,
+        region: customer.region || "미분류",
+        score: Math.max(50, Math.min(99, Math.round(Number(customer.monthlyRevenue || 0) / 5))),
+        reasons: ["거래처 원장 기준", customer.grade ? `${customer.grade}등급` : "등급 산정", customer.deliveryManager || "담당자 배정"],
+        status: index < 15 ? "today" : "visit-planned",
+        expectedRevenue: Number(customer.monthlyRevenue || 0),
         address,
-        distanceKm: cached?.distanceKm ?? sample?.deliveryKm,
-        durationMinutes: cached?.durationMinutes ?? estimateMinutesFromKm(sample?.deliveryKm),
+        distanceKm,
+        durationMinutes: cached?.durationMinutes ?? customer.deliveryMinutes ?? estimateMinutesFromKm(distanceKm),
+        deliveryArea: customer.deliveryZone || customer.region || "미분류",
+        deliveryDriver: customer.deliveryManager,
         order: index + 1,
         routeCalculatedAt: cached?.calculatedAt,
         routeProvider

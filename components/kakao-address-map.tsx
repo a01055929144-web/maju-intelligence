@@ -24,6 +24,7 @@ type KakaoAddressMapProps = {
   readonly focusedMarkerId?: string;
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
+  readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
   readonly showList?: boolean;
 };
@@ -38,7 +39,7 @@ let kakaoScriptPromise: Promise<void> | null = null;
 const emptyRoutePath: ReadonlyArray<KakaoRoutePoint> = [];
 const defaultMapClassName = "h-[360px]";
 
-export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
+export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, onMarkerClick, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const boundsRef = useRef<any>(null);
@@ -86,8 +87,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
                   if (geocodeStatus === kakao.maps.services.Status.OK && result[0]) {
                     const position = new kakao.maps.LatLng(Number(result[0].y), Number(result[0].x));
+                    const overlayContent = createMarkerOverlay(marker);
+                    overlayContent.addEventListener("click", () => onMarkerClick?.(marker));
                     new kakao.maps.CustomOverlay({
-                      content: createMarkerOverlay(marker),
+                      content: overlayContent,
                       map,
                       position,
                       yAnchor: 1.75
@@ -138,10 +141,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
     return () => {
       ignore = true;
     };
-  }, [appKey, canUseKakao, focusedMarkerId, markers, routePath]);
+  }, [appKey, canUseKakao, focusedMarkerId, markers, onMarkerClick, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} routePath={routePath} showList={showList} />;
+    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} onMarkerClick={onMarkerClick} routePath={routePath} showList={showList} />;
   }
 
   const moveToCurrentLocation = () => {
@@ -329,35 +332,41 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
   const name = escapeHtml(marker.name);
 
   if (marker.tone === "origin") {
-    return `
-      <div title="${name}" style="background:#0f172a;color:#ffffff;border:1px solid rgba(255,255,255,.92);border-radius:999px;display:flex;align-items:center;gap:6px;padding:6px 10px;box-shadow:0 10px 22px rgba(15,23,42,.30);font-size:12px;font-weight:900;letter-spacing:0;">
+    return htmlToElement(`
+      <button type="button" title="${name}" style="cursor:pointer;background:#0f172a;color:#ffffff;border:1px solid rgba(255,255,255,.92);border-radius:999px;display:flex;align-items:center;gap:6px;padding:6px 10px;box-shadow:0 10px 22px rgba(15,23,42,.30);font-size:12px;font-weight:900;letter-spacing:0;">
         <span style="width:7px;height:7px;border-radius:999px;background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.18);display:block;"></span>
         ${label || "출발"}
-      </div>
-    `;
+      </button>
+    `);
   }
 
   if (marker.tone === "customer" && /^\d+$/.test(marker.label)) {
-    return `
-      <div title="${name}" style="background:#2563eb;color:#ffffff;width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
+    return htmlToElement(`
+      <button type="button" title="${name}" style="cursor:pointer;background:#2563eb;color:#ffffff;width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
         ${label}
-      </div>
-    `;
+      </button>
+    `);
   }
 
   if (marker.grade) {
-    return `
-      <div title="${name}" style="${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;">
+    return htmlToElement(`
+      <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;">
         ${label}
-      </div>
-    `;
+      </button>
+    `);
   }
 
-  return `
-    <div style="${toneClass}border-radius:8px;padding:7px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:12px;font-weight:800;white-space:nowrap;">
+  return htmlToElement(`
+    <button type="button" title="${name}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:7px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:12px;font-weight:800;white-space:nowrap;">
       ${label} · ${name}
-    </div>
-  `;
+    </button>
+  `);
+}
+
+function htmlToElement(html: string) {
+  const template = document.createElement("template");
+  template.innerHTML = html.trim();
+  return template.content.firstElementChild as HTMLElement;
 }
 
 function gradeStyle(grade: "A" | "B" | "C") {
@@ -379,6 +388,7 @@ function FallbackAddressMap({
   focusedMarkerId,
   mapClassName = defaultMapClassName,
   markers,
+  onMarkerClick,
   routePath,
   showList
 }: KakaoAddressMapProps) {
@@ -405,9 +415,11 @@ function FallbackAddressMap({
         {displayMarkers.map((marker) => {
           const focused = focusedMarkerId && marker.id === focusedMarkerId;
           return (
-          <div
+          <button
+            type="button"
             key={`${marker.label}-${marker.address}`}
-            className={`group absolute -translate-x-1/2 -translate-y-1/2 ${focused ? "z-20" : "z-10"}`}
+            className={`group absolute -translate-x-1/2 -translate-y-1/2 text-left ${focused ? "z-20" : "z-10"}`}
+            onClick={() => onMarkerClick?.(marker)}
             style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
           >
             <span
@@ -431,7 +443,7 @@ function FallbackAddressMap({
               <p className="font-black">{marker.name}</p>
               <p className="mt-1 leading-5 text-muted-foreground">{marker.address}</p>
             </div>
-          </div>
+          </button>
           );
         })}
       </div>
