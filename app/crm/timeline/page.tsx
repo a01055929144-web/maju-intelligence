@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Building2, FileText, LinkIcon, PackageCheck, Pencil, Phone, Plus, Route, Save, Store } from "lucide-react";
+import { Banknote, Building2, FileText, LinkIcon, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { sampleCustomers } from "@/lib/sample-data";
@@ -94,6 +94,8 @@ export default function CrmTimelinePage() {
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
 
   useEffect(() => {
     let active = true;
@@ -214,6 +216,31 @@ export default function CrmTimelinePage() {
 
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
+  const filteredCustomers = useMemo(() => {
+    const keyword = customerSearch.trim().toLowerCase();
+
+    return customers
+      .map((customer, index) => ({ customer, index }))
+      .filter(({ customer }) => {
+        const matchesGrade = gradeFilter === "all" || customer.grade === gradeFilter;
+        const matchesKeyword =
+          !keyword ||
+          [
+            customer.customerName,
+            customer.address,
+            customer.businessNumber,
+            customer.deliveryManager,
+            customer.industry,
+            customer.phone,
+            customer.region
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(keyword));
+
+        return matchesGrade && matchesKeyword;
+      });
+  }, [customerSearch, customers, gradeFilter]);
+  const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
 
   function updateDraft(field: keyof CustomerView, value: string) {
     setDraftCustomer((current) => {
@@ -359,7 +386,7 @@ export default function CrmTimelinePage() {
         <div className="grid gap-3 lg:grid-cols-4">
           <SummaryCard label="전체 거래처" value={`${customers.length}곳`} helper="기초 등록된 매장" />
           <SummaryCard label="A등급 거래처" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
-          <SummaryCard label="방문 기록" value={`${timeline.length}건`} helper={`${quoteRequests}건 견적 요청`} tone="blue" />
+          <SummaryCard label="현재 목록" value={`${filteredCustomers.length}곳`} helper={gradeFilter === "all" ? "전체 등급 기준" : `${gradeFilter}등급 필터 기준`} tone="blue" />
           <SummaryCard label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} helper="최근 액션 기준" tone="violet" />
         </div>
 
@@ -377,19 +404,44 @@ export default function CrmTimelinePage() {
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <aside className="rounded-md border border-slate-200 bg-white">
+        <div className="grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
+          <aside className="overflow-hidden rounded-md border border-slate-200 bg-white">
             <div className="border-b border-slate-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
                   <p className="mt-1 text-sm font-medium text-slate-500">매장을 누르면 상세 정보가 오른쪽에 표시됩니다.</p>
                 </div>
-                <Badge className="bg-slate-100 text-slate-700">{customers.length}곳</Badge>
+                <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
               </div>
             </div>
-            <div className="max-h-[calc(100vh-280px)] space-y-2 overflow-auto p-3">
-              {customers.map((customer, index) => (
+            <div className="border-b border-slate-200 bg-slate-50 p-3">
+              <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
+                  onChange={(event) => setCustomerSearch(event.target.value)}
+                  placeholder="상호명, 주소, 사업자번호 검색"
+                  value={customerSearch}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {(["all", "A", "B", "C"] as const).map((grade) => (
+                  <button
+                    className={`h-9 rounded-md border text-xs font-black transition ${
+                      gradeFilter === grade ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50"
+                    }`}
+                    key={grade}
+                    onClick={() => setGradeFilter(grade)}
+                    type="button"
+                  >
+                    {grade === "all" ? "전체" : `${grade}등급`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="max-h-[calc(100vh-370px)] space-y-2 overflow-auto p-3">
+              {filteredCustomers.map(({ customer, index }) => (
                 <button
                   key={`${customer.customerName}-${customer.address}`}
                   className={`w-full rounded-md border p-4 text-left transition ${
@@ -409,9 +461,16 @@ export default function CrmTimelinePage() {
                     <span className="rounded bg-slate-100 px-2 py-1">{customer.industry}</span>
                     <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryKm}km</span>
                     <span className="rounded bg-slate-100 px-2 py-1">{customer.monthlyRevenue}만원</span>
+                    <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryManager}</span>
                   </div>
                 </button>
               ))}
+              {!filteredCustomers.length ? (
+                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                  <p className="text-sm font-black text-slate-700">조건에 맞는 거래처가 없습니다.</p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">검색어 또는 등급 필터를 바꿔보세요.</p>
+                </div>
+              ) : null}
             </div>
           </aside>
 
@@ -430,6 +489,13 @@ export default function CrmTimelinePage() {
                   <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}>
                     사업자 {selectedCustomer.businessStatus}
                   </Badge>
+                  <Link
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                    href="/routes/today"
+                  >
+                    <Route className="h-3.5 w-3.5" />
+                    코스 보기
+                  </Link>
                   <button
                     className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50"
                     onClick={() => setIsEditing((value) => !value)}
@@ -446,6 +512,11 @@ export default function CrmTimelinePage() {
                 <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone} />
                 <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
                 <InfoTile icon={Route} label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <PriorityTile label="배송 적재위치" value={selectedCustomer.loadingPosition || "미등록"} helper={`${loadingPositionAttachments}개 자료 등록`} tone="blue" />
+                <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
+                <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager} helper={`${selectedCustomer.region} 권역`} tone="emerald" />
               </div>
             </div>
 
@@ -680,6 +751,34 @@ function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: str
       <p className="mt-1 truncate text-sm font-black text-slate-950" title={value}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function PriorityTile({
+  helper,
+  label,
+  tone,
+  value
+}: {
+  helper: string;
+  label: string;
+  tone: "blue" | "emerald" | "slate";
+  value: string;
+}) {
+  const toneClassName = {
+    blue: "border-blue-100 bg-blue-50 text-blue-800",
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-800",
+    slate: "border-slate-200 bg-slate-50 text-slate-800"
+  }[tone];
+
+  return (
+    <div className={`min-w-0 rounded-md border p-4 ${toneClassName}`}>
+      <p className="text-xs font-black opacity-70">{label}</p>
+      <p className="mt-2 truncate text-sm font-black" title={value}>
+        {value}
+      </p>
+      <p className="mt-1 text-xs font-bold opacity-60">{helper}</p>
     </div>
   );
 }
