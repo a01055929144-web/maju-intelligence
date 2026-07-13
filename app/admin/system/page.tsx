@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { getAdminSession } from "@/lib/auth";
 import { getSystemDiagnostics } from "@/lib/store";
 
@@ -37,6 +38,44 @@ export default async function AdminSystemPage() {
       </header>
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+        <Card className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
+          <CardContent className="p-5">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge className={system.readyForOperations ? "mb-3 bg-primary text-primary-foreground" : "mb-3 bg-amber-100 text-amber-900"}>
+                  {system.readyForOperations ? "운영 가능" : "조치 필요"}
+                </Badge>
+                <h2 className="text-2xl font-black">운영 준비 상태</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  관리자, 고객사, DB 저장, 첨부자료, 경로 계산에 필요한 설정을 기준으로 실제 운영 가능 여부를 점검합니다.
+                </p>
+              </div>
+              <div className="w-full rounded-md border border-border bg-white p-4 lg:w-72">
+                <div className="mb-3 flex items-end justify-between">
+                  <p className="text-sm font-bold text-muted-foreground">준비도</p>
+                  <p className="text-3xl font-black">{system.readinessScore}%</p>
+                </div>
+                <Progress value={system.readinessScore} />
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <ReadinessList
+                empty="필수 운영 항목이 준비되었습니다."
+                icon="danger"
+                items={system.blockingIssues}
+                title="필수 조치"
+              />
+              <ReadinessList
+                empty="권장 점검 항목이 없습니다."
+                icon="warning"
+                items={system.warningIssues}
+                title="권장 점검"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Database} label="데이터 모드" value={system.mode === "production-db" ? "실 DB" : "저장 확인 필요"} />
           <Metric icon={ServerCog} label="앱 URL" value={system.appUrlConfigured ? "설정됨" : "미설정"} />
@@ -148,6 +187,31 @@ export default async function AdminSystemPage() {
         </Card>
       </section>
     </main>
+  );
+}
+
+function ReadinessList({ empty, icon, items, title }: { empty: string; icon: "danger" | "warning"; items: string[]; title: string }) {
+  const Icon = icon === "danger" ? ShieldAlert : AlertTriangle;
+  const tone = icon === "danger" ? "text-destructive" : "text-amber-700";
+
+  return (
+    <div className="rounded-md border border-border bg-white p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className={`h-4 w-4 ${tone}`} />
+        <p className="font-black">{title}</p>
+      </div>
+      {items.length > 0 ? (
+        <ul className="space-y-2">
+          {items.map((item) => (
+            <li key={item} className="rounded-md bg-muted/60 px-3 py-2 text-sm leading-6 text-foreground">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary">{empty}</div>
+      )}
+    </div>
   );
 }
 

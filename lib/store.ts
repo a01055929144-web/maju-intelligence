@@ -203,6 +203,10 @@ export type SystemStatus = {
   adminConfigured: boolean;
   customerConfigured: boolean;
   mode: "production-db" | "local-fallback";
+  blockingIssues: string[];
+  readinessScore: number;
+  readyForOperations: boolean;
+  warningIssues: string[];
   requiredEnvironment: Array<{ key: string; present: boolean; scope: "server" | "client" }>;
   services: Array<{ name: string; status: "ready" | "fallback" | "missing"; description: string }>;
   databaseChecks: DatabaseCheck[];
@@ -858,12 +862,26 @@ export function getSystemStatus(): SystemStatus {
   const adminConfigured = Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET);
   const customerConfigured = Boolean(process.env.CUSTOMER_EMAIL && process.env.CUSTOMER_PASSWORD);
   const routeConfigured = Boolean(process.env.COMPANY_ORIGIN_ADDRESS && process.env.TMAP_API_KEY);
+  const blockingIssues = [
+    !supabaseConfigured && "Supabase URL과 Service Role Key가 없어 거래처/매출/첨부자료 서버 저장을 확인할 수 없습니다.",
+    !adminConfigured && "관리자 이메일, 비밀번호, 세션 시크릿 환경변수를 모두 설정해야 합니다.",
+    !customerConfigured && "고객사 로그인 이메일과 비밀번호 환경변수를 설정해야 합니다."
+  ].filter((issue): issue is string => Boolean(issue));
+  const warningIssues = [
+    !routeConfigured && "회사 출발지 또는 TMAP API 키가 없어 실도로 경로 계산이 제한됩니다.",
+    !appUrlConfigured && "NEXT_PUBLIC_APP_URL이 없어 배포 URL 기반 링크와 리다이렉트 확인이 제한될 수 있습니다."
+  ].filter((issue): issue is string => Boolean(issue));
+  const readinessScore = Math.max(0, Math.min(100, 100 - blockingIssues.length * 25 - warningIssues.length * 10));
 
   return {
     appUrlConfigured,
     adminConfigured,
     customerConfigured,
     mode: supabaseConfigured ? "production-db" : "local-fallback",
+    blockingIssues,
+    readinessScore,
+    readyForOperations: blockingIssues.length === 0,
+    warningIssues,
     requiredEnvironment: [
       { key: "NEXT_PUBLIC_APP_URL", present: appUrlConfigured, scope: "client" },
       { key: "NEXT_PUBLIC_SUPABASE_URL", present: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL), scope: "client" },
