@@ -248,6 +248,11 @@ export default function CrmTimelinePage() {
       });
   }, [customerSearch, customers, gradeFilter]);
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
+  const draftBusinessNumberChanged = Boolean(
+    draftCustomer && normalizeBusinessRegistrationNumber(draftCustomer.businessNumber) !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber)
+  );
+  const draftBusinessNumberValid = !draftCustomer?.businessNumber || isValidBusinessRegistrationNumber(draftCustomer.businessNumber);
+  const canSaveCustomer = !isSaving && (!draftBusinessNumberChanged || draftBusinessNumberValid);
 
   function updateDraft(field: keyof CustomerView, value: string) {
     setDraftCustomer((current) => {
@@ -261,6 +266,10 @@ export default function CrmTimelinePage() {
 
   async function saveCustomer() {
     if (!draftCustomer) return;
+    if (draftBusinessNumberChanged && !draftBusinessNumberValid) {
+      setSaveMessage("사업자번호가 유효하지 않습니다. 10자리 번호와 체크값을 확인하세요.");
+      return;
+    }
     setIsSaving(true);
     setSaveMessage("");
 
@@ -270,7 +279,7 @@ export default function CrmTimelinePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: draftCustomer.address,
-          businessNumber: draftCustomer.businessNumber,
+          businessNumber: formatBusinessRegistrationNumber(draftCustomer.businessNumber),
           businessStatus: draftCustomer.businessStatus,
           customerName: draftCustomer.customerName,
           deliveryKm: draftCustomer.deliveryKm,
@@ -283,6 +292,7 @@ export default function CrmTimelinePage() {
           phone: draftCustomer.phone,
           region: draftCustomer.region,
           representativeName: draftCustomer.representativeName,
+          validateBusinessNumber: draftBusinessNumberChanged && Boolean(draftCustomer.businessNumber),
           visitCount: draftCustomer.visitCount,
           companyId: getAdminCompanyIdFromUrl()
         })
@@ -535,7 +545,7 @@ export default function CrmTimelinePage() {
                   {isEditing ? (
                     <button
                       className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      disabled={isSaving}
+                      disabled={!canSaveCustomer}
                       onClick={saveCustomer}
                       type="button"
                     >
@@ -552,7 +562,19 @@ export default function CrmTimelinePage() {
                 {isEditing && draftCustomer ? (
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
-                    <EditableField label="사업자번호" value={draftCustomer.businessNumber} onChange={(value) => updateDraft("businessNumber", value)} />
+                    <EditableField
+                      helper={
+                        draftBusinessNumberChanged
+                          ? draftBusinessNumberValid
+                            ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber)} 검증 완료`
+                            : "유효하지 않은 사업자번호입니다."
+                          : "기존 번호 유지"
+                      }
+                      helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
+                      label="사업자번호"
+                      value={draftCustomer.businessNumber}
+                      onChange={(value) => updateDraft("businessNumber", value)}
+                    />
                     <EditableField label="대표자명" value={draftCustomer.representativeName} onChange={(value) => updateDraft("representativeName", value)} />
                     <EditableField label="연락처" value={draftCustomer.phone} onChange={(value) => updateDraft("phone", value)} />
                     <EditableField label="이메일" value={draftCustomer.email} onChange={(value) => updateDraft("email", value)} />
@@ -806,15 +828,25 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function EditableField({
   className = "",
+  helper = "",
+  helperTone = "muted",
   label,
   onChange,
   value
 }: {
   className?: string;
+  helper?: string;
+  helperTone?: "danger" | "muted" | "success";
   label: string;
   onChange: (value: string) => void;
   value: string;
 }) {
+  const helperClassName = {
+    danger: "text-rose-600",
+    muted: "text-slate-400",
+    success: "text-emerald-700"
+  }[helperTone];
+
   return (
     <label className={`block min-w-0 ${className}`}>
       <span className="mb-1.5 block text-xs font-black text-slate-500">{label}</span>
@@ -823,6 +855,7 @@ function EditableField({
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
+      {helper ? <span className={`mt-1.5 block text-xs font-black ${helperClassName}`}>{helper}</span> : null}
     </label>
   );
 }
@@ -896,6 +929,26 @@ function gradeClassName(grade: string) {
 
 function formatDbCount(value: number | null) {
   return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
+}
+
+function normalizeBusinessRegistrationNumber(value: string) {
+  return value.replace(/[^0-9]/g, "");
+}
+
+function formatBusinessRegistrationNumber(value: string) {
+  const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+function isValidBusinessRegistrationNumber(value: string) {
+  const digits = normalizeBusinessRegistrationNumber(value);
+  if (!/^[0-9]{10}$/.test(digits)) return false;
+
+  const weights = [1, 3, 7, 1, 3, 7, 1, 3, 5];
+  const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0) + Math.floor((Number(digits[8]) * 5) / 10);
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === Number(digits[9]);
 }
 
 const sampleVisitTimeline: TimelineItem[] = [
