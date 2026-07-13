@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Building2, FileText, LinkIcon, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
+import { Banknote, Building2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { sampleCustomers } from "@/lib/sample-data";
@@ -60,6 +60,16 @@ type CustomerAttachmentView = {
   fileUrl: string;
   mimeType: string;
   title: string;
+};
+type AddressSearchResult = {
+  address: string;
+  buildingName: string;
+  jibunAddress: string;
+  latitude: number;
+  longitude: number;
+  postalCode: string;
+  region: string;
+  roadAddress: string;
 };
 
 const resultLabels: Record<string, string> = {
@@ -182,7 +192,11 @@ export default function CrmTimelinePage() {
   const [newAttachmentType, setNewAttachmentType] = useState("loading_position");
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
   const [newAttachmentFile, setNewAttachmentFile] = useState<File | null>(null);
+  const [addressQuery, setAddressQuery] = useState("");
+  const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
+  const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+  const [isAddressSearching, setIsAddressSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
@@ -197,6 +211,9 @@ export default function CrmTimelinePage() {
     setNewAttachmentType("loading_position");
     setNewAttachmentUrl("");
     setNewAttachmentFile(null);
+    setAddressQuery(selectedCustomer?.address || "");
+    setAddressResults([]);
+    setAddressSearchMessage("");
   }, [selectedCustomer]);
 
   useEffect(() => {
@@ -262,6 +279,39 @@ export default function CrmTimelinePage() {
       }
       return { ...current, [field]: value };
     });
+  }
+
+  async function searchAddress() {
+    const query = addressQuery.trim();
+    if (query.length < 2) {
+      setAddressSearchMessage("주소 검색어를 2글자 이상 입력하세요.");
+      return;
+    }
+
+    setIsAddressSearching(true);
+    setAddressSearchMessage("");
+    const response = await fetch(`/api/address-search?query=${encodeURIComponent(query)}`, { cache: "no-store" }).catch(() => null);
+    const payload = response?.ok ? await response.json().catch(() => null) : null;
+    const results = Array.isArray(payload?.results) ? payload.results : [];
+
+    setAddressResults(results);
+    setAddressSearchMessage(results.length ? `${results.length}개 주소를 찾았습니다.` : payload?.message || "검색 결과가 없습니다.");
+    setIsAddressSearching(false);
+  }
+
+  function selectAddress(result: AddressSearchResult) {
+    setDraftCustomer((current) =>
+      current
+        ? {
+            ...current,
+            address: result.address,
+            region: result.region || extractRegion(result.address) || current.region
+          }
+        : current
+    );
+    setAddressQuery(result.address);
+    setAddressResults([]);
+    setAddressSearchMessage("선택한 주소를 거래처 원장에 반영했습니다.");
   }
 
   async function saveCustomer() {
@@ -560,34 +610,87 @@ export default function CrmTimelinePage() {
                   </p>
                 ) : null}
                 {isEditing && draftCustomer ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
-                    <EditableField
-                      helper={
-                        draftBusinessNumberChanged
-                          ? draftBusinessNumberValid
-                            ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber)} 검증 완료`
-                            : "유효하지 않은 사업자번호입니다."
-                          : "기존 번호 유지"
-                      }
-                      helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
-                      label="사업자번호"
-                      value={draftCustomer.businessNumber}
-                      onChange={(value) => updateDraft("businessNumber", value)}
-                    />
-                    <EditableField label="대표자명" value={draftCustomer.representativeName} onChange={(value) => updateDraft("representativeName", value)} />
-                    <EditableField label="연락처" value={draftCustomer.phone} onChange={(value) => updateDraft("phone", value)} />
-                    <EditableField label="이메일" value={draftCustomer.email} onChange={(value) => updateDraft("email", value)} />
-                    <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
-                    <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
-                    <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
-                    <EditableField label="배송담당자" value={draftCustomer.deliveryManager} onChange={(value) => updateDraft("deliveryManager", value)} />
-                    <EditableField label="배송거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
-                    <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
-                    <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
-                    <EditableField className="md:col-span-2" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
-                    <EditableField className="md:col-span-2" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
-                  </div>
+                  <>
+                    <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/60 p-3">
+                      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
+                        <MapPin className="h-4 w-4 text-blue-700" />
+                        주소 API 검색
+                      </div>
+                      <div className="mt-3 flex flex-col gap-2 lg:flex-row">
+                        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-3">
+                          <Search className="h-4 w-4 text-slate-400" />
+                          <input
+                            className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
+                            onChange={(event) => setAddressQuery(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                searchAddress();
+                              }
+                            }}
+                            placeholder="도로명 또는 지번 주소 검색"
+                            value={addressQuery}
+                          />
+                        </label>
+                        <button
+                          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          disabled={isAddressSearching}
+                          onClick={searchAddress}
+                          type="button"
+                        >
+                          <Search className="h-4 w-4" />
+                          {isAddressSearching ? "검색 중" : "주소 검색"}
+                        </button>
+                      </div>
+                      {addressSearchMessage ? <p className="mt-2 text-xs font-black text-blue-700">{addressSearchMessage}</p> : null}
+                      {addressResults.length ? (
+                        <div className="mt-3 max-h-56 space-y-2 overflow-auto">
+                          {addressResults.map((result) => (
+                            <button
+                              className="w-full rounded-md border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                              key={`${result.address}-${result.longitude}-${result.latitude}`}
+                              onClick={() => selectAddress(result)}
+                              type="button"
+                            >
+                              <span className="block text-sm font-black text-slate-950">{result.address}</span>
+                              {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
+                              <span className="mt-1 block text-xs font-black text-blue-700">
+                                {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
+                      <EditableField
+                        helper={
+                          draftBusinessNumberChanged
+                            ? draftBusinessNumberValid
+                              ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber)} 검증 완료`
+                              : "유효하지 않은 사업자번호입니다."
+                            : "기존 번호 유지"
+                        }
+                        helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
+                        label="사업자번호"
+                        value={draftCustomer.businessNumber}
+                        onChange={(value) => updateDraft("businessNumber", value)}
+                      />
+                      <EditableField label="대표자명" value={draftCustomer.representativeName} onChange={(value) => updateDraft("representativeName", value)} />
+                      <EditableField label="연락처" value={draftCustomer.phone} onChange={(value) => updateDraft("phone", value)} />
+                      <EditableField label="이메일" value={draftCustomer.email} onChange={(value) => updateDraft("email", value)} />
+                      <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
+                      <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
+                      <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
+                      <EditableField label="배송담당자" value={draftCustomer.deliveryManager} onChange={(value) => updateDraft("deliveryManager", value)} />
+                      <EditableField label="배송거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
+                      <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
+                      <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
+                      <EditableField className="md:col-span-2" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
+                      <EditableField className="md:col-span-2" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
+                    </div>
+                  </>
                 ) : (
                   <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
                     <DetailRow label="상호명" value={selectedCustomer.customerName} />
@@ -949,6 +1052,11 @@ function isValidBusinessRegistrationNumber(value: string) {
   const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0) + Math.floor((Number(digits[8]) * 5) / 10);
   const checkDigit = (10 - (sum % 10)) % 10;
   return checkDigit === Number(digits[9]);
+}
+
+function extractRegion(address: string) {
+  const parts = address.split(/\s+/).filter(Boolean);
+  return parts.find((part) => /(구|군|시|동|읍|면)$/.test(part)) || parts[1] || parts[0] || "";
 }
 
 const sampleVisitTimeline: TimelineItem[] = [
