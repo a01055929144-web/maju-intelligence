@@ -30,7 +30,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
@@ -344,16 +343,21 @@ export default function Home() {
 
 function WorkspaceModeTabs({ active, onMove }: { active: string; onMove: (screen: "briefing" | "onboarding" | "report") => void }) {
   const tabs = [
-    ["onboarding", "데이터 등록"],
     ["briefing", "등록 가이드"],
+    ["onboarding", "데이터 등록"],
     ["report", "AI 리포트"]
   ] as const;
+  const copy = {
+    briefing: ["데이터 등록 전 확인할 것", "기초정보는 1회 저장하고, 매출 거래내역은 반복 업데이트해서 회사 현황을 갱신합니다."],
+    onboarding: ["매장 기본정보 · 매출 거래내역", "수기 등록, 엑셀 업로드, ERP별 컬럼 매핑을 같은 흐름에서 처리합니다."],
+    report: ["AI 리포트 미리보기", "저장된 거래처와 매출 업데이트를 기준으로 대표가 볼 진단 리포트를 생성합니다."]
+  }[active as "briefing" | "onboarding" | "report"] || ["매장 기본정보 · 매출 거래내역", "거래처 마스터와 매출 데이터를 운영 자산으로 관리합니다."];
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-4">
       <div>
-        <p className="text-sm font-black text-slate-950">매장 기본정보 · 매출 거래내역</p>
-        <p className="mt-1 text-xs font-bold text-slate-500">거래처 마스터는 1회 등록 후 수정하고, 매출 거래내역은 주기적으로 업데이트합니다.</p>
+        <p className="text-sm font-black text-slate-950">{copy[0]}</p>
+        <p className="mt-1 text-xs font-bold text-slate-500">{copy[1]}</p>
       </div>
       <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
         {tabs.map(([key, label]) => (
@@ -407,184 +411,162 @@ function Briefing({
   onStart: (type: UploadTemplateType) => void;
   onSample: () => void;
 }) {
-  const metrics = [
-    ["관리 거래처", `${analysis.customers}개`, "사업자 정보 기반 마스터"],
-    ["동선 내 기회", `${analysis.routeLeads}곳`, "배송권역 기준 신규 매장"],
-    ["이번주 발굴", `${analysis.newOpportunities}곳`, "White Space 후보"],
-    ["고확률 리드", `${analysis.highProbabilityCount}곳`, "우선 방문 대상"]
+  const guideSteps = [
+    ["01", "회사 기준값 확인", "회사명, 물류 출발지, 담당자, 배송권역을 먼저 정리합니다.", "회사 설정"],
+    ["02", "거래처 마스터 등록", "사업자번호, 대표자, 배송주소, 연락처, 적재위치 자료를 1회 저장합니다.", "기초 등록"],
+    ["03", "매출 거래내역 업데이트", "ERP별 거래원장을 업로드하고 거래처 key와 매출 컬럼을 매핑합니다.", "반복 업데이트"],
+    ["04", "검증 후 AI 리포트 갱신", "누락값과 사업자번호 형식을 확인한 뒤 Health Score와 추천 액션을 생성합니다.", "진단 생성"]
+  ] as const;
+  const dataSets = [
+    {
+      action: () => onStart("customer-master" as UploadTemplateType),
+      badge: "최초 1회 + 변경 시",
+      description: "거래처 히스토리, 지도, 배송 코스의 기준 데이터입니다.",
+      fields: ["사업자등록번호", "거래처명", "배송주소", "대표자명", "연락처", "첨부자료"],
+      icon: Building2,
+      title: "매장 및 거래처 기본정보"
+    },
+    {
+      action: () => onStart("sales-analysis" as UploadTemplateType),
+      badge: "일/월/분기 반복",
+      description: "매출 등급, 이탈 감지, 신규 영업 전략의 기준 데이터입니다.",
+      fields: ["거래처 key", "매출일자", "품목", "수량", "공급가", "총매출"],
+      icon: FileSpreadsheet,
+      title: "매출 거래내역서"
+    }
+  ] as const;
+  const validationRows = [
+    ["사업자번호", "10자리 형식 검증 후 저장, 추후 API로 휴폐업 상태 매일 조회"],
+    ["주소", "카카오 주소 검색으로 표준화하고 지도 좌표와 배송거리 계산에 사용"],
+    ["거래처 key", "ERP별 다른 헤더라도 사업자번호 또는 거래처명으로 매출과 연결"],
+    ["첨부자료", "사업자등록증, 통장사본, 배송 적재위치 사진/영상 보관"]
+  ] as const;
+  const reportOutcomes = [
+    ["거래처 현황", `${analysis.customers}곳`, "전체 거래처, 등급, 사업자 상태"],
+    ["배송 운영", `${analysis.avgDeliveryKm.toFixed(1)}km`, "출발지 기준 이동거리와 권역"],
+    ["신규 기회", `${analysis.newOpportunities}곳`, "White Space와 영업 후보"],
+    ["회사 건강도", `${analysis.health.total}점`, "영업력, 배송효율, 리스크"]
   ];
-  const pillars = [
-    ["거래처 히스토리", "사업자등록번호, 대표자, 주소, 상태 변경, 방문 이력을 한 거래처 카드에 누적합니다.", Building2],
-    ["운영 동선 최적화", "회사 물류 출발지에서 거래처 배송주소까지 거리와 이동시간을 기록하고 권역을 관리합니다.", Route],
-    ["신규 매장 발굴", "현재 잘 팔리는 업종과 지역 패턴을 기준으로 공략 가능한 신규 매장을 추천합니다.", Target]
-  ] as const;
-  const routeRows = [
-    ["하남 물류센터", "성수 온반", "24.3km", "42분"],
-    ["하남 물류센터", "송파 고깃집", "18.8km", "31분"],
-    ["하남 물류센터", "위례 반찬", "12.4km", "24분"]
-  ] as const;
-  const mapMarkers = [
-    { label: "출발", name: "하남 물류센터", address: "경기도 하남시 초이로 133 1층", x: 72, y: 62, tone: "origin" },
-    { label: "A", name: "성수 온반", address: "서울 성동구 성수이로 88", x: 45, y: 28, tone: "customer" },
-    { label: "B", name: "광진 능동 식당", address: "서울시 광진구 능동로 41길 17 1층", x: 58, y: 34, tone: "customer" },
-    { label: "C", name: "송파 고깃집", address: "서울 송파구 가락로 120", x: 62, y: 50, tone: "customer" },
-    { label: "D", name: "위례 반찬", address: "경기 성남시 수정구 위례광장로 21", x: 67, y: 56, tone: "lead" },
-    { label: "E", name: "망원 브런치", address: "서울 마포구 망원로 33", x: 28, y: 31, tone: "lead" }
-  ] as const;
-  const historyRows = ["사업자 상태 정상 확인", "배송주소 변경 기록", "6월 매출 18% 증가", "방문 메모 3건 누적"];
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-      <div className="grid gap-6 lg:grid-cols-[1fr_430px] lg:items-stretch">
-        <div className="rounded-lg border border-border bg-white p-6 shadow-panel sm:p-8">
-          <Badge className="mb-5 bg-primary/10 text-primary">AI Sales Intelligence Platform</Badge>
-          <h1 className="max-w-4xl text-3xl font-black leading-tight tracking-normal sm:text-5xl">
-            거래처 히스토리부터
-            <span className="block text-primary">동선 최적화와 신규 매장 발굴까지</span>
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
-            MAJU는 엑셀 업로드 도구가 아니라 식자재 유통사의 영업 데이터를 운영 자산으로 바꾸는 플랫폼입니다.
-            사업자등록 기반 거래처 관리, 물류 출발지 기준 동선 기록, 신규 매장 추천을 하나의 흐름으로 연결합니다.
-          </p>
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Link className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-bold text-white transition hover:opacity-90" href="/dashboard/login">
-              고객사 대시보드 보기
-              <ArrowRight size={18} />
-            </Link>
-            <Button variant="outline" onClick={() => onStart("customer-master")}>
-              <Building2 size={18} />
-              거래처 등록 체험
-            </Button>
-            <Button variant="accent" onClick={onSample}>
-              <Sparkles size={18} />
-              샘플 진단 보기
-            </Button>
-          </div>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {metrics.map(([label, value, hint]) => (
-              <div key={label} className="rounded-md border border-border bg-muted/35 p-4">
-                <p className="text-xs font-bold text-muted-foreground">{label}</p>
-                <p className="mt-1 text-3xl font-black">{value}</p>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">{hint}</p>
-              </div>
-            ))}
+    <section className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="rounded-md border border-slate-200 bg-white p-5">
+          <Badge className="mb-4 bg-blue-50 text-blue-700">등록 가이드</Badge>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-end">
+            <div>
+              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">처음 등록은 어렵지 않게, 이후 업데이트는 반복 가능하게</h1>
+              <p className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
+                엑셀 업로드는 등록 방법 중 하나입니다. 핵심은 거래처 기본정보를 회사의 기준 데이터로 저장하고, 매출 거래내역을 주기적으로 업데이트해서
+                현황판과 AI 리포트가 계속 갱신되도록 만드는 것입니다.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Button onClick={() => onStart("customer-master")}>
+                <Building2 size={17} />
+                거래처 등록 시작
+              </Button>
+              <Button variant="outline" onClick={() => onStart("sales-analysis")}>
+                <FileSpreadsheet size={17} />
+                매출 업데이트 시작
+              </Button>
+              <Button variant="accent" onClick={onSample}>
+                <Sparkles size={17} />
+                샘플 AI 리포트 보기
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-border bg-foreground p-5 text-white shadow-panel">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold text-white/60">Company Health Score</p>
-              <div className="mt-3 flex items-end gap-2">
-                <span className="text-7xl font-black text-accent">{analysis.health.total}</span>
-                <span className="pb-3 text-sm font-bold text-white/60">/ 100</span>
-              </div>
-            </div>
-            <Badge className="bg-white/10 text-white">진단 완료</Badge>
-          </div>
-          <div className="mt-5 space-y-3">
-            {[
-              ["영업력", analysis.health.salesPower],
-              ["배송효율", analysis.health.deliveryEfficiency],
-              ["신규영업", analysis.health.newSales],
-              ["리스크", analysis.health.risk]
-            ].map(([label, value]) => (
-              <div key={label as string}>
-                <div className="mb-1 flex justify-between text-xs font-bold text-white/70">
-                  <span>{label as string}</span>
-                  <span>{value as number}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/15">
-                  <div className="h-full rounded-full bg-accent" style={{ width: `${value as number}%` }} />
-                </div>
+        <div className="rounded-md border border-slate-200 bg-slate-950 p-5 text-white">
+          <p className="text-xs font-bold text-white/60">등록 후 생성되는 결과</p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {reportOutcomes.map(([label, value, hint]) => (
+              <div key={label} className="rounded-md border border-white/10 bg-white/5 p-3">
+                <p className="text-xs font-bold text-white/55">{label}</p>
+                <p className="mt-1 text-2xl font-black text-white">{value}</p>
+                <p className="mt-2 text-xs leading-5 text-white/55">{hint}</p>
               </div>
             ))}
           </div>
-          <p className="mt-5 text-sm leading-6 text-white/70">
-            대표가 보고 싶은 것은 기능 목록이 아니라 회사 상태입니다. MAJU는 거래처, 동선, 신규영업을 숫자로 압축합니다.
-          </p>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {pillars.map(([title, description, Icon]) => (
-          <Card key={title} className="shadow-none">
-            <CardContent className="p-5">
-              <Icon className="mb-4 h-6 w-6 text-primary" />
-              <p className="text-lg font-black">{title}</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-            </CardContent>
-          </Card>
+      <div className="grid gap-3 xl:grid-cols-4">
+        {guideSteps.map(([step, title, description, tag]) => (
+          <div key={step} className="rounded-md border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-black text-blue-600">{step}</span>
+              <Badge className="bg-slate-100 text-slate-700">{tag}</Badge>
+            </div>
+            <p className="mt-4 text-base font-black text-slate-950">{title}</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{description}</p>
+          </div>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              거래처 카드 예시
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-border bg-muted/35 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xl font-black">성수 온반</p>
-                  <p className="mt-1 text-sm text-muted-foreground">사업자등록번호 123-45-67890 · 한식 · 정상</p>
-                </div>
-                <Badge className="bg-primary/10 text-primary">거래중</Badge>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <MiniFact label="대표자" value="김성수" />
-                <MiniFact label="배송주소" value="서울 성동구" />
-                <MiniFact label="월매출" value="420만원" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              {historyRows.map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="font-semibold">{item}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Route className="h-5 w-5 text-primary" />
-              운영 동선과 주소 지도
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <KakaoAddressMap markers={mapMarkers} />
-            <div className="rounded-md border border-border bg-white p-4">
-              <p className="text-sm font-black">물류 출발지: 경기도 하남시 초이로 133 1층</p>
-              <div className="mt-3 space-y-2">
-                {routeRows.map(([origin, destination, distance, minutes]) => (
-                  <div key={destination} className="grid gap-2 rounded-md bg-muted/35 p-3 text-sm sm:grid-cols-[1fr_auto_auto] sm:items-center">
-                    <span className="font-semibold">{origin}에서 {destination}까지</span>
-                    <Badge>{distance}</Badge>
-                    <Badge className="bg-accent/20 text-foreground">{minutes}</Badge>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-4 lg:grid-cols-2">
+          {dataSets.map((dataSet) => {
+            const Icon = dataSet.icon;
+            return (
+              <div key={dataSet.title} className="rounded-md border border-slate-200 bg-white p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-700">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-lg font-black text-slate-950">{dataSet.title}</p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{dataSet.description}</p>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {analysis.missingRegions.slice(0, 3).map((region, index) => (
-                <div key={region} className="rounded-md border border-border p-4">
-                  <p className="text-xs font-bold text-muted-foreground">White Space {index + 1}</p>
-                  <p className="mt-1 text-lg font-black">{region}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">신규 매장 우선 발굴 지역</p>
+                  <Badge className="whitespace-nowrap bg-emerald-50 text-emerald-700">{dataSet.badge}</Badge>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {dataSet.fields.map((field) => (
+                    <div key={field} className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
+                      <Check className="h-4 w-4 text-emerald-600" />
+                      {field}
+                    </div>
+                  ))}
+                </div>
+                <Button className="mt-5 w-full" variant="outline" onClick={dataSet.action}>
+                  이 데이터 등록하기
+                  <ArrowRight size={17} />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-white p-5">
+          <div className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-blue-700" />
+            <p className="text-lg font-black text-slate-950">저장 전 검증 기준</p>
+          </div>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">ERP 양식이 달라도 아래 기준으로 정규화하면 같은 DB 구조에 저장됩니다.</p>
+          <div className="mt-5 space-y-3">
+            {validationRows.map(([label, value]) => (
+              <div key={label} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                <p className="text-sm font-black text-slate-950">{label}</p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-black text-blue-950">권장 순서</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-blue-800">회사 설정 확인 → 거래처 기본정보 저장 → 매출 거래내역 업로드 → AI 리포트 확인 → 히스토리와 코스에서 운영</p>
+          </div>
+          <Link className="inline-flex h-10 items-center justify-center rounded-md bg-blue-700 px-4 text-sm font-black text-white transition hover:bg-blue-800" href="/crm/timeline">
+            거래처 히스토리 보기
+          </Link>
+        </div>
       </div>
     </section>
   );
@@ -1566,142 +1548,165 @@ function Report({
     ["거래처 집중도", analysis.health.concentration],
     ["리스크", analysis.health.risk]
   ];
+  const isSalesReport = uploadType === "sales-analysis";
+  const sortedWhiteSpace = analysis.regionDistribution
+    .slice()
+    .sort((a, b) => b.whitespace - a.whitespace)
+    .slice(0, 4);
+  const actionPlan = [
+    ["오늘", "A등급 거래처 주소와 사업자 상태를 먼저 보완하고, 배송 적재위치 자료를 등록합니다."],
+    ["이번주", `${analysis.missingRegions.slice(0, 3).join(", ")} 지역의 신규 매장 후보를 영업 코스에 넣습니다.`],
+    ["이번달", "매출 거래원장을 다시 업로드해 품목 이탈과 매출 등급 변화를 비교합니다."]
+  ] as const;
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-      <div className="flex flex-col justify-between gap-4 rounded-lg border border-border bg-white p-6 shadow-panel md:flex-row md:items-end">
-        <div>
-          <Badge className="mb-4 bg-primary/10 text-primary">MAJU AI Report</Badge>
-          <h1 className="text-3xl font-black sm:text-4xl">{analysis.companyName}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">거래처 {analysis.customers}개 · 거래지역 {analysis.regions}개 · 분석 완료</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            className="inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800"
-            href={uploadType === "sales-analysis" ? "/revenue/transactions" : "/crm/timeline"}
-          >
-            {uploadType === "sales-analysis" ? "매출 원장 보기" : "거래처 히스토리 보기"}
-          </Link>
-          <Link
-            className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted"
-            href="/dashboard"
-          >
-            대시보드 보기
-          </Link>
-          <Button variant="outline" onClick={onReset}>새 데이터 등록</Button>
-        </div>
-      </div>
-
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
-        <ResultMetric label="처리된 행" value={`${meta.rows.toLocaleString()}개`} />
-        <ResultMetric label="저장 위치" value={meta.persisted ? "Supabase 저장" : "로컬/샘플 처리"} />
-        <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "계산 완료"} />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <HeartPulse className="h-5 w-5 text-primary" />
-              Company Health Score
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-6 flex items-end gap-3">
-              <span className="text-7xl font-black text-primary">{analysis.health.total}</span>
-              <span className="pb-3 text-sm font-bold text-muted-foreground">점</span>
+    <section className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-md border border-slate-200 bg-white p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <Badge className="mb-4 bg-blue-50 text-blue-700">MAJU AI Report</Badge>
+              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} 회사 진단 리포트</h1>
+              <p className="mt-2 text-sm font-semibold text-slate-500">
+                {isSalesReport ? "매출 거래내역 업데이트" : "거래처 마스터 등록"} 기준 · 거래처 {analysis.customers}곳 · 거래지역 {analysis.regions}개 · 분석 완료
+              </p>
             </div>
-            <div className="space-y-4">
-              {scoreRows.map(([label, value]) => (
-                <div key={label as string}>
-                  <div className="mb-1 flex justify-between text-sm font-bold">
-                    <span>{label as string}</span>
-                    <span>{value as number}</span>
-                  </div>
-                  <Progress value={value as number} />
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800" href="/dashboard">
+                대시보드 보기
+              </Link>
+              <Link
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                href={isSalesReport ? "/revenue/transactions" : "/crm/timeline"}
+              >
+                {isSalesReport ? "매출 원장 보기" : "거래처 히스토리 보기"}
+              </Link>
+              <Button variant="outline" onClick={onReset}>데이터 다시 등록</Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              AI 제안
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {analysis.aiInsights.map((insight) => (
-              <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm leading-6">
-                {insight}
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <ResultMetric label="처리 데이터" value={`${meta.rows.toLocaleString()}행`} />
+            <ResultMetric label="저장 상태" value={meta.persisted ? "서버 저장" : "샘플/로컬"} />
+            <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "확인 필요"} />
+            <ResultMetric label="잠재매출" value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-950 p-5 text-white">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-white/55">Company Health Score</p>
+              <div className="mt-3 flex items-end gap-2">
+                <span className="text-6xl font-black text-emerald-300">{analysis.health.total}</span>
+                <span className="pb-2 text-sm font-black text-white/55">점</span>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <ReportSection icon={MapPin} title="거래처 분포">
-          {analysis.regionDistribution.slice(0, 6).map((item) => (
-            <MetricLine key={item.region} label={item.region} value={`${item.count}개`} hint={`잠재 ${item.potential}곳`} />
-          ))}
-        </ReportSection>
-
-        <ReportSection icon={Route} title="배송 효율">
-          <BigNumber value={`${analysis.avgDeliveryKm.toFixed(1)}km`} label="현재 평균 배송거리" />
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">AI: 반경 최적화 시 하루 {Math.max(18, Math.round(analysis.avgDeliveryKm * 2.8))}km 절감 가능합니다.</p>
-        </ReportSection>
-
-        <ReportSection icon={Target} title="신규 리드">
-          <BigNumber value={`${analysis.newOpportunities}곳`} label="영업 가능한 신규 리드" />
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">현재 거래처 반경과 지역 텍스트를 기준으로 v1 추천 풀을 계산했습니다.</p>
-        </ReportSection>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <ReportSection icon={BarChart3} title="업종 분석">
-          {analysis.industryDistribution.map((item) => (
-            <MetricLine key={item.industry} label={item.industry} value={`${item.share}%`} hint={`${item.count}개`} />
-          ))}
-        </ReportSection>
-
-        <ReportSection icon={ClipboardList} title="추천 TOP10">
-          <div className="space-y-3">
-            {analysis.leadRecommendations.map((lead, index) => (
-              <div key={lead.name} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[48px_1fr_auto] sm:items-center">
-                <span className="text-lg font-black text-primary">{index + 1}위</span>
-                <div>
-                  <p className="font-bold">{lead.name}</p>
-                  <p className="text-xs text-muted-foreground">{lead.reasons.join(" · ")}</p>
+            </div>
+            <HeartPulse className="h-6 w-6 text-emerald-300" />
+          </div>
+          <div className="mt-5 space-y-3">
+            {scoreRows.map(([label, value]) => (
+              <div key={label as string}>
+                <div className="mb-1 flex justify-between text-xs font-bold text-white/70">
+                  <span>{label as string}</span>
+                  <span>{value as number}</span>
                 </div>
-                <Badge className="justify-center bg-accent/20 text-foreground">{lead.score}점</Badge>
+                <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-emerald-300" style={{ width: `${value as number}%` }} />
+                </div>
               </div>
             ))}
           </div>
-        </ReportSection>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <ReportSection icon={MapPin} title="White Space">
-          {analysis.regionDistribution
-            .slice()
-            .sort((a, b) => b.whitespace - a.whitespace)
-            .slice(0, 4)
-            .map((item) => (
-              <MetricLine key={item.region} label={item.region} value={`${item.whitespace}곳`} hint={`현재 ${item.count}곳`} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ReportSection icon={MapPin} title="거래처 분포">
+            {analysis.regionDistribution.slice(0, 6).map((item) => (
+              <MetricLine key={item.region} label={item.region} value={`${item.count}곳`} hint={`잠재 ${item.potential}곳 · 공백 ${item.whitespace}곳`} />
             ))}
-        </ReportSection>
-        <ReportSection icon={Activity} title="잠재매출">
-          <BigNumber value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} label="예상 추가매출" />
-          <p className="mt-4 text-xs text-muted-foreground">(가정값) 리드 수와 업종 적합도를 단순 가중했습니다.</p>
-        </ReportSection>
-        <ReportSection icon={Route} title="오늘 동선">
-          <BigNumber value="8곳 방문" label="우선 방문 계획" />
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">v2에서 티맵/카카오맵 연동 전까지는 지역 묶음 기준으로 방문 순서를 제안합니다.</p>
-        </ReportSection>
+          </ReportSection>
+
+          <ReportSection icon={Route} title="배송 운영">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ResultMetric label="평균 배송거리" value={`${analysis.avgDeliveryKm.toFixed(1)}km`} />
+              <ResultMetric label="절감 가능거리" value={`${Math.max(18, Math.round(analysis.avgDeliveryKm * 2.8))}km`} />
+            </div>
+            <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">
+              물류 출발지와 배송주소를 기준으로 권역을 묶으면 같은 차량의 중복 이동을 줄일 수 있습니다.
+            </p>
+          </ReportSection>
+
+          <ReportSection icon={BarChart3} title="업종 · 매출 구조">
+            {analysis.industryDistribution.map((item) => (
+              <MetricLine key={item.industry} label={item.industry} value={`${item.share}%`} hint={`${item.count}곳 · 매출 등급 산정 기준`} />
+            ))}
+          </ReportSection>
+
+          <ReportSection icon={Target} title="White Space">
+            {sortedWhiteSpace.map((item) => (
+              <MetricLine key={item.region} label={item.region} value={`${item.whitespace}곳`} hint={`현재 거래처 ${item.count}곳`} />
+            ))}
+          </ReportSection>
+        </div>
+
+        <div className="space-y-4">
+          <Card className="shadow-none">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                AI 제안 요약
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {analysis.aiInsights.map((insight) => (
+                <div key={insight} className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-700">
+                  {insight}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-none">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-primary" />
+                다음 액션
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {actionPlan.map(([period, action]) => (
+                <div key={period} className="grid gap-3 rounded-md border border-slate-100 p-3 sm:grid-cols-[72px_1fr]">
+                  <Badge className="h-fit justify-center bg-blue-50 text-blue-700">{period}</Badge>
+                  <p className="text-sm font-semibold leading-6 text-slate-600">{action}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-primary" />
+            추천 TOP10
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 lg:grid-cols-2">
+          {analysis.leadRecommendations.map((lead, index) => (
+            <div key={lead.name} className="grid gap-3 rounded-md border border-slate-100 bg-white p-3 sm:grid-cols-[48px_1fr_auto] sm:items-center">
+              <span className="text-lg font-black text-blue-700">{index + 1}위</span>
+              <div>
+                <p className="font-black text-slate-950">{lead.name}</p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{lead.reasons.join(" · ")}</p>
+              </div>
+              <Badge className="justify-center bg-emerald-50 text-emerald-700">{lead.score}점</Badge>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </section>
   );
 }
