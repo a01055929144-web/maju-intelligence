@@ -20,6 +20,7 @@ import {
   History,
   MapPin,
   Save,
+  Search,
   Route,
   Sparkles,
   Target,
@@ -60,6 +61,16 @@ type DataQualitySummary = {
   issueRows: Array<{ missingLabels: string[]; rowNumber: number }>;
   readyRows: number;
   rows: number;
+};
+type AddressSearchResult = {
+  address: string;
+  buildingName: string;
+  jibunAddress: string;
+  latitude: number;
+  longitude: number;
+  postalCode: string;
+  region: string;
+  roadAddress: string;
 };
 
 const emptyMap: FieldMap = {};
@@ -159,6 +170,8 @@ export default function Home() {
   }
 
   function saveManualEntry() {
+    if (uploadType === "customer-master" && !isValidBusinessRegistrationNumber(String(manualDraft.businessRegistrationNumber ?? ""))) return;
+
     const nextHeaders = currentTemplate.fields.map((field) => field.key);
     const nextRow = currentTemplate.fields.reduce<RawRow>((row, field) => {
       row[field.key] = manualDraft[field.key] ?? "";
@@ -650,23 +663,59 @@ function Onboarding({
   onDownloadSalesExport: () => void;
 }) {
   const [entryMode, setEntryMode] = useState<"excel" | "manual">("excel");
+  const [addressQuery, setAddressQuery] = useState("");
+  const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
+  const [addressSearchMessage, setAddressSearchMessage] = useState("");
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
   const [savedPreset, setSavedPreset] = useState<FieldMap | null>(null);
   const [presetMessage, setPresetMessage] = useState("");
   const requiredFields = template.fields.filter((field) => field.required);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const complete = missingRequiredFields.length === 0;
-  const manualComplete = template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim());
+  const isMaster = uploadType === "customer-master";
+  const manualBusinessNumber = String(manualDraft.businessRegistrationNumber ?? "");
+  const manualBusinessNumberValid = !isMaster || isValidBusinessRegistrationNumber(manualBusinessNumber);
+  const manualComplete =
+    template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim()) && manualBusinessNumberValid;
   const canAnalyze = rawRows.length > 0 && complete;
   const mappedRequiredCount = requiredFields.length - missingRequiredFields.length;
   const mappingProgress = requiredFields.length ? Math.round((mappedRequiredCount / requiredFields.length) * 100) : 100;
   const dataQuality = useMemo(() => summarizeDataQuality(rawRows, requiredFields, fieldMap), [fieldMap, rawRows, requiredFields]);
-  const isMaster = uploadType === "customer-master";
   const uploadHint = isMaster
     ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
     : "거래처 key와 매출 행을 누적해 일/월/분기/반기/연 분석과 이탈 징후를 갱신합니다.";
   const saveHint = isMaster
     ? "기초값은 고정 보존하고, 새 엑셀은 기존 거래처 수정과 신규 거래처 등록으로 반영합니다."
     : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
+
+  async function searchAddress() {
+    const query = addressQuery.trim();
+    if (query.length < 2) {
+      setAddressSearchMessage("주소 검색어를 2글자 이상 입력하세요.");
+      return;
+    }
+
+    setIsSearchingAddress(true);
+    setAddressSearchMessage("");
+    const response = await fetch(`/api/address-search?query=${encodeURIComponent(query)}`, { cache: "no-store" }).catch(() => null);
+    const payload = response?.ok ? await response.json().catch(() => null) : null;
+    const results = Array.isArray(payload?.results) ? payload.results : [];
+
+    setAddressResults(results);
+    setAddressSearchMessage(results.length ? `${results.length}개 주소를 찾았습니다.` : payload?.message || "검색 결과가 없습니다.");
+    setIsSearchingAddress(false);
+  }
+
+  function selectAddress(result: AddressSearchResult) {
+    onManualChange({
+      ...manualDraft,
+      address: result.address,
+      region: result.region || extractRegion(result.address)
+    });
+    setAddressQuery(result.address);
+    setAddressResults([]);
+    setAddressSearchMessage("선택한 주소를 배송주소에 반영했습니다.");
+  }
 
   useEffect(() => {
     let active = true;
@@ -853,13 +902,57 @@ function Onboarding({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">소량 등록이나 누락값 보완은 화면에서 바로 입력합니다.</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">주소는 API 검색 결과에서 선택하고, 사업자번호는 유효한 번호만 저장합니다.</p>
                 </div>
                 <Button onClick={onManualSave} disabled={!manualComplete}>
                   <Save size={18} />
                   입력값 저장
                 </Button>
               </div>
+              {isMaster ? (
+                <div className="mt-4 rounded-md border border-blue-100 bg-white p-3">
+                  <div className="flex flex-col gap-2 lg:flex-row">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                        onChange={(event) => setAddressQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            searchAddress();
+                          }
+                        }}
+                        placeholder="배송주소 검색 예: 서울 성동구 성수이로 88"
+                        value={addressQuery}
+                      />
+                    </div>
+                    <Button className="shrink-0" disabled={isSearchingAddress} onClick={searchAddress} type="button" variant="outline">
+                      <Search size={16} />
+                      {isSearchingAddress ? "검색 중" : "주소 검색"}
+                    </Button>
+                  </div>
+                  {addressSearchMessage ? <p className="mt-2 text-xs font-bold text-slate-500">{addressSearchMessage}</p> : null}
+                  {addressResults.length ? (
+                    <div className="mt-3 max-h-64 space-y-2 overflow-auto">
+                      {addressResults.map((result) => (
+                        <button
+                          className="w-full rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                          key={`${result.address}-${result.longitude}-${result.latitude}`}
+                          onClick={() => selectAddress(result)}
+                          type="button"
+                        >
+                          <span className="block text-sm font-black text-slate-950">{result.address}</span>
+                          {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
+                          <span className="mt-1 block text-xs font-bold text-blue-700">
+                            {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                 {template.fields.map((field) => (
                   <label key={field.key} className="space-y-1.5">
@@ -875,6 +968,12 @@ function Onboarding({
                       onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
                       placeholder={field.description || `${field.label} 입력`}
                     />
+                    {field.key === "businessRegistrationNumber" && isMaster ? (
+                      <span className={`block text-xs font-black ${manualBusinessNumber ? (manualBusinessNumberValid ? "text-emerald-700" : "text-rose-600") : "text-slate-400"}`}>
+                        {manualBusinessNumber ? (manualBusinessNumberValid ? "유효한 사업자등록번호입니다." : "유효하지 않은 사업자등록번호입니다. 10자리 번호를 확인하세요.") : "사업자등록번호 10자리를 입력하세요."}
+                      </span>
+                    ) : null}
+                    {field.key === "address" && isMaster ? <span className="block text-xs font-bold text-blue-700">상단 주소 검색 결과를 선택하면 자동 입력됩니다.</span> : null}
                   </label>
                 ))}
               </div>
@@ -1798,6 +1897,16 @@ function getCell(row: RawRow, key?: string) {
 
 function normalizeTextForCompare(value: string) {
   return value.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function isValidBusinessRegistrationNumber(value: string) {
+  const digits = value.replace(/[^0-9]/g, "");
+  if (!/^[0-9]{10}$/.test(digits)) return false;
+
+  const weights = [1, 3, 7, 1, 3, 7, 1, 3, 5];
+  const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0) + Math.floor((Number(digits[8]) * 5) / 10);
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === Number(digits[9]);
 }
 
 function toNumber(value: unknown) {
