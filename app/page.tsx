@@ -631,15 +631,47 @@ function Onboarding({
     : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
 
   useEffect(() => {
+    let active = true;
     const preset = loadMappingPreset(uploadType);
     setSavedPreset(preset);
     setPresetMessage(preset ? `${template.label} 매핑 프리셋이 저장되어 있습니다.` : "");
+
+    fetch(mappingPresetEndpoint(uploadType), { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!active || !payload?.preset?.mapping) return;
+        setSavedPreset(payload.preset.mapping);
+        saveMappingPreset(uploadType, payload.preset.mapping);
+        setPresetMessage(payload.persisted ? `${template.label} 서버 매핑 프리셋이 저장되어 있습니다.` : `${template.label} 로컬 매핑 프리셋이 저장되어 있습니다.`);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
   }, [template.label, uploadType]);
 
-  function saveCurrentPreset() {
+  async function saveCurrentPreset() {
     saveMappingPreset(uploadType, fieldMap);
     setSavedPreset(fieldMap);
-    setPresetMessage(`${template.label} 매핑을 저장했습니다. 같은 ERP 양식은 다음 업로드 때 바로 불러올 수 있습니다.`);
+    setPresetMessage(`${template.label} 매핑을 저장 중입니다.`);
+
+    const response = await fetch(mappingPresetEndpoint(uploadType), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: getAdminCompanyIdFromUrl(),
+        mapping: fieldMap,
+        uploadType
+      })
+    }).catch(() => null);
+    const payload = response?.ok ? await response.json().catch(() => null) : null;
+
+    setPresetMessage(
+      payload?.persisted
+        ? `${template.label} 매핑을 서버에 저장했습니다. 같은 고객사는 다른 PC에서도 불러올 수 있습니다.`
+        : `${template.label} 매핑을 이 브라우저에 저장했습니다. 서버 저장은 환경 확인이 필요합니다.`
+    );
   }
 
   function applySavedPreset() {
@@ -652,10 +684,17 @@ function Onboarding({
     setPresetMessage("저장된 매핑을 현재 업로드 파일에 적용했습니다.");
   }
 
-  function removeSavedPreset() {
+  async function removeSavedPreset() {
     deleteMappingPreset(uploadType);
     setSavedPreset(null);
-    setPresetMessage("저장된 매핑 프리셋을 삭제했습니다.");
+    setPresetMessage("저장된 매핑 프리셋을 삭제 중입니다.");
+
+    const response = await fetch(mappingPresetEndpoint(uploadType), {
+      method: "DELETE"
+    }).catch(() => null);
+    const payload = response?.ok ? await response.json().catch(() => null) : null;
+
+    setPresetMessage(payload?.persisted ? "서버 매핑 프리셋을 삭제했습니다." : "이 브라우저의 매핑 프리셋을 삭제했습니다.");
   }
 
   return (
@@ -1486,6 +1525,13 @@ function dateStamp() {
 
 function fieldLabelForHeader(header: string, fields: readonly UploadTemplateField[]) {
   return fields.find((field) => field.key === header)?.label || header;
+}
+
+function mappingPresetEndpoint(type: UploadTemplateType) {
+  const params = new URLSearchParams({ uploadType: type });
+  const companyId = getAdminCompanyIdFromUrl();
+  if (companyId) params.set("companyId", companyId);
+  return `/api/excel-mapping-presets?${params.toString()}`;
 }
 
 function loadMappingPreset(type: UploadTemplateType) {
