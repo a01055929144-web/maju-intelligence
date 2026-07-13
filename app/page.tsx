@@ -609,8 +609,11 @@ function Onboarding({
   onDownloadSalesExport: () => void;
 }) {
   const [entryMode, setEntryMode] = useState<"excel" | "manual">("excel");
-  const complete = template.fields.filter((field) => field.required).every((field) => fieldMap[field.key]);
+  const requiredFields = template.fields.filter((field) => field.required);
+  const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
+  const complete = missingRequiredFields.length === 0;
   const manualComplete = template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim());
+  const canAnalyze = rawRows.length > 0 && complete;
   const isMaster = uploadType === "customer-master";
   const uploadHint = isMaster
     ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
@@ -786,6 +789,19 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
+                <div className="mb-4 grid gap-2">
+                  {requiredFields.map((field) => {
+                    const mappedHeader = fieldMap[field.key];
+                    return (
+                      <div key={field.key} className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 ${mappedHeader ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
+                        <span className="text-sm font-black text-slate-800">{field.label}</span>
+                        <span className={`text-xs font-black ${mappedHeader ? "text-emerald-700" : "text-amber-700"}`}>
+                          {mappedHeader || "필수"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
                 {headers.length ? (
                   <div className="grid max-h-[520px] gap-3 overflow-auto pr-1">
                     {template.fields.map((field) => (
@@ -817,10 +833,11 @@ function Onboarding({
                 )}
                 <div className="mt-4 rounded-md border border-slate-200 p-3">
                   <span className="flex items-center gap-2 text-sm font-black text-slate-700">
-                    <Check className={complete || usingSample ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
-                    {complete ? "저장 준비 완료" : `${template.label} 필수 컬럼을 연결하면 저장할 수 있습니다.`}
+                    <Check className={canAnalyze ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
+                    {canAnalyze ? "저장 준비 완료" : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
                   </span>
-                  <Button className="mt-3 w-full" onClick={onAnalyze} disabled={rawRows.length === 0 && !usingSample}>
+                  {rawRows.length ? <DataPreview rows={rawRows} fields={template.fields} fieldMap={fieldMap} /> : null}
+                  <Button className="mt-3 w-full" onClick={onAnalyze} disabled={!canAnalyze}>
                     업데이트 후 리포트 갱신
                     <ArrowRight size={18} />
                   </Button>
@@ -831,6 +848,44 @@ function Onboarding({
         </div>
       </aside>
     </section>
+  );
+}
+
+function DataPreview({ fields, fieldMap, rows }: { fields: readonly UploadTemplateField[]; fieldMap: FieldMap; rows: RawRow[] }) {
+  const previewFields = fields.filter((field) => field.required || fieldMap[field.key]).slice(0, 5);
+  const previewRows = rows.slice(0, 3);
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+        <p className="text-xs font-black text-slate-500">미리보기</p>
+        <p className="text-xs font-bold text-slate-400">상위 {previewRows.length}행</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[360px] text-left text-xs">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              {previewFields.map((field) => (
+                <th key={field.key} className="whitespace-nowrap px-3 py-2 font-black">
+                  {field.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {previewRows.map((row, index) => (
+              <tr key={index} className="border-t border-slate-100">
+                {previewFields.map((field) => (
+                  <td key={field.key} className="max-w-32 truncate px-3 py-2 font-bold text-slate-700">
+                    {String(row[fieldMap[field.key] || field.key] ?? "-") || "-"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
