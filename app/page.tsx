@@ -102,7 +102,9 @@ export default function Home() {
   const [customers, setCustomers] = useState<CustomerRow[]>(sampleCustomers);
   const [uploadedFilename, setUploadedFilename] = useState<string>("sample-customers.xlsx");
   const [uploadHistory, setUploadHistory] = useState<UploadHistoryRow[]>([]);
+  const [lastManualCustomerHref, setLastManualCustomerHref] = useState("");
   const [manualSaveMessage, setManualSaveMessage] = useState("");
+  const [isManualSaving, setIsManualSaving] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
   const [pipelineMeta, setPipelineMeta] = useState({ rows: sampleCustomers.length, qualityScore: 100, persisted: false });
 
@@ -174,6 +176,8 @@ export default function Home() {
   async function saveManualEntry() {
     if (uploadType === "customer-master" && !isValidBusinessRegistrationNumber(String(manualDraft.businessRegistrationNumber ?? ""))) return;
 
+    setIsManualSaving(true);
+    setLastManualCustomerHref("");
     const nextHeaders = currentTemplate.fields.map((field) => field.key);
     const nextRow = currentTemplate.fields.reduce<RawRow>((row, field) => {
       row[field.key] = field.key === "businessRegistrationNumber" ? formatBusinessRegistrationNumber(String(manualDraft[field.key] ?? "")) : manualDraft[field.key] ?? "";
@@ -188,25 +192,30 @@ export default function Home() {
     setUsingSample(false);
     setManualSaveMessage("저장 대기 목록에 추가했습니다.");
 
-    if (uploadType === "customer-master") {
-      const response = await fetch(customerMasterEndpoint(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildManualCustomerPayload(nextRow))
-      }).catch(() => null);
-      const payload = response ? await response.json().catch(() => null) : null;
+    try {
+      if (uploadType === "customer-master") {
+        const response = await fetch(customerMasterEndpoint(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildManualCustomerPayload(nextRow))
+        }).catch(() => null);
+        const payload = response ? await response.json().catch(() => null) : null;
 
-      if (response?.ok) {
-        setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 DB 환경은 fallback이라 화면 기준으로 반영됩니다." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
-        await refreshUploadHistory();
-      } else if (response?.status === 401) {
-        setManualSaveMessage("저장 대기 목록에 추가했습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
-      } else {
-        setManualSaveMessage(payload?.message ? `저장 대기 목록에 추가했습니다. 서버 저장 확인: ${payload.message}` : "저장 대기 목록에 추가했습니다. 서버 저장은 나중에 다시 시도하세요.");
+        if (response?.ok) {
+          const customerId = String(payload?.customer?.id || "");
+          setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
+          setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 DB 환경은 fallback이라 화면 기준으로 반영됩니다." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+          await refreshUploadHistory();
+        } else if (response?.status === 401) {
+          setManualSaveMessage("저장 대기 목록에 추가했습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
+        } else {
+          setManualSaveMessage(payload?.message ? `저장 대기 목록에 추가했습니다. 서버 저장 확인: ${payload.message}` : "저장 대기 목록에 추가했습니다. 서버 저장은 나중에 다시 시도하세요.");
+        }
       }
+    } finally {
+      setIsManualSaving(false);
+      setManualDraft({});
     }
-
-    setManualDraft({});
   }
 
   async function analyzeUploadedRows() {
@@ -308,6 +317,8 @@ export default function Home() {
             pipelineSteps={pipelineSteps}
             uploadHistory={uploadHistory}
             usingSample={usingSample}
+            isManualSaving={isManualSaving}
+            lastManualCustomerHref={lastManualCustomerHref}
             manualSaveMessage={manualSaveMessage}
             onFile={handleFile}
             onMap={setFieldMap}
@@ -651,6 +662,8 @@ function Onboarding({
   pipelineMeta,
   pipelineSteps,
   usingSample,
+  isManualSaving,
+  lastManualCustomerHref,
   manualSaveMessage,
   onFile,
   onMap,
@@ -675,6 +688,8 @@ function Onboarding({
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
   pipelineSteps: PipelineStep[];
   usingSample: boolean;
+  isManualSaving: boolean;
+  lastManualCustomerHref: string;
   manualSaveMessage: string;
   onFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onMap: (map: FieldMap) => void;
@@ -931,11 +946,20 @@ function Onboarding({
                   <div>
                     <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
                     <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 저장 대기 목록에 추가됩니다.</p>
-                    {manualSaveMessage ? <p className="mt-2 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">{manualSaveMessage}</p> : null}
+                    {manualSaveMessage ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
+                        <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
+                        {lastManualCustomerHref ? (
+                          <Link className="inline-flex h-7 items-center justify-center rounded-md bg-slate-950 px-2.5 text-xs font-black text-white" href={lastManualCustomerHref}>
+                            히스토리에서 확인
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                  <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete}>
+                  <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete || isManualSaving}>
                     <Save size={18} />
-                    검증 후 저장
+                    {isManualSaving ? "저장 중" : "검증 후 저장"}
                   </Button>
                 </div>
 
@@ -1997,6 +2021,15 @@ function uploadHistoryEndpoint() {
 function customerMasterEndpoint() {
   const companyId = getAdminCompanyIdFromUrl();
   return companyId ? `/api/customers?companyId=${encodeURIComponent(companyId)}` : "/api/customers";
+}
+
+function customerHistoryHref(customerId: string) {
+  const params = new URLSearchParams();
+  const companyId = getAdminCompanyIdFromUrl();
+  if (companyId) params.set("companyId", companyId);
+  if (customerId) params.set("customerId", customerId);
+  const query = params.toString();
+  return query ? `/crm/timeline?${query}` : "/crm/timeline";
 }
 
 function buildManualCustomerPayload(row: RawRow) {
