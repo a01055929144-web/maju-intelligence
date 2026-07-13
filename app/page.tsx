@@ -253,7 +253,7 @@ export default function Home() {
             onDownloadSalesExport={downloadSalesExport}
           />
         )}
-        {screen === "report" && <Report analysis={analysis} onReset={() => setScreen("onboarding")} />}
+        {screen === "report" && <Report analysis={analysis} meta={pipelineMeta} onReset={() => setScreen("onboarding")} uploadType={uploadType} />}
       </div>
     </CustomerAppShell>
   );
@@ -1017,7 +1017,17 @@ function PipelineMetric({ icon: Icon, label, value }: { icon: typeof FileSpreads
   );
 }
 
-function Report({ analysis, onReset }: { analysis: AnalysisResult; onReset: () => void }) {
+function Report({
+  analysis,
+  meta,
+  onReset,
+  uploadType
+}: {
+  analysis: AnalysisResult;
+  meta: { rows: number; qualityScore: number; persisted: boolean };
+  onReset: () => void;
+  uploadType: UploadTemplateType;
+}) {
   const scoreRows = [
     ["영업력", analysis.health.salesPower],
     ["배송효율", analysis.health.deliveryEfficiency],
@@ -1035,7 +1045,27 @@ function Report({ analysis, onReset }: { analysis: AnalysisResult; onReset: () =
           <h1 className="text-3xl font-black sm:text-4xl">{analysis.companyName}</h1>
           <p className="mt-2 text-sm text-muted-foreground">거래처 {analysis.customers}개 · 거래지역 {analysis.regions}개 · 분석 완료</p>
         </div>
-        <Button variant="outline" onClick={onReset}>새 엑셀 업로드</Button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800"
+            href={uploadType === "sales-analysis" ? "/revenue/transactions" : "/crm/timeline"}
+          >
+            {uploadType === "sales-analysis" ? "매출 원장 보기" : "거래처 히스토리 보기"}
+          </Link>
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted"
+            href="/dashboard"
+          >
+            대시보드 보기
+          </Link>
+          <Button variant="outline" onClick={onReset}>새 데이터 등록</Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
+        <ResultMetric label="처리된 행" value={`${meta.rows.toLocaleString()}개`} />
+        <ResultMetric label="저장 위치" value={meta.persisted ? "Supabase 저장" : "로컬/샘플 처리"} />
+        <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "계산 완료"} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
@@ -1157,6 +1187,15 @@ function ReportSection({ icon: Icon, title, children }: { icon: typeof MapPin; t
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
+  );
+}
+
+function ResultMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
+      <p className="text-xs font-black text-slate-400">{label}</p>
+      <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 
