@@ -58,6 +58,7 @@ type UploadHistoryRow = {
 };
 type DataQualitySummary = {
   duplicateCandidates: number;
+  invalidBusinessNumbers: Array<{ rowNumber: number; value: string }>;
   issueRows: Array<{ missingLabels: string[]; rowNumber: number }>;
   readyRows: number;
   rows: number;
@@ -1157,7 +1158,9 @@ function MiniStatus({ label, value }: { label: string; value: string }) {
 
 function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () => void; summary: DataQualitySummary }) {
   const hasRows = summary.rows > 0;
-  const hasIssues = summary.issueRows.length > 0 || summary.duplicateCandidates > 0;
+  const hasRowIssues = summary.issueRows.length > 0 || summary.invalidBusinessNumbers.length > 0;
+  const hasIssues = hasRowIssues || summary.duplicateCandidates > 0;
+  const rowIssueCount = new Set([...summary.issueRows.map((issue) => issue.rowNumber), ...summary.invalidBusinessNumbers.map((issue) => issue.rowNumber)]).size;
 
   return (
     <div className={`mb-4 rounded-md border p-3 ${hasIssues ? "border-amber-200 bg-amber-50/70" : "border-emerald-100 bg-emerald-50/70"}`}>
@@ -1168,14 +1171,15 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
             행 데이터 품질
           </p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-            {hasRows ? "필수값 누락과 중복 후보를 저장 전에 확인합니다." : "엑셀을 올리면 행 단위 검증 결과가 표시됩니다."}
+            {hasRows ? "필수값 누락, 사업자번호 유효성, 중복 후보를 저장 전에 확인합니다." : "엑셀을 올리면 행 단위 검증 결과가 표시됩니다."}
           </p>
         </div>
         <Badge className={hasIssues ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>{hasIssues ? "보완 권장" : "정상"}</Badge>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <MiniStatus label="정상 행" value={`${summary.readyRows.toLocaleString()}개`} />
-        <MiniStatus label="보완 행" value={`${summary.issueRows.length.toLocaleString()}개`} />
+        <MiniStatus label="보완 행" value={`${rowIssueCount.toLocaleString()}개`} />
+        <MiniStatus label="사업자 오류" value={`${summary.invalidBusinessNumbers.length.toLocaleString()}개`} />
         <MiniStatus label="중복 후보" value={`${summary.duplicateCandidates.toLocaleString()}개`} />
       </div>
       {summary.issueRows.length ? (
@@ -1188,7 +1192,17 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
           {summary.issueRows.length > 3 ? <p className="px-1 text-xs font-bold text-amber-700">외 {summary.issueRows.length - 3}개 행 보완 필요</p> : null}
         </div>
       ) : null}
-      <Button className="mt-3 w-full bg-white" disabled={!summary.issueRows.length} onClick={onDownloadIssues} size="sm" variant="outline">
+      {summary.invalidBusinessNumbers.length ? (
+        <div className="mt-3 space-y-1.5">
+          {summary.invalidBusinessNumbers.slice(0, 3).map((issue) => (
+            <div key={`business-${issue.rowNumber}`} className="rounded-md bg-white/80 px-3 py-2 text-xs font-bold text-slate-700">
+              {issue.rowNumber}행: 사업자번호 {issue.value || "빈 값"} 유효성 오류
+            </div>
+          ))}
+          {summary.invalidBusinessNumbers.length > 3 ? <p className="px-1 text-xs font-bold text-amber-700">외 {summary.invalidBusinessNumbers.length - 3}개 사업자번호 확인 필요</p> : null}
+        </div>
+      ) : null}
+      <Button className="mt-3 w-full bg-white" disabled={!hasRowIssues} onClick={onDownloadIssues} size="sm" variant="outline">
         <Download className="h-4 w-4" />
         보완 필요 행 다운로드
       </Button>
@@ -1777,9 +1791,11 @@ function fieldLabelForHeader(header: string, fields: readonly UploadTemplateFiel
 function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTemplateField[], fieldMap: FieldMap): DataQualitySummary {
   const seenKeys = new Map<string, number>();
   let duplicateCandidates = 0;
+  const invalidBusinessNumbers: DataQualitySummary["invalidBusinessNumbers"] = [];
   const issueRows: DataQualitySummary["issueRows"] = [];
 
   rows.forEach((row, index) => {
+    const rowNumber = index + 2;
     const missingLabels = requiredFields
       .filter((field) => {
         const sourceHeader = fieldMap[field.key];
@@ -1788,10 +1804,15 @@ function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTem
       .map((field) => field.label);
 
     if (missingLabels.length) {
-      issueRows.push({ missingLabels, rowNumber: index + 2 });
+      issueRows.push({ missingLabels, rowNumber });
     }
 
-    const businessNumber = normalizeTextForCompare(getCell(row, fieldMap.businessRegistrationNumber));
+    const rawBusinessNumber = getCell(row, fieldMap.businessRegistrationNumber);
+    const businessNumber = normalizeTextForCompare(rawBusinessNumber);
+    if (rawBusinessNumber && !isValidBusinessRegistrationNumber(rawBusinessNumber)) {
+      invalidBusinessNumbers.push({ rowNumber, value: rawBusinessNumber });
+    }
+
     const customerName = normalizeTextForCompare(getCell(row, fieldMap.customerName));
     const address = normalizeTextForCompare(getCell(row, fieldMap.address));
     const duplicateKey = businessNumber || [customerName, address].filter(Boolean).join("|");
@@ -1803,25 +1824,31 @@ function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTem
     }
   });
 
+  const blockingRows = new Set([...issueRows.map((issue) => issue.rowNumber), ...invalidBusinessNumbers.map((issue) => issue.rowNumber)]);
+
   return {
     duplicateCandidates,
+    invalidBusinessNumbers,
     issueRows,
-    readyRows: Math.max(0, rows.length - issueRows.length),
+    readyRows: Math.max(0, rows.length - blockingRows.size),
     rows: rows.length
   };
 }
 
 function buildIssueRows(rows: RawRow[], summary: DataQualitySummary, fieldMap: FieldMap): RawRow[] {
   const issueMap = new Map(summary.issueRows.map((issue) => [issue.rowNumber, issue.missingLabels]));
+  const invalidBusinessNumberMap = new Map(summary.invalidBusinessNumbers.map((issue) => [issue.rowNumber, issue.value]));
 
   return rows.reduce<RawRow[]>((issueRows, row, index) => {
     const rowNumber = index + 2;
     const missingLabels = issueMap.get(rowNumber);
-    if (!missingLabels) return issueRows;
+    const invalidBusinessNumber = invalidBusinessNumberMap.get(rowNumber);
+    if (!missingLabels && !invalidBusinessNumber) return issueRows;
 
     issueRows.push({
         보완필요행: rowNumber,
-        누락필수값: missingLabels.join(", "),
+        누락필수값: missingLabels?.join(", ") || "",
+        사업자번호오류: invalidBusinessNumber ? "유효하지 않은 사업자등록번호" : "",
         거래처명: getCell(row, fieldMap.customerName),
         사업자등록번호: getCell(row, fieldMap.businessRegistrationNumber),
         주소: getCell(row, fieldMap.address),
