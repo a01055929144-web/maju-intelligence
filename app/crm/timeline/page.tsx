@@ -391,19 +391,15 @@ export default function CrmTimelinePage() {
       title="거래처 히스토리"
       userName="관리자"
     >
-      <section className="mx-auto max-w-[1760px] space-y-5">
-        <div className="grid gap-3 lg:grid-cols-4">
-          <SummaryCard label="전체 거래처" value={`${customers.length}곳`} helper="기초 등록된 매장" />
-          <SummaryCard label="A등급 거래처" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
-          <SummaryCard label="현재 목록" value={`${filteredCustomers.length}곳`} helper={gradeFilter === "all" ? "전체 등급 기준" : `${gradeFilter}등급 필터 기준`} tone="blue" />
-          <SummaryCard label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} helper="최근 액션 기준" tone="violet" />
-        </div>
-
+      <section className="mx-auto max-w-[1760px] space-y-4">
         <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Badge className={dbSummary.tone === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{dbSummary.label}</Badge>
-              <p className="text-sm font-bold leading-6 text-slate-600">{dbSummary.description}</p>
+              <span className="text-sm font-black text-slate-950">전체 {customers.length}곳</span>
+              <span className="text-sm font-black text-emerald-700">A등급 {customers.filter((customer) => customer.grade === "A").length}곳</span>
+              <span className="text-sm font-black text-blue-700">현재 목록 {filteredCustomers.length}곳</span>
+              <span className="text-sm font-black text-violet-700">예상매출 {expectedRevenue.toLocaleString()}만원</span>
             </div>
             <div className="flex flex-wrap gap-2 text-xs font-black text-slate-500">
               <span className="rounded-md bg-slate-100 px-3 py-2">정제 거래처 {formatDbCount(dbSummary.normalizedCustomers)}</span>
@@ -413,7 +409,7 @@ export default function CrmTimelinePage() {
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
           <aside className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-200/80 p-5">
               <div className="flex items-center justify-between gap-3">
