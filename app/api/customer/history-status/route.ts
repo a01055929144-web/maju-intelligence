@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession, getCustomerSession } from "@/lib/auth";
 import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 
@@ -17,7 +17,7 @@ const sampleTimeline = [
   }
 ];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
@@ -28,6 +28,8 @@ export async function GET() {
   const errors: string[] = [];
   let system = null;
   let timeline = sampleTimeline;
+  const adminCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
+  const scopedCompanyId = customerSession?.companyId || adminCompanyId;
 
   try {
     system = await getSystemDiagnostics();
@@ -36,7 +38,7 @@ export async function GET() {
   }
 
   try {
-    const rows = await getVisitTimeline(customerSession?.companyId);
+    const rows = await getVisitTimeline(scopedCompanyId);
     if (rows.length) timeline = rows;
   } catch (error) {
     errors.push(`방문 히스토리 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
@@ -1163,6 +1164,12 @@ function StoreDetail({
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 저장됨 · {savedAt}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <Link
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                href={`/crm/timeline?customerId=${encodeURIComponent(store.id)}`}
+              >
+                히스토리 열기
+              </Link>
               <button
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white hover:bg-blue-700"
                 onClick={saveDraft}

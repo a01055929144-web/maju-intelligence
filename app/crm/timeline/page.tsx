@@ -83,6 +83,11 @@ function getAdminCompanyIdFromUrl() {
   return new URLSearchParams(window.location.search).get("companyId") || "";
 }
 
+function getSelectedCustomerIdFromUrl() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("customerId") || "";
+}
+
 function withCompanyQuery(path: string) {
   const companyId = getAdminCompanyIdFromUrl();
   if (!companyId) return path;
@@ -100,7 +105,7 @@ export default function CrmTimelinePage() {
   useEffect(() => {
     let active = true;
 
-    fetch("/api/customer/history-status", { cache: "no-store" })
+    fetch(withCompanyQuery("/api/customer/history-status"), { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => {
         if (!active) return;
@@ -155,7 +160,9 @@ export default function CrmTimelinePage() {
       .then((payload) => {
         if (!active || !payload?.customers?.length) return;
         setCustomers(payload.customers);
-        setSelectedIndex(0);
+        const requestedCustomerId = getSelectedCustomerIdFromUrl();
+        const requestedIndex = requestedCustomerId ? payload.customers.findIndex((customer: CustomerView) => customer.id === requestedCustomerId) : -1;
+        setSelectedIndex(requestedIndex >= 0 ? requestedIndex : 0);
       })
       .catch(() => null);
 
@@ -267,9 +274,11 @@ export default function CrmTimelinePage() {
           businessStatus: draftCustomer.businessStatus,
           customerName: draftCustomer.customerName,
           deliveryKm: draftCustomer.deliveryKm,
+          deliveryManager: draftCustomer.deliveryManager,
           email: draftCustomer.email,
           industry: draftCustomer.industry,
           lastOrderDays: draftCustomer.lastOrderDays,
+          loadingPosition: draftCustomer.loadingPosition,
           monthlyRevenue: draftCustomer.monthlyRevenue,
           phone: draftCustomer.phone,
           region: draftCustomer.region,
@@ -554,7 +563,12 @@ export default function CrmTimelinePage() {
                     <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
                     <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
                     <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
+                    <EditableField label="배송담당자" value={draftCustomer.deliveryManager} onChange={(value) => updateDraft("deliveryManager", value)} />
+                    <EditableField label="배송거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
+                    <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
+                    <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
                     <EditableField className="md:col-span-2" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
+                    <EditableField className="md:col-span-2" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
                   </div>
                 ) : (
                   <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
