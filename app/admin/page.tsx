@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, BarChart3, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, MessageSquareText, Route, ServerCog, Settings, ShieldCheck, Sparkles, Target, TrendingUp } from "lucide-react";
+import { Activity, BarChart3, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, MessageSquareText, Route, ServerCog, Settings, ShieldCheck, Sparkles, Target, TrendingUp, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -67,6 +67,13 @@ export default async function AdminPage() {
             >
               <Building2 className="h-4 w-4" />
               고객사 관리
+            </Link>
+            <Link
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
+              href="/admin/uploads"
+            >
+              <UploadCloud className="h-4 w-4" />
+              업로드 이력
             </Link>
             <Link
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
@@ -203,10 +210,18 @@ export default async function AdminPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5 text-primary" />
-              업로드/분석 이력
-            </CardTitle>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+                업로드/분석 이력
+              </CardTitle>
+              <Link
+                className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
+                href="/admin/uploads"
+              >
+                전체 이력 보기
+              </Link>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {dashboard.uploadHistory.map((item) => (
