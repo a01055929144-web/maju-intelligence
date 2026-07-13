@@ -175,7 +175,7 @@ export default function Home() {
 
     const nextHeaders = currentTemplate.fields.map((field) => field.key);
     const nextRow = currentTemplate.fields.reduce<RawRow>((row, field) => {
-      row[field.key] = manualDraft[field.key] ?? "";
+      row[field.key] = field.key === "businessRegistrationNumber" ? formatBusinessRegistrationNumber(String(manualDraft[field.key] ?? "")) : manualDraft[field.key] ?? "";
       return row;
     }, {});
     const nextRows = [...rawRows, nextRow];
@@ -676,8 +676,10 @@ function Onboarding({
   const isMaster = uploadType === "customer-master";
   const manualBusinessNumber = String(manualDraft.businessRegistrationNumber ?? "");
   const manualBusinessNumberValid = !isMaster || isValidBusinessRegistrationNumber(manualBusinessNumber);
+  const manualMissingRequiredFields = template.fields.filter((field) => field.required && !String(manualDraft[field.key] ?? "").trim());
+  const manualAddressSelected = !isMaster || Boolean(String(manualDraft.address ?? "").trim());
   const manualComplete =
-    template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim()) && manualBusinessNumberValid;
+    manualMissingRequiredFields.length === 0 && manualBusinessNumberValid;
   const canAnalyze = rawRows.length > 0 && complete;
   const mappedRequiredCount = requiredFields.length - missingRequiredFields.length;
   const mappingProgress = requiredFields.length ? Math.round((mappedRequiredCount / requiredFields.length) * 100) : 100;
@@ -899,85 +901,111 @@ function Onboarding({
               </div>
             </div>
           ) : (
-            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50/70 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">주소는 API 검색 결과에서 선택하고, 사업자번호는 유효한 번호만 저장합니다.</p>
-                </div>
-                <Button onClick={onManualSave} disabled={!manualComplete}>
-                  <Save size={18} />
-                  입력값 저장
-                </Button>
-              </div>
-              {isMaster ? (
-                <div className="mt-4 rounded-md border border-blue-100 bg-white p-3">
-                  <div className="flex flex-col gap-2 lg:flex-row">
-                    <div className="relative flex-1">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <input
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
-                        onChange={(event) => setAddressQuery(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            searchAddress();
-                          }
-                        }}
-                        placeholder="배송주소 검색 예: 서울 성동구 성수이로 88"
-                        value={addressQuery}
-                      />
-                    </div>
-                    <Button className="shrink-0" disabled={isSearchingAddress} onClick={searchAddress} type="button" variant="outline">
-                      <Search size={16} />
-                      {isSearchingAddress ? "검색 중" : "주소 검색"}
-                    </Button>
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 저장 대기 목록에 추가됩니다.</p>
                   </div>
-                  {addressSearchMessage ? <p className="mt-2 text-xs font-bold text-slate-500">{addressSearchMessage}</p> : null}
-                  {addressResults.length ? (
-                    <div className="mt-3 max-h-64 space-y-2 overflow-auto">
-                      {addressResults.map((result) => (
-                        <button
-                          className="w-full rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
-                          key={`${result.address}-${result.longitude}-${result.latitude}`}
-                          onClick={() => selectAddress(result)}
-                          type="button"
-                        >
-                          <span className="block text-sm font-black text-slate-950">{result.address}</span>
-                          {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
-                          <span className="mt-1 block text-xs font-bold text-blue-700">
-                            {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                  <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete}>
+                    <Save size={18} />
+                    검증 후 저장
+                  </Button>
                 </div>
-              ) : null}
-              <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                {template.fields.map((field) => (
-                  <label key={field.key} className="space-y-1.5">
-                    <span className="text-xs font-black text-slate-500">
-                      {field.label}
-                      {field.required ? <span className="ml-1 text-destructive">*</span> : null}
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
-                      inputMode={manualInputMode(field.key)}
-                      type={manualInputType(field.key)}
-                      value={String(manualDraft[field.key] ?? "")}
-                      onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
-                      placeholder={field.description || `${field.label} 입력`}
-                    />
-                    {field.key === "businessRegistrationNumber" && isMaster ? (
-                      <span className={`block text-xs font-black ${manualBusinessNumber ? (manualBusinessNumberValid ? "text-emerald-700" : "text-rose-600") : "text-slate-400"}`}>
-                        {manualBusinessNumber ? (manualBusinessNumberValid ? "유효한 사업자등록번호입니다." : "유효하지 않은 사업자등록번호입니다. 10자리 번호를 확인하세요.") : "사업자등록번호 10자리를 입력하세요."}
-                      </span>
+
+                {isMaster ? (
+                  <div className="mt-4 rounded-md border border-blue-100 bg-white p-3">
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-950">
+                      <MapPin className="h-4 w-4 text-blue-700" />
+                      배송주소 API 검색
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 lg:flex-row">
+                      <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          className="h-11 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                          onChange={(event) => setAddressQuery(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              searchAddress();
+                            }
+                          }}
+                          placeholder="예: 서울 성동구 성수이로 88"
+                          value={addressQuery}
+                        />
+                      </div>
+                      <Button className="h-11 shrink-0" disabled={isSearchingAddress} onClick={searchAddress} type="button" variant="outline">
+                        <Search size={16} />
+                        {isSearchingAddress ? "검색 중" : "검색"}
+                      </Button>
+                    </div>
+                    {String(manualDraft.address ?? "").trim() ? (
+                      <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
+                        선택 주소: {String(manualDraft.address)}
+                      </div>
                     ) : null}
-                    {field.key === "address" && isMaster ? <span className="block text-xs font-bold text-blue-700">상단 주소 검색 결과를 선택하면 자동 입력됩니다.</span> : null}
-                  </label>
-                ))}
+                    {addressSearchMessage ? <p className="mt-2 text-xs font-bold text-slate-500">{addressSearchMessage}</p> : null}
+                    {addressResults.length ? (
+                      <div className="mt-3 max-h-64 space-y-2 overflow-auto">
+                        {addressResults.map((result) => (
+                          <button
+                            className="w-full rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                            key={`${result.address}-${result.longitude}-${result.latitude}`}
+                            onClick={() => selectAddress(result)}
+                            type="button"
+                          >
+                            <span className="block text-sm font-black text-slate-950">{result.address}</span>
+                            {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
+                            <span className="mt-1 block text-xs font-bold text-blue-700">
+                              {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                  {template.fields.map((field) => {
+                    const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
+                    const isAddressField = field.key === "address" && isMaster;
+                    return (
+                      <label key={field.key} className={`space-y-1.5 rounded-md border bg-white p-3 ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
+                        <span className="text-xs font-black text-slate-500">
+                          {field.label}
+                          {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                        </span>
+                        <input
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                          inputMode={manualInputMode(field.key)}
+                          type={manualInputType(field.key)}
+                          value={String(manualDraft[field.key] ?? "")}
+                          onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
+                          placeholder={field.description || `${field.label} 입력`}
+                        />
+                        {field.key === "businessRegistrationNumber" && isMaster ? (
+                          <span className={`block text-xs font-black ${manualBusinessNumber ? (manualBusinessNumberValid ? "text-emerald-700" : "text-rose-600") : "text-slate-400"}`}>
+                            {manualBusinessNumber ? (manualBusinessNumberValid ? `${formatBusinessRegistrationNumber(manualBusinessNumber)} 검증 완료` : "유효하지 않은 번호입니다. 10자리와 체크값을 확인하세요.") : "사업자등록번호 10자리를 입력하세요."}
+                          </span>
+                        ) : null}
+                        {isAddressField ? <span className="block text-xs font-bold text-blue-700">검색 결과 선택 시 지역이 자동 반영됩니다.</span> : null}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
+
+              <ManualValidationPanel
+                addressSelected={manualAddressSelected}
+                businessNumber={manualBusinessNumber}
+                businessNumberValid={manualBusinessNumberValid}
+                isMaster={isMaster}
+                missingFields={manualMissingRequiredFields}
+                ready={manualComplete}
+              />
             </div>
           )}
         </div>
@@ -1098,6 +1126,76 @@ function Onboarding({
         </div>
       </aside>
     </section>
+  );
+}
+
+function ManualValidationPanel({
+  addressSelected,
+  businessNumber,
+  businessNumberValid,
+  isMaster,
+  missingFields,
+  ready
+}: {
+  addressSelected: boolean;
+  businessNumber: string;
+  businessNumberValid: boolean;
+  isMaster: boolean;
+  missingFields: UploadTemplateField[];
+  ready: boolean;
+}) {
+  const checks = [
+    {
+      description: missingFields.length ? `${missingFields.map((field) => field.label).join(", ")} 입력 필요` : "필수값이 모두 입력되었습니다.",
+      label: "필수값",
+      ok: missingFields.length === 0
+    },
+    {
+      description: isMaster ? (addressSelected ? "배송주소가 선택되었습니다." : "주소 검색 후 배송주소를 선택하세요.") : "매출 데이터는 거래처 key 기준으로 저장됩니다.",
+      label: "주소",
+      ok: addressSelected
+    },
+    {
+      description: isMaster
+        ? businessNumber
+          ? businessNumberValid
+            ? `${formatBusinessRegistrationNumber(businessNumber)} 확인 완료`
+            : "사업자번호 체크값이 맞지 않습니다."
+          : "사업자번호를 입력하세요."
+        : "매출 업로드에서는 선택값입니다.",
+      label: "사업자번호",
+      ok: businessNumberValid
+    }
+  ];
+
+  return (
+    <aside className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            <ClipboardList className="h-4 w-4 text-blue-700" />
+            등록 검증
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 전 필요한 조건을 확인합니다.</p>
+        </div>
+        <Badge className={ready ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{ready ? "저장 가능" : "확인 필요"}</Badge>
+      </div>
+      <div className="mt-4 space-y-2">
+        {checks.map((check) => (
+          <div key={check.label} className={`rounded-md border p-3 ${check.ok ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-black text-slate-900">{check.label}</span>
+              {check.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{check.description}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <p className="text-xs font-black text-slate-500">저장 후 흐름</p>
+        <p className="mt-1 text-sm font-bold leading-6 text-slate-800">저장 대기 목록에 추가되고, 우측 저장 상태에서 서버 반영과 리포트 갱신을 진행합니다.</p>
+      </div>
+    </aside>
   );
 }
 
@@ -1924,6 +2022,12 @@ function getCell(row: RawRow, key?: string) {
 
 function normalizeTextForCompare(value: string) {
   return value.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function formatBusinessRegistrationNumber(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 10);
+  if (digits.length !== 10) return value;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 }
 
 function isValidBusinessRegistrationNumber(value: string) {
