@@ -232,6 +232,7 @@ export default function Home() {
             template={currentTemplate}
             manualDraft={manualDraft}
             rawRows={rawRows}
+            uploadedFilename={uploadedFilename}
             isAnalyzing={isAnalyzing}
             pipelineMeta={pipelineMeta}
             pipelineSteps={pipelineSteps}
@@ -572,6 +573,7 @@ function Onboarding({
   template,
   manualDraft,
   rawRows,
+  uploadedFilename,
   isAnalyzing,
   pipelineMeta,
   pipelineSteps,
@@ -593,6 +595,7 @@ function Onboarding({
   template: { label: string; description: string; fields: readonly UploadTemplateField[] };
   manualDraft: RawRow;
   rawRows: RawRow[];
+  uploadedFilename: string;
   isAnalyzing: boolean;
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
   pipelineSteps: PipelineStep[];
@@ -614,6 +617,8 @@ function Onboarding({
   const complete = missingRequiredFields.length === 0;
   const manualComplete = template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim());
   const canAnalyze = rawRows.length > 0 && complete;
+  const mappedRequiredCount = requiredFields.length - missingRequiredFields.length;
+  const mappingProgress = requiredFields.length ? Math.round((mappedRequiredCount / requiredFields.length) * 100) : 100;
   const isMaster = uploadType === "customer-master";
   const uploadHint = isMaster
     ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
@@ -789,6 +794,15 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
+                <UploadStatusCard
+                  complete={complete}
+                  filename={uploadedFilename}
+                  headers={headers}
+                  mappedRequiredCount={mappedRequiredCount}
+                  mappingProgress={mappingProgress}
+                  requiredCount={requiredFields.length}
+                  rows={rawRows}
+                />
                 <div className="mb-4 grid gap-2">
                   {requiredFields.map((field) => {
                     const mappedHeader = fieldMap[field.key];
@@ -848,6 +862,61 @@ function Onboarding({
         </div>
       </aside>
     </section>
+  );
+}
+
+function UploadStatusCard({
+  complete,
+  filename,
+  headers,
+  mappedRequiredCount,
+  mappingProgress,
+  requiredCount,
+  rows
+}: {
+  complete: boolean;
+  filename: string;
+  headers: string[];
+  mappedRequiredCount: number;
+  mappingProgress: number;
+  requiredCount: number;
+  rows: RawRow[];
+}) {
+  const hasRows = rows.length > 0;
+
+  return (
+    <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black text-slate-400">{hasRows ? "업로드됨" : "대기 중"}</p>
+          <p className="mt-1 truncate text-sm font-black text-slate-950">{hasRows ? filename : "아직 등록할 데이터가 없습니다."}</p>
+        </div>
+        <Badge className={complete && hasRows ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+          {complete && hasRows ? "저장 가능" : "확인 필요"}
+        </Badge>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <MiniStatus label="행" value={`${rows.length}개`} />
+        <MiniStatus label="컬럼" value={`${headers.length}개`} />
+        <MiniStatus label="필수" value={`${mappedRequiredCount}/${requiredCount}`} />
+      </div>
+      <div className="mt-3">
+        <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
+          <span>필수 매핑</span>
+          <span>{mappingProgress}%</span>
+        </div>
+        <Progress value={mappingProgress} />
+      </div>
+    </div>
+  );
+}
+
+function MiniStatus({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-2">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
+    </div>
   );
 }
 
