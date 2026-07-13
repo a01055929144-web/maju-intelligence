@@ -11,10 +11,12 @@ import {
   Building2,
   Check,
   ClipboardList,
+  Clock,
   Database,
   Download,
   FileSpreadsheet,
   HeartPulse,
+  History,
   MapPin,
   Save,
   Route,
@@ -39,6 +41,18 @@ type PipelineStep = {
   label: string;
   description: string;
   status: PipelineStatus;
+};
+type UploadHistoryRow = {
+  id: string;
+  company: string;
+  filename: string;
+  reportId: string;
+  rows: number;
+  status: "completed" | "running" | "failed";
+  qualityScore: number;
+  duplicateCount: number;
+  healthScore: number;
+  createdAt: string;
 };
 
 const emptyMap: FieldMap = {};
@@ -68,11 +82,16 @@ export default function Home() {
   const [usingSample, setUsingSample] = useState(true);
   const [customers, setCustomers] = useState<CustomerRow[]>(sampleCustomers);
   const [uploadedFilename, setUploadedFilename] = useState<string>("sample-customers.xlsx");
+  const [uploadHistory, setUploadHistory] = useState<UploadHistoryRow[]>([]);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
   const [pipelineMeta, setPipelineMeta] = useState({ rows: sampleCustomers.length, qualityScore: 100, persisted: false });
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
   const currentTemplate = uploadTemplates[uploadType];
+
+  useEffect(() => {
+    refreshUploadHistory();
+  }, []);
 
   function downloadTemplate(type: UploadTemplateType) {
     const templateRows = buildTemplateWorkbookRows(type);
@@ -193,10 +212,18 @@ export default function Home() {
     }
 
     await completePipelineStep("report");
+    await refreshUploadHistory();
     window.setTimeout(() => {
       setIsAnalyzing(false);
       setScreen("report");
     }, 450);
+  }
+
+  async function refreshUploadHistory() {
+    const response = await fetch(uploadHistoryEndpoint(), { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) return;
+    const payload = await response.json().catch(() => null);
+    if (Array.isArray(payload?.uploads)) setUploadHistory(payload.uploads);
   }
 
   async function completePipelineStep(key: string) {
@@ -237,6 +264,7 @@ export default function Home() {
             isAnalyzing={isAnalyzing}
             pipelineMeta={pipelineMeta}
             pipelineSteps={pipelineSteps}
+            uploadHistory={uploadHistory}
             usingSample={usingSample}
             onFile={handleFile}
             onMap={setFieldMap}
@@ -575,6 +603,7 @@ function Onboarding({
   manualDraft,
   rawRows,
   uploadedFilename,
+  uploadHistory,
   isAnalyzing,
   pipelineMeta,
   pipelineSteps,
@@ -597,6 +626,7 @@ function Onboarding({
   manualDraft: RawRow;
   rawRows: RawRow[];
   uploadedFilename: string;
+  uploadHistory: UploadHistoryRow[];
   isAnalyzing: boolean;
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
   pipelineSteps: PipelineStep[];
@@ -882,6 +912,7 @@ function Onboarding({
                   onRemove={removeSavedPreset}
                   onSave={saveCurrentPreset}
                 />
+                <RecentUploadHistoryCard uploads={uploadHistory} />
                 <div className="mb-4 grid gap-2">
                   {requiredFields.map((field) => {
                     const mappedHeader = fieldMap[field.key];
@@ -1038,6 +1069,56 @@ function MappingPresetCard({
           삭제
         </Button>
       </div>
+    </div>
+  );
+}
+
+function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
+  const latestUploads = uploads.slice(0, 4);
+
+  return (
+    <div className="mb-4 rounded-md border border-slate-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            <History className="h-4 w-4 text-slate-500" />
+            최근 등록 이력
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장된 파일과 분석 품질을 바로 확인합니다.</p>
+        </div>
+        <Badge className="shrink-0 bg-slate-100 text-slate-600">{uploads.length}건</Badge>
+      </div>
+
+      {latestUploads.length ? (
+        <div className="mt-3 space-y-2">
+          {latestUploads.map((upload) => (
+            <div key={upload.id} className="rounded-md border border-slate-100 bg-slate-50/70 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{upload.filename}</p>
+                  <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+                    <Clock className="h-3.5 w-3.5" />
+                    {upload.createdAt}
+                  </p>
+                </div>
+                <Badge className={upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
+                  {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
+                </Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <MiniStatus label="rows" value={`${upload.rows.toLocaleString()}개`} />
+                <MiniStatus label="품질" value={`${upload.qualityScore}%`} />
+                <MiniStatus label="중복" value={`${upload.duplicateCount.toLocaleString()}개`} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
+          <p className="text-sm font-black text-slate-900">아직 서버 등록 이력이 없습니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">엑셀 업로드 후 저장하면 이곳에 최근 이력이 표시됩니다.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1532,6 +1613,11 @@ function mappingPresetEndpoint(type: UploadTemplateType) {
   const companyId = getAdminCompanyIdFromUrl();
   if (companyId) params.set("companyId", companyId);
   return `/api/excel-mapping-presets?${params.toString()}`;
+}
+
+function uploadHistoryEndpoint() {
+  const companyId = getAdminCompanyIdFromUrl();
+  return companyId ? `/api/upload-history?companyId=${encodeURIComponent(companyId)}` : "/api/upload-history";
 }
 
 function loadMappingPreset(type: UploadTemplateType) {
