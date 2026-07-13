@@ -608,6 +608,7 @@ function Onboarding({
   onDownloadCustomerExport: () => void;
   onDownloadSalesExport: () => void;
 }) {
+  const [entryMode, setEntryMode] = useState<"excel" | "manual">("excel");
   const complete = template.fields.filter((field) => field.required).every((field) => fieldMap[field.key]);
   const manualComplete = template.fields.filter((field) => field.required).every((field) => String(manualDraft[field.key] ?? "").trim());
   const isMaster = uploadType === "customer-master";
@@ -619,136 +620,163 @@ function Onboarding({
     : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_420px]">
-      <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-        <div className="rounded-md border border-slate-200 bg-white p-4">
-          <Badge className="mb-3 w-fit bg-emerald-50 text-emerald-800">등록 단계 1</Badge>
-          <h2 className="text-lg font-black text-slate-950">데이터 종류 선택</h2>
-          <p className="mt-1 text-sm font-medium leading-6 text-slate-500">거래처 기본정보와 매출 거래내역은 목적이 다르기 때문에 분리해서 등록합니다.</p>
-          <div className="mt-4 grid gap-2">
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="space-y-4">
+        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+            <div>
+              <Badge className="mb-3 bg-emerald-50 text-emerald-800">1. 무엇을 등록하나요?</Badge>
+              <h2 className="text-xl font-black text-slate-950">데이터 종류를 먼저 선택하세요</h2>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">기초정보는 거래처 원장에 저장되고, 매출 거래내역은 분석과 등급 갱신에 누적됩니다.</p>
+            </div>
+            <Badge className="w-fit bg-slate-100 text-slate-700">{rawRows.length}개 저장 대기</Badge>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {Object.entries(uploadTemplates).map(([key, item]) => {
               const selected = uploadType === key;
+              const Icon = key === "customer-master" ? Building2 : Banknote;
               return (
                 <button
                   key={key}
                   className={`rounded-md border p-4 text-left transition ${
-                    selected ? "border-emerald-300 bg-emerald-50 text-emerald-950" : "border-slate-200 bg-white hover:bg-slate-50"
+                    selected ? "border-emerald-300 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-100" : "border-slate-200 bg-white hover:bg-slate-50"
                   }`}
                   onClick={() => onUploadType(key as UploadTemplateType)}
                   type="button"
                 >
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="font-black">{item.label}</span>
-                    <Badge className={selected ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}>{key === "customer-master" ? "기초" : "매출"}</Badge>
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="flex min-w-0 gap-3">
+                      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${selected ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span>
+                        <span className="block font-black">{item.label}</span>
+                        <span className="mt-1 block text-sm font-medium leading-6 text-slate-500">{item.description}</span>
+                      </span>
+                    </span>
+                    {selected ? <Check className="h-5 w-5 shrink-0 text-emerald-700" /> : null}
                   </span>
-                  <span className="mt-1 block text-sm font-medium leading-6 text-slate-500">{item.description}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-base font-black text-slate-950">양식과 데이터</h2>
-              <p className="mt-1 text-xs font-bold text-slate-500">다운로드 후 ERP 양식에 맞춰 업로드합니다.</p>
-            </div>
-            <Badge className="border border-slate-200 bg-white text-slate-500">Excel</Badge>
-          </div>
-          <div className="mt-4 grid gap-2">
-            <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("customer-master")}>
-              <Download size={16} />
-              거래처 마스터 양식
-            </Button>
-            <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("sales-analysis")}>
-              <Download size={16} />
-              매출 거래내역 양식
-            </Button>
-            <Button variant="outline" className="justify-start gap-2" onClick={onDownloadCustomerExport}>
-              <FileSpreadsheet size={16} />
-              현재 거래처 내보내기
-            </Button>
-            <Button variant="outline" className="justify-start gap-2" onClick={onDownloadSalesExport}>
-              <FileSpreadsheet size={16} />
-              매출 거래내역 내보내기
-            </Button>
-            <Link
-              className="inline-flex h-10 items-center justify-start gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-              href={getAdminCompanyIdFromUrl() ? `/revenue/transactions?companyId=${encodeURIComponent(getAdminCompanyIdFromUrl())}` : "/revenue/transactions"}
-            >
-              <Banknote size={16} />
-              저장된 매출 원장 보기
-            </Link>
-          </div>
-        </div>
-      </aside>
-
-      <div className="space-y-4">
-        <div className="rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <Badge className="mb-3 bg-blue-50 text-blue-700">등록 단계 2</Badge>
+              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 어떻게 등록하나요?</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
-              <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{uploadHint}</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{uploadHint}</p>
             </div>
-            <Badge className="bg-slate-100 text-slate-700">{rawRows.length}개 저장 대기</Badge>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
-            <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/40 p-6 text-center transition hover:bg-blue-50">
-              <FileSpreadsheet className="mb-4 h-10 w-10 text-blue-700" />
-              <span className="text-base font-black text-slate-950">{template.label} 엑셀 업로드</span>
-              <span className="mt-2 max-w-xl text-sm font-medium leading-6 text-slate-500">ERP마다 헤더가 달라도 업로드 후 우측에서 필수 컬럼을 매핑합니다.</span>
-              <input className="sr-only" type="file" accept=".xlsx,.xls,.csv" onChange={onFile} />
-            </label>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm font-medium leading-6 text-slate-500">
-              <p className="font-black text-slate-950">저장 기준</p>
-              <p className="mt-2">{saveHint}</p>
-              <Button variant="outline" className="mt-4 w-full bg-white" onClick={onSample}>
-                샘플 리포트 보기
-              </Button>
+            <div className="grid grid-cols-2 rounded-md border border-slate-200 bg-slate-50 p-1">
+              <button
+                className={`h-9 rounded-md px-3 text-sm font-black ${entryMode === "excel" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}
+                onClick={() => setEntryMode("excel")}
+                type="button"
+              >
+                엑셀 업로드
+              </button>
+              <button
+                className={`h-9 rounded-md px-3 text-sm font-black ${entryMode === "manual" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}
+                onClick={() => setEntryMode("manual")}
+                type="button"
+              >
+                수기 입력
+              </button>
             </div>
           </div>
+
+          {entryMode === "excel" ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+              <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center transition hover:bg-blue-50">
+                <Upload className="mb-4 h-11 w-11 text-blue-700" />
+                <span className="text-lg font-black text-slate-950">엑셀 파일을 여기에 올리세요</span>
+                <span className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">ERP 양식이 달라도 괜찮습니다. 파일을 올리면 헤더를 읽고 오른쪽에서 필수 컬럼을 자동 매핑합니다.</span>
+                <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">.xlsx · .xls · .csv 지원</span>
+                <input className="sr-only" type="file" accept=".xlsx,.xls,.csv" onChange={onFile} />
+              </label>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-black text-slate-950">빠른 시작</p>
+                <div className="mt-3 grid gap-2">
+                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={() => onDownloadTemplate(uploadType)}>
+                    <Download size={16} />
+                    현재 양식 받기
+                  </Button>
+                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={uploadType === "customer-master" ? onDownloadCustomerExport : onDownloadSalesExport}>
+                    <FileSpreadsheet size={16} />
+                    현재 데이터 받기
+                  </Button>
+                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={onSample}>
+                    <Sparkles size={16} />
+                    샘플로 보기
+                  </Button>
+                </div>
+                <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">{saveHint}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">소량 등록이나 누락값 보완은 화면에서 바로 입력합니다.</p>
+                </div>
+                <Button onClick={onManualSave} disabled={!manualComplete}>
+                  <Save size={18} />
+                  입력값 저장
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                {template.fields.map((field) => (
+                  <label key={field.key} className="space-y-1.5">
+                    <span className="text-xs font-black text-slate-500">
+                      {field.label}
+                      {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                    </span>
+                    <input
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                      inputMode={manualInputMode(field.key)}
+                      type={manualInputType(field.key)}
+                      value={String(manualDraft[field.key] ?? "")}
+                      onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
+                      placeholder={field.description || `${field.label} 입력`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <Badge className="mb-3 bg-slate-100 text-slate-700">등록 단계 3</Badge>
-              <h2 className="text-lg font-black text-slate-950">수기 입력</h2>
-              <p className="mt-1 text-sm font-medium text-slate-500">소량 등록이나 누락값 보완은 화면에서 바로 입력합니다.</p>
-            </div>
-            <Button onClick={onManualSave} disabled={!manualComplete}>
-              <Save size={18} />
-              입력값 저장
-            </Button>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {template.fields.map((field) => (
-              <label key={field.key} className="space-y-1.5">
-                <span className="text-xs font-black text-slate-500">
-                  {field.label}
-                  {field.required ? <span className="ml-1 text-destructive">*</span> : null}
-                </span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
-                  inputMode={manualInputMode(field.key)}
-                  type={manualInputType(field.key)}
-                  value={String(manualDraft[field.key] ?? "")}
-                  onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
-                  placeholder={field.description || `${field.label} 입력`}
-                />
-              </label>
-            ))}
-          </div>
+        <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+          <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("customer-master")}>
+            <Download size={16} />
+            거래처 양식
+          </Button>
+          <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("sales-analysis")}>
+            <Download size={16} />
+            매출 양식
+          </Button>
+          <Button variant="outline" className="justify-start gap-2" onClick={onDownloadCustomerExport}>
+            <FileSpreadsheet size={16} />
+            거래처 내보내기
+          </Button>
+          <Link
+            className="inline-flex h-10 items-center justify-start gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            href={getAdminCompanyIdFromUrl() ? `/revenue/transactions?companyId=${encodeURIComponent(getAdminCompanyIdFromUrl())}` : "/revenue/transactions"}
+          >
+            <Banknote size={16} />
+            매출 원장 보기
+          </Link>
         </div>
       </div>
 
       <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
         <div className="rounded-md border border-slate-200 bg-white">
           <div className="border-b border-slate-200 p-4">
-            <Badge className="mb-3 bg-violet-50 text-violet-700">등록 단계 4</Badge>
-            <h2 className="text-lg font-black text-slate-950">저장 대기 · 컬럼 매핑</h2>
+            <Badge className="mb-3 bg-violet-50 text-violet-700">3. 확인하고 저장</Badge>
+            <h2 className="text-lg font-black text-slate-950">컬럼 매핑 · 저장 상태</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
               {rawRows.length ? `${rawRows.length}개 행을 확인한 뒤 리포트를 갱신합니다.` : "엑셀 업로드 또는 수기 저장 후 이곳에서 확인합니다."}
             </p>
