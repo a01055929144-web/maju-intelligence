@@ -8,7 +8,7 @@ import { getSystemDiagnostics } from "@/lib/store";
 
 const statusLabels = {
   ready: "준비됨",
-  fallback: "Fallback",
+  fallback: "점검 필요",
   missing: "누락"
 };
 
@@ -38,7 +38,7 @@ export default async function AdminSystemPage() {
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-4">
-          <Metric icon={Database} label="데이터 모드" value={system.mode === "production-db" ? "실 DB" : "Local"} />
+          <Metric icon={Database} label="데이터 모드" value={system.mode === "production-db" ? "실 DB" : "저장 확인 필요"} />
           <Metric icon={ServerCog} label="앱 URL" value={system.appUrlConfigured ? "설정됨" : "미설정"} />
           <Metric icon={KeyRound} label="관리자 인증" value={system.adminConfigured ? "운영값" : "기본값"} />
           <Metric icon={ShieldAlert} label="고객사 인증" value={system.customerConfigured ? "운영값" : "기본값"} />

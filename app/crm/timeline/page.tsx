@@ -81,7 +81,7 @@ const resultLabels: Record<string, string> = {
 };
 
 const defaultDbSummary: DbSummary = {
-  description: "DB 상태를 확인 중입니다. 실패해도 화면은 샘플 데이터로 유지됩니다.",
+  description: "DB 상태를 확인 중입니다. 실패해도 거래처 화면은 기준 데이터로 표시됩니다.",
   label: "DB 확인 중",
   normalizedCustomers: null,
   tone: "fallback",
@@ -127,7 +127,7 @@ export default function CrmTimelinePage() {
         if (!active) return;
         setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
         setDbSummary({
-          description: "DB 상태 API 호출에 실패했습니다. 화면은 샘플 데이터로 유지합니다.",
+          description: "DB 상태 API 호출에 실패했습니다. 거래처 화면은 기준 데이터로 표시합니다.",
           label: "DB 확인 실패",
           normalizedCustomers: null,
           tone: "fallback",
@@ -1064,7 +1064,7 @@ const sampleVisitTimeline: TimelineItem[] = [
     id: "history-001",
     expectedRevenue: 320,
     leadName: "성수 온반",
-    memo: "대표가 단가표 재요청. 다음 방문 때 냉동 품목 샘플 제안 예정.",
+    memo: "대표가 단가표 재요청. 다음 방문 때 냉동 품목 제안 예정.",
     nextAction: "단가표 발송",
     region: "성수동",
     result: "quote-requested",

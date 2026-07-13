@@ -97,9 +97,9 @@ export default function Home() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [fieldMap, setFieldMap] = useState<FieldMap>(emptyMap);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [usingSample, setUsingSample] = useState(true);
+  const [usingSample, setUsingSample] = useState(false);
   const [customers, setCustomers] = useState<CustomerRow[]>(sampleCustomers);
-  const [uploadedFilename, setUploadedFilename] = useState<string>("sample-customers.xlsx");
+  const [uploadedFilename, setUploadedFilename] = useState<string>("registered-customers");
   const [uploadHistory, setUploadHistory] = useState<UploadHistoryRow[]>([]);
   const [lastManualCustomerHref, setLastManualCustomerHref] = useState("");
   const [manualSaveMessage, setManualSaveMessage] = useState("");
@@ -140,10 +140,9 @@ export default function Home() {
     setScreen("onboarding");
   }
 
-  function startSampleReport() {
-    setUsingSample(true);
-    setCustomers(sampleCustomers);
-    runPipeline(sampleCustomers, [], {}, "sample-customers.xlsx");
+  function generateCurrentReport() {
+    setUsingSample(false);
+    runPipeline(customers, rawRows, fieldMap, uploadedFilename || "registered-customers");
   }
 
   function runAnalysis() {
@@ -203,7 +202,7 @@ export default function Home() {
         if (response?.ok) {
           const customerId = String(payload?.customer?.id || "");
           setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
-          setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 DB 환경은 fallback이라 화면 기준으로 반영됩니다." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+          setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
           await refreshUploadHistory();
         } else if (response?.status === 401) {
           setManualSaveMessage("저장 대기 목록에 추가했습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
@@ -220,7 +219,7 @@ export default function Home() {
   async function analyzeUploadedRows() {
     const mapped = uploadType === "sales-analysis" ? mapSalesRowsToCustomers(rawRows, fieldMap) : mapMasterRowsToCustomers(rawRows, fieldMap);
 
-    const nextRows = mapped.length ? mapped : sampleCustomers;
+    const nextRows = mapped.length ? mapped : customers;
     setCustomers(nextRows);
     await runPipeline(nextRows, rawRows, fieldMap, uploadedFilename);
   }
@@ -301,7 +300,7 @@ export default function Home() {
     >
       <div className="mx-auto max-w-[1880px] space-y-4">
         <WorkspaceModeTabs active={screen} onMove={setScreen} />
-        {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onSample={startSampleReport} />}
+        {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}
         {screen === "onboarding" && (
           <Onboarding
             headers={headers}
@@ -329,7 +328,7 @@ export default function Home() {
             onManualChange={setManualDraft}
             onManualSave={saveManualEntry}
             onAnalyze={analyzeUploadedRows}
-            onSample={startSampleReport}
+            onGenerateReport={generateCurrentReport}
             onDownloadTemplate={downloadTemplate}
             onDownloadCustomerExport={downloadCustomerExport}
             onDownloadSalesExport={downloadSalesExport}
@@ -382,7 +381,7 @@ function TopNav({ active, onMove }: { active: string; onMove: (screen: "briefing
         <button className="flex items-center gap-2 text-left" onClick={() => onMove("briefing")}>
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-black text-white">M</span>
           <span>
-            <span className="block text-sm font-black">MAJU Intelligence v1</span>
+            <span className="block text-sm font-black">MAJU Intelligence</span>
             <span className="block text-xs text-muted-foreground">AI Sales Intelligence Platform</span>
           </span>
         </button>
@@ -405,11 +404,11 @@ function TopNav({ active, onMove }: { active: string; onMove: (screen: "briefing
 function Briefing({
   analysis,
   onStart,
-  onSample
+  onGenerateReport
 }: {
   analysis: AnalysisResult;
   onStart: (type: UploadTemplateType) => void;
-  onSample: () => void;
+  onGenerateReport: () => void;
 }) {
   const guideSteps = [
     ["01", "회사 기준값 확인", "회사명, 물류 출발지, 담당자, 배송권역을 먼저 정리합니다.", "회사 설정"],
@@ -470,9 +469,9 @@ function Briefing({
                 <FileSpreadsheet size={17} />
                 매출 업데이트 시작
               </Button>
-              <Button variant="accent" onClick={onSample}>
+              <Button variant="accent" onClick={onGenerateReport}>
                 <Sparkles size={17} />
-                샘플 AI 리포트 보기
+                현재 데이터로 리포트 생성
               </Button>
             </div>
           </div>
@@ -618,8 +617,8 @@ function AddressMapPanel({
           </div>
         ))}
         <div className="absolute bottom-3 left-3 rounded-md border border-border bg-white/95 p-3 text-xs shadow-panel">
-          <p className="font-black">임의 주소 지도 시각화</p>
-          <p className="mt-1 text-muted-foreground">출발지, 거래처, 신규 리드 위치를 MVP용 좌표로 표시했습니다.</p>
+          <p className="font-black">주소 기반 지도 시각화</p>
+          <p className="mt-1 text-muted-foreground">출발지, 거래처, 신규 리드 위치를 운영 기준 좌표로 표시합니다.</p>
         </div>
       </div>
       <div className="grid gap-2 border-t border-border p-3 text-xs sm:grid-cols-3">
@@ -653,7 +652,7 @@ function Onboarding({
   onManualChange,
   onManualSave,
   onAnalyze,
-  onSample,
+  onGenerateReport,
   onDownloadTemplate,
   onDownloadCustomerExport,
   onDownloadSalesExport
@@ -679,7 +678,7 @@ function Onboarding({
   onManualChange: (draft: RawRow) => void;
   onManualSave: () => void | Promise<void>;
   onAnalyze: () => void;
-  onSample: () => void;
+  onGenerateReport: () => void;
   onDownloadTemplate: (type: UploadTemplateType) => void;
   onDownloadCustomerExport: () => void;
   onDownloadSalesExport: () => void;
@@ -753,7 +752,7 @@ function Onboarding({
         if (!active || !payload?.preset?.mapping) return;
         setSavedPreset(payload.preset.mapping);
         saveMappingPreset(uploadType, payload.preset.mapping);
-        setPresetMessage(payload.persisted ? `${template.label} 서버 매핑 프리셋이 저장되어 있습니다.` : `${template.label} 로컬 매핑 프리셋이 저장되어 있습니다.`);
+        setPresetMessage(payload.persisted ? `${template.label} 서버 매핑 프리셋이 저장되어 있습니다.` : `${template.label} 브라우저 매핑 프리셋이 저장되어 있습니다.`);
       })
       .catch(() => undefined);
 
@@ -913,9 +912,9 @@ function Onboarding({
                     <FileSpreadsheet size={16} />
                     현재 데이터 받기
                   </Button>
-                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={onSample}>
+                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={onGenerateReport}>
                     <Sparkles size={16} />
-                    샘플로 보기
+                    현재 데이터로 리포트 생성
                   </Button>
                 </div>
                 <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">{saveHint}</p>
@@ -1488,7 +1487,7 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
       <Progress value={progress} />
       <div className="grid gap-3 sm:grid-cols-3">
         <PipelineMetric icon={FileSpreadsheet} label="처리 rows" value={`${meta.rows}개`} />
-        <PipelineMetric icon={Database} label="저장소" value={meta.persisted ? "Supabase" : "Local"} />
+        <PipelineMetric icon={Database} label="저장 상태" value={meta.persisted ? "서버 저장" : "저장 확인 필요"} />
         <PipelineMetric icon={Save} label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "계산 중"} />
       </div>
       <div className="space-y-3">
@@ -1587,7 +1586,7 @@ function Report({
 
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             <ResultMetric label="처리 데이터" value={`${meta.rows.toLocaleString()}행`} />
-            <ResultMetric label="저장 상태" value={meta.persisted ? "서버 저장" : "샘플/로컬"} />
+            <ResultMetric label="저장 상태" value={meta.persisted ? "서버 저장" : "저장 확인 필요"} />
             <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "확인 필요"} />
             <ResultMetric label="잠재매출" value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} />
           </div>

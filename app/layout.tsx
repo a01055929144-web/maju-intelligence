@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MAJU Intelligence v1",
+  title: "MAJU Intelligence",
   description: "AI Sales Intelligence Platform for company diagnosis and lead briefing."
 };
 

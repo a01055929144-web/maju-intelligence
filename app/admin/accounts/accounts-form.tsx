@@ -31,7 +31,7 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
     }
 
     setForm(payload.credentials);
-    setMessage(payload.persisted ? "계정 정보가 저장되었습니다." : "샘플 모드로 반영되었습니다.");
+    setMessage(payload.persisted ? "계정 정보가 저장되었습니다." : "계정 정보가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   function update<K extends keyof AuthCredentials>(key: K, value: AuthCredentials[K]) {

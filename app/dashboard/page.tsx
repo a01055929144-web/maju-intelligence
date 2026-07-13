@@ -340,8 +340,8 @@ function DashboardAddressMap({
           </div>
         ))}
         <div className="absolute bottom-3 left-3 rounded-md border border-border bg-white/95 p-3 text-xs shadow-panel">
-          <p className="font-black">임의 주소 좌표</p>
-          <p className="mt-1 text-muted-foreground">실제 API 연동 전 지도 UX 검증용 화면입니다.</p>
+          <p className="font-black">주소 기반 운영 지도</p>
+          <p className="mt-1 text-muted-foreground">등록된 출발지와 거래처 주소를 기준으로 위치를 확인합니다.</p>
         </div>
       </div>
       <div className="space-y-3">

@@ -155,7 +155,7 @@ function estimateRouteDistance(originAddress: string, destinationAddress: string
     provider: "estimated",
     routeGeometry: null,
     rawResponse: {
-      reason: "TMAP_API_KEY is missing or Tmap request failed. Deterministic MVP estimate was used."
+      reason: "TMAP_API_KEY is missing or Tmap request failed. Deterministic operational estimate was used."
     }
   };
 }

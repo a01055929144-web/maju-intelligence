@@ -882,7 +882,7 @@ export function getSystemStatus(): SystemStatus {
       {
         name: "Supabase Postgres",
         status: supabaseConfigured ? "ready" : "fallback",
-        description: supabaseConfigured ? "실 DB 적재 모드입니다." : "환경변수가 없어 샘플 데이터 fallback으로 동작합니다."
+        description: supabaseConfigured ? "실 DB 적재 모드입니다." : "환경변수가 없어 서버 저장을 확인할 수 없습니다."
       },
       {
         name: "Admin Auth",
@@ -935,7 +935,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
           name: "Supabase 연결",
           status: "fallback",
           count: null,
-          description: "환경변수가 없어 DB 조회를 건너뛰고 샘플 데이터 모드로 동작합니다."
+          description: "환경변수가 없어 DB 조회를 건너뛰었습니다. 서버 환경변수를 등록한 뒤 다시 확인하세요."
         }
       ],
       storageChecks: [

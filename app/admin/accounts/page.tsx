@@ -39,7 +39,7 @@ export default async function AdminAccountsPage() {
           <CardContent className="flex gap-3 p-4 text-sm leading-6 text-amber-900">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
             <p>
-              MVP 운영 편의를 위해 비밀번호를 관리자 화면에서 확인할 수 있게 저장합니다. 현장 데모 후에는 더 긴 비밀번호로 교체하고,
+              초기 운영 편의를 위해 비밀번호를 관리자 화면에서 확인할 수 있게 저장합니다. 실제 고객사 배포 전에는 더 긴 비밀번호로 교체하고,
               추후에는 비밀번호 보기 대신 초기화 방식으로 바꾸는 것을 권장합니다.
             </p>
           </CardContent>

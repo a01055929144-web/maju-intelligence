@@ -98,7 +98,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       customerEmail: saved.customerEmail,
       customerPassword: saved.customerPassword
     });
-    setMessage(payload.persisted ? "고객사와 로그인 계정이 저장되었습니다." : "샘플 모드로 반영되었습니다.");
+    setMessage(payload.persisted ? "고객사와 로그인 계정이 저장되었습니다." : "고객사 정보가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -113,7 +113,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               <p className="text-2xl font-black">{companies.length}곳</p>
             </div>
             <Badge className={source === "supabase" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
-              {source === "supabase" ? "DB 연결" : "샘플"}
+              {source === "supabase" ? "DB 연결" : "저장 확인 필요"}
             </Badge>
           </div>
           <div className="mt-4 flex gap-2">

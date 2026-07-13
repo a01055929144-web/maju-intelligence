@@ -1308,7 +1308,7 @@ function StoreDetail({
 
               <CollapsibleSection title="메모 히스토리">
                 <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
-                  메모는 상담·배송 이력이라 실서비스에서는 삭제 로그를 남기는 방식이 안전합니다. MVP에서는 개별 삭제와 전체 삭제를 제공하되, 전체 삭제는 확인 후 실행합니다.
+                  메모는 상담·배송 이력이라 운영에서는 삭제 로그를 남기는 방식이 안전합니다. 개별 삭제와 전체 삭제는 확인 후 실행됩니다.
                 </div>
                 <textarea
                   className="mt-4 min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
@@ -1980,7 +1980,7 @@ function saveLocalJson(key: string, value: unknown) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Attachments can be large because MVP stores previews as data URLs.
+    // Attachments can be large because previews are stored as data URLs in the browser.
   }
 }
 
@@ -2003,7 +2003,7 @@ function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
   if (provider === "cached") return "티맵 캐시";
   if (provider === "tmap") return "티맵";
   if (provider === "estimated") return "추정";
-  return "샘플";
+  return "기준 데이터";
 }
 
 function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {

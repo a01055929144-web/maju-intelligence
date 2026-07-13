@@ -135,7 +135,7 @@ export function analyzeCompany(inputRows: CustomerRow[]): AnalysisResult {
       `${regionDistribution[0]?.region || "핵심 지역"} 비중이 가장 높습니다. 기존 강점을 유지하되 주변 2km 신규 리드를 먼저 확인하세요.`,
       `평균 배송거리는 ${avgDeliveryKm.toFixed(1)}km입니다. 반경 기준으로 묶으면 하루 약 ${Math.max(18, Math.round(avgDeliveryKm * 2.8))}km 절감 여지가 있습니다.`,
       `${topWhitespace?.region || "송파구"}는 현재 거래처 대비 시장 여지가 큽니다. 이번 주 우선 공략 지역으로 추천합니다.`,
-      `${topIndustry?.industry || "한식"} 업종에서 전문성이 확인됩니다. v1에서는 이 업종을 확장하고 카페/베이커리는 검증 리드로 분리하세요.`
+      `${topIndustry?.industry || "한식"} 업종에서 전문성이 확인됩니다. 운영 리포트에서는 이 업종을 확장하고 카페/베이커리는 검증 리드로 분리하세요.`
     ]
   };
 }

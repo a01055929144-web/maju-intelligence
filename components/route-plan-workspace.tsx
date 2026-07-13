@@ -884,7 +884,7 @@ function createFallbackStop(): RoutePlanStop {
     address: "서울 성동구 성수동",
     expectedRevenue: 120,
     id: "delivery-fallback",
-    name: "샘플 거래처",
+    name: "기준 거래처",
     order: 1,
     region: "성수동",
     score: 78,
