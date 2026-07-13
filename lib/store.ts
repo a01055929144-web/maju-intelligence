@@ -111,9 +111,20 @@ export type LeadItem = {
 };
 export type RoutePlanStop = LeadItem & {
   address?: string;
+  birthDate?: string;
+  businessNumber?: string;
+  businessStatus?: string;
+  deliveryArea?: string;
+  deliveryDriver?: string;
   distanceKm?: number;
   durationMinutes?: number;
+  email?: string;
+  industry?: string;
+  loadingPosition?: string;
+  openingDate?: string;
   order: number;
+  phone?: string;
+  representativeName?: string;
   routeCalculatedAt?: string;
   routeProvider?: "tmap" | "estimated" | "cached" | "sample";
 };
@@ -1667,8 +1678,17 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         status: index < 15 ? "today" : "visit-planned",
         expectedRevenue: Number(customer.monthlyRevenue || 0),
         address,
+        birthDate: customer.birthDate,
+        businessNumber: customer.businessNumber,
+        businessStatus: customer.businessStatus,
         distanceKm,
         durationMinutes: cached?.durationMinutes ?? customer.deliveryMinutes ?? estimateMinutesFromKm(distanceKm),
+        email: customer.email,
+        industry: customer.industry,
+        loadingPosition: customer.loadingPosition,
+        openingDate: customer.openingDate,
+        phone: customer.phone,
+        representativeName: customer.representativeName,
         deliveryArea: customer.deliveryZone || customer.region || "미분류",
         deliveryDriver: customer.deliveryManager,
         order: index + 1,

@@ -35,6 +35,13 @@ type StoreRow = RoutePlanStop & {
   representativeName: string;
 };
 
+type RoutePlanStoreDetails = RoutePlanStop & {
+  businessNumber?: string;
+  businessStatus?: string;
+  loadingPosition?: string;
+  memo?: string;
+};
+
 type StoreEdit = Partial<
   Pick<
     StoreRow,
@@ -172,6 +179,23 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
+
+  async function updateStore(storeId: string, edit: StoreEdit) {
+    const currentStore = allStores.find((store) => store.id === storeId);
+    if (!currentStore) return { persisted: false };
+
+    const nextStore = { ...currentStore, ...edit };
+    setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], ...edit } }));
+
+    const response = await fetch("/api/customers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(toCustomerPayload(nextStore))
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
+    return { persisted: payload?.persisted !== false };
+  }
 
   return (
     <div className="flex h-[calc(100vh-166px)] min-h-[760px] flex-col overflow-hidden rounded-md border border-slate-200/80 bg-white text-slate-950 shadow-sm">
@@ -345,7 +369,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               }
             }))
           }
-          onUpdateStore={(storeId, edit) => setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], ...edit } }))}
+          onUpdateStore={updateStore}
           onWriteHistory={(storeId, memo) =>
             setStoreHistories((current) => ({
               ...current,
@@ -1098,7 +1122,7 @@ function StoreDetail({
   readonly onDeleteHistory: (storeId: string, historyId: string) => void;
   readonly onSaveAttachment: (slot: "bankbookCopy" | "businessCertificate", file: AttachmentFile) => void;
   readonly onSaveLoadingMedia: (files: AttachmentFile[]) => void;
-  readonly onUpdateStore: (storeId: string, edit: StoreEdit) => void;
+  readonly onUpdateStore: (storeId: string, edit: StoreEdit) => Promise<{ persisted: boolean } | void>;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly store: StoreRow;
 }) {
@@ -1121,9 +1145,15 @@ function StoreDetail({
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
   const [historyMemo, setHistoryMemo] = useState("");
   const [ocrSuggestion, setOcrSuggestion] = useState<BusinessOcrSuggestion | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState("");
-  const saveDraft = () => {
-    onUpdateStore(store.id, {
+  const [saveError, setSaveError] = useState("");
+  const saveDraft = async () => {
+    setIsSaving(true);
+    setSaveError("");
+
+    try {
+      const result = await onUpdateStore(store.id, {
       accountCopyStatus: draftAccountCopyStatus,
       address: draftAddress,
       bankAccount: draftBankAccount,
@@ -1141,8 +1171,14 @@ function StoreDetail({
       openingDate: draftOpeningDate,
       phone: draftPhone,
       representativeName: draftRepresentativeName
-    });
-    setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }));
+      });
+      const persistedLabel = result?.persisted === false ? "화면 저장" : "DB 저장";
+      setSavedAt(`${persistedLabel} · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1162,6 +1198,7 @@ function StoreDetail({
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 저장됨 · {savedAt}</p> : null}
+              {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Link
@@ -1172,11 +1209,12 @@ function StoreDetail({
               </Link>
               <button
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white hover:bg-blue-700"
+                disabled={isSaving}
                 onClick={saveDraft}
                 type="button"
               >
                 <Check className="h-4 w-4" />
-                변경 저장
+                {isSaving ? "저장 중" : "변경 저장"}
               </button>
               <button className="grid h-9 w-9 place-items-center rounded-md bg-slate-950 text-white hover:bg-slate-800" onClick={onClose} type="button">
                 <X className="h-4 w-4" />
@@ -1653,25 +1691,26 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
     .flatMap((group) => group.stops)
     .map((store, index) => {
       const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
+      const details = store as RoutePlanStoreDetails;
       return {
         ...store,
         accountCopyStatus: getSampleDocumentStatus(index + 3),
         bankAccount: createBankAccount(index),
-        birthDate: createSampleDate(1974 + (index % 18), (index % 12) + 1, (index % 27) + 1),
+        birthDate: store.birthDate || createSampleDate(1974 + (index % 18), (index % 12) + 1, (index % 27) + 1),
         businessCertificateStatus: getSampleDocumentStatus(index),
-        businessRegistrationNumber: createBusinessNumber(index),
-        businessStatus: getSampleBusinessStatus(index),
+        businessRegistrationNumber: details.businessNumber || createBusinessNumber(index),
+        businessStatus: normalizeStoreBusinessStatus(details.businessStatus, index),
         deliveryArea: (store as RoutePlanStop & { deliveryArea?: string }).deliveryArea || store.region,
         deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || defaultDriverByIndex(index),
-        email: createStoreEmail(store.name, index),
+        email: store.email || createStoreEmail(store.name, index),
         grade: getRevenueGrade(store.expectedRevenue),
-        industry: getSampleIndustry(index),
+        industry: store.industry || getSampleIndustry(index),
         markerX: marker?.x ?? 18 + ((index * 13) % 68),
         markerY: marker?.y ?? 20 + ((index * 17) % 58),
-        memo: "정기 납품 조건 확인 필요",
-        openingDate: createSampleDate(2015 + (index % 9), (index % 12) + 1, (index % 27) + 1),
-        phone: createPhoneNumber(index),
-        representativeName: createRepresentativeName(index)
+        memo: details.loadingPosition || "정기 납품 조건 확인 필요",
+        openingDate: store.openingDate || createSampleDate(2015 + (index % 9), (index % 12) + 1, (index % 27) + 1),
+        phone: store.phone || createPhoneNumber(index),
+        representativeName: store.representativeName || createRepresentativeName(index)
       };
     });
 }
@@ -1681,30 +1720,61 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
     vehicle.stops.map((store, storeIndex) => {
       const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
       const globalIndex = vehicleIndex * 15 + storeIndex;
+      const details = store as StoreRow & RoutePlanStoreDetails;
       return {
         ...store,
         accountCopyStatus: getSampleDocumentStatus(globalIndex + 3),
         bankAccount: createBankAccount(globalIndex),
-        birthDate: createSampleDate(1974 + (globalIndex % 18), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
+        birthDate: store.birthDate || createSampleDate(1974 + (globalIndex % 18), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
         businessCertificateStatus: getSampleDocumentStatus(globalIndex),
-        businessRegistrationNumber: createBusinessNumber(globalIndex),
-        businessStatus: getSampleBusinessStatus(globalIndex),
+        businessRegistrationNumber: details.businessRegistrationNumber || details.businessNumber || createBusinessNumber(globalIndex),
+        businessStatus: normalizeStoreBusinessStatus(details.businessStatus, globalIndex),
         deliveryArea: vehicle.area,
         deliveryDriver: vehicle.driver,
         deliveryVehicleId: vehicle.id,
         deliveryVehicleName: vehicle.name,
-        email: createStoreEmail(store.name, globalIndex),
+        email: store.email || createStoreEmail(store.name, globalIndex),
         grade: getRevenueGrade(store.expectedRevenue),
-        industry: getSampleIndustry(globalIndex),
+        industry: store.industry || getSampleIndustry(globalIndex),
         markerX: marker?.x ?? 16 + (((vehicleIndex * 15 + storeIndex) * 7) % 70),
         markerY: marker?.y ?? 18 + (((vehicleIndex * 15 + storeIndex) * 11) % 58),
-        memo: "배송 시간대와 결제 조건 확인 필요",
-        openingDate: createSampleDate(2015 + (globalIndex % 9), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
-        phone: createPhoneNumber(globalIndex),
-        representativeName: createRepresentativeName(globalIndex)
+        memo: details.loadingPosition || details.memo || "배송 시간대와 결제 조건 확인 필요",
+        openingDate: store.openingDate || createSampleDate(2015 + (globalIndex % 9), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
+        phone: store.phone || createPhoneNumber(globalIndex),
+        representativeName: store.representativeName || createRepresentativeName(globalIndex)
       };
     })
   );
+}
+
+function normalizeStoreBusinessStatus(status: string | undefined, index: number): StoreRow["businessStatus"] {
+  if (status === "active" || status === "정상") return "active";
+  if (status === "closed" || status === "폐업") return "closed";
+  if (status === "unknown" || status === "확인 필요" || status === "확인 예정") return "unknown";
+  return getSampleBusinessStatus(index);
+}
+
+function toCustomerPayload(store: StoreRow) {
+  return {
+    address: store.address || "",
+    birthDate: store.birthDate,
+    businessNumber: store.businessRegistrationNumber,
+    businessStatus: getBusinessStatusLabel(store.businessStatus),
+    customerName: store.name,
+    deliveryKm: Number(store.distanceKm || 0),
+    deliveryManager: store.deliveryDriver || "",
+    deliveryMinutes: Number(store.durationMinutes || 0),
+    deliveryZone: store.deliveryArea || store.region,
+    email: store.email,
+    industry: store.industry,
+    loadingPosition: store.memo || "",
+    monthlyRevenue: Number(store.expectedRevenue || 0),
+    openingDate: store.openingDate,
+    phone: store.phone,
+    region: store.region,
+    representativeName: store.representativeName,
+    visitCount: Number(store.order || 0)
+  };
 }
 
 function createDeliveryVehiclesFromStores(stores: StoreRow[]): DeliveryVehicle[] {
