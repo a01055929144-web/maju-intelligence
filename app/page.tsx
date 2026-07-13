@@ -102,6 +102,7 @@ export default function Home() {
   const [customers, setCustomers] = useState<CustomerRow[]>(sampleCustomers);
   const [uploadedFilename, setUploadedFilename] = useState<string>("sample-customers.xlsx");
   const [uploadHistory, setUploadHistory] = useState<UploadHistoryRow[]>([]);
+  const [manualSaveMessage, setManualSaveMessage] = useState("");
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
   const [pipelineMeta, setPipelineMeta] = useState({ rows: sampleCustomers.length, qualityScore: 100, persisted: false });
 
@@ -170,7 +171,7 @@ export default function Home() {
     setUsingSample(false);
   }
 
-  function saveManualEntry() {
+  async function saveManualEntry() {
     if (uploadType === "customer-master" && !isValidBusinessRegistrationNumber(String(manualDraft.businessRegistrationNumber ?? ""))) return;
 
     const nextHeaders = currentTemplate.fields.map((field) => field.key);
@@ -185,6 +186,26 @@ export default function Home() {
     setFieldMap(createIdentityFieldMap(currentTemplate.fields));
     setUploadedFilename(`${currentTemplate.label}-manual`);
     setUsingSample(false);
+    setManualSaveMessage("저장 대기 목록에 추가했습니다.");
+
+    if (uploadType === "customer-master") {
+      const response = await fetch(customerMasterEndpoint(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildManualCustomerPayload(nextRow))
+      }).catch(() => null);
+      const payload = response ? await response.json().catch(() => null) : null;
+
+      if (response?.ok) {
+        setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 DB 환경은 fallback이라 화면 기준으로 반영됩니다." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+        await refreshUploadHistory();
+      } else if (response?.status === 401) {
+        setManualSaveMessage("저장 대기 목록에 추가했습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
+      } else {
+        setManualSaveMessage(payload?.message ? `저장 대기 목록에 추가했습니다. 서버 저장 확인: ${payload.message}` : "저장 대기 목록에 추가했습니다. 서버 저장은 나중에 다시 시도하세요.");
+      }
+    }
+
     setManualDraft({});
   }
 
@@ -287,6 +308,7 @@ export default function Home() {
             pipelineSteps={pipelineSteps}
             uploadHistory={uploadHistory}
             usingSample={usingSample}
+            manualSaveMessage={manualSaveMessage}
             onFile={handleFile}
             onMap={setFieldMap}
             onUploadType={(nextType) => {
@@ -629,6 +651,7 @@ function Onboarding({
   pipelineMeta,
   pipelineSteps,
   usingSample,
+  manualSaveMessage,
   onFile,
   onMap,
   onUploadType,
@@ -652,11 +675,12 @@ function Onboarding({
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
   pipelineSteps: PipelineStep[];
   usingSample: boolean;
+  manualSaveMessage: string;
   onFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onMap: (map: FieldMap) => void;
   onUploadType: (type: UploadTemplateType) => void;
   onManualChange: (draft: RawRow) => void;
-  onManualSave: () => void;
+  onManualSave: () => void | Promise<void>;
   onAnalyze: () => void;
   onSample: () => void;
   onDownloadTemplate: (type: UploadTemplateType) => void;
@@ -907,6 +931,7 @@ function Onboarding({
                   <div>
                     <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
                     <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 저장 대기 목록에 추가됩니다.</p>
+                    {manualSaveMessage ? <p className="mt-2 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">{manualSaveMessage}</p> : null}
                   </div>
                   <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete}>
                     <Save size={18} />
@@ -1967,6 +1992,32 @@ function mappingPresetEndpoint(type: UploadTemplateType) {
 function uploadHistoryEndpoint() {
   const companyId = getAdminCompanyIdFromUrl();
   return companyId ? `/api/upload-history?companyId=${encodeURIComponent(companyId)}` : "/api/upload-history";
+}
+
+function customerMasterEndpoint() {
+  const companyId = getAdminCompanyIdFromUrl();
+  return companyId ? `/api/customers?companyId=${encodeURIComponent(companyId)}` : "/api/customers";
+}
+
+function buildManualCustomerPayload(row: RawRow) {
+  return {
+    address: String(row.address || ""),
+    birthDate: String(row.birthDate || ""),
+    businessNumber: String(row.businessRegistrationNumber || ""),
+    businessStatus: "확인 예정",
+    customerName: String(row.customerName || ""),
+    deliveryKm: toNumber(row.deliveryKm),
+    email: String(row.email || ""),
+    industry: String(row.industry || "미분류"),
+    lastOrderDays: 0,
+    monthlyRevenue: 0,
+    openingDate: String(row.openingDate || ""),
+    phone: String(row.phone || ""),
+    region: String(row.region || extractRegion(String(row.address || "")) || "미분류"),
+    representativeName: String(row.representativeName || ""),
+    validateBusinessNumber: true,
+    visitCount: 0
+  };
 }
 
 function loadMappingPreset(type: UploadTemplateType) {
