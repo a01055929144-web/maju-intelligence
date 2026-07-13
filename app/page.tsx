@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   Banknote,
   BarChart3,
@@ -53,6 +54,12 @@ type UploadHistoryRow = {
   duplicateCount: number;
   healthScore: number;
   createdAt: string;
+};
+type DataQualitySummary = {
+  duplicateCandidates: number;
+  issueRows: Array<{ missingLabels: string[]; rowNumber: number }>;
+  readyRows: number;
+  rows: number;
 };
 
 const emptyMap: FieldMap = {};
@@ -652,6 +659,7 @@ function Onboarding({
   const canAnalyze = rawRows.length > 0 && complete;
   const mappedRequiredCount = requiredFields.length - missingRequiredFields.length;
   const mappingProgress = requiredFields.length ? Math.round((mappedRequiredCount / requiredFields.length) * 100) : 100;
+  const dataQuality = useMemo(() => summarizeDataQuality(rawRows, requiredFields, fieldMap), [fieldMap, rawRows, requiredFields]);
   const isMaster = uploadType === "customer-master";
   const uploadHint = isMaster
     ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
@@ -903,6 +911,7 @@ function Onboarding({
                   requiredCount={requiredFields.length}
                   rows={rawRows}
                 />
+                <DataQualityCard summary={dataQuality} />
                 <MappingPresetCard
                   canLoad={Boolean(savedPreset)}
                   canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
@@ -1026,6 +1035,43 @@ function MiniStatus({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-slate-200 bg-white p-2">
       <p className="text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function DataQualityCard({ summary }: { summary: DataQualitySummary }) {
+  const hasRows = summary.rows > 0;
+  const hasIssues = summary.issueRows.length > 0 || summary.duplicateCandidates > 0;
+
+  return (
+    <div className={`mb-4 rounded-md border p-3 ${hasIssues ? "border-amber-200 bg-amber-50/70" : "border-emerald-100 bg-emerald-50/70"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            {hasIssues ? <AlertTriangle className="h-4 w-4 text-amber-700" /> : <Check className="h-4 w-4 text-emerald-700" />}
+            행 데이터 품질
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+            {hasRows ? "필수값 누락과 중복 후보를 저장 전에 확인합니다." : "엑셀을 올리면 행 단위 검증 결과가 표시됩니다."}
+          </p>
+        </div>
+        <Badge className={hasIssues ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>{hasIssues ? "보완 권장" : "정상"}</Badge>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <MiniStatus label="정상 행" value={`${summary.readyRows.toLocaleString()}개`} />
+        <MiniStatus label="보완 행" value={`${summary.issueRows.length.toLocaleString()}개`} />
+        <MiniStatus label="중복 후보" value={`${summary.duplicateCandidates.toLocaleString()}개`} />
+      </div>
+      {summary.issueRows.length ? (
+        <div className="mt-3 space-y-1.5">
+          {summary.issueRows.slice(0, 3).map((issue) => (
+            <div key={issue.rowNumber} className="rounded-md bg-white/80 px-3 py-2 text-xs font-bold text-slate-700">
+              {issue.rowNumber}행: {issue.missingLabels.join(", ")} 누락
+            </div>
+          ))}
+          {summary.issueRows.length > 3 ? <p className="px-1 text-xs font-bold text-amber-700">외 {summary.issueRows.length - 3}개 행 보완 필요</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1608,6 +1654,43 @@ function fieldLabelForHeader(header: string, fields: readonly UploadTemplateFiel
   return fields.find((field) => field.key === header)?.label || header;
 }
 
+function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTemplateField[], fieldMap: FieldMap): DataQualitySummary {
+  const seenKeys = new Map<string, number>();
+  let duplicateCandidates = 0;
+  const issueRows: DataQualitySummary["issueRows"] = [];
+
+  rows.forEach((row, index) => {
+    const missingLabels = requiredFields
+      .filter((field) => {
+        const sourceHeader = fieldMap[field.key];
+        return !sourceHeader || !String(row[sourceHeader] ?? "").trim();
+      })
+      .map((field) => field.label);
+
+    if (missingLabels.length) {
+      issueRows.push({ missingLabels, rowNumber: index + 2 });
+    }
+
+    const businessNumber = normalizeTextForCompare(getCell(row, fieldMap.businessRegistrationNumber));
+    const customerName = normalizeTextForCompare(getCell(row, fieldMap.customerName));
+    const address = normalizeTextForCompare(getCell(row, fieldMap.address));
+    const duplicateKey = businessNumber || [customerName, address].filter(Boolean).join("|");
+
+    if (duplicateKey) {
+      const count = seenKeys.get(duplicateKey) || 0;
+      if (count > 0) duplicateCandidates += 1;
+      seenKeys.set(duplicateKey, count + 1);
+    }
+  });
+
+  return {
+    duplicateCandidates,
+    issueRows,
+    readyRows: Math.max(0, rows.length - issueRows.length),
+    rows: rows.length
+  };
+}
+
 function mappingPresetEndpoint(type: UploadTemplateType) {
   const params = new URLSearchParams({ uploadType: type });
   const companyId = getAdminCompanyIdFromUrl();
@@ -1669,6 +1752,10 @@ function manualInputMode(key: string) {
 
 function getCell(row: RawRow, key?: string) {
   return key ? String(row[key] || "").trim() : "";
+}
+
+function normalizeTextForCompare(value: string) {
+  return value.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
 }
 
 function toNumber(value: unknown) {
