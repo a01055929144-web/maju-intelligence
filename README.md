@@ -1,18 +1,18 @@
-# MAJU Intelligence v1
+# MAJU Intelligence
 
-AI Sales Intelligence Platform MVP.
+MAJU Intelligence는 식자재 유통사의 거래처, 매출, 배송 동선, 영업 히스토리를 한 곳에서 관리하는 AI Sales Intelligence Platform입니다.
 
-## MVP Scope
+## 운영 범위
 
-- Excel upload with SheetJS
-- Required column mapping
-- Customer data cleanup and duplicate removal
-- Company Health Score formula
-- MAJU AI Report screen
-- Today's AI briefing screen
-- Admin console
-- Backend API routes
-- Text-based region analysis for v1
+- 관리자 회사/고객사 계정 생성
+- 고객사 로그인과 회사 설정 관리
+- 거래처 마스터 수기 등록 및 엑셀 대량 등록
+- ERP별 매출 거래내역 업로드와 컬럼 매핑
+- 거래처 정제, 중복 방지, 사업자번호 기반 관리
+- 매출 등급, 방문 이력, 메모, 첨부자료 관리
+- Company Health Score와 MAJU AI Report
+- 오늘의 영업/배송 코스와 TMAP 경로 계산
+- Supabase 기반 서버 저장과 관리자 운영 점검
 
 ## Run
 
@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+로컬 확인은 `http://localhost:3000`에서 진행합니다.
 
 ## App Routes
 
@@ -64,7 +64,7 @@ The project includes `.github/workflows/ci.yml` for install and build checks on 
 
 ## Production
 
-See `DEPLOYMENT.md` and `DEPLOYMENT.ko.md`. The app supports Supabase-backed production storage through these environment variables:
+운영 배포 절차는 `DEPLOYMENT.ko.md`를 기준으로 진행합니다. 서버 저장은 Supabase 환경변수를 통해 활성화됩니다.
 
 - `SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
@@ -72,4 +72,4 @@ See `DEPLOYMENT.md` and `DEPLOYMENT.ko.md`. The app supports Supabase-backed pro
 
 ## Product Flow
 
-See `FLOW_VALIDATION.ko.md` for the v1 flow validation checklist.
+제품 운영 흐름과 검증 기준은 `FLOW_VALIDATION.ko.md`에서 관리합니다.

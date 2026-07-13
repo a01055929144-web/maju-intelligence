@@ -1,4 +1,4 @@
-# MAJU Intelligence v1 실서비스 배포 런북
+# MAJU Intelligence 실서비스 배포 런북
 
 이 문서는 `maju-intelligence`를 GitHub, Vercel, Supabase에 연결해서 실제 서비스 URL로 운영하기 위한 체크리스트입니다.
 
@@ -11,7 +11,7 @@
 - 관리자 로그인: 준비 완료
 - 고객 대시보드 로그인: 준비 완료
 - Supabase 스키마: `supabase/schema.sql`
-- Supabase 데모 seed: `supabase/seed.sql`
+- Supabase 초기 운영 데이터 seed: `supabase/seed.sql`
 - Vercel 설정 파일: `vercel.json`
 - GitHub Actions 빌드 체크: `.github/workflows/ci.yml`
 
@@ -31,7 +31,7 @@
 1. Supabase에서 새 프로젝트를 만듭니다.
 2. SQL Editor를 엽니다.
 3. 이 저장소의 `supabase/schema.sql` 전체를 붙여넣고 실행합니다.
-4. 데모 고객사와 리포트가 필요하면 `supabase/seed.sql`도 이어서 실행합니다.
+4. 초기 운영 점검용 고객사와 리포트가 필요하면 `supabase/seed.sql`도 이어서 실행합니다.
 5. Project Settings > API에서 아래 값을 복사합니다.
    - Project URL
    - service_role key
@@ -86,8 +86,8 @@ NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
 
 ## 6. 첫 운영 테스트
 
-1. `/admin/system`에서 Supabase 연결 상태가 `configured`인지 확인합니다.
-2. `/`에서 샘플 데이터 또는 엑셀 파일로 분석을 실행합니다.
+1. `/admin/system`에서 운영 준비 상태, Supabase 연결, Storage 상태를 확인합니다.
+2. `/`에서 거래처 마스터 또는 매출 거래내역 파일로 분석을 실행합니다.
 3. `/admin`에서 업로드 이력과 리드 추천 목록이 보이는지 확인합니다.
 4. `/dashboard/login`에서 고객 계정으로 로그인합니다.
 5. `/dashboard`에서 회사 진단 리포트가 고객 범위로 보이는지 확인합니다.
@@ -103,15 +103,15 @@ NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
 - 매출 엑셀 업로드와 사업자 기본정보 확장을 적용하려면 `supabase/migrations/20260701_sales_transactions.sql`도 한 번 실행합니다.
 - ERP/유통사별 엑셀 매핑 프리셋 저장을 준비하려면 `supabase/migrations/20260701_excel_mapping_presets.sql`도 한 번 실행합니다.
 - 회사 출발지에서 거래처까지 티맵 거리/시간/경로 캐시를 저장하려면 `supabase/migrations/20260701_tmap_route_cache.sql`도 한 번 실행합니다.
-- Supabase RLS 정책은 v1 MVP 기준으로 켜져 있으며, 실제 고객사별 권한 분리는 Phase 2에서 더 강화합니다.
+- Supabase RLS 정책은 기본 운영 기준으로 켜져 있으며, 고객사별 사용자 초대와 세부 권한은 다음 운영 단계에서 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 
 ## 8. 다음 개발 우선순위
 
-1. Supabase 실제 저장 검증
-2. 관리자 계정 생성/초대 기능
-3. 고객사별 사용자 초대 기능
-4. 엑셀 업로드 이력 상세 보기
+1. 관리자 업로드 이력 상세 화면
+2. 고객사별 사용자 초대와 권한 분리
+3. 거래처 첨부자료 OCR 자동 입력
+4. 사업자 상태 정기 조회 작업
 5. 리드 추천 TOP50 필터/검색
-6. OpenAI 기반 실제 AI 리포트 문장 생성
+6. OpenAI 기반 AI 리포트 문장 고도화
 7. Vercel 커스텀 도메인 연결

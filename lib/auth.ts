@@ -25,7 +25,16 @@ const DEFAULT_CUSTOMER_PASSWORD = "maju-owner-2026";
 const DEFAULT_CUSTOMER_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 
 function getSecret() {
-  return process.env.ADMIN_SESSION_SECRET || "local-development-session-secret";
+  if (process.env.ADMIN_SESSION_SECRET) return process.env.ADMIN_SESSION_SECRET;
+  return process.env.NODE_ENV === "production" ? "missing-production-session-secret" : "local-development-session-secret";
+}
+
+function isDevelopmentAdminCredential(email: string, password: string) {
+  return email === DEFAULT_ADMIN_EMAIL || password === DEFAULT_ADMIN_PASSWORD;
+}
+
+function isDevelopmentCustomerCredential(email: string, password: string) {
+  return email === DEFAULT_CUSTOMER_EMAIL || password === DEFAULT_CUSTOMER_PASSWORD;
 }
 
 function sign(value: string) {
@@ -76,6 +85,10 @@ export async function validateAdminCredentials(email: string, password: string):
   const adminEmail = credentials.adminEmail || DEFAULT_ADMIN_EMAIL;
   const adminPassword = credentials.adminPassword || DEFAULT_ADMIN_PASSWORD;
 
+  if (process.env.NODE_ENV === "production" && (!process.env.ADMIN_SESSION_SECRET || isDevelopmentAdminCredential(adminEmail, adminPassword))) {
+    return null;
+  }
+
   if (email.trim().toLowerCase() !== adminEmail.toLowerCase()) return null;
   if (password !== adminPassword) return null;
 
@@ -92,6 +105,10 @@ export async function validateCustomerCredentials(email: string, password: strin
 
   const customerEmail = credentials.customerEmail || DEFAULT_CUSTOMER_EMAIL;
   const customerPassword = credentials.customerPassword || DEFAULT_CUSTOMER_PASSWORD;
+
+  if (process.env.NODE_ENV === "production" && isDevelopmentCustomerCredential(customerEmail, customerPassword)) {
+    return null;
+  }
 
   if (email.trim().toLowerCase() !== customerEmail.toLowerCase()) return null;
   if (password !== customerPassword) return null;
