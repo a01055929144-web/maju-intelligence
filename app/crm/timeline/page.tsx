@@ -391,7 +391,7 @@ export default function CrmTimelinePage() {
       title="거래처 히스토리"
       userName="관리자"
     >
-      <section className="mx-auto max-w-[1720px] space-y-5">
+      <section className="mx-auto max-w-[1760px] space-y-5">
         <div className="grid gap-3 lg:grid-cols-4">
           <SummaryCard label="전체 거래처" value={`${customers.length}곳`} helper="기초 등록된 매장" />
           <SummaryCard label="A등급 거래처" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} helper="매출 상위 고객" tone="emerald" />
@@ -413,7 +413,7 @@ export default function CrmTimelinePage() {
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
+        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
           <aside className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-200/80 p-5">
               <div className="flex items-center justify-between gap-3">

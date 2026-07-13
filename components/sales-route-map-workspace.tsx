@@ -198,8 +198,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex h-[calc(100vh-166px)] min-h-[760px] flex-col overflow-hidden rounded-md border border-slate-200/80 bg-white text-slate-950 shadow-sm">
-      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div className="flex h-[calc(100vh-154px)] min-h-[740px] flex-col overflow-hidden rounded-md border border-slate-200/80 bg-white text-slate-950 shadow-sm">
+      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="min-w-0">
           <h2 className="whitespace-nowrap text-[20px] font-black leading-tight">영업·배송 통합 지도</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
@@ -233,7 +233,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
         <Kpi label="예상매출" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
-        <Kpi label="오늘 이동거리" tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
+        <Kpi label="예상 운행거리" tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
         <Kpi label="예상시간" tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
@@ -276,7 +276,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_380px]" : "xl:grid-cols-[320px_minmax(0,1fr)_380px]"}`}>
+        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_400px]" : "xl:grid-cols-[340px_minmax(0,1fr)_400px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -800,7 +800,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[320px_minmax(0,1fr)_60px]" : "xl:grid-cols-[320px_minmax(0,1fr)_460px]"}`}>
+    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[340px_minmax(0,1fr)_60px]" : "xl:grid-cols-[340px_minmax(0,1fr)_460px]"}`}>
       <aside className="min-h-0 border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">오늘 코스</p>

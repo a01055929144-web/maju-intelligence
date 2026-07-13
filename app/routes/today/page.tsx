@@ -33,7 +33,7 @@ export default async function TodayRoutePage() {
       title="오늘의 영업·배송 코스"
       userName={customerSession?.name || adminSession?.email || "관리자"}
     >
-      <section className="mx-auto max-w-[1880px]">
+      <section className="mx-auto max-w-[1760px]">
         <SalesRouteMapWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />
       </section>
     </CustomerAppShell>

@@ -80,7 +80,7 @@ export default async function DashboardPage() {
       title="대시보드"
       userName={session.name}
     >
-      <section className="mx-auto max-w-[1680px] space-y-5">
+      <section className="mx-auto max-w-[1760px] space-y-5">
         <div className="grid gap-5 rounded-md border border-slate-200/80 bg-white p-5 shadow-sm lg:grid-cols-[1fr_360px] lg:items-stretch">
           <div className="min-w-0">
             <Badge className="mb-4 bg-slate-100 text-slate-700">MAJU 운영 지휘판</Badge>
