@@ -46,7 +46,7 @@ export function RouteDistanceAction({ destinationAddress, distanceKm, durationMi
       durationMinutes: payload?.route?.durationMinutes,
       provider: payload?.route?.provider
     });
-    setMessage(payload?.route?.persisted ? "저장됨" : "계산됨");
+    setMessage(payload?.route?.persisted ? "경로 캐시 저장" : "계산 완료 · 저장 미확인");
     setIsLoading(false);
   }
 

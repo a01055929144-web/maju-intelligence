@@ -1172,7 +1172,7 @@ function StoreDetail({
       phone: draftPhone,
       representativeName: draftRepresentativeName
       });
-      const persistedLabel = result?.persisted === false ? "화면 저장" : "DB 저장";
+      const persistedLabel = result?.persisted === false ? "서버 저장 미확인" : "서버 저장 완료";
       setSavedAt(`${persistedLabel} · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
@@ -1197,7 +1197,7 @@ function StoreDetail({
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
-              {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 저장됨 · {savedAt}</p> : null}
+              {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">

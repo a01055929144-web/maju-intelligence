@@ -355,7 +355,7 @@ export default function CrmTimelinePage() {
       setCustomers((current) => current.map((customer, index) => (index === selectedIndex ? saved : customer)));
       setDraftCustomer(saved);
       setIsEditing(false);
-      setSaveMessage(payload?.persisted === false ? "현재 Vercel DB 환경변수가 없어 화면에만 반영되었습니다." : "거래처 정보가 저장되었습니다.");
+      setSaveMessage(payload?.persisted === false ? "거래처 정보가 화면에 반영되었습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "거래처 정보가 서버에 저장되었습니다.");
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
     } finally {

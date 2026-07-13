@@ -94,10 +94,10 @@ export function getAdminDashboard(): AdminDashboard {
       }
     ],
     dataQuality: [
-      { label: "주소 인식률", value: 88, description: "v1은 지역/주소 텍스트 기준으로 분석합니다." },
+      { label: "주소 인식률", value: 88, description: "등록된 지역/주소 텍스트 기준으로 분석합니다." },
       { label: "중복 제거율", value: 96, description: "거래처명과 주소를 기준으로 중복을 제거합니다." },
       { label: "필수 컬럼 완성도", value: 91, description: "거래처명, 지역, 주소, 업종, 매출, 방문 정보를 확인합니다." },
-      { label: "리포트 생성 성공률", value: 100, description: "샘플/업로드 데이터 모두 동일한 엔진을 사용합니다." }
+      { label: "리포트 생성 성공률", value: 100, description: "등록 데이터와 업로드 데이터 모두 동일한 분석 엔진을 사용합니다." }
     ],
     scoringWeights: [
       { label: "영업력", value: 22, note: "최근 주문과 거래 규모" },

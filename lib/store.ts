@@ -620,7 +620,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           salesTransactionCount: 0,
           uploadCount: 0,
           recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
-          updatedAt: "샘플 기준"
+          updatedAt: "기준 데이터"
         }
       ]
     };
@@ -777,7 +777,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         salesTransactionCount: 0,
         uploadCount: 0,
         recentUploads: [],
-        updatedAt: "로컬 샘플"
+        updatedAt: "서버 저장 미확인"
       }
     };
   }
@@ -887,12 +887,12 @@ export function getSystemStatus(): SystemStatus {
       {
         name: "Admin Auth",
         status: adminConfigured ? "ready" : "fallback",
-        description: adminConfigured ? "관리자 환경변수가 설정되었습니다." : "로컬 기본 관리자 계정을 사용합니다."
+        description: adminConfigured ? "관리자 환경변수가 설정되었습니다." : "관리자 인증 환경변수를 확인해야 합니다."
       },
       {
         name: "Customer Auth",
         status: customerConfigured ? "ready" : "fallback",
-        description: customerConfigured ? "고객사 환경변수가 설정되었습니다." : "로컬 기본 고객사 계정을 사용합니다."
+        description: customerConfigured ? "고객사 환경변수가 설정되었습니다." : "고객사 인증 환경변수를 확인해야 합니다."
       },
       {
         name: "Analysis Pipeline",
@@ -916,7 +916,7 @@ export function getSystemStatus(): SystemStatus {
         status: supabaseConfigured ? "ready" : "fallback",
         description: supabaseConfigured
           ? "사업자등록증, 통장사본, 배송 적재위치 사진/영상 업로드 API가 실 Storage를 사용합니다."
-          : "Supabase 환경변수가 없어 첨부 업로드는 샘플 응답으로만 동작합니다."
+          : "Supabase 환경변수가 없어 첨부파일 서버 저장을 확인할 수 없습니다."
       }
     ],
     databaseChecks: [],
@@ -961,7 +961,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
-    checkDemoCompany()
+    checkDefaultCompany()
     ]),
     Promise.all([
       checkStorageBucket(CUSTOMER_ATTACHMENT_BUCKET, "첨부자료 Storage", "사업자등록증, 통장사본, 배송 적재위치 파일이 저장되는 비공개 버킷입니다.")
@@ -1381,14 +1381,14 @@ async function countTableRows(table: string, name: string, description: string):
   }
 }
 
-async function checkDemoCompany(): Promise<DatabaseCheck> {
+async function checkDefaultCompany(): Promise<DatabaseCheck> {
   try {
     const rows = await supabaseRequest<Array<{ id: string }>>(
       `companies?select=id&id=eq.${encodeURIComponent(getDefaultCompanyId())}&limit=1`
     );
 
     return {
-      name: "데모 고객사 UUID",
+      name: "기본 고객사 연결",
       status: rows.length ? "ready" : "missing",
       count: rows.length,
       description: rows.length
@@ -1397,7 +1397,7 @@ async function checkDemoCompany(): Promise<DatabaseCheck> {
     };
   } catch (error) {
     return {
-      name: "데모 고객사 UUID",
+      name: "기본 고객사 연결",
       status: "missing",
       count: null,
       description: getErrorMessage(error)
@@ -2081,7 +2081,7 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
       productName: ["쌀 20kg", "식용유", "돈육", "김치", "야채믹스"][index % 5],
       quantity: 1 + (index % 8),
       salesAmount: customer.monthlyRevenue * 10000,
-      createdAt: "샘플 기준"
+      createdAt: "기준 데이터"
     }));
     return summarizeSalesTransactions(items);
   }
@@ -2196,7 +2196,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     ownerName: "정두영",
     originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
     status: "fallback",
-    updatedAt: "샘플 기준"
+    updatedAt: "기준 데이터"
   };
 
   if (!isProductionStoreConfigured()) {
@@ -2258,7 +2258,7 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
         ownerName: payload.owner_name || "",
         originAddress: payload.origin_address || "",
         status: "active",
-        updatedAt: "로컬 샘플"
+        updatedAt: "서버 저장 미확인"
       }
     };
   }
@@ -2877,7 +2877,7 @@ function getSampleVisitTimeline(): VisitTimelineItem[] {
       leadName: "송파 신규오픈 B",
       region: "송파구",
       result: "interested",
-      memo: "샘플 납품 가능 여부 확인 요청.",
+      memo: "테스트 납품 가능 여부 확인 요청.",
       nextAction: "재방문 일정 조율",
       expectedRevenue: 244,
       visitedAt: "2026. 6. 30. 오후 1:10"
