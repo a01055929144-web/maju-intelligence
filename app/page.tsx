@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import {
@@ -42,6 +42,7 @@ type PipelineStep = {
 };
 
 const emptyMap: FieldMap = {};
+const mappingPresetStorageKey = "maju:data-registration:mapping-presets";
 const initialPipelineSteps: PipelineStep[] = [
   { key: "file", label: "파일 수신", description: "엑셀 파일과 시트 정보를 확인합니다.", status: "pending" },
   { key: "mapping", label: "컬럼 매핑", description: "필수 컬럼과 업로드 컬럼을 연결합니다.", status: "pending" },
@@ -612,6 +613,8 @@ function Onboarding({
   onDownloadSalesExport: () => void;
 }) {
   const [entryMode, setEntryMode] = useState<"excel" | "manual">("excel");
+  const [savedPreset, setSavedPreset] = useState<FieldMap | null>(null);
+  const [presetMessage, setPresetMessage] = useState("");
   const requiredFields = template.fields.filter((field) => field.required);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const complete = missingRequiredFields.length === 0;
@@ -626,6 +629,34 @@ function Onboarding({
   const saveHint = isMaster
     ? "기초값은 고정 보존하고, 새 엑셀은 기존 거래처 수정과 신규 거래처 등록으로 반영합니다."
     : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
+
+  useEffect(() => {
+    const preset = loadMappingPreset(uploadType);
+    setSavedPreset(preset);
+    setPresetMessage(preset ? `${template.label} 매핑 프리셋이 저장되어 있습니다.` : "");
+  }, [template.label, uploadType]);
+
+  function saveCurrentPreset() {
+    saveMappingPreset(uploadType, fieldMap);
+    setSavedPreset(fieldMap);
+    setPresetMessage(`${template.label} 매핑을 저장했습니다. 같은 ERP 양식은 다음 업로드 때 바로 불러올 수 있습니다.`);
+  }
+
+  function applySavedPreset() {
+    if (!savedPreset) return;
+    const filteredPreset = Object.entries(savedPreset).reduce<FieldMap>((map, [key, value]) => {
+      if (!value || headers.includes(value)) map[key] = value;
+      return map;
+    }, {});
+    onMap({ ...fieldMap, ...filteredPreset });
+    setPresetMessage("저장된 매핑을 현재 업로드 파일에 적용했습니다.");
+  }
+
+  function removeSavedPreset() {
+    deleteMappingPreset(uploadType);
+    setSavedPreset(null);
+    setPresetMessage("저장된 매핑 프리셋을 삭제했습니다.");
+  }
 
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -803,6 +834,15 @@ function Onboarding({
                   requiredCount={requiredFields.length}
                   rows={rawRows}
                 />
+                <MappingPresetCard
+                  canLoad={Boolean(savedPreset)}
+                  canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
+                  message={presetMessage}
+                  templateLabel={template.label}
+                  onLoad={applySavedPreset}
+                  onRemove={removeSavedPreset}
+                  onSave={saveCurrentPreset}
+                />
                 <div className="mb-4 grid gap-2">
                   {requiredFields.map((field) => {
                     const mappedHeader = fieldMap[field.key];
@@ -916,6 +956,49 @@ function MiniStatus({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-slate-200 bg-white p-2">
       <p className="text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function MappingPresetCard({
+  canLoad,
+  canSave,
+  message,
+  templateLabel,
+  onLoad,
+  onRemove,
+  onSave
+}: {
+  canLoad: boolean;
+  canSave: boolean;
+  message: string;
+  templateLabel: string;
+  onLoad: () => void;
+  onRemove: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="mb-4 rounded-md border border-indigo-100 bg-indigo-50/60 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-slate-950">ERP 매핑 프리셋</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+            {message || `${templateLabel}의 현재 컬럼 연결을 저장해 다음 업로드에 재사용합니다.`}
+          </p>
+        </div>
+        {canLoad ? <Badge className="shrink-0 bg-indigo-100 text-indigo-700">저장됨</Badge> : <Badge className="shrink-0 bg-white text-slate-500">없음</Badge>}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Button size="sm" variant="outline" className="bg-white" onClick={onSave} disabled={!canSave}>
+          저장
+        </Button>
+        <Button size="sm" variant="outline" className="bg-white" onClick={onLoad} disabled={!canLoad}>
+          불러오기
+        </Button>
+        <Button size="sm" variant="outline" className="bg-white text-slate-500" onClick={onRemove} disabled={!canLoad}>
+          삭제
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1403,6 +1486,41 @@ function dateStamp() {
 
 function fieldLabelForHeader(header: string, fields: readonly UploadTemplateField[]) {
   return fields.find((field) => field.key === header)?.label || header;
+}
+
+function loadMappingPreset(type: UploadTemplateType) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(mappingPresetStorageKey);
+    if (!raw) return null;
+    const presets = JSON.parse(raw) as Partial<Record<UploadTemplateType, FieldMap>>;
+    return presets[type] || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveMappingPreset(type: UploadTemplateType, fieldMap: FieldMap) {
+  if (typeof window === "undefined") return;
+  const presets = readMappingPresets();
+  presets[type] = fieldMap;
+  window.localStorage.setItem(mappingPresetStorageKey, JSON.stringify(presets));
+}
+
+function deleteMappingPreset(type: UploadTemplateType) {
+  if (typeof window === "undefined") return;
+  const presets = readMappingPresets();
+  delete presets[type];
+  window.localStorage.setItem(mappingPresetStorageKey, JSON.stringify(presets));
+}
+
+function readMappingPresets() {
+  try {
+    const raw = window.localStorage.getItem(mappingPresetStorageKey);
+    return raw ? (JSON.parse(raw) as Partial<Record<UploadTemplateType, FieldMap>>) : {};
+  } catch {
+    return {};
+  }
 }
 
 function manualInputType(key: string) {
