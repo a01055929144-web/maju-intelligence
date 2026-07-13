@@ -735,6 +735,23 @@ function Onboarding({
     setPresetMessage(payload?.persisted ? "서버 매핑 프리셋을 삭제했습니다." : "이 브라우저의 매핑 프리셋을 삭제했습니다.");
   }
 
+  function downloadIssueRows() {
+    const issueRows = buildIssueRows(rawRows, dataQuality, fieldMap);
+    if (!issueRows.length) return;
+
+    downloadWorkbook(`maju_보완필요행_${uploadTemplates[uploadType].label}_${dateStamp()}.xlsx`, [
+      { name: "보완 필요 행", rows: issueRows },
+      {
+        name: "필수 컬럼",
+        rows: requiredFields.map((field) => ({
+          필수컬럼: field.label,
+          시스템키: field.key,
+          현재연결: fieldMap[field.key] || "미연결"
+        }))
+      }
+    ]);
+  }
+
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
       <div className="space-y-4">
@@ -911,7 +928,7 @@ function Onboarding({
                   requiredCount={requiredFields.length}
                   rows={rawRows}
                 />
-                <DataQualityCard summary={dataQuality} />
+                <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} />
                 <MappingPresetCard
                   canLoad={Boolean(savedPreset)}
                   canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
@@ -1039,7 +1056,7 @@ function MiniStatus({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DataQualityCard({ summary }: { summary: DataQualitySummary }) {
+function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () => void; summary: DataQualitySummary }) {
   const hasRows = summary.rows > 0;
   const hasIssues = summary.issueRows.length > 0 || summary.duplicateCandidates > 0;
 
@@ -1072,6 +1089,10 @@ function DataQualityCard({ summary }: { summary: DataQualitySummary }) {
           {summary.issueRows.length > 3 ? <p className="px-1 text-xs font-bold text-amber-700">외 {summary.issueRows.length - 3}개 행 보완 필요</p> : null}
         </div>
       ) : null}
+      <Button className="mt-3 w-full bg-white" disabled={!summary.issueRows.length} onClick={onDownloadIssues} size="sm" variant="outline">
+        <Download className="h-4 w-4" />
+        보완 필요 행 다운로드
+      </Button>
     </div>
   );
 }
@@ -1689,6 +1710,27 @@ function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTem
     readyRows: Math.max(0, rows.length - issueRows.length),
     rows: rows.length
   };
+}
+
+function buildIssueRows(rows: RawRow[], summary: DataQualitySummary, fieldMap: FieldMap): RawRow[] {
+  const issueMap = new Map(summary.issueRows.map((issue) => [issue.rowNumber, issue.missingLabels]));
+
+  return rows.reduce<RawRow[]>((issueRows, row, index) => {
+    const rowNumber = index + 2;
+    const missingLabels = issueMap.get(rowNumber);
+    if (!missingLabels) return issueRows;
+
+    issueRows.push({
+        보완필요행: rowNumber,
+        누락필수값: missingLabels.join(", "),
+        거래처명: getCell(row, fieldMap.customerName),
+        사업자등록번호: getCell(row, fieldMap.businessRegistrationNumber),
+        주소: getCell(row, fieldMap.address),
+        ...row
+    });
+
+    return issueRows;
+  }, []);
 }
 
 function mappingPresetEndpoint(type: UploadTemplateType) {
