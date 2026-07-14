@@ -187,6 +187,8 @@ function MappingWorkspaceModal({
 }) {
   const [columnFilter, setColumnFilter] = useState<"all" | "mapped" | "unmapped">("all");
   const [columnQuery, setColumnQuery] = useState("");
+  const [fieldFilter, setFieldFilter] = useState<"all" | "required" | "mapped" | "unmapped">("all");
+  const [fieldQuery, setFieldQuery] = useState("");
   const requiredFields = fields.filter((field) => field.required);
   const optionalFields = fields.filter((field) => !field.required);
   const mappedCount = fields.filter((field) => fieldMap[field.key]).length;
@@ -203,6 +205,20 @@ function MappingWorkspaceModal({
       return header.toLowerCase().includes(normalizedQuery);
     });
   }, [columnFilter, columnQuery, headers, mappedByHeader]);
+  const filteredFields = useMemo(() => {
+    const normalizedQuery = fieldQuery.trim().toLowerCase();
+
+    return fields.filter((field) => {
+      const mapped = Boolean(fieldMap[field.key]);
+      if (fieldFilter === "required" && !field.required) return false;
+      if (fieldFilter === "mapped" && !mapped) return false;
+      if (fieldFilter === "unmapped" && mapped) return false;
+      if (!normalizedQuery) return true;
+      return `${field.label} ${field.description ?? ""}`.toLowerCase().includes(normalizedQuery);
+    });
+  }, [fieldFilter, fieldMap, fieldQuery, fields]);
+  const filteredRequiredFields = filteredFields.filter((field) => field.required);
+  const filteredOptionalFields = filteredFields.filter((field) => !field.required);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
@@ -266,14 +282,54 @@ function MappingWorkspaceModal({
             <ExcelMappingSheetTable fields={fields} headers={filteredHeaders} mappedByHeader={mappedByHeader} rows={rows} onHeaderMap={onHeaderMap} />
           </section>
 
-          <aside className="min-h-0 bg-white">
+          <aside className="flex min-h-0 flex-col bg-white">
             <div className="border-b border-slate-200 bg-white px-5 py-3">
               <p className="text-sm font-black text-slate-950">우측: MAJU 표준 필드 설정</p>
               <p className="mt-1 text-xs font-bold text-slate-500">필수값부터 연결하면 저장 가능 여부가 바로 갱신됩니다.</p>
             </div>
-            <div className="max-h-full space-y-4 overflow-auto p-4">
-              <FieldMappingGroup fields={requiredFields} fieldMap={fieldMap} headers={headers} title="필수 필드" tone="required" onFieldMap={onFieldMap} />
-              <FieldMappingGroup fields={optionalFields} fieldMap={fieldMap} headers={headers} title="선택 필드" tone="optional" onFieldMap={onFieldMap} />
+            <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <input
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                value={fieldQuery}
+                onChange={(event) => setFieldQuery(event.target.value)}
+                placeholder="표준 필드 검색..."
+              />
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  ["all", "전체"],
+                  ["required", "필수"],
+                  ["unmapped", "미연결"],
+                  ["mapped", "연결됨"]
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`h-9 rounded-md border px-2 text-xs font-black transition ${
+                      fieldFilter === value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                    type="button"
+                    onClick={() => setFieldFilter(value as "all" | "required" | "mapped" | "unmapped")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
+                <span>{filteredFields.length}/{fields.length}개 표준 필드 표시</span>
+                <span>미연결 {fields.length - mappedCount}개</span>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+              {filteredFields.length ? (
+                <>
+                  <FieldMappingGroup fields={filteredRequiredFields} fieldMap={fieldMap} headers={headers} title="필수 필드" tone="required" onFieldMap={onFieldMap} />
+                  <FieldMappingGroup fields={filteredOptionalFields} fieldMap={fieldMap} headers={headers} title="선택 필드" tone="optional" onFieldMap={onFieldMap} />
+                </>
+              ) : (
+                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                  <p className="text-sm font-black text-slate-800">조건에 맞는 표준 필드가 없습니다.</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
+                </div>
+              )}
             </div>
           </aside>
         </div>
