@@ -979,7 +979,7 @@ function Onboarding({
       <div className="space-y-4">
         <DataRegistrationFlowCard steps={flowSteps} />
 
-        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-md border border-l-4 border-slate-200 border-l-emerald-600 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
             <div>
               <Badge className="mb-3 bg-emerald-50 text-emerald-800">1. 무엇을 등록하나요?</Badge>
@@ -1019,7 +1019,7 @@ function Onboarding({
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-md border border-l-4 border-slate-200 border-l-blue-600 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Badge className="mb-3 bg-blue-50 text-blue-700">2. 어떻게 등록하나요?</Badge>
@@ -1216,29 +1216,31 @@ function Onboarding({
       </div>
 
       <aside className="space-y-4">
-        <div className="rounded-md border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 p-4">
+        <div className="rounded-md border border-l-4 border-slate-200 border-l-violet-600 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-violet-50/40 p-5">
             <Badge className="mb-3 bg-violet-50 text-violet-700">3. 미리보기 · 매핑 · 저장</Badge>
             <h2 className="text-lg font-black text-slate-950">엑셀 전체 미리보기와 컬럼 매칭</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
               {rawRows.length ? `${rawRows.length}개 행 전체를 확인하고, ERP 헤더를 MAJU 표준 필드에 연결한 뒤 저장합니다.` : "엑셀 업로드 또는 수기 저장 후 이곳에서 확인합니다."}
             </p>
           </div>
-          <div className="p-4">
-            <RegistrationStatusCard status={registrationStatus} />
+          <div className="space-y-5 p-5">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <RegistrationStatusCard status={registrationStatus} />
+              <UploadStatusCard
+                complete={complete}
+                filename={uploadedFilename}
+                headers={headers}
+                mappedRequiredCount={mappedRequiredCount}
+                mappingProgress={mappingProgress}
+                requiredCount={requiredFields.length}
+                rows={rawRows}
+              />
+            </div>
             {isAnalyzing ? (
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <UploadStatusCard
-                  complete={complete}
-                  filename={uploadedFilename}
-                  headers={headers}
-                  mappedRequiredCount={mappedRequiredCount}
-                  mappingProgress={mappingProgress}
-                  requiredCount={requiredFields.length}
-                  rows={rawRows}
-                />
                 <ExcelHeaderMappingPreview
                   fields={template.fields}
                   fieldMap={fieldMap}
@@ -1263,16 +1265,21 @@ function Onboarding({
                     <p className="mt-2 text-sm font-medium leading-6 text-slate-500">중앙에서 엑셀을 업로드하거나 수기로 입력하면 매핑 상태가 표시됩니다.</p>
                   </div>
                 ) : null}
-                <div className="mt-4 rounded-md border border-slate-200 p-3">
-                  <span className="flex items-center gap-2 text-sm font-black text-slate-700">
-                    <Check className={canAnalyze ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
-                    {canAnalyze ? "저장 준비 완료" : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
-                  </span>
-                  {rawRows.length ? <DataPreview rows={rawRows} fields={template.fields} fieldMap={fieldMap} /> : null}
-                  <Button className="mt-3 w-full" onClick={onAnalyze} disabled={!canAnalyze}>
-                    업데이트 후 리포트 갱신
-                    <ArrowRight size={18} />
-                  </Button>
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <Badge className={canAnalyze ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>3-3 검증 후 저장</Badge>
+                      <p className="mt-2 flex items-center gap-2 text-base font-black text-slate-950">
+                        <Check className={canAnalyze ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
+                        {canAnalyze ? "저장 준비 완료" : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">품질 검증과 매핑 프리셋을 확인한 뒤 리포트를 갱신하면 서버 저장 여부가 표시됩니다.</p>
+                    </div>
+                    <Button className="h-11 shrink-0" onClick={onAnalyze} disabled={!canAnalyze}>
+                      업데이트 후 리포트 갱신
+                      <ArrowRight size={18} />
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
@@ -1414,7 +1421,7 @@ function UploadStatusCard({
   const hasRows = rows.length > 0;
 
   return (
-    <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="h-full rounded-md border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black text-slate-400">{hasRows ? "업로드됨" : "대기 중"}</p>
@@ -1473,13 +1480,14 @@ function ExcelHeaderMappingPreview({
   }
 
   return (
-    <div className="mb-4 overflow-hidden rounded-md border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 bg-slate-50 p-3">
+    <div className="overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm">
+      <div className="border-b border-blue-100 bg-blue-50/70 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
+            <Badge className="mb-2 bg-blue-700 text-white">3-1 헤더 매칭</Badge>
             <p className="flex items-center gap-2 text-sm font-black text-slate-950">
               <FileSpreadsheet className="h-4 w-4 text-blue-700" />
-              엑셀 헤더 미리보기 · 직접 매칭
+              ERP 엑셀 컬럼을 MAJU 표준 필드로 연결
             </p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
               업로드한 ERP 엑셀의 실제 컬럼과 샘플값을 보고 MAJU 표준 필드에 연결합니다.
@@ -1495,13 +1503,13 @@ function ExcelHeaderMappingPreview({
           </p>
         ) : null}
       </div>
-      <div className="max-h-[520px] overflow-auto">
+      <div className="max-h-[520px] overflow-auto bg-white">
         <table className="w-full min-w-[720px] text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-white text-slate-500 shadow-sm">
+          <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
             <tr>
-              <th className="w-[24%] px-3 py-2 font-black">엑셀 헤더</th>
-              <th className="w-[42%] px-3 py-2 font-black">샘플값</th>
-              <th className="w-[34%] px-3 py-2 font-black">MAJU 표준 필드</th>
+              <th className="w-[24%] border-b border-slate-200 px-4 py-3 font-black">엑셀 헤더</th>
+              <th className="w-[42%] border-b border-slate-200 px-4 py-3 font-black">샘플값</th>
+              <th className="w-[34%] border-b border-slate-200 px-4 py-3 font-black">MAJU 표준 필드</th>
             </tr>
           </thead>
           <tbody>
@@ -1514,8 +1522,8 @@ function ExcelHeaderMappingPreview({
                 .filter(Boolean);
 
               return (
-                <tr key={header} className="border-t border-slate-100 align-top">
-                  <td className="px-3 py-3">
+                <tr key={header} className="border-t border-slate-100 align-top transition hover:bg-blue-50/30">
+                  <td className="px-4 py-3">
                     <p className="font-black text-slate-950">{header}</p>
                     {mappedField ? (
                       <Badge className={mappedField.required ? "mt-2 bg-blue-100 text-blue-800" : "mt-2 bg-slate-100 text-slate-700"}>
@@ -1525,7 +1533,7 @@ function ExcelHeaderMappingPreview({
                       <Badge className="mt-2 bg-slate-100 text-slate-500">미사용</Badge>
                     )}
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       {samples.length ? (
                         samples.map((sample, index) => (
@@ -1538,7 +1546,7 @@ function ExcelHeaderMappingPreview({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-4 py-3">
                     <select
                       className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       value={mappedFieldKey}
@@ -1568,9 +1576,10 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
   if (!headers.length || !rows.length) return null;
 
   return (
-    <div className="border-t border-slate-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-3">
+    <div className="border-t-8 border-slate-100 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4">
         <div>
+          <Badge className="mb-2 bg-slate-900 text-white">3-2 전체 데이터 검수</Badge>
           <p className="text-sm font-black text-slate-950">업로드 데이터 전체 보기</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
             엑셀의 전체 행을 그대로 보여줍니다. 세로·가로 스크롤로 누락값과 이상값을 확인하세요.
@@ -1578,13 +1587,13 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
         </div>
         <Badge className="bg-slate-100 text-slate-700">{rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼</Badge>
       </div>
-      <div className="max-h-[680px] overflow-auto">
+      <div className="max-h-[680px] overflow-auto bg-white">
         <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-white text-slate-500 shadow-sm">
+          <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
             <tr>
-              <th className="sticky left-0 z-20 w-16 border-b border-r border-slate-100 bg-white px-3 py-2 font-black">행</th>
+              <th className="sticky left-0 z-20 w-16 border-b border-r border-slate-200 bg-slate-100 px-3 py-3 font-black">행</th>
               {headers.map((header) => (
-                <th key={header} className="min-w-40 border-b border-slate-100 px-3 py-2 font-black">
+                <th key={header} className="min-w-40 border-b border-slate-200 px-3 py-3 font-black">
                   {header}
                 </th>
               ))}
@@ -1592,7 +1601,7 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={index} className="odd:bg-white even:bg-slate-50/60">
+              <tr key={index} className="odd:bg-white even:bg-slate-50/70 hover:bg-blue-50/40">
                 <td className="sticky left-0 z-0 border-r border-slate-100 bg-inherit px-3 py-2 font-black text-slate-400">{index + 2}</td>
                 {headers.map((header) => {
                   const value = String(row[header] ?? "").trim();
@@ -1646,7 +1655,7 @@ function RegistrationStatusCard({ status }: { status: RegistrationStatus }) {
   }[status.status];
 
   return (
-    <div className={`mb-4 rounded-md border p-4 ${tone.border}`}>
+    <div className={`h-full rounded-md border p-4 ${tone.border}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white shadow-sm">{tone.icon}</span>
