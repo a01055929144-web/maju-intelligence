@@ -52,6 +52,12 @@ export function ExcelHeaderMappingPreview({
     onMap(nextMap);
   }
 
+  function applySuggestedMapping(targetHeaders: string[]) {
+    const { appliedCount, nextMap } = buildSuggestedMapping(fieldMap, fields, targetHeaders);
+    if (appliedCount > 0) onMap(nextMap);
+    return appliedCount;
+  }
+
   return (
     <div className="overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm">
       <div className="border-b border-blue-100 bg-blue-50/70 p-4">
@@ -156,6 +162,7 @@ export function ExcelHeaderMappingPreview({
           mappedByHeader={mappedByHeader}
           rows={rows}
           onClose={() => setIsWorkspaceOpen(false)}
+          onAutoMap={applySuggestedMapping}
           onFieldMap={updateFieldMapping}
           onHeaderMap={updateHeaderMapping}
         />
@@ -171,6 +178,7 @@ function MappingWorkspaceModal({
   mappedByHeader,
   missingRequiredFields,
   onClose,
+  onAutoMap,
   onFieldMap,
   onHeaderMap,
   rows
@@ -181,6 +189,7 @@ function MappingWorkspaceModal({
   mappedByHeader: Record<string, string>;
   missingRequiredFields: UploadTemplateField[];
   onClose: () => void;
+  onAutoMap: (headers: string[]) => number;
   onFieldMap: (fieldKey: string, header: string) => void;
   onHeaderMap: (header: string, fieldKey: string) => void;
   rows: RawRow[];
@@ -189,6 +198,7 @@ function MappingWorkspaceModal({
   const [columnQuery, setColumnQuery] = useState("");
   const [fieldFilter, setFieldFilter] = useState<"all" | "required" | "mapped" | "unmapped">("all");
   const [fieldQuery, setFieldQuery] = useState("");
+  const [autoMapMessage, setAutoMapMessage] = useState("");
   const requiredFields = fields.filter((field) => field.required);
   const optionalFields = fields.filter((field) => !field.required);
   const mappedCount = fields.filter((field) => fieldMap[field.key]).length;
@@ -278,6 +288,17 @@ function MappingWorkspaceModal({
                 </button>
               ))}
               <Badge className="bg-slate-100 text-slate-700">{filteredHeaders.length}/{headers.length}컬럼</Badge>
+              <button
+                className="h-10 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
+                type="button"
+                onClick={() => {
+                  const appliedCount = onAutoMap(filteredHeaders);
+                  setAutoMapMessage(appliedCount ? `${appliedCount}개 표준 필드를 자동 연결했습니다.` : "추가로 자동 연결할 컬럼을 찾지 못했습니다.");
+                }}
+              >
+                보이는 컬럼 자동 매칭
+              </button>
+              {autoMapMessage ? <p className="basis-full text-xs font-black text-emerald-700">{autoMapMessage}</p> : null}
             </div>
             <ExcelMappingSheetTable fields={fields} headers={filteredHeaders} mappedByHeader={mappedByHeader} rows={rows} onHeaderMap={onHeaderMap} />
           </section>
@@ -518,4 +539,35 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
       </div>
     </div>
   );
+}
+
+function buildSuggestedMapping(fieldMap: FieldMap, fields: readonly UploadTemplateField[], headers: string[]) {
+  const nextMap = { ...fieldMap };
+  const usedHeaders = new Set(Object.values(nextMap).filter(Boolean));
+  let appliedCount = 0;
+
+  fields.forEach((field) => {
+    if (nextMap[field.key]) return;
+
+    const terms = [field.key, field.label, ...(field.aliases ?? [])]
+      .map(normalizeMappingText)
+      .filter(Boolean);
+    const matchedHeader = headers.find((header) => {
+      if (usedHeaders.has(header)) return false;
+      const normalizedHeader = normalizeMappingText(header);
+      return terms.some((term) => normalizedHeader === term || normalizedHeader.includes(term) || term.includes(normalizedHeader));
+    });
+
+    if (matchedHeader) {
+      nextMap[field.key] = matchedHeader;
+      usedHeaders.add(matchedHeader);
+      appliedCount += 1;
+    }
+  });
+
+  return { appliedCount, nextMap };
+}
+
+function normalizeMappingText(value: string) {
+  return value.toLowerCase().replace(/[\s_\-./()[\]{}|:;'"`,]+/g, "");
 }
