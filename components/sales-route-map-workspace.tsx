@@ -1016,6 +1016,11 @@ function TodayCourseView({
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="border-b border-slate-200/80 p-3">
+                <div className="mb-3 grid grid-cols-3 gap-2">
+                  <RouteMetric label="선택 경유지" value={`${selectedRouteStores.length}곳`} />
+                  <RouteMetric label={routeSequence ? "경유 코스 거리" : "출발지 기준 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
+                  <RouteMetric label={routeSequence ? "경유 코스 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
+                </div>
                 <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
                   <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
                     {routeSequence ? "티맵 계산 완료" : selectedRouteStores.length ? "티맵 계산 대기" : "경유지 선택 필요"}
@@ -1111,7 +1116,7 @@ function TodayCourseView({
                             <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                             <span className="mt-2 block text-xs font-bold text-slate-400">
-                              {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
+                              출발지 기준 {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원
                             </span>
                           </span>
                           <span className="flex shrink-0 flex-col items-end gap-2">
@@ -1192,7 +1197,7 @@ function TodayCourseView({
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                           <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
-                          <span className="mt-2 block text-xs font-bold text-slate-400">{store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원</span>
+                          <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-2">
                           <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
@@ -1837,6 +1842,15 @@ function Kpi({
       <p className="truncate text-[11px] font-black uppercase text-slate-400">{label}</p>
       <p className={`mt-1 truncate text-[24px] font-black leading-none ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-2 truncate text-[11px] font-semibold text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
+function RouteMetric({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2">
+      <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }
