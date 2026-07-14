@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { KakaoMapMarker } from "@/components/kakao-address-map";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 
 export default async function TodayRoutePage({ searchParams }: { searchParams?: { companyId?: string } }) {
@@ -39,30 +39,4 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
       </section>
     </CustomerAppShell>
   );
-}
-
-function createRouteMapMarkers(originAddress: string, stops: Array<{ address?: string; name: string; order: number }>): KakaoMapMarker[] {
-  const routeStops = stops
-    .filter((stop) => stop.address)
-    .slice(0, 10)
-    .map((stop, index) => ({
-      address: stop.address || "",
-      label: String(stop.order || index + 1),
-      name: stop.name,
-      tone: "customer" as const,
-      x: 24 + ((index * 13) % 58),
-      y: 28 + ((index * 17) % 44)
-    }));
-
-  return [
-    {
-      address: originAddress,
-      label: "출발",
-      name: "물류 출발지",
-      tone: "origin",
-      x: 72,
-      y: 62
-    },
-    ...routeStops
-  ];
 }

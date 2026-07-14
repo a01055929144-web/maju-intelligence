@@ -25,10 +25,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getCustomerSession } from "@/lib/auth";
+import { createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getCompanyDashboardPayload, getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 import { CustomerLogoutButton } from "./logout-button";
 
@@ -63,7 +64,7 @@ export default async function DashboardPage() {
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
     { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
-  const mapMarkers = createDashboardRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (
     <CustomerAppShell
@@ -281,31 +282,6 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
     </div>
   );
-}
-
-function createDashboardRouteMapMarkers(originAddress: string, stops: Array<{ address?: string; name: string; order: number }>): KakaoMapMarker[] {
-  const routeStops = stops
-    .filter((stop) => stop.address)
-    .map((stop, index) => ({
-      address: stop.address || "",
-      label: String(stop.order || index + 1),
-      name: stop.name,
-      tone: "customer" as const,
-      x: 24 + ((index * 13) % 58),
-      y: 28 + ((index * 17) % 44)
-    }));
-
-  return [
-    {
-      address: originAddress,
-      label: "출발",
-      name: "물류 출발지",
-      tone: "origin",
-      x: 72,
-      y: 62
-    },
-    ...routeStops
-  ];
 }
 
 function estimateFuelCost(distanceKm: number) {
