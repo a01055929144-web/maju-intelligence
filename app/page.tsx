@@ -62,6 +62,13 @@ type DataQualitySummary = {
   readyRows: number;
   rows: number;
 };
+type RegistrationStatus = {
+  actionLabel: string;
+  description: string;
+  nextAction: string;
+  status: "idle" | "ready" | "running" | "success" | "warning" | "error";
+  title: string;
+};
 type AddressSearchResult = {
   address: string;
   buildingName: string;
@@ -83,6 +90,13 @@ const initialPipelineSteps: PipelineStep[] = [
   { key: "score", label: "Health Score 계산", description: "영업력, 배송효율, 리스크 점수를 계산합니다.", status: "pending" },
   { key: "report", label: "AI 리포트 생성", description: "대표가 볼 진단 리포트와 추천 리드를 생성합니다.", status: "pending" }
 ];
+const initialRegistrationStatus: RegistrationStatus = {
+  actionLabel: "대기 중",
+  description: "엑셀 업로드 또는 수기 입력을 시작하면 이곳에서 저장 가능 여부와 서버 반영 결과를 확인합니다.",
+  nextAction: "거래처 마스터 또는 매출 거래내역 등록 방식을 선택하세요.",
+  status: "idle",
+  title: "아직 등록이 시작되지 않았습니다."
+};
 
 function getAdminCompanyIdFromUrl() {
   if (typeof window === "undefined") return "";
@@ -106,6 +120,7 @@ export default function Home() {
   const [isManualSaving, setIsManualSaving] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
   const [pipelineMeta, setPipelineMeta] = useState({ rows: sampleCustomers.length, qualityScore: 100, persisted: false });
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>(initialRegistrationStatus);
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
   const currentTemplate = uploadTemplates[uploadType];
@@ -158,17 +173,59 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json<RawRow>(firstSheet, { defval: "" });
-    const nextHeaders = Object.keys(json[0] || {});
+    setRegistrationStatus({
+      actionLabel: "파일 확인 중",
+      description: `${file.name} 파일을 읽고 첫 번째 시트의 헤더를 확인하고 있습니다.`,
+      nextAction: "잠시만 기다려 주세요.",
+      status: "running",
+      title: "엑셀 파일을 불러오는 중입니다."
+    });
 
-    setRawRows(json);
-    setHeaders(nextHeaders);
-    setFieldMap(autoMapHeaders(nextHeaders, currentTemplate.fields));
-    setUploadedFilename(file.name);
-    setUsingSample(false);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json<RawRow>(firstSheet, { defval: "" });
+      const nextHeaders = Object.keys(json[0] || {});
+
+      if (!json.length || !nextHeaders.length) {
+        setRegistrationStatus({
+          actionLabel: "파일 확인 실패",
+          description: "선택한 엑셀에서 데이터 행 또는 헤더를 찾지 못했습니다.",
+          nextAction: "첫 번째 시트에 헤더와 데이터가 있는지 확인한 뒤 다시 업로드하세요.",
+          status: "error",
+          title: "등록할 행이 없습니다."
+        });
+        return;
+      }
+
+      const nextFieldMap = autoMapHeaders(nextHeaders, currentTemplate.fields);
+      const requiredCount = currentTemplate.fields.filter((field) => field.required).length;
+      const mappedCount = currentTemplate.fields.filter((field) => field.required && nextFieldMap[field.key]).length;
+
+      setRawRows(json);
+      setHeaders(nextHeaders);
+      setFieldMap(nextFieldMap);
+      setUploadedFilename(file.name);
+      setUsingSample(false);
+      setRegistrationStatus({
+        actionLabel: "파일 수신 완료",
+        description: `${json.length.toLocaleString()}개 행과 ${nextHeaders.length.toLocaleString()}개 컬럼을 확인했습니다. 필수 매핑 ${mappedCount}/${requiredCount}개가 자동 연결됐습니다.`,
+        nextAction: mappedCount === requiredCount ? "우측에서 품질을 확인한 뒤 업데이트 후 리포트 갱신을 누르세요." : "우측 컬럼 매핑에서 필수 컬럼을 연결하세요.",
+        status: mappedCount === requiredCount ? "ready" : "warning",
+        title: mappedCount === requiredCount ? "저장 준비가 거의 완료됐습니다." : "필수 컬럼 매핑이 더 필요합니다."
+      });
+    } catch (error) {
+      setRegistrationStatus({
+        actionLabel: "파일 읽기 실패",
+        description: error instanceof Error ? error.message : "엑셀 파일을 읽는 중 오류가 발생했습니다.",
+        nextAction: "파일 형식이 .xlsx/.xls/.csv인지 확인하고 다시 시도하세요.",
+        status: "error",
+        title: "업로드를 완료하지 못했습니다."
+      });
+    } finally {
+      event.target.value = "";
+    }
   }
 
   async function saveManualEntry() {
@@ -189,6 +246,13 @@ export default function Home() {
     setUploadedFilename(`${currentTemplate.label}-manual`);
     setUsingSample(false);
     setManualSaveMessage("저장 대기 목록에 추가했습니다.");
+    setRegistrationStatus({
+      actionLabel: "수기 등록 저장 중",
+      description: `${String(nextRow.customerName || nextRow.name || "신규 거래처")} 정보를 저장 대기 목록에 추가하고 서버 반영을 확인하고 있습니다.`,
+      nextAction: "저장 결과를 확인 중입니다.",
+      status: "running",
+      title: "수기 입력값을 처리하고 있습니다."
+    });
 
     try {
       if (uploadType === "customer-master") {
@@ -203,13 +267,42 @@ export default function Home() {
           const customerId = String(payload?.customer?.id || "");
           setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
           setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+          setRegistrationStatus({
+            actionLabel: payload?.persisted === false ? "로컬 대기" : "서버 저장 완료",
+            description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 서버 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
+            nextAction: customerId ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "거래처 히스토리 화면에서 저장 결과를 확인하세요.",
+            status: payload?.persisted === false ? "warning" : "success",
+            title: payload?.persisted === false ? "저장 확인이 필요합니다." : "수기 등록이 완료됐습니다."
+          });
           await refreshUploadHistory();
         } else if (response?.status === 401) {
           setManualSaveMessage("저장 대기 목록에 추가했습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
+          setRegistrationStatus({
+            actionLabel: "로그인 필요",
+            description: "화면의 저장 대기 목록에는 추가됐지만, 서버 저장 API가 로그인을 요구했습니다.",
+            nextAction: "고객사 또는 관리자 계정으로 로그인한 뒤 다시 저장하세요.",
+            status: "warning",
+            title: "서버 저장은 아직 완료되지 않았습니다."
+          });
         } else {
           setManualSaveMessage(payload?.message ? `저장 대기 목록에 추가했습니다. 서버 저장 확인: ${payload.message}` : "저장 대기 목록에 추가했습니다. 서버 저장은 나중에 다시 시도하세요.");
+          setRegistrationStatus({
+            actionLabel: "서버 저장 확인 필요",
+            description: payload?.message || "서버가 저장 완료 응답을 주지 않았습니다.",
+            nextAction: "입력값을 확인한 뒤 다시 저장하거나 관리자 시스템 상태를 확인하세요.",
+            status: "warning",
+            title: "저장 대기 상태입니다."
+          });
         }
       }
+    } catch (error) {
+      setRegistrationStatus({
+        actionLabel: "저장 실패",
+        description: error instanceof Error ? error.message : "수기 저장 중 오류가 발생했습니다.",
+        nextAction: "네트워크와 로그인 상태를 확인한 뒤 다시 시도하세요.",
+        status: "error",
+        title: "수기 등록을 완료하지 못했습니다."
+      });
     } finally {
       setIsManualSaving(false);
       setManualDraft({});
@@ -217,6 +310,13 @@ export default function Home() {
   }
 
   async function analyzeUploadedRows() {
+    setRegistrationStatus({
+      actionLabel: "리포트 갱신 시작",
+      description: `${rawRows.length.toLocaleString()}개 원본 행을 정제하고 서버 저장을 시도합니다.`,
+      nextAction: "파이프라인 단계가 모두 완료될 때까지 기다려 주세요.",
+      status: "running",
+      title: "데이터 업데이트를 시작했습니다."
+    });
     const mapped = uploadType === "sales-analysis" ? mapSalesRowsToCustomers(rawRows, fieldMap) : mapMasterRowsToCustomers(rawRows, fieldMap);
 
     const nextRows = mapped.length ? mapped : customers;
@@ -253,14 +353,33 @@ export default function Home() {
 
     if (response?.ok) {
       const payload = await response.json().catch(() => null);
+      const persisted = Boolean(payload?.persisted);
       setPipelineMeta({
         rows: payload?.pipeline?.rows || nextRows.length,
         qualityScore: payload?.pipeline?.qualityScore || 0,
-        persisted: Boolean(payload?.persisted)
+        persisted
+      });
+      setRegistrationStatus({
+        actionLabel: persisted ? "서버 저장 완료" : "분석 완료 · 저장 확인 필요",
+        description: persisted ? `${nextFilename} 데이터가 서버에 저장되고 AI 리포트가 갱신됐습니다.` : "분석은 완료됐지만 서버 저장이 확인되지 않았습니다.",
+        nextAction: persisted ? "AI 리포트와 거래처 히스토리, 매출 원장에서 반영 결과를 확인하세요." : "로그인/DB 환경변수를 확인한 뒤 다시 저장을 시도하세요.",
+        status: persisted ? "success" : "warning",
+        title: persisted ? "데이터 등록이 완료됐습니다." : "분석은 됐지만 서버 저장 확인이 필요합니다."
+      });
+      await completePipelineStep("report");
+    } else {
+      const payload = response ? await response.json().catch(() => null) : null;
+      setPipelineMeta({ rows: nextRows.length, qualityScore: 0, persisted: false });
+      setPipelineSteps((steps) => steps.map((step) => (step.key === "report" ? { ...step, status: "error" } : step)));
+      setRegistrationStatus({
+        actionLabel: response?.status === 401 ? "로그인 필요" : "저장 실패",
+        description: payload?.message || payload?.error || "서버 저장 API가 완료 응답을 주지 않았습니다.",
+        nextAction: response?.status === 401 ? "고객사 또는 관리자 계정으로 로그인한 뒤 다시 리포트를 갱신하세요." : "관리자 시스템 상태와 DB 연결을 확인하세요.",
+        status: response?.status === 401 ? "warning" : "error",
+        title: "데이터 등록이 서버에 반영되지 않았습니다."
       });
     }
 
-    await completePipelineStep("report");
     await refreshUploadHistory();
     window.setTimeout(() => {
       setIsAnalyzing(false);
@@ -313,6 +432,7 @@ export default function Home() {
             isAnalyzing={isAnalyzing}
             pipelineMeta={pipelineMeta}
             pipelineSteps={pipelineSteps}
+            registrationStatus={registrationStatus}
             uploadHistory={uploadHistory}
             usingSample={usingSample}
             isManualSaving={isManualSaving}
@@ -642,6 +762,7 @@ function Onboarding({
   isAnalyzing,
   pipelineMeta,
   pipelineSteps,
+  registrationStatus,
   usingSample,
   isManualSaving,
   lastManualCustomerHref,
@@ -668,6 +789,7 @@ function Onboarding({
   isAnalyzing: boolean;
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
   pipelineSteps: PipelineStep[];
+  registrationStatus: RegistrationStatus;
   usingSample: boolean;
   isManualSaving: boolean;
   lastManualCustomerHref: string;
@@ -1103,6 +1225,7 @@ function Onboarding({
             </p>
           </div>
           <div className="p-4">
+            <RegistrationStatusCard status={registrationStatus} />
             {isAnalyzing ? (
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
@@ -1346,6 +1469,59 @@ function UploadStatusCard({
   );
 }
 
+function RegistrationStatusCard({ status }: { status: RegistrationStatus }) {
+  const tone = {
+    error: {
+      badge: "bg-rose-100 text-rose-800",
+      border: "border-rose-200 bg-rose-50",
+      icon: <AlertTriangle className="h-5 w-5 text-rose-700" />
+    },
+    idle: {
+      badge: "bg-slate-100 text-slate-700",
+      border: "border-slate-200 bg-slate-50",
+      icon: <Clock className="h-5 w-5 text-slate-500" />
+    },
+    ready: {
+      badge: "bg-blue-100 text-blue-800",
+      border: "border-blue-200 bg-blue-50",
+      icon: <Check className="h-5 w-5 text-blue-700" />
+    },
+    running: {
+      badge: "bg-violet-100 text-violet-800",
+      border: "border-violet-200 bg-violet-50",
+      icon: <Activity className="h-5 w-5 animate-pulse text-violet-700" />
+    },
+    success: {
+      badge: "bg-emerald-100 text-emerald-800",
+      border: "border-emerald-200 bg-emerald-50",
+      icon: <Check className="h-5 w-5 text-emerald-700" />
+    },
+    warning: {
+      badge: "bg-amber-100 text-amber-800",
+      border: "border-amber-200 bg-amber-50",
+      icon: <AlertTriangle className="h-5 w-5 text-amber-700" />
+    }
+  }[status.status];
+
+  return (
+    <div className={`mb-4 rounded-md border p-4 ${tone.border}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white shadow-sm">{tone.icon}</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-slate-950">{status.title}</p>
+              <Badge className={tone.badge}>{status.actionLabel}</Badge>
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{status.description}</p>
+            <p className="mt-2 rounded-md bg-white/80 px-3 py-2 text-xs font-black leading-5 text-slate-800">다음 액션: {status.nextAction}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MiniStatus({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-slate-200 bg-white p-2">
@@ -1570,17 +1746,19 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
                   ? "flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white"
                   : step.status === "running"
                     ? "flex h-7 w-7 items-center justify-center rounded-full bg-accent text-foreground"
+                    : step.status === "error"
+                      ? "flex h-7 w-7 items-center justify-center rounded-full bg-rose-100 text-rose-700"
                     : "flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground"
               }
             >
-              {step.status === "done" ? <Check className="h-4 w-4" /> : step.status === "running" ? <Activity className="h-4 w-4 animate-pulse" /> : null}
+              {step.status === "done" ? <Check className="h-4 w-4" /> : step.status === "running" ? <Activity className="h-4 w-4 animate-pulse" /> : step.status === "error" ? <AlertTriangle className="h-4 w-4" /> : null}
             </span>
             <div>
               <p className="font-black">{step.label}</p>
               <p className="text-xs text-muted-foreground">{step.description}</p>
             </div>
-            <Badge className={step.status === "done" ? "bg-primary/10 text-primary" : step.status === "running" ? "bg-accent/20 text-foreground" : ""}>
-              {step.status === "done" ? "완료" : step.status === "running" ? "진행 중" : "대기"}
+            <Badge className={step.status === "done" ? "bg-primary/10 text-primary" : step.status === "running" ? "bg-accent/20 text-foreground" : step.status === "error" ? "bg-rose-100 text-rose-800" : ""}>
+              {step.status === "done" ? "완료" : step.status === "running" ? "진행 중" : step.status === "error" ? "실패" : "대기"}
             </Badge>
           </div>
         ))}
