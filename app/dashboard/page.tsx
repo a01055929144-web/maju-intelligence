@@ -64,7 +64,9 @@ export default async function DashboardPage() {
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
     { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
-  const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const routeStops = routePlan.groups.flatMap((group) => group.stops);
+  const mapMarkers = createRouteMapMarkers(originAddress, routeStops);
+  const routeMapStoreCount = Math.max(mapMarkers.length - 1, 0);
 
   return (
     <CustomerAppShell
@@ -154,8 +156,13 @@ export default async function DashboardPage() {
                 상세 열기
               </Link>
             </CardHeader>
-            <CardContent>
-              <KakaoAddressMap mapClassName="h-[420px]" markers={mapMarkers} />
+            <CardContent className="space-y-3">
+              <div className="grid gap-2 text-sm sm:grid-cols-3">
+                <MapSummary label="출발지" value={originAddress} />
+                <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
+                <MapSummary label="오늘 전체 코스" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+              </div>
+              <KakaoAddressMap mapClassName="h-[420px]" markers={mapMarkers} showList={false} />
             </CardContent>
           </Card>
 
@@ -280,6 +287,15 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
       <p className="text-xs font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function MapSummary({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/70 px-3 py-2">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
     </div>
   );
 }
