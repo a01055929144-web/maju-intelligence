@@ -132,6 +132,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [activeView, setActiveView] = useState<WorkspaceView>("map");
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
@@ -163,6 +164,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     [gradeBaseStores, gradeFilter]
   );
   const selectedStore = allStores.find((store) => store.id === selectedId);
+  const previewStore = allStores.find((store) => store.id === previewStoreId);
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
@@ -176,6 +178,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
+    setPreviewStoreId("");
     setSelectedId("");
   };
 
@@ -307,17 +310,27 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             vehicles={deliveryVehicles}
           />
 
-          <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
+          <div className="relative min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
             <KakaoAddressMap
-              focusedMarkerId={selectedId || undefined}
+              focusedMarkerId={previewStoreId || selectedId || undefined}
               mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
               markers={markers}
               onMarkerClick={(marker) => {
                 if (!marker.id || marker.tone === "origin") return;
-                setSelectedId(marker.id);
+                setPreviewStoreId(marker.id);
               }}
               showList={false}
             />
+            {previewStore ? (
+              <StoreQuickCard
+                onClose={() => setPreviewStoreId("")}
+                onOpenDetail={() => {
+                  setSelectedId(previewStore.id);
+                  setPreviewStoreId("");
+                }}
+                store={previewStore}
+              />
+            ) : null}
           </div>
 
           <StoreManagementPanel
@@ -340,6 +353,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       {activeView === "course" ? (
         <TodayCourseView
           markers={markers}
+          onPreviewStore={setPreviewStoreId}
           onSummaryChange={setCourseSummary}
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
@@ -529,6 +543,62 @@ function DeliveryAssignmentPanel({
         })}
       </div>
     </aside>
+  );
+}
+
+function StoreQuickCard({
+  onClose,
+  onOpenDetail,
+  store
+}: {
+  readonly onClose: () => void;
+  readonly onOpenDetail: () => void;
+  readonly store: StoreRow;
+}) {
+  return (
+    <div className="absolute left-1/2 top-6 z-30 w-[min(420px,calc(100%-32px))] -translate-x-1/2 overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-base font-black text-slate-950">{store.name}</p>
+            <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+            <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+          </div>
+          <p className="mt-1 truncate text-xs font-bold text-slate-500">
+            {store.deliveryVehicleName || "배송차 미지정"} · {store.deliveryDriver || "담당자 미지정"}
+          </p>
+        </div>
+        <button className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" onClick={onClose} type="button">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="space-y-3 px-4 py-3">
+        <p className="flex gap-2 text-sm font-bold leading-5 text-slate-600">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+          <span>{store.address || store.region}</span>
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <QuickMetric label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
+          <QuickMetric label="시간" value={formatMinutes(store.durationMinutes || 0)} />
+          <QuickMetric label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-xs font-bold text-slate-400">사업자번호 {store.businessRegistrationNumber}</p>
+          <button className="h-9 rounded-md bg-slate-950 px-3 text-sm font-black text-white hover:bg-slate-800" onClick={onOpenDetail} type="button">
+            상세 보기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickMetric({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 
@@ -722,6 +792,7 @@ function CustomerDirectoryView({
 
 function TodayCourseView({
   markers,
+  onPreviewStore,
   onSummaryChange,
   onSelectStore,
   onSelectVehicle,
@@ -733,6 +804,7 @@ function TodayCourseView({
   vehicles
 }: {
   readonly markers: KakaoMapMarker[];
+  readonly onPreviewStore: (storeId: string) => void;
   readonly onSummaryChange: (summary: CourseSummary) => void;
   readonly onSelectStore: (storeId: string) => void;
   readonly onSelectVehicle: (vehicleId: string) => void;
@@ -900,7 +972,7 @@ function TodayCourseView({
         </div>
       </aside>
 
-      <div className="min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
+      <div className="relative min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
         <KakaoAddressMap
           focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
           mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
@@ -908,11 +980,18 @@ function TodayCourseView({
           onMarkerClick={(marker) => {
             if (!marker.id || marker.tone === "origin") return;
             openRouteStore(marker.id);
-            onSelectStore(marker.id);
+            onPreviewStore(marker.id);
           }}
           routePath={routeSequence?.path || []}
           showList={false}
         />
+        {routeSelectedStoreId && routeSelectedStore ? (
+          <StoreQuickCard
+            onClose={() => setRouteSelectedStoreId("")}
+            onOpenDetail={() => onSelectStore(routeSelectedStore.id)}
+            store={routeSelectedStore}
+          />
+        ) : null}
       </div>
 
       <aside className="min-h-0 border-l border-slate-200/80 bg-white">
