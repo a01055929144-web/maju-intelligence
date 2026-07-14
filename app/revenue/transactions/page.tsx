@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store, TrendingUp, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
 
-  const companyId = customerSession?.companyId || searchParams?.companyId;
+  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const sales = await getSalesTransactions(companyId);
 
   return (

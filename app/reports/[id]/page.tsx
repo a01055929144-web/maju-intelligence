@@ -4,10 +4,10 @@ import { BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartP
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getLatestReport, getReportById } from "@/lib/store";
 
-export default async function ReportDetailPage({ params }: { params: { id: string } }) {
+export default async function ReportDetailPage({ params, searchParams }: { params: { id: string }; searchParams?: { companyId?: string } }) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
@@ -15,7 +15,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
     redirect("/dashboard/login");
   }
 
-  const companyId = customerSession?.companyId;
+  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const report = params.id === "latest" ? await getLatestReport(companyId) : await getReportById(params.id, companyId);
   if (!report) notFound();
 

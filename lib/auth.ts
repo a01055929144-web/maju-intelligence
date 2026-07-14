@@ -81,6 +81,12 @@ export function requireAdminSession() {
   return session;
 }
 
+export function resolvePageCompanyId(customerSession: CustomerSession | null, adminSession: AdminSession | null, queryCompanyId?: string) {
+  if (customerSession) return customerSession.companyId;
+  if (adminSession) return queryCompanyId;
+  return undefined;
+}
+
 export function getRequestAuthScope(request: NextRequest, bodyCompanyId?: string) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();

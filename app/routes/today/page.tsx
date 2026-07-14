@@ -3,17 +3,18 @@ import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { KakaoMapMarker } from "@/components/kakao-address-map";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 
-export default async function TodayRoutePage() {
+export default async function TodayRoutePage({ searchParams }: { searchParams?: { companyId?: string } }) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
 
-  const routePlan = await getTodayRoutePlan(customerSession?.companyId);
-  const originAddress = await getCompanyOriginAddress(customerSession?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const routePlan = await getTodayRoutePlan(companyId);
+  const originAddress = await getCompanyOriginAddress(companyId);
   const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (

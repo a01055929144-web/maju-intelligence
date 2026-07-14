@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ClipboardEdit, FileText, MessageSquareText, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesAssistantDrafts } from "@/lib/store";
 
 const typeLabels = {
@@ -12,13 +12,14 @@ const typeLabels = {
   summary: "방문 요약"
 };
 
-export default async function SalesAssistantPage() {
+export default async function SalesAssistantPage({ searchParams }: { searchParams?: { companyId?: string } }) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
 
-  const drafts = await getSalesAssistantDrafts(customerSession?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const drafts = await getSalesAssistantDrafts(companyId);
   const followUps = drafts.filter((draft) => draft.type === "follow-up").length;
   const quotes = drafts.filter((draft) => draft.type === "quote").length;
 
@@ -92,4 +93,3 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Sparkles; label: st
     </Card>
   );
 }
-

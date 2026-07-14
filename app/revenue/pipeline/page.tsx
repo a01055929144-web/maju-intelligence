@@ -4,7 +4,7 @@ import { Banknote, CircleDollarSign, Percent, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getRevenuePipeline } from "@/lib/store";
 
 const resultLabels: Record<string, string> = {
@@ -14,13 +14,14 @@ const resultLabels: Record<string, string> = {
   failed: "실패"
 };
 
-export default async function RevenuePipelinePage() {
+export default async function RevenuePipelinePage({ searchParams }: { searchParams?: { companyId?: string } }) {
   const customerSession = getCustomerSession();
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
 
-  const pipeline = await getRevenuePipeline(customerSession?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const pipeline = await getRevenuePipeline(companyId);
 
   return (
     <main className="min-h-screen bg-background">
@@ -119,4 +120,3 @@ function PipelineLine({ label, value, total }: { label: string; value: number; t
     </div>
   );
 }
-
