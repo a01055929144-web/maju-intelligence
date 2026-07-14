@@ -10,6 +10,7 @@ import { UploadHistoryItem } from "@/lib/store";
 
 const statusCopy = {
   all: "전체",
+  needsAction: "보완 필요",
   completed: "완료",
   failed: "실패",
   running: "진행중"
@@ -24,13 +25,14 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
   const filteredUploads = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return uploads.filter((upload) => {
-      const matchesStatus = status === "all" || upload.status === status;
+      const matchesStatus = status === "all" || (status === "needsAction" ? needsReview(upload) : upload.status === status);
       const matchesQuery =
         !normalizedQuery ||
         [upload.filename, upload.company, upload.createdAt, upload.status].some((value) => value.toLowerCase().includes(normalizedQuery));
       return matchesStatus && matchesQuery;
     });
   }, [query, status, uploads]);
+  const issueUploads = useMemo(() => uploads.filter(needsReview), [uploads]);
 
   function downloadCsv() {
     const rows = filteredUploads.map((upload) => ({
@@ -56,6 +58,25 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 
   return (
     <div className="space-y-4">
+      {issueUploads.length ? (
+        <div className="grid gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <p className="font-black text-amber-950">보완이 필요한 업로드 {issueUploads.length.toLocaleString()}건</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-amber-800">
+              실패, 품질 80% 미만, 중복 후보, 리포트 미생성 건을 먼저 확인하세요.
+            </p>
+          </div>
+          <Button className="w-fit bg-amber-900 text-white hover:bg-amber-950" onClick={() => setStatus("needsAction")} type="button">
+            보완 필요만 보기
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
+          <p className="font-black text-primary">현재 보완이 필요한 업로드가 없습니다.</p>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">실패, 중복, 품질 저하, 리포트 미생성 상태가 발견되면 이곳에 표시됩니다.</p>
+        </div>
+      )}
+
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
         <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-white px-3">
           <Search className="h-4 w-4 text-muted-foreground" />
@@ -121,10 +142,15 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 }
 
 function UploadRow({ upload }: { upload: UploadHistoryItem }) {
+  const reviewNeeded = needsReview(upload);
+
   return (
     <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] items-center px-4 py-3 text-sm">
       <div className="min-w-0">
-        <p className="truncate font-black">{upload.filename}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate font-black">{upload.filename}</p>
+          {reviewNeeded ? <Badge className="shrink-0 bg-amber-100 text-amber-800">보완</Badge> : null}
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">{upload.createdAt}</p>
       </div>
       <p className="truncate font-bold">{upload.company}</p>
@@ -152,6 +178,10 @@ function statusClass(status: UploadHistoryItem["status"]) {
   if (status === "completed") return "w-fit justify-center bg-primary/10 text-primary";
   if (status === "failed") return "w-fit justify-center bg-destructive/10 text-destructive";
   return "w-fit justify-center bg-amber-100 text-amber-800";
+}
+
+function needsReview(upload: UploadHistoryItem) {
+  return upload.status === "failed" || upload.qualityScore < 80 || upload.duplicateCount > 0 || !upload.reportId;
 }
 
 function toCsv(rows: Record<string, string | number>[]) {
