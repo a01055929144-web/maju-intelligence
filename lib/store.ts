@@ -183,6 +183,9 @@ export type SalesTransactionItem = {
   createdAt: string;
 };
 export type SalesTransactionSummary = {
+  averageOrderAmount: number;
+  topCustomers: Array<{ customerName: string; grade: "A" | "B" | "C"; latestSalesDate?: string; share: number; totalAmount: number; transactionCount: number }>;
+  topProducts: Array<{ productName: string; share: number; totalAmount: number; transactionCount: number }>;
   totalAmount: number;
   transactionCount: number;
   customerCount: number;
@@ -2137,13 +2140,62 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
 
 function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransactionSummary {
   const customerNames = new Set(items.map((item) => item.customerName).filter(Boolean));
+  const totalAmount = items.reduce((total, item) => total + item.salesAmount, 0);
+  const topCustomers = summarizeSalesGroup(items, (item) => item.customerName || "미지정 거래처").slice(0, 8).map((item) => ({
+    customerName: item.key,
+    grade: getSalesAmountGrade(item.totalAmount),
+    latestSalesDate: item.latestSalesDate,
+    share: totalAmount ? Math.round((item.totalAmount / totalAmount) * 100) : 0,
+    totalAmount: item.totalAmount,
+    transactionCount: item.transactionCount
+  }));
+  const topProducts = summarizeSalesGroup(items, (item) => item.productName || "미지정 품목").slice(0, 8).map((item) => ({
+    productName: item.key,
+    share: totalAmount ? Math.round((item.totalAmount / totalAmount) * 100) : 0,
+    totalAmount: item.totalAmount,
+    transactionCount: item.transactionCount
+  }));
+
   return {
-    totalAmount: items.reduce((total, item) => total + item.salesAmount, 0),
+    averageOrderAmount: items.length ? Math.round(totalAmount / items.length) : 0,
+    topCustomers,
+    topProducts,
+    totalAmount,
     transactionCount: items.length,
     customerCount: customerNames.size,
     latestSalesDate: items.find((item) => item.salesDate)?.salesDate,
     items
   };
+}
+
+function summarizeSalesGroup(items: SalesTransactionItem[], getKey: (item: SalesTransactionItem) => string) {
+  const groups = new Map<string, { key: string; latestSalesDate?: string; totalAmount: number; transactionCount: number }>();
+
+  for (const item of items) {
+    const key = getKey(item).trim() || "미지정";
+    const current = groups.get(key) || { key, totalAmount: 0, transactionCount: 0 };
+    current.totalAmount += item.salesAmount;
+    current.transactionCount += 1;
+    if (!current.latestSalesDate || compareDateText(item.salesDate, current.latestSalesDate) > 0) {
+      current.latestSalesDate = item.salesDate;
+    }
+    groups.set(key, current);
+  }
+
+  return Array.from(groups.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+}
+
+function compareDateText(left?: string, right?: string) {
+  if (!left && !right) return 0;
+  if (!left) return -1;
+  if (!right) return 1;
+  return left.localeCompare(right);
+}
+
+function getSalesAmountGrade(amount: number): "A" | "B" | "C" {
+  if (amount >= 2500000) return "A";
+  if (amount >= 1800000) return "B";
+  return "C";
 }
 
 export async function getSalesAssistantDrafts(companyId?: string): Promise<SalesAssistantDraft[]> {
