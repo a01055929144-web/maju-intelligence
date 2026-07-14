@@ -975,7 +975,7 @@ function Onboarding({
   }
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+    <section className="space-y-4">
       <div className="space-y-4">
         <DataRegistrationFlowCard steps={flowSteps} />
 
@@ -1215,13 +1215,13 @@ function Onboarding({
         </div>
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+      <aside className="space-y-4">
         <div className="rounded-md border border-slate-200 bg-white">
           <div className="border-b border-slate-200 p-4">
-            <Badge className="mb-3 bg-violet-50 text-violet-700">3. 확인하고 저장</Badge>
-            <h2 className="text-lg font-black text-slate-950">컬럼 매핑 · 저장 상태</h2>
+            <Badge className="mb-3 bg-violet-50 text-violet-700">3. 미리보기 · 매핑 · 저장</Badge>
+            <h2 className="text-lg font-black text-slate-950">엑셀 전체 미리보기와 컬럼 매칭</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
-              {rawRows.length ? `${rawRows.length}개 행을 확인한 뒤 리포트를 갱신합니다.` : "엑셀 업로드 또는 수기 저장 후 이곳에서 확인합니다."}
+              {rawRows.length ? `${rawRows.length}개 행 전체를 확인하고, ERP 헤더를 MAJU 표준 필드에 연결한 뒤 저장합니다.` : "엑셀 업로드 또는 수기 저장 후 이곳에서 확인합니다."}
             </p>
           </div>
           <div className="p-4">
@@ -1556,6 +1556,54 @@ function ExcelHeaderMappingPreview({
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+      <FullExcelDataPreview headers={headers} rows={rows} />
+    </div>
+  );
+}
+
+function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawRow[] }) {
+  if (!headers.length || !rows.length) return null;
+
+  return (
+    <div className="border-t border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-3">
+        <div>
+          <p className="text-sm font-black text-slate-950">업로드 데이터 전체 보기</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+            엑셀의 전체 행을 그대로 보여줍니다. 세로·가로 스크롤로 누락값과 이상값을 확인하세요.
+          </p>
+        </div>
+        <Badge className="bg-slate-100 text-slate-700">{rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼</Badge>
+      </div>
+      <div className="max-h-[680px] overflow-auto">
+        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-xs">
+          <thead className="sticky top-0 z-10 bg-white text-slate-500 shadow-sm">
+            <tr>
+              <th className="sticky left-0 z-20 w-16 border-b border-r border-slate-100 bg-white px-3 py-2 font-black">행</th>
+              {headers.map((header) => (
+                <th key={header} className="min-w-40 border-b border-slate-100 px-3 py-2 font-black">
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index} className="odd:bg-white even:bg-slate-50/60">
+                <td className="sticky left-0 z-0 border-r border-slate-100 bg-inherit px-3 py-2 font-black text-slate-400">{index + 2}</td>
+                {headers.map((header) => {
+                  const value = String(row[header] ?? "").trim();
+                  return (
+                    <td key={`${index}-${header}`} className="max-w-64 border-b border-slate-100 px-3 py-2 font-semibold text-slate-700">
+                      <span className={value ? "line-clamp-2" : "text-slate-300"}>{value || "-"}</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
