@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { Building2, Eye, EyeOff, FileSpreadsheet, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Eye, EyeOff, FileSpreadsheet, KeyRound, MapPin, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ManagedCompanyAccount, ManagedCompanyAccountInput } from "@/lib/store";
@@ -102,9 +102,22 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
+  const selectedReadiness = selectedCompany ? getCompanyReadiness(selectedCompany) : null;
+  const totalCustomers = companies.reduce((sum, company) => sum + company.customerCount, 0);
+  const totalSalesRows = companies.reduce((sum, company) => sum + company.salesTransactionCount, 0);
+  const totalUploads = companies.reduce((sum, company) => sum + company.uploadCount, 0);
+  const activeCompanies = companies.filter((company) => company.status === "active").length;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+    <div className="space-y-5">
+      <div className="grid gap-3 md:grid-cols-4">
+        <AdminSummaryCard icon={Building2} label="운영 고객사" value={`${activeCompanies.toLocaleString()}곳`} helper={`전체 ${companies.length.toLocaleString()}곳`} />
+        <AdminSummaryCard icon={Users} label="총 거래처" value={`${totalCustomers.toLocaleString()}곳`} helper="회사별 분리 저장" />
+        <AdminSummaryCard icon={ReceiptText} label="매출 거래행" value={`${totalSalesRows.toLocaleString()}건`} helper="거래원장 누적" />
+        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "DB 연결" : "저장 확인 필요"} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
       <aside className="rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -163,6 +176,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 </span>
                 <span>{company.ownerName || "대표자 미입력"}</span>
               </div>
+              <div className="mt-3">
+                <ReadinessMeter readiness={getCompanyReadiness(company)} compact />
+              </div>
             </button>
           ))}
         </div>
@@ -181,6 +197,44 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
         </div>
 
         <form className="space-y-6 p-5" onSubmit={handleSubmit}>
+          {selectedCompany ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-black">운영 준비 상태</p>
+                    <p className="mt-1 text-xs font-bold text-muted-foreground">계정, 출발지, 거래처, 매출, 업로드 기준으로 고객사가 바로 쓸 수 있는지 확인합니다.</p>
+                  </div>
+                  {selectedReadiness ? <ReadinessMeter readiness={selectedReadiness} /> : null}
+                </div>
+                {selectedReadiness ? (
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    {selectedReadiness.checks.map((check) => (
+                      <div key={check.label} className="flex items-start gap-2 rounded-md border border-slate-200 bg-white p-3">
+                        {check.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />}
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{check.label}</p>
+                          <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">{check.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="font-black">빠른 운영 작업</p>
+                <p className="mt-1 text-xs font-bold text-muted-foreground">선택 고객사의 다음 작업으로 바로 이동합니다.</p>
+                <div className="mt-4 grid gap-2">
+                  <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" />
+                  <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="데이터 등록/업로드" />
+                  <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" />
+                  <QuickAction href={`/routes/today?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="영업·배송 코스" />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {selectedCompany ? (
             <div className="grid gap-3 md:grid-cols-4">
               <DataMetric icon={Users} label="거래처" value={`${selectedCompany.customerCount.toLocaleString()}곳`} />
@@ -281,6 +335,14 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 onChange={(value) => update("customerPassword", value)}
               />
             </div>
+            <div className="mt-4 rounded-md border border-slate-200 bg-white p-3">
+              <div className="flex items-start gap-2">
+                <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
+                <p className="text-xs font-bold leading-5 text-muted-foreground">
+                  현재 버전은 어드민이 고객사 계정을 생성/수정합니다. 추후 운영 안정화 단계에서 비밀번호 해시 저장, 임시 비밀번호 발급, 비밀번호 변경 이력으로 강화합니다.
+                </p>
+              </div>
+            </div>
           </div>
 
           {form.id ? (
@@ -327,7 +389,94 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           </div>
         </form>
       </section>
+      </div>
     </div>
+  );
+}
+
+type CompanyReadiness = {
+  checks: Array<{ description: string; label: string; ok: boolean }>;
+  complete: number;
+  score: number;
+  total: number;
+};
+
+function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
+  const checks = [
+    {
+      description: company.customerEmail && company.customerPassword ? "고객사 로그인 이메일과 비밀번호가 등록되어 있습니다." : "고객사 로그인 계정을 먼저 등록하세요.",
+      label: "로그인 계정",
+      ok: Boolean(company.customerEmail && company.customerPassword)
+    },
+    {
+      description: company.originAddress ? "물류 출발지 주소가 있어 배송/영업 코스 계산에 사용할 수 있습니다." : "회사 출발지 주소를 입력해야 경로 계산이 가능합니다.",
+      label: "출발지 주소",
+      ok: Boolean(company.originAddress)
+    },
+    {
+      description: company.customerCount > 0 ? `거래처 ${company.customerCount.toLocaleString()}곳이 연결되어 있습니다.` : "거래처 마스터를 등록해야 합니다.",
+      label: "거래처 데이터",
+      ok: company.customerCount > 0
+    },
+    {
+      description: company.salesTransactionCount > 0 ? `매출 거래 ${company.salesTransactionCount.toLocaleString()}건이 연결되어 있습니다.` : "매출 거래원장을 업로드해야 분석이 가능합니다.",
+      label: "매출 원장",
+      ok: company.salesTransactionCount > 0
+    },
+    {
+      description: company.uploadCount > 0 ? `업로드 이력 ${company.uploadCount.toLocaleString()}회가 기록되어 있습니다.` : "최초 데이터 등록 이력이 필요합니다.",
+      label: "업로드 이력",
+      ok: company.uploadCount > 0
+    }
+  ];
+  const complete = checks.filter((check) => check.ok).length;
+
+  return {
+    checks,
+    complete,
+    score: Math.round((complete / checks.length) * 100),
+    total: checks.length
+  };
+}
+
+function AdminSummaryCard({ helper, icon: Icon, label, value }: { helper: string; icon: typeof Building2; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <Icon className="mb-3 h-4 w-4 text-primary" />
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-1 text-xs font-bold text-muted-foreground">{helper}</p>
+    </div>
+  );
+}
+
+function ReadinessMeter({ compact, readiness }: { compact?: boolean; readiness: CompanyReadiness }) {
+  const ready = readiness.score >= 80;
+
+  return (
+    <div className={compact ? "" : "min-w-[180px]"}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={`text-xs font-black ${ready ? "text-emerald-700" : "text-amber-700"}`}>운영 준비 {readiness.score}%</span>
+        <span className="text-xs font-black text-slate-500">
+          {readiness.complete}/{readiness.total}
+        </span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${ready ? "bg-emerald-500" : "bg-amber-500"}`} style={{ width: `${readiness.score}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function QuickAction({ href, icon: Icon, label }: { href: string; icon: typeof Users; label: string }) {
+  return (
+    <Link className="inline-flex h-10 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-800 transition hover:bg-white" href={href}>
+      <span className="inline-flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        {label}
+      </span>
+      <span className="text-xs text-muted-foreground">열기</span>
+    </Link>
   );
 }
 
