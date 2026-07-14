@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { BarChart3, Building2, ClipboardList, HeartPulse, MapPin, Route, Target } from "lucide-react";
+import { BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartPulse, MapPin, Route, Target, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -27,6 +27,33 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
     ["집중도", report.health.concentration],
     ["리스크", report.health.risk]
   ];
+  const topRegion = report.regionDistribution[0];
+  const topWhitespace = [...report.regionDistribution].sort((a, b) => b.whitespace - a.whitespace)[0];
+  const topIndustry = report.industryDistribution[0];
+  const reportGrade = report.health.total >= 85 ? "확장 가능" : report.health.total >= 70 ? "운영 보완" : "집중 개선";
+  const reportSummary = [
+    {
+      label: "핵심 거래권",
+      title: topRegion ? `${topRegion.region} ${topRegion.count}개 거래처` : "거래권 확인 필요",
+      body: topRegion ? `${topRegion.region} 비중이 가장 높습니다. 기존 강점 지역의 밀도를 유지하면서 인접 지역으로 확장하세요.` : "거래처 마스터 업로드 후 핵심 거래권을 확인할 수 있습니다."
+    },
+    {
+      label: "확장 여지",
+      title: topWhitespace ? `${topWhitespace.region} White Space ${topWhitespace.whitespace}곳` : "White Space 확인 필요",
+      body: topWhitespace ? `${topWhitespace.region}는 현재 거래처 대비 잠재 매장이 많습니다. 이번 주 영업 후보에 우선 반영하세요.` : "지역별 시장 잠재값과 거래처 분포가 필요합니다."
+    },
+    {
+      label: "업종 전략",
+      title: topIndustry ? `${topIndustry.industry} ${topIndustry.share}%` : "업종 데이터 확인 필요",
+      body: topIndustry ? `${topIndustry.industry} 업종의 전문성이 보입니다. 주력 업종은 확장하고 낮은 비중 업종은 테스트 리드로 분리하세요.` : "업종 컬럼을 등록하면 전문 업종과 제외 업종을 나눌 수 있습니다."
+    }
+  ];
+  const actionPlan = [
+    ["오늘", "A/B등급 거래처의 사업자 상태, 배송주소, 적재위치 자료를 먼저 정리합니다."],
+    ["이번 주", `${report.missingRegions.slice(0, 3).join(", ") || "White Space"} 지역에 신규 리드 후보를 넣고 방문 코스를 계산합니다.`],
+    ["이번 달", "매출 거래원장을 다시 업로드해 거래처 등급 변화와 품목 이탈 여부를 비교합니다."]
+  ] as const;
+  const dataConfidence = Math.min(100, Math.max(45, Math.round(report.customers * 0.8 + report.regions * 4 + (report.totalRevenue > 0 ? 20 : 0))));
 
   return (
     <main className="min-h-screen bg-background">
@@ -56,7 +83,7 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
           <Metric icon={Route} label="평균 배송거리" value={`${report.avgDeliveryKm.toFixed(1)}km`} />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -68,6 +95,12 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
               <div className="mb-6 flex items-end gap-3">
                 <span className="text-7xl font-black text-primary">{report.health.total}</span>
                 <span className="pb-3 text-sm font-bold text-muted-foreground">점</span>
+              </div>
+              <div className="mb-6 rounded-md border border-primary/15 bg-primary/5 p-4">
+                <p className="text-sm font-black text-primary">{reportGrade}</p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">
+                  영업력, 배송효율, CRM관리, 신규영업, 거래처 집중도, 리스크를 가중 평균한 회사 건강도입니다.
+                </p>
               </div>
               <div className="space-y-4">
                 {scoreRows.map(([label, value]) => (
@@ -86,16 +119,56 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-primary" />
-                AI 제안
+                <TrendingUp className="h-5 w-5 text-primary" />
+                운영 진단 요약
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {report.aiInsights.map((insight) => (
-                <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm leading-6">
-                  {insight}
+            <CardContent className="grid gap-3">
+              {reportSummary.map((item) => (
+                <div key={item.label} className="rounded-md border border-border bg-muted/35 p-4">
+                  <Badge className="mb-2 bg-white text-slate-600">{item.label}</Badge>
+                  <p className="text-lg font-black text-slate-950">{item.title}</p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-muted-foreground">{item.body}</p>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                우선 실행 액션
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              {actionPlan.map(([period, action]) => (
+                <div key={period} className="rounded-md border border-border bg-white p-4">
+                  <p className="text-sm font-black text-primary">{period}</p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{action}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-primary" />
+                리포트 신뢰도
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-3 flex items-end gap-2">
+                <span className="text-4xl font-black text-slate-950">{dataConfidence}</span>
+                <span className="pb-1 text-sm font-bold text-muted-foreground">%</span>
+              </div>
+              <Progress value={dataConfidence} />
+              <p className="mt-3 text-xs font-semibold leading-5 text-muted-foreground">
+                거래처 수, 거래지역 수, 매출 데이터 존재 여부를 기준으로 산정합니다. 매출 거래원장과 사업자 자료가 늘수록 리포트 품질이 올라갑니다.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -117,6 +190,22 @@ export default async function ReportDetailPage({ params }: { params: { id: strin
             ))}
           </ReportBlock>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              AI 상세 제안
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {report.aiInsights.map((insight) => (
+              <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm font-semibold leading-6">
+                {insight}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </section>
     </main>
   );
@@ -159,4 +248,3 @@ function Line({ label, value, hint }: { label: string; value: string; hint: stri
     </div>
   );
 }
-
