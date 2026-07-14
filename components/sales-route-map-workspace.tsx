@@ -311,7 +311,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           />
 
           <div className="relative min-h-0 min-w-0 bg-slate-100">
-            <div className="h-full">
+            <div className="h-full [&>div]:h-full">
               <KakaoAddressMap
                 focusedMarkerId={previewStoreId || selectedId || undefined}
                 mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
@@ -959,7 +959,7 @@ function TodayCourseView({
       </aside>
 
       <div className="relative min-h-0 min-w-0 bg-slate-100">
-        <div className="h-full">
+        <div className="h-full [&>div]:h-full">
           <KakaoAddressMap
             focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
             mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"

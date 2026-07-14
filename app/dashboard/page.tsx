@@ -25,11 +25,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { KakaoAddressMap } from "@/components/kakao-address-map";
+import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getCustomerSession } from "@/lib/auth";
-import { getCompanyDashboardPayload, getTodayRoutePlan } from "@/lib/store";
+import { getCompanyDashboardPayload, getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 import { CustomerLogoutButton } from "./logout-button";
 
 export default async function DashboardPage() {
@@ -38,6 +38,7 @@ export default async function DashboardPage() {
 
   const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(session.companyId);
   const routePlan = await getTodayRoutePlan(session.companyId);
+  const originAddress = await getCompanyOriginAddress(session.companyId);
   const estimatedFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
@@ -62,14 +63,7 @@ export default async function DashboardPage() {
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
     { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
-  const mapMarkers = [
-    { label: "출발", name: "하남 물류센터", address: "경기도 하남시 초이로 133 1층", x: 72, y: 62, tone: "origin" },
-    { label: "A", name: "성수 온반", address: "서울 성동구 성수이로 88", x: 45, y: 28, tone: "customer" },
-    { label: "B", name: "광진 능동 식당", address: "서울시 광진구 능동로 41길 17 1층", x: 58, y: 34, tone: "customer" },
-    { label: "C", name: "송파 고깃집", address: "서울 송파구 가락로 120", x: 62, y: 50, tone: "customer" },
-    { label: "D", name: "위례 신규매장", address: "경기 성남시 수정구 위례광장로 21", x: 67, y: 56, tone: "lead" },
-    { label: "E", name: "망원 브런치", address: "서울 마포구 망원로 33", x: 28, y: 31, tone: "lead" }
-  ] as const;
+  const mapMarkers = createDashboardRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (
     <CustomerAppShell
@@ -287,6 +281,31 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
     </div>
   );
+}
+
+function createDashboardRouteMapMarkers(originAddress: string, stops: Array<{ address?: string; name: string; order: number }>): KakaoMapMarker[] {
+  const routeStops = stops
+    .filter((stop) => stop.address)
+    .map((stop, index) => ({
+      address: stop.address || "",
+      label: String(stop.order || index + 1),
+      name: stop.name,
+      tone: "customer" as const,
+      x: 24 + ((index * 13) % 58),
+      y: 28 + ((index * 17) % 44)
+    }));
+
+  return [
+    {
+      address: originAddress,
+      label: "출발",
+      name: "물류 출발지",
+      tone: "origin",
+      x: 72,
+      y: 62
+    },
+    ...routeStops
+  ];
 }
 
 function estimateFuelCost(distanceKm: number) {
