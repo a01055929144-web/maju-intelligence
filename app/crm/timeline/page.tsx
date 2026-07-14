@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Building2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { sampleCustomers } from "@/lib/sample-data";
@@ -265,6 +265,41 @@ export default function CrmTimelinePage() {
       });
   }, [customerSearch, customers, gradeFilter]);
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
+  const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
+  const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
+  const operationalChecks = [
+    {
+      description: selectedCustomer.businessStatus === "정상" ? "사업자 상태가 정상으로 관리 중입니다." : "사업자 상태 확인 또는 재조회가 필요합니다.",
+      ok: selectedCustomer.businessStatus === "정상",
+      title: "사업자 상태"
+    },
+    {
+      description: selectedCustomer.phone && selectedCustomer.representativeName ? "대표자와 연락처가 등록되어 있습니다." : "대표자명 또는 연락처를 보완하세요.",
+      ok: Boolean(selectedCustomer.phone && selectedCustomer.representativeName),
+      title: "연락 기본값"
+    },
+    {
+      description: selectedCustomer.address ? "배송주소가 등록되어 지도와 경로 계산에 사용할 수 있습니다." : "배송주소를 먼저 등록하세요.",
+      ok: Boolean(selectedCustomer.address),
+      title: "배송주소"
+    },
+    {
+      description: selectedCustomer.loadingPosition ? `${selectedCustomer.loadingPosition} · 자료 ${loadingPositionAttachments}건` : "현장 배송 적재위치를 등록하세요.",
+      ok: Boolean(selectedCustomer.loadingPosition && loadingPositionAttachments > 0),
+      title: "배송 적재위치"
+    },
+    {
+      description: `사업자등록증 ${businessCertificateAttachments}건 · 통장사본 ${bankAccountAttachments}건`,
+      ok: businessCertificateAttachments > 0 && bankAccountAttachments > 0,
+      title: "필수 첨부자료"
+    },
+    {
+      description: customerNotes.length ? "최근 메모가 서버 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
+      ok: customerNotes.length > 0 || selectedCustomer.memoCount > 0,
+      title: "메모 히스토리"
+    }
+  ];
+  const operationalReadyCount = operationalChecks.filter((check) => check.ok).length;
   const draftBusinessNumberChanged = Boolean(
     draftCustomer && normalizeBusinessRegistrationNumber(draftCustomer.businessNumber) !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber)
   );
@@ -583,6 +618,7 @@ export default function CrmTimelinePage() {
                 <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
                 <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager} helper={`${selectedCustomer.region} 권역`} tone="emerald" />
               </div>
+              <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
             </div>
 
             <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_440px]">
@@ -849,6 +885,42 @@ export default function CrmTimelinePage() {
         </div>
       </section>
     </CustomerAppShell>
+  );
+}
+
+function OperationalReadinessCard({
+  checks,
+  completeCount
+}: {
+  checks: Array<{ description: string; ok: boolean; title: string }>;
+  completeCount: number;
+}) {
+  const ready = completeCount === checks.length;
+
+  return (
+    <div className={`mt-4 rounded-md border p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            {ready ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+            거래처 운영 준비 상태
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">사업자정보, 연락처, 배송주소, 적재위치, 첨부자료, 메모 이력을 기준으로 확인합니다.</p>
+        </div>
+        <Badge className={ready ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>{completeCount}/{checks.length} 완료</Badge>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {checks.map((check) => (
+          <div key={check.title} className="rounded-md border border-white/80 bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-slate-900">{check.title}</p>
+              {check.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{check.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
