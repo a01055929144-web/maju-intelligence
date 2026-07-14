@@ -310,17 +310,19 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             vehicles={deliveryVehicles}
           />
 
-          <div className="relative min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-            <KakaoAddressMap
-              focusedMarkerId={previewStoreId || selectedId || undefined}
-              mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
-              markers={markers}
-              onMarkerClick={(marker) => {
-                if (!marker.id || marker.tone === "origin") return;
-                setPreviewStoreId(marker.id);
-              }}
-              showList={false}
-            />
+          <div className="relative min-h-0 min-w-0 bg-slate-100">
+            <div className="h-full">
+              <KakaoAddressMap
+                focusedMarkerId={previewStoreId || selectedId || undefined}
+                mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
+                markers={markers}
+                onMarkerClick={(marker) => {
+                  if (!marker.id || marker.tone === "origin") return;
+                  setPreviewStoreId(marker.id);
+                }}
+                showList={false}
+              />
+            </div>
             {previewStore ? (
               <StoreQuickCard
                 onClose={() => setPreviewStoreId("")}
@@ -556,30 +558,29 @@ function StoreQuickCard({
   readonly store: StoreRow;
 }) {
   return (
-    <div className="absolute left-1/2 top-5 z-30 w-[min(340px,calc(100%-24px))] -translate-x-1/2 rounded-md border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
-      <div className="flex items-start justify-between gap-3 px-4 py-3">
+    <div className="absolute left-4 top-4 z-30 h-auto w-[min(320px,calc(100%-32px))] rounded-md border border-slate-200 bg-white/95 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur">
+      <div className="flex items-start justify-between gap-2 px-3.5 py-3">
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
             <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
-            <span className={gradeBadgeClass(store.grade)}>{store.grade}등급</span>
           </div>
         </div>
-        <button className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
-          <X className="h-4 w-4" />
+        <button className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="border-t border-slate-100 px-4 py-3">
-        <p className="flex gap-2 text-sm font-bold leading-5 text-slate-600">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+      <div className="border-t border-slate-100 px-3.5 py-3">
+        <p className="flex gap-2 text-[13px] font-bold leading-5 text-slate-600">
+          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
-        <div className="mt-3 flex justify-end">
-          <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800" onClick={onOpenDetail} type="button">
-            상세 보기
+        <div className="mt-2.5 flex justify-end">
+          <button className="h-7 rounded-md bg-slate-950 px-2.5 text-xs font-black text-white hover:bg-slate-800" onClick={onOpenDetail} type="button">
+            상세
           </button>
         </div>
       </div>
@@ -957,19 +958,21 @@ function TodayCourseView({
         </div>
       </aside>
 
-      <div className="relative min-h-0 min-w-0 bg-slate-100 [&>div]:h-full">
-        <KakaoAddressMap
-          focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-          mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
-          markers={routeMapMarkers}
-          onMarkerClick={(marker) => {
-            if (!marker.id || marker.tone === "origin") return;
-            openRouteStore(marker.id);
-            onPreviewStore(marker.id);
-          }}
-          routePath={routeSequence?.path || []}
-          showList={false}
-        />
+      <div className="relative min-h-0 min-w-0 bg-slate-100">
+        <div className="h-full">
+          <KakaoAddressMap
+            focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
+            mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
+            markers={routeMapMarkers}
+            onMarkerClick={(marker) => {
+              if (!marker.id || marker.tone === "origin") return;
+              openRouteStore(marker.id);
+              onPreviewStore(marker.id);
+            }}
+            routePath={routeSequence?.path || []}
+            showList={false}
+          />
+        </div>
         {routeSelectedStoreId && routeSelectedStore ? (
           <StoreQuickCard
             onClose={() => setRouteSelectedStoreId("")}
