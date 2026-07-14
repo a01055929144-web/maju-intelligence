@@ -710,6 +710,34 @@ function Onboarding({
   const saveHint = isMaster
     ? "기초값은 고정 보존하고, 새 엑셀은 기존 거래처 수정과 신규 거래처 등록으로 반영합니다."
     : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
+  const hasDataRows = rawRows.length > 0;
+  const hasBlockingQualityIssues = dataQuality.issueRows.length > 0 || dataQuality.invalidBusinessNumbers.length > 0;
+  const flowSteps = [
+    {
+      description: isMaster ? "거래처 마스터는 히스토리와 배송 코스의 기준값입니다." : "매출 거래내역은 등급, 이탈, 리포트의 기준값입니다.",
+      done: Boolean(uploadType),
+      label: "등록 유형",
+      value: template.label
+    },
+    {
+      description: entryMode === "excel" ? "파일을 올려 ERP 헤더를 읽고 매핑합니다." : "주소/사업자번호 검증 후 1건씩 저장합니다.",
+      done: entryMode === "manual" ? manualComplete : hasDataRows,
+      label: "등록 방식",
+      value: entryMode === "excel" ? "엑셀 업로드" : "수기 입력"
+    },
+    {
+      description: hasBlockingQualityIssues ? "필수값과 사업자번호 오류를 먼저 보완하세요." : "필수 컬럼과 행 품질을 저장 전에 확인합니다.",
+      done: hasDataRows && complete && !hasBlockingQualityIssues,
+      label: "검증",
+      value: hasDataRows ? `${mappedRequiredCount}/${requiredFields.length} 필수 매핑` : "대기 중"
+    },
+    {
+      description: pipelineMeta.persisted ? "서버 저장 후 리포트와 운영 화면에 반영됐습니다." : "업데이트 후 리포트 갱신을 눌러 서버 저장을 확인합니다.",
+      done: pipelineMeta.persisted,
+      label: "반영",
+      value: pipelineMeta.persisted ? "서버 저장" : "저장 확인 전"
+    }
+  ];
 
   async function searchAddress() {
     const query = addressQuery.trim();
@@ -827,6 +855,8 @@ function Onboarding({
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
       <div className="space-y-4">
+        <DataRegistrationFlowCard steps={flowSteps} />
+
         <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
             <div>
@@ -1156,6 +1186,47 @@ function Onboarding({
         </div>
       </aside>
     </section>
+  );
+}
+
+function DataRegistrationFlowCard({
+  steps
+}: {
+  steps: Array<{
+    description: string;
+    done: boolean;
+    label: string;
+    value: string;
+  }>;
+}) {
+  const completeCount = steps.filter((step) => step.done).length;
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <Badge className="mb-3 bg-slate-950 text-white">운영 등록 플로우</Badge>
+          <h2 className="text-xl font-black text-slate-950">데이터가 운영 화면에 반영되는 순서</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처 기본정보와 매출 거래내역은 같은 등록 흐름을 거치지만, 저장 후 쓰임이 다릅니다.</p>
+        </div>
+        <Badge className="w-fit bg-blue-50 text-blue-700">{completeCount}/4 완료</Badge>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-4">
+        {steps.map((step, index) => (
+          <div key={step.label} className={`rounded-md border p-3 ${step.done ? "border-emerald-100 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md text-sm font-black ${step.done ? "bg-emerald-700 text-white" : "bg-white text-slate-500"}`}>
+                {step.done ? <Check className="h-4 w-4" /> : index + 1}
+              </span>
+              <Badge className={step.done ? "bg-white text-emerald-700" : "bg-white text-slate-500"}>{step.done ? "완료" : "대기"}</Badge>
+            </div>
+            <p className="mt-3 text-sm font-black text-slate-950">{step.label}</p>
+            <p className="mt-1 text-sm font-black text-blue-700">{step.value}</p>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{step.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
