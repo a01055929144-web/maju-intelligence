@@ -556,48 +556,33 @@ function StoreQuickCard({
   readonly store: StoreRow;
 }) {
   return (
-    <div className="absolute left-1/2 top-6 z-30 w-[min(420px,calc(100%-32px))] -translate-x-1/2 overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-base font-black text-slate-950">{store.name}</p>
-            <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+    <div className="absolute left-1/2 top-5 z-30 w-[min(340px,calc(100%-24px))] -translate-x-1/2 rounded-md border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+      <div className="flex items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
             <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
           </div>
-          <p className="mt-1 truncate text-xs font-bold text-slate-500">
-            {store.deliveryVehicleName || "배송차 미지정"} · {store.deliveryDriver || "담당자 미지정"}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
+            <span className={gradeBadgeClass(store.grade)}>{store.grade}등급</span>
+          </div>
         </div>
-        <button className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" onClick={onClose} type="button">
+        <button className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="space-y-3 px-4 py-3">
+      <div className="border-t border-slate-100 px-4 py-3">
         <p className="flex gap-2 text-sm font-bold leading-5 text-slate-600">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          <span>{store.address || store.region}</span>
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+          <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
-        <div className="grid grid-cols-3 gap-2">
-          <QuickMetric label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
-          <QuickMetric label="시간" value={formatMinutes(store.durationMinutes || 0)} />
-          <QuickMetric label="예상매출" value={`${store.expectedRevenue.toLocaleString()}만원`} />
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="min-w-0 truncate text-xs font-bold text-slate-400">사업자번호 {store.businessRegistrationNumber}</p>
-          <button className="h-9 rounded-md bg-slate-950 px-3 text-sm font-black text-white hover:bg-slate-800" onClick={onOpenDetail} type="button">
+        <div className="mt-3 flex justify-end">
+          <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800" onClick={onOpenDetail} type="button">
             상세 보기
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function QuickMetric({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-[11px] font-black text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }
