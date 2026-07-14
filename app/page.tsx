@@ -1644,55 +1644,13 @@ function MappingWorkspaceModal({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_520px]">
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_500px]">
           <section className="min-h-0 border-r border-slate-200 bg-slate-50/50">
             <div className="border-b border-slate-200 bg-white px-5 py-3">
-              <p className="text-sm font-black text-slate-950">좌측: 업로드 엑셀 컬럼</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">{headers.length.toLocaleString()}개 컬럼 · 각 컬럼의 상위 샘플값을 표시합니다.</p>
+              <p className="text-sm font-black text-slate-950">좌측: 업로드 엑셀 원본 전체 보기</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼을 그대로 확인하면서 컬럼별 표준 필드를 지정합니다.</p>
             </div>
-            <div className="grid max-h-full gap-3 overflow-auto p-4 md:grid-cols-2 xl:grid-cols-3">
-              {headers.map((header) => {
-                const mappedFieldKey = mappedByHeader[header] || "";
-                const mappedField = fields.find((field) => field.key === mappedFieldKey);
-                const samples = rows
-                  .slice(0, 6)
-                  .map((row) => String(row[header] ?? "").trim())
-                  .filter(Boolean);
-
-                return (
-                  <div key={header} className={`rounded-md border bg-white p-3 shadow-sm ${mappedField ? "border-blue-200 ring-1 ring-blue-50" : "border-slate-200"}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-950">{header}</p>
-                        <p className="mt-1 text-[11px] font-bold text-slate-400">엑셀 원본 헤더</p>
-                      </div>
-                      <Badge className={mappedField ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-500"}>
-                        {mappedField ? mappedField.label : "미연결"}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 space-y-1.5">
-                      {(samples.length ? samples : ["빈 값"]).map((sample, index) => (
-                        <p key={`${header}-${index}`} className="truncate rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-600">
-                          {sample}
-                        </p>
-                      ))}
-                    </div>
-                    <select
-                      className="mt-3 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      value={mappedFieldKey}
-                      onChange={(event) => onHeaderMap(header, event.target.value)}
-                    >
-                      <option value="">이 컬럼 사용 안 함</option>
-                      {fields.map((field) => (
-                        <option key={field.key} value={field.key}>
-                          {field.label}{field.required ? " *" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
+            <ExcelMappingSheetTable fields={fields} headers={headers} mappedByHeader={mappedByHeader} rows={rows} onHeaderMap={onHeaderMap} />
           </section>
 
           <aside className="min-h-0 bg-white">
@@ -1707,6 +1665,82 @@ function MappingWorkspaceModal({
           </aside>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ExcelMappingSheetTable({
+  fields,
+  headers,
+  mappedByHeader,
+  onHeaderMap,
+  rows
+}: {
+  fields: readonly UploadTemplateField[];
+  headers: string[];
+  mappedByHeader: Record<string, string>;
+  onHeaderMap: (header: string, fieldKey: string) => void;
+  rows: RawRow[];
+}) {
+  return (
+    <div className="h-[calc(100%-65px)] min-h-0 overflow-auto bg-white">
+      <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-left text-xs">
+        <thead className="sticky top-0 z-20 bg-slate-100 text-slate-600 shadow-sm">
+          <tr>
+            <th className="sticky left-0 z-30 w-16 border-b border-r border-slate-200 bg-slate-100 px-3 py-3 font-black">행</th>
+            {headers.map((header) => {
+              const mappedFieldKey = mappedByHeader[header] || "";
+              const mappedField = fields.find((field) => field.key === mappedFieldKey);
+
+              return (
+                <th key={header} className="min-w-56 border-b border-r border-slate-200 bg-slate-100 px-3 py-3 align-top font-black">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="max-w-40 truncate text-slate-950" title={header}>
+                        {header}
+                      </span>
+                      <Badge className={mappedField ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-600"}>
+                        {mappedField ? mappedField.label : "미연결"}
+                      </Badge>
+                    </div>
+                    <select
+                      className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      value={mappedFieldKey}
+                      onChange={(event) => onHeaderMap(header, event.target.value)}
+                    >
+                      <option value="">표준 필드 선택</option>
+                      {fields.map((field) => (
+                        <option key={field.key} value={field.key}>
+                          {field.label}
+                          {field.required ? " *" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index} className="odd:bg-white even:bg-slate-50/70 hover:bg-blue-50/40">
+              <td className="sticky left-0 z-10 border-b border-r border-slate-100 bg-inherit px-3 py-2 font-black text-slate-400">{index + 2}</td>
+              {headers.map((header) => {
+                const value = String(row[header] ?? "").trim();
+
+                return (
+                  <td key={`${index}-${header}`} className="max-w-72 border-b border-r border-slate-100 px-3 py-2 font-semibold text-slate-700">
+                    <span className={value ? "line-clamp-2" : "text-slate-300"} title={value || "-"}>
+                      {value || "-"}
+                    </span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
