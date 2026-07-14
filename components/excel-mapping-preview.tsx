@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -185,8 +185,24 @@ function MappingWorkspaceModal({
   onHeaderMap: (header: string, fieldKey: string) => void;
   rows: RawRow[];
 }) {
+  const [columnFilter, setColumnFilter] = useState<"all" | "mapped" | "unmapped">("all");
+  const [columnQuery, setColumnQuery] = useState("");
   const requiredFields = fields.filter((field) => field.required);
   const optionalFields = fields.filter((field) => !field.required);
+  const mappedCount = fields.filter((field) => fieldMap[field.key]).length;
+  const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
+  const completionRate = fields.length ? Math.round((mappedCount / fields.length) * 100) : 0;
+  const filteredHeaders = useMemo(() => {
+    const normalizedQuery = columnQuery.trim().toLowerCase();
+
+    return headers.filter((header) => {
+      const mapped = Boolean(mappedByHeader[header]);
+      if (columnFilter === "mapped" && !mapped) return false;
+      if (columnFilter === "unmapped" && mapped) return false;
+      if (!normalizedQuery) return true;
+      return header.toLowerCase().includes(normalizedQuery);
+    });
+  }, [columnFilter, columnQuery, headers, mappedByHeader]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
@@ -196,6 +212,13 @@ function MappingWorkspaceModal({
             <Badge className="mb-2 bg-blue-700 text-white">매핑 전용 화면</Badge>
             <h3 className="text-xl font-black text-slate-950">엑셀 컬럼과 MAJU 표준 필드 연결</h3>
             <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">좌측 엑셀 원본 표를 확인하고, 컬럼별로 알맞은 표준 필드를 선택하세요.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Badge className="bg-slate-900 text-white">전체 {fields.length}개 필드 중 {mappedCount}개 연결</Badge>
+              <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
+                필수 {requiredMappedCount}/{requiredFields.length}
+              </Badge>
+              <Badge className="bg-blue-100 text-blue-800">진행률 {completionRate}%</Badge>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
@@ -208,14 +231,39 @@ function MappingWorkspaceModal({
         </div>
 
         <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_500px]">
-          <section className="min-h-0 border-r border-slate-200 bg-slate-50/50">
+          <section className="flex min-h-0 flex-col border-r border-slate-200 bg-slate-50/50">
             <div className="border-b border-slate-200 bg-white px-5 py-3">
               <p className="text-sm font-black text-slate-950">좌측: 업로드 엑셀 원본 전체 보기</p>
               <p className="mt-1 text-xs font-bold text-slate-500">
                 {rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼을 그대로 확인하면서 컬럼별 표준 필드를 지정합니다.
               </p>
             </div>
-            <ExcelMappingSheetTable fields={fields} headers={headers} mappedByHeader={mappedByHeader} rows={rows} onHeaderMap={onHeaderMap} />
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-3">
+              <input
+                className="h-10 min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                value={columnQuery}
+                onChange={(event) => setColumnQuery(event.target.value)}
+                placeholder="엑셀 컬럼명 검색..."
+              />
+              {[
+                ["all", "전체"],
+                ["unmapped", "미연결"],
+                ["mapped", "연결됨"]
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={`h-10 rounded-md border px-3 text-xs font-black transition ${
+                    columnFilter === value ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                  type="button"
+                  onClick={() => setColumnFilter(value as "all" | "mapped" | "unmapped")}
+                >
+                  {label}
+                </button>
+              ))}
+              <Badge className="bg-slate-100 text-slate-700">{filteredHeaders.length}/{headers.length}컬럼</Badge>
+            </div>
+            <ExcelMappingSheetTable fields={fields} headers={filteredHeaders} mappedByHeader={mappedByHeader} rows={rows} onHeaderMap={onHeaderMap} />
           </section>
 
           <aside className="min-h-0 bg-white">
@@ -248,7 +296,7 @@ function ExcelMappingSheetTable({
   rows: RawRow[];
 }) {
   return (
-    <div className="h-[calc(100%-65px)] min-h-0 overflow-auto bg-white">
+    <div className="min-h-0 flex-1 overflow-auto bg-white">
       <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-left text-xs">
         <thead className="sticky top-0 z-20 bg-slate-100 text-slate-600 shadow-sm">
           <tr>
