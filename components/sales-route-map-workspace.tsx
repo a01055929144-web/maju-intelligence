@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Check, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, CheckCircle2, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -233,8 +233,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
         <Kpi label="예상매출" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
-        <Kpi label="예상 운행거리" tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
-        <Kpi label="예상시간" tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
+        <Kpi label="계획 이동거리" tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
+        <Kpi label="계획 소요시간" tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
       <section className="flex flex-col gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:flex-row lg:items-center">
@@ -800,11 +800,22 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[340px_minmax(0,1fr)_60px]" : "xl:grid-cols-[340px_minmax(0,1fr)_460px]"}`}>
+    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[340px_minmax(0,1fr)_60px]" : "xl:grid-cols-[340px_minmax(0,1fr)_500px]"}`}>
       <aside className="min-h-0 border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">오늘 코스</p>
           <p className="mt-1 text-xs font-bold text-slate-500">배송담당자별 방문 코스를 선택합니다.</p>
+        </div>
+        <div className="border-b border-slate-200/80 p-3">
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-black text-slate-500">실사용 순서</p>
+            <div className="mt-3 grid gap-2">
+              <RouteWorkStep active={selectedVehicleId !== "all"} done={selectedVehicleId !== "all"} label="담당자 선택" />
+              <RouteWorkStep active={selectedRouteStores.length > 0} done={selectedRouteStores.length > 0} label="경유 매장 선택" />
+              <RouteWorkStep active={selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
+              <RouteWorkStep active={Boolean(routeSequence)} done={Boolean(routeSequence)} label="코스 확인" />
+            </div>
+          </div>
         </div>
         <div className="space-y-2 p-3">
           <button
@@ -883,6 +894,18 @@ function TodayCourseView({
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="border-b border-slate-200/80 p-3">
+                <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
+                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
+                    {routeSequence ? "티맵 계산 완료" : selectedRouteStores.length ? "티맵 계산 대기" : "경유지 선택 필요"}
+                  </p>
+                  <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : selectedRouteStores.length ? "text-blue-700" : "text-amber-800"}`}>
+                    {routeSequence
+                      ? `현재 묶음 ${selectedRouteStores.length}곳의 도로 경로를 지도에 반영했습니다.`
+                      : selectedRouteStores.length
+                        ? `${activeRouteBatchIndex + 1}묶음 ${selectedRouteStores.length}곳을 계산할 준비가 됐습니다. 버튼을 눌러 실제 도로 기준 거리와 시간을 갱신하세요.`
+                        : "아래 매장 목록에서 오늘 방문할 경유지를 추가하세요."}
+                  </p>
+                </div>
                 <RouteSequenceAction
                   buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
                   destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
@@ -1654,6 +1677,17 @@ function Kpi({
       <p className="truncate text-[11px] font-black uppercase text-slate-400">{label}</p>
       <p className={`mt-1 truncate text-[24px] font-black leading-none ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-2 truncate text-[11px] font-semibold text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
+function RouteWorkStep({ active, done, label }: { active: boolean; done: boolean; label: string }) {
+  return (
+    <div className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${done ? "border-emerald-200 bg-white text-emerald-800" : active ? "border-blue-200 bg-white text-blue-800" : "border-slate-200 bg-white text-slate-500"}`}>
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${done ? "bg-emerald-600 text-white" : active ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>
+        {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+      </span>
+      <span className="text-xs font-black">{label}</span>
     </div>
   );
 }
