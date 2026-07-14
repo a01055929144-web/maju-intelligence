@@ -11,6 +11,7 @@ import { RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
+type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course";
 
 type StoreRow = RoutePlanStop & {
@@ -118,6 +119,7 @@ const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
   { label: "오늘 코스", value: "course" }
 ];
 const tmapWaypointLimit = 15;
+const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
 const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
@@ -132,6 +134,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [activeView, setActiveView] = useState<WorkspaceView>("map");
+  const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
@@ -162,7 +165,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectedStore = allStores.find((store) => store.id === selectedId);
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
-  const markers = useMemo(() => createMarkers(mapMarkers, visibleStores), [mapMarkers, visibleStores]);
+  const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
+  const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
   const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 담당자";
@@ -206,6 +210,21 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
+            {[
+              { label: "매장 등급별", value: "grade" },
+              { label: "배송차별", value: "vehicle" }
+            ].map((item) => (
+              <button
+                className={`h-8 rounded-md px-3 text-sm font-black transition ${markerViewMode === item.value ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-950"}`}
+                key={item.value}
+                onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
             {workspaceViews.map((item) => (
               <button
                 className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-slate-950 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-950"}`}
@@ -248,6 +267,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           />
         </label>
         <div className="flex flex-wrap items-center gap-2">
+          <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
           {gradeFilters.map((filter) => (
             <button
               className={`h-10 rounded-md border px-4 text-sm font-black transition ${
@@ -509,6 +529,41 @@ function DeliveryAssignmentPanel({
         })}
       </div>
     </aside>
+  );
+}
+
+function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; readonly vehicles: DeliveryVehicle[] }) {
+  if (mode === "grade") {
+    return (
+      <div className="flex flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+        <span className="mr-1 text-xs font-black text-slate-500">마커</span>
+        {[
+          ["A", "#7c3aed"],
+          ["B", "#2563eb"],
+          ["C", "#64748b"]
+        ].map(([label, color]) => (
+          <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={label}>
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+            {label}등급
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex max-w-full flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+      <span className="mr-1 text-xs font-black text-slate-500">마커</span>
+      {vehicles.slice(0, 5).map((vehicle, index) => (
+        <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={vehicle.id}>
+          <span className="grid h-4 min-w-4 place-items-center rounded-full text-[10px] text-white" style={{ backgroundColor: vehicleMarkerColors[index % vehicleMarkerColors.length] }}>
+            {index + 1}
+          </span>
+          {vehicle.name}
+        </span>
+      ))}
+      {vehicles.length > 5 ? <span className="px-1 text-[11px] font-black text-slate-400">+{vehicles.length - 5}</span> : null}
+    </div>
   );
 }
 
@@ -1888,19 +1943,34 @@ function defaultDriverByIndex(index: number) {
   return ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저", "정배송 매니저", "한배송 매니저", "오배송 매니저", "서배송 매니저", "신배송 매니저", "문배송 매니저"][index % 10];
 }
 
-function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[]): KakaoMapMarker[] {
+function createVehicleMarkerMeta(vehicles: DeliveryVehicle[]) {
+  return vehicles.reduce<Record<string, { color: string; label: string }>>((meta, vehicle, index) => {
+    meta[vehicle.id] = {
+      color: vehicleMarkerColors[index % vehicleMarkerColors.length],
+      label: String(index + 1)
+    };
+    return meta;
+  }, {});
+}
+
+function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mode: MarkerViewMode, vehicleMeta: Record<string, { color: string; label: string }>): KakaoMapMarker[] {
   const origin = existingMarkers.find((marker) => marker.tone === "origin");
   const storeMarkers = spreadMarkers(
-    stores.map((store) => ({
-      address: store.address || `${store.region} ${store.name}`,
-      grade: store.grade,
-      id: store.id,
-      label: store.grade,
-      name: store.name,
-      tone: "lead" as const,
-      x: store.markerX,
-      y: store.markerY
-    }))
+    stores.map((store) => {
+      const vehicle = store.deliveryVehicleId ? vehicleMeta[store.deliveryVehicleId] : undefined;
+
+      return {
+        address: store.address || `${store.region} ${store.name}`,
+        grade: mode === "grade" ? store.grade : undefined,
+        id: store.id,
+        label: mode === "vehicle" ? vehicle?.label || "?" : store.grade,
+        markerColor: mode === "vehicle" ? vehicle?.color : undefined,
+        name: mode === "vehicle" ? `${store.deliveryVehicleName || "배송차 미지정"} · ${store.name}` : store.name,
+        tone: "lead" as const,
+        x: store.markerX,
+        y: store.markerY
+      };
+    })
   );
 
   return mergeMarkers(origin ? [origin, ...storeMarkers] : storeMarkers);

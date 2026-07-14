@@ -9,6 +9,7 @@ export type KakaoMapMarker = {
   readonly grade?: "A" | "B" | "C";
   readonly id?: string;
   readonly label: string;
+  readonly markerColor?: string;
   readonly name: string;
   readonly tone: "customer" | "lead" | "origin";
   readonly x: number;
@@ -323,6 +324,8 @@ function loadKakaoMapSdk(appKey: string) {
 function createMarkerOverlay(marker: KakaoMapMarker) {
   const toneClass = marker.tone === "origin"
       ? "background:#111827;color:#ffffff;"
+      : marker.markerColor
+        ? `background:${marker.markerColor};color:#ffffff;`
       : marker.grade
         ? gradeStyle(marker.grade)
         : marker.tone === "lead"
@@ -340,9 +343,9 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
     `);
   }
 
-  if (marker.tone === "customer" && /^\d+$/.test(marker.label)) {
+  if ((marker.tone === "customer" || marker.markerColor) && /^\d+$/.test(marker.label)) {
     return htmlToElement(`
-      <button type="button" title="${name}" style="cursor:pointer;background:#2563eb;color:#ffffff;width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
+      <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
         ${label}
       </button>
     `);
@@ -424,7 +427,9 @@ function FallbackAddressMap({
           >
             <span
               className={`flex items-center justify-center rounded-full border-2 border-white text-xs font-black text-white shadow-lg ${focused ? "h-12 min-w-12 px-2 ring-4 ring-blue-200" : "h-7 min-w-7 px-1"} ${
-                marker.grade === "A"
+                marker.markerColor
+                  ? ""
+                  : marker.grade === "A"
                   ? "bg-violet-700"
                   : marker.grade === "B"
                     ? "bg-blue-600"
@@ -436,6 +441,7 @@ function FallbackAddressMap({
                           ? "bg-emerald-600"
                           : "bg-primary"
               }`}
+              style={marker.markerColor ? { backgroundColor: marker.markerColor } : undefined}
             >
               {marker.label}
             </span>
@@ -477,6 +483,7 @@ function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarke
                           ? "bg-emerald-600 text-white"
                           : ""
               }
+              style={marker.markerColor ? { backgroundColor: marker.markerColor, color: "#fff" } : undefined}
             >
               {marker.grade ? `${marker.grade}등급` : marker.tone === "origin" ? "출발지" : marker.tone === "lead" ? "신규" : "거래처"}
             </Badge>
