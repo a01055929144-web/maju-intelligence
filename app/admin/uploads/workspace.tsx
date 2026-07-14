@@ -1,0 +1,167 @@
+"use client";
+
+import Link from "next/link";
+import { Download, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { UploadHistoryItem } from "@/lib/store";
+
+const statusCopy = {
+  all: "전체",
+  completed: "완료",
+  failed: "실패",
+  running: "진행중"
+};
+
+type UploadStatusFilter = keyof typeof statusCopy;
+
+export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[] }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<UploadStatusFilter>("all");
+
+  const filteredUploads = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return uploads.filter((upload) => {
+      const matchesStatus = status === "all" || upload.status === status;
+      const matchesQuery =
+        !normalizedQuery ||
+        [upload.filename, upload.company, upload.createdAt, upload.status].some((value) => value.toLowerCase().includes(normalizedQuery));
+      return matchesStatus && matchesQuery;
+    });
+  }, [query, status, uploads]);
+
+  function downloadCsv() {
+    const rows = filteredUploads.map((upload) => ({
+      파일명: upload.filename,
+      고객사: upload.company,
+      상태: statusCopy[upload.status],
+      처리행수: upload.rows,
+      품질점수: upload.qualityScore,
+      중복건수: upload.duplicateCount,
+      건강도: upload.healthScore,
+      리포트ID: upload.reportId || "",
+      생성일시: upload.createdAt
+    }));
+    const csv = toCsv(rows);
+    const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `maju_upload_history_${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+        <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-white px-3">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            className="h-full min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="파일명, 고객사, 날짜 검색..."
+            value={query}
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(statusCopy) as UploadStatusFilter[]).map((key) => (
+            <button
+              className={`h-10 rounded-md border px-3 text-sm font-black transition ${
+                status === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-foreground hover:bg-muted"
+              }`}
+              key={key}
+              onClick={() => setStatus(key)}
+              type="button"
+            >
+              {statusCopy[key]}
+            </button>
+          ))}
+        </div>
+        <Button className="h-10 gap-2" onClick={downloadCsv} type="button" variant="outline">
+          <Download className="h-4 w-4" />
+          CSV 다운로드
+        </Button>
+      </div>
+
+      <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
+        <span className="font-bold text-muted-foreground">검색 결과</span>
+        <span className="font-black">{filteredUploads.length.toLocaleString()}건</span>
+      </div>
+
+      {filteredUploads.length ? (
+        <div className="overflow-x-auto rounded-md border border-border">
+          <div className="min-w-[980px]">
+            <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
+              <span>파일</span>
+              <span>고객사</span>
+              <span className="text-right">행 수</span>
+              <span>상태</span>
+              <span className="text-right">품질</span>
+              <span className="text-right">중복</span>
+              <span className="text-center">리포트</span>
+            </div>
+            <div className="divide-y divide-border">
+              {filteredUploads.map((upload) => (
+                <UploadRow key={upload.id} upload={upload} />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
+          <p className="font-black">조건에 맞는 업로드 이력이 없습니다.</p>
+          <p className="mt-2 text-sm text-muted-foreground">검색어 또는 상태 필터를 조정해보세요.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UploadRow({ upload }: { upload: UploadHistoryItem }) {
+  return (
+    <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] items-center px-4 py-3 text-sm">
+      <div className="min-w-0">
+        <p className="truncate font-black">{upload.filename}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{upload.createdAt}</p>
+      </div>
+      <p className="truncate font-bold">{upload.company}</p>
+      <p className="text-right font-black">{upload.rows.toLocaleString()}</p>
+      <Badge className={statusClass(upload.status)}>{statusCopy[upload.status]}</Badge>
+      <div className="text-right">
+        <p className="font-black">{upload.qualityScore}%</p>
+        <Progress className="mt-1 h-1.5" value={upload.qualityScore} />
+      </div>
+      <p className="text-right font-black">{upload.duplicateCount.toLocaleString()}건</p>
+      <div className="text-center">
+        {upload.reportId ? (
+          <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}`}>
+            보기
+          </Link>
+        ) : (
+          <span className="text-xs font-bold text-muted-foreground">미생성</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function statusClass(status: UploadHistoryItem["status"]) {
+  if (status === "completed") return "w-fit justify-center bg-primary/10 text-primary";
+  if (status === "failed") return "w-fit justify-center bg-destructive/10 text-destructive";
+  return "w-fit justify-center bg-amber-100 text-amber-800";
+}
+
+function toCsv(rows: Record<string, string | number>[]) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const body = rows.map((row) => headers.map((header) => csvCell(row[header])).join(","));
+  return [headers.join(","), ...body].join("\n");
+}
+
+function csvCell(value: string | number) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}

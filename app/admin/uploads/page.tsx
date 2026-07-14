@@ -3,15 +3,9 @@ import { redirect } from "next/navigation";
 import { AlertTriangle, FileSpreadsheet, Gauge, Rows3, ServerCog, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { getAdminSession } from "@/lib/auth";
-import { getUploadHistory, UploadHistoryItem } from "@/lib/store";
-
-const statusCopy = {
-  completed: "완료",
-  failed: "실패",
-  running: "진행중"
-};
+import { getUploadHistory } from "@/lib/store";
+import { AdminUploadsWorkspace } from "./workspace";
 
 export default async function AdminUploadsPage() {
   const session = getAdminSession();
@@ -61,24 +55,7 @@ export default async function AdminUploadsPage() {
           </CardHeader>
           <CardContent>
             {uploads.length ? (
-              <div className="overflow-x-auto rounded-md border border-border">
-                <div className="min-w-[980px]">
-                  <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
-                    <span>파일</span>
-                    <span>고객사</span>
-                    <span className="text-right">행 수</span>
-                    <span>상태</span>
-                    <span className="text-right">품질</span>
-                    <span className="text-right">중복</span>
-                    <span className="text-center">리포트</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {uploads.map((upload) => (
-                      <UploadRow key={upload.id} upload={upload} />
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <AdminUploadsWorkspace uploads={uploads} />
             ) : (
               <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
                 <FileSpreadsheet className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
@@ -114,34 +91,6 @@ export default async function AdminUploadsPage() {
   );
 }
 
-function UploadRow({ upload }: { upload: UploadHistoryItem }) {
-  return (
-    <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] items-center px-4 py-3 text-sm">
-      <div className="min-w-0">
-        <p className="truncate font-black">{upload.filename}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{upload.createdAt}</p>
-      </div>
-      <p className="truncate font-bold">{upload.company}</p>
-      <p className="text-right font-black">{upload.rows.toLocaleString()}</p>
-      <Badge className={statusClass(upload.status)}>{statusCopy[upload.status]}</Badge>
-      <div className="text-right">
-        <p className="font-black">{upload.qualityScore}%</p>
-        <Progress className="mt-1 h-1.5" value={upload.qualityScore} />
-      </div>
-      <p className="text-right font-black">{upload.duplicateCount.toLocaleString()}건</p>
-      <div className="text-center">
-        {upload.reportId ? (
-          <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}`}>
-            보기
-          </Link>
-        ) : (
-          <span className="text-xs font-bold text-muted-foreground">미생성</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <Card className="shadow-none">
@@ -152,10 +101,4 @@ function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string;
       </CardContent>
     </Card>
   );
-}
-
-function statusClass(status: UploadHistoryItem["status"]) {
-  if (status === "completed") return "w-fit justify-center bg-primary/10 text-primary";
-  if (status === "failed") return "w-fit justify-center bg-destructive/10 text-destructive";
-  return "w-fit justify-center bg-amber-100 text-amber-800";
 }
