@@ -116,7 +116,7 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
 const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
   { label: "지도", value: "map" },
   { label: "거래처 목록", value: "customers" },
-  { label: "오늘 코스", value: "course" }
+  { label: "경유 코스", value: "course" }
 ];
 const tmapWaypointLimit = 15;
 const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
@@ -249,14 +249,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/70 md:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
-          label={kpiSummary ? "오늘 코스 선택" : `등급 매장 · ${selectedGradeLabel}`}
+          label={kpiSummary ? "선택 경유지" : `등급 매장 · ${selectedGradeLabel}`}
           tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
           value={`${kpiSummary?.selectedCount ?? selectedGradeCount}곳`}
         />
         <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
-        <Kpi label="예상매출" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
-        <Kpi label="계획 이동거리" tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
-        <Kpi label="계획 소요시간" tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
+        <Kpi label="매장 매출합" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
+        <Kpi label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
+        <Kpi label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
       <section className="flex flex-col gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:flex-row lg:items-center">
@@ -916,7 +916,7 @@ function TodayCourseView({
     <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[340px_minmax(0,1fr)_60px]" : "xl:grid-cols-[340px_minmax(0,1fr)_500px]"}`}>
       <aside className="min-h-0 border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
-          <p className="text-sm font-black text-slate-950">오늘 코스</p>
+          <p className="text-sm font-black text-slate-950">경유 코스</p>
           <p className="mt-1 text-xs font-bold text-slate-500">배송담당자별 방문 코스를 선택합니다.</p>
         </div>
         <div className="border-b border-slate-200/80 p-3">
@@ -986,14 +986,14 @@ function TodayCourseView({
         {routePanelCollapsed ? (
           <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
             <button
-              aria-label="오늘 코스 패널 열기"
+              aria-label="경유 코스 패널 열기"
               className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               onClick={() => setRoutePanelCollapsed(false)}
               type="button"
             >
               <PanelLeftOpen className="h-4 w-4" />
             </button>
-            <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">오늘 코스</div>
+            <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">경유 코스</div>
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{selectedRouteStores.length}</span>
           </div>
         ) : (
@@ -1002,11 +1002,11 @@ function TodayCourseView({
               <div className="min-w-0">
                 <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
                 <p className="mt-1 text-xs font-bold text-slate-500">
-                  선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
+                  선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · 경유 {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
                 </p>
               </div>
               <button
-                aria-label="오늘 코스 패널 접기"
+                aria-label="경유 코스 패널 접기"
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 onClick={() => setRoutePanelCollapsed(true)}
                 type="button"
@@ -1024,7 +1024,7 @@ function TodayCourseView({
                     {routeSequence
                       ? `현재 묶음 ${selectedRouteStores.length}곳의 도로 경로를 지도에 반영했습니다.`
                       : selectedRouteStores.length
-                        ? `${activeRouteBatchIndex + 1}묶음 ${selectedRouteStores.length}곳을 계산할 준비가 됐습니다. 버튼을 눌러 실제 도로 기준 거리와 시간을 갱신하세요.`
+                        ? `${activeRouteBatchIndex + 1}묶음 ${selectedRouteStores.length}곳을 계산할 준비가 됐습니다. 버튼을 눌러 도로 기준 경유 거리와 시간을 갱신하세요.`
                         : "아래 매장 목록에서 오늘 방문할 경유지를 추가하세요."}
                   </p>
                 </div>
@@ -1149,9 +1149,9 @@ function TodayCourseView({
                       {routeRoadPointCount ? "티맵 경유 경로 반영됨" : "거리·시간 계산됨 · 도로 경로 좌표 없음"}
                     </p>
                     <p className={`mt-1 text-xs font-bold leading-5 ${routeRoadPointCount ? "text-emerald-700" : "text-amber-800"}`}>
-                      경유지 {routeSequence.stops.length}곳 · 실도로 {tmapLegCount}/{routeSequence.legs.length}구간 · 총 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeRoadPointCount.toLocaleString()}개
+                      경유지 {routeSequence.stops.length}곳 · 실도로 {tmapLegCount}/{routeSequence.legs.length}구간 · 경유 코스 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeRoadPointCount.toLocaleString()}개
                     </p>
-                    {tmapLegCount < routeSequence.legs.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">일부 구간은 티맵 주소 지오코딩이 실패해 도로선 없이 거리·시간 추정값만 반영됐습니다.</p> : null}
+                    {tmapLegCount < routeSequence.legs.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">일부 구간은 티맵 주소 지오코딩이 실패해 도로선 없이 기초 거리값만 반영됐습니다.</p> : null}
                   </div>
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -1517,7 +1517,7 @@ function StoreDetail({
               <CollapsibleSection defaultOpen title="배송·방문 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
-                  <MetricRow icon={<Clock className="h-4 w-4" />} label="예상시간" value={formatMinutes(store.durationMinutes || 0)} />
+                  <MetricRow icon={<Clock className="h-4 w-4" />} label="출발지 기준 시간" value={formatMinutes(store.durationMinutes || 0)} />
                   <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
                   <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
                 </div>

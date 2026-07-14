@@ -40,14 +40,14 @@ export default async function DashboardPage() {
   const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(session.companyId);
   const routePlan = await getTodayRoutePlan(session.companyId);
   const originAddress = await getCompanyOriginAddress(session.companyId);
-  const estimatedFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
+  const referenceFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
   const latestUpload = uploadHistory[0];
   const dataReadiness = [
     { label: "거래처 마스터", ready: briefing.currentCustomers > 0, detail: `${briefing.currentCustomers.toLocaleString()}개 거래처` },
     { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
-    { label: "오늘 코스", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 방문/배송` }
+    { label: "코스 데이터", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 등록` }
   ];
   const scoreRows = [
     ["영업력", report.health.salesPower],
@@ -58,7 +58,7 @@ export default async function DashboardPage() {
     ["리스크", report.health.risk]
   ];
   const quickActions = [
-    { href: "/routes/today", label: "오늘 방문 계획", icon: Route, description: "추천 리드를 지역별로 묶어 방문 순서를 봅니다." },
+    { href: "/routes/today", label: "방문·배송 코스", icon: Route, description: "출발지와 매장 주소를 기준으로 차량별 경유지를 관리합니다." },
     { href: "/revenue/pipeline", label: "매출 파이프라인", icon: TrendingUp, description: "방문 결과가 예상 매출로 얼마나 전환되는지 봅니다." },
     { href: "/revenue/transactions", label: "매출 거래내역", icon: ReceiptText, description: "ERP 엑셀에서 누적된 일자·품목·금액 원장을 확인합니다." },
     { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
@@ -91,7 +91,7 @@ export default async function DashboardPage() {
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800" href="/routes/today">
                   <Route className="h-4 w-4" />
-                  오늘 코스 열기
+                  코스 관리 열기
                 </Link>
                 <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" href="/crm/timeline">
                   <Building2 className="h-4 w-4" />
@@ -101,8 +101,8 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <Metric icon={Building2} label="전체 거래처" value={`${briefing.currentCustomers}개`} />
-              <Metric icon={Route} label="오늘 코스" value={`${routePlan.totalStops}곳`} />
-              <Metric icon={Fuel} label="예상 주유비" value={`${estimatedFuelCost.toLocaleString()}원`} />
+              <Metric icon={Route} label="등록 코스 매장" value={`${routePlan.totalStops}곳`} />
+              <Metric icon={Fuel} label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
               <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
               <Metric icon={Lightbulb} label="고확률 리드" value={`${briefing.highProbability}곳`} />
             </div>
@@ -138,7 +138,7 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <NextAction description="사업자 상태와 배송 적재위치를 먼저 확인합니다." href="/crm/timeline" label="1. 거래처 원장 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
-              <NextAction description="방문·배송 매장을 선택하고 티맵 경로를 계산합니다." href="/routes/today" label="2. 코스 확정" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+              <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 코스를 계산합니다." href="/routes/today" label="2. 코스 관리" value={`${routePlan.totalStops.toLocaleString()}곳`} />
               <NextAction description="ERP 거래원장 업로드 상태와 매출 변화를 봅니다." href="/revenue/transactions" label="3. 매출 데이터 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
             </CardContent>
           </Card>
@@ -148,7 +148,7 @@ export default async function DashboardPage() {
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <MapPin className="h-5 w-5 text-primary" />
-                  거래처 위치와 오늘 코스
+                  거래처 위치와 배송 코스
                 </CardTitle>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서는 현황만 보고, 상세 코스는 영업·배송 코스에서 조정합니다.</p>
               </div>
@@ -160,7 +160,7 @@ export default async function DashboardPage() {
               <div className="grid gap-2 text-sm sm:grid-cols-3">
                 <MapSummary label="출발지" value={originAddress} />
                 <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
-                <MapSummary label="오늘 전체 코스" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
               </div>
               <KakaoAddressMap mapClassName="h-[420px]" markers={mapMarkers} showList={false} />
             </CardContent>
@@ -239,12 +239,12 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-2">
-                <SmallMetric label="운행거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-                <SmallMetric label="예상시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-                <SmallMetric label="주간거리" value={`${Math.round(routePlan.totalDistanceKm * 5).toLocaleString()}km`} />
-                <SmallMetric label="월간시간" value={formatCompactMinutes(routePlan.totalDurationMinutes * 22)} />
+                <SmallMetric label="경유 코스 거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+                <SmallMetric label="경유 코스 시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
+                <SmallMetric label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                <SmallMetric label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
               </div>
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">주유비는 1L당 1,650원, 평균 연비 7.5km/L 기준의 가정값입니다.</p>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">주유비는 선택 코스 검토용 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
             </CardContent>
           </Card>
         </div>
