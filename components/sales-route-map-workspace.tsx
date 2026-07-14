@@ -1171,7 +1171,14 @@ function StoreDetail({
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
+  const activeOcrSuggestion = ocrSuggestion || (attachments.businessCertificate ? createBusinessOcrSuggestion(store, attachments.businessCertificate.name) : null);
+  const businessNumberValid = isValidBusinessRegistrationNumber(draftBusinessNumber);
   const saveDraft = async () => {
+    if (!businessNumberValid) {
+      setSaveError("사업자번호가 유효하지 않습니다. 사업자등록증 OCR 후보값을 반영하거나 10자리 번호를 확인하세요.");
+      return;
+    }
+
     setIsSaving(true);
     setSaveError("");
 
@@ -1216,6 +1223,9 @@ function StoreDetail({
                 <h3 className="truncate text-2xl font-black text-slate-950">{draftName}</h3>
                 <span className={gradeBadgeClass(draftGrade)}>{draftGrade}</span>
                 <span className={businessStatusClass(draftBusinessStatus)}>{getBusinessStatusLabel(draftBusinessStatus)}</span>
+                <span className={businessNumberValid ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700" : "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700"}>
+                  {businessNumberValid ? "사업자번호 유효" : "사업자번호 확인"}
+                </span>
               </div>
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
@@ -1251,7 +1261,7 @@ function StoreDetail({
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <EditRow label="매장명" onChange={setDraftName} value={draftName} />
-                  <EditRow label="사업자번호" onChange={setDraftBusinessNumber} value={draftBusinessNumber} />
+                  <BusinessNumberEditRow onChange={setDraftBusinessNumber} valid={businessNumberValid} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
                   <EditRow label="연락처" onChange={setDraftPhone} value={draftPhone} />
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
@@ -1304,10 +1314,11 @@ function StoreDetail({
                     label="사업자등록증"
                     onSave={(file) => {
                       onSaveAttachment("businessCertificate", file);
+                      setDraftBusinessCertificateStatus("received");
                       setOcrSuggestion(createBusinessOcrSuggestion(store, file.name));
                     }}
                   />
-                  {ocrSuggestion ? (
+                  {activeOcrSuggestion ? (
                     <BusinessOcrPanel
                       current={{
                         businessRegistrationNumber: draftBusinessNumber,
@@ -1316,13 +1327,14 @@ function StoreDetail({
                         representativeName: draftRepresentativeName
                       }}
                       onApply={() => {
-                        setDraftBusinessNumber(ocrSuggestion.businessRegistrationNumber);
-                        setDraftBusinessStatus(ocrSuggestion.businessStatus);
-                        setDraftName(ocrSuggestion.companyName);
-                        setDraftOpeningDate(ocrSuggestion.openingDate);
-                        setDraftRepresentativeName(ocrSuggestion.representativeName);
+                        setDraftBusinessNumber(activeOcrSuggestion.businessRegistrationNumber);
+                        setDraftBusinessStatus(activeOcrSuggestion.businessStatus);
+                        setDraftBusinessCertificateStatus("received");
+                        setDraftName(activeOcrSuggestion.companyName);
+                        setDraftOpeningDate(activeOcrSuggestion.openingDate);
+                        setDraftRepresentativeName(activeOcrSuggestion.representativeName);
                       }}
-                      suggestion={ocrSuggestion}
+                      suggestion={activeOcrSuggestion}
                     />
                   ) : null}
                   <AttachmentBox description="정산과 결제 확인용 자료입니다." file={attachments.bankbookCopy} label="통장사본" onSave={(file) => onSaveAttachment("bankbookCopy", file)} />
@@ -1507,19 +1519,25 @@ function BusinessOcrPanel({
 }) {
   const rows = [
     { current: current.companyName, label: "상호명", value: suggestion.companyName },
-    { current: current.businessRegistrationNumber, label: "사업자번호", value: suggestion.businessRegistrationNumber },
+    { current: formatBusinessRegistrationNumber(current.businessRegistrationNumber), label: "사업자번호", value: formatBusinessRegistrationNumber(suggestion.businessRegistrationNumber) },
     { current: current.representativeName, label: "대표자명", value: suggestion.representativeName },
     { current: current.openingDate, label: "개업일", value: suggestion.openingDate }
   ];
+  const suggestionNumberValid = isValidBusinessRegistrationNumber(suggestion.businessRegistrationNumber);
 
   return (
     <div className="rounded-md border border-blue-200 bg-blue-50/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-black text-slate-900">OCR 인식 결과 확인</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-black text-slate-900">OCR 인식 결과 확인</p>
+            <span className={suggestionNumberValid ? "rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-black text-emerald-700" : "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-black text-rose-700"}>
+              {suggestionNumberValid ? "사업자번호 검증 통과" : "사업자번호 확인 필요"}
+            </span>
+          </div>
           <p className="mt-1 text-xs font-bold text-slate-500">사업자등록증에서 읽은 후보값입니다. 기존 값과 비교 후 반영하세요.</p>
         </div>
-        <button className="h-9 rounded-md bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700" onClick={onApply} type="button">
+        <button className="h-9 rounded-md bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!suggestionNumberValid} onClick={onApply} type="button">
           기본정보에 반영
         </button>
       </div>
@@ -1626,6 +1644,26 @@ function EditRow({
     <label className="grid gap-1.5 text-sm">
       <span className="text-xs font-black text-slate-500">{label}</span>
       <input className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} type={type} value={value} />
+    </label>
+  );
+}
+
+function BusinessNumberEditRow({ onChange, valid, value }: { readonly onChange: (value: string) => void; readonly valid: boolean; readonly value: string }) {
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-xs font-black text-slate-500">사업자번호</span>
+        <span className={valid ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700" : "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700"}>
+          {valid ? "유효" : "확인필요"}
+        </span>
+      </span>
+      <input
+        className={`h-10 min-w-0 rounded-md border bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500 ${valid ? "border-slate-200" : "border-rose-200"}`}
+        inputMode="numeric"
+        onChange={(event) => onChange(formatBusinessRegistrationNumber(event.target.value))}
+        placeholder="000-00-00000"
+        value={value}
+      />
     </label>
   );
 }
@@ -1891,10 +1929,10 @@ function clamp(value: number, min: number, max: number) {
 
 function createBusinessOcrSuggestion(store: StoreRow, fileName: string): BusinessOcrSuggestion {
   const seed = fileName.length + store.name.length;
-  const currentNumber = store.businessRegistrationNumber;
+  const currentNumber = isValidBusinessRegistrationNumber(store.businessRegistrationNumber) ? store.businessRegistrationNumber : "";
   const generatedNumber = currentNumber || createBusinessNumber(seed);
   return {
-    businessRegistrationNumber: generatedNumber,
+    businessRegistrationNumber: formatBusinessRegistrationNumber(generatedNumber),
     businessStatus: "active",
     companyName: store.name,
     openingDate: store.openingDate,
@@ -1920,8 +1958,33 @@ function getRevenueGrade(revenue: number): RevenueGrade {
 
 function createBusinessNumber(index: number) {
   const middle = String(10 + (index % 89)).padStart(2, "0");
-  const serial = String(10000 + ((index * 7919) % 89999)).padStart(5, "0");
-  return `123-${middle}-${serial}`;
+  const serial = String(1000 + ((index * 7919) % 8999)).padStart(4, "0");
+  const base = `123${middle}${serial}`;
+  return formatBusinessRegistrationNumber(`${base}${getBusinessRegistrationCheckDigit(base)}`);
+}
+
+function normalizeBusinessRegistrationNumber(value: string) {
+  return value.replace(/[^0-9]/g, "").slice(0, 10);
+}
+
+function formatBusinessRegistrationNumber(value: string) {
+  const digits = normalizeBusinessRegistrationNumber(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+function isValidBusinessRegistrationNumber(value: string) {
+  const digits = normalizeBusinessRegistrationNumber(value);
+  if (!/^[0-9]{10}$/.test(digits)) return false;
+  return getBusinessRegistrationCheckDigit(digits.slice(0, 9)) === Number(digits[9]);
+}
+
+function getBusinessRegistrationCheckDigit(firstNineDigits: string) {
+  const digits = normalizeBusinessRegistrationNumber(firstNineDigits).slice(0, 9).padEnd(9, "0");
+  const weights = [1, 3, 7, 1, 3, 7, 1, 3, 5];
+  const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0) + Math.floor((Number(digits[8]) * 5) / 10);
+  return (10 - (sum % 10)) % 10;
 }
 
 function getSampleBusinessStatus(index: number): StoreRow["businessStatus"] {
