@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getRequestAuthScope } from "@/lib/auth";
 import { uploadCustomerAttachmentFile } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -7,19 +7,16 @@ export const dynamic = "force-dynamic";
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
-
-  if (!customerSession && !adminSession) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");
   const customerId = String(formData?.get("customerId") || "");
   const attachmentType = String(formData?.get("attachmentType") || "etc");
   const title = String(formData?.get("title") || "");
-  const adminCompanyId = String(formData?.get("companyId") || "") || undefined;
+  const scope = getRequestAuthScope(request, String(formData?.get("companyId") || "") || undefined);
+
+  if (!scope.ok) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
 
   if (!customerId) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
@@ -36,9 +33,9 @@ export async function POST(request: NextRequest) {
   const result = await uploadCustomerAttachmentFile({
     attachmentType,
     bytes: await file.arrayBuffer(),
-    companyId: customerSession?.companyId || adminCompanyId,
+    companyId: scope.companyId,
     contentType: file.type || "application/octet-stream",
-    createdByName: customerSession?.name || adminSession?.name,
+    createdByName: scope.customerSession?.name || scope.adminSession?.name,
     customerId,
     filename: file.name,
     title: title || file.name

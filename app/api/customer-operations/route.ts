@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getRequestAuthScope } from "@/lib/auth";
 import { addCustomerAttachment, addCustomerNote, getCustomerOperations } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-function getSession() {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
-  return { adminSession, customerSession };
-}
-
 export async function GET(request: NextRequest) {
-  const { adminSession, customerSession } = getSession();
-  if (!customerSession && !adminSession) {
+  const scope = getRequestAuthScope(request);
+  if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
@@ -21,17 +15,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
   }
 
-  const adminCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
-  const result = await getCustomerOperations(customerId, customerSession?.companyId || adminCompanyId);
+  const result = await getCustomerOperations(customerId, scope.companyId);
   return NextResponse.json(result);
 }
 
 export async function POST(request: NextRequest) {
-  const { adminSession, customerSession } = getSession();
-  if (!customerSession && !adminSession) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
   const body = (await request.json().catch(() => null)) as
     | {
         action?: "note" | "attachment";
@@ -46,13 +34,17 @@ export async function POST(request: NextRequest) {
         companyId?: string;
       }
     | null;
+  const scope = getRequestAuthScope(request, body?.companyId);
+
+  if (!scope.ok) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
 
   if (!body?.customerId) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
   }
 
   if (body.action === "attachment") {
-    const companyId = customerSession?.companyId || body.companyId;
     const result = await addCustomerAttachment(
       {
         attachmentType: body.attachmentType || "etc",
@@ -60,23 +52,22 @@ export async function POST(request: NextRequest) {
         fileUrl: body.fileUrl,
         mimeType: body.mimeType,
         title: body.title || "첨부자료",
-        createdByName: customerSession?.name || adminSession?.name
+        createdByName: scope.customerSession?.name || scope.adminSession?.name
       },
-      companyId
+      scope.companyId
     );
     return NextResponse.json(result);
   }
 
-  const companyId = customerSession?.companyId || body.companyId;
   const result = await addCustomerNote(
     {
       customerId: body.customerId,
       memo: body.memo || "",
       nextAction: body.nextAction,
       noteType: body.noteType || "general",
-      createdByName: customerSession?.name || adminSession?.name
+      createdByName: scope.customerSession?.name || scope.adminSession?.name
     },
-    companyId
+    scope.companyId
   );
   return NextResponse.json(result);
 }

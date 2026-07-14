@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getRequestAuthScope } from "@/lib/auth";
 import { CustomerRow, sampleCustomers } from "@/lib/sample-data";
 import { ColumnMapping, RawUploadRow, saveAnalysis } from "@/lib/store";
 
@@ -14,13 +14,16 @@ export async function POST(request: NextRequest) {
     rows?: CustomerRow[];
     uploadType?: "customer-master" | "sales-analysis";
   } | null;
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+  const scope = getRequestAuthScope(request, body?.companyId);
+  if (!scope.ok) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
   const rows = body?.rows?.length ? body.rows : sampleCustomers;
   const result = await saveAnalysis(rows, body?.companyName, {
     actorName: body?.actorName,
     columnMapping: body?.columnMapping,
-    companyId: customerSession?.companyId || (adminSession ? body?.companyId : undefined),
+    companyId: scope.companyId,
     originalFilename: body?.originalFilename,
     rawRows: body?.rawRows,
     uploadType: body?.uploadType

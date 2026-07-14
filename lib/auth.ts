@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "crypto";
+import { NextRequest } from "next/server";
 import { getAuthCredentials, getCustomerLoginCredentials } from "./store";
 
 export type AdminSession = {
@@ -78,6 +79,41 @@ export function requireAdminSession() {
   const session = getAdminSession();
   if (!session) return null;
   return session;
+}
+
+export function getRequestAuthScope(request: NextRequest, bodyCompanyId?: string) {
+  const customerSession = getCustomerSession();
+  const adminSession = getAdminSession();
+
+  if (!customerSession && !adminSession) {
+    return {
+      adminSession: null,
+      companyId: undefined,
+      customerSession: null,
+      ok: false as const,
+      role: "anonymous" as const
+    };
+  }
+
+  if (customerSession) {
+    return {
+      adminSession,
+      companyId: customerSession.companyId,
+      customerSession,
+      ok: true as const,
+      role: "customer" as const
+    };
+  }
+
+  const queryCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
+
+  return {
+    adminSession,
+    companyId: bodyCompanyId || queryCompanyId,
+    customerSession: null,
+    ok: true as const,
+    role: "admin" as const
+  };
 }
 
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {

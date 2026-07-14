@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getRequestAuthScope } from "@/lib/auth";
 import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -18,18 +18,15 @@ const sampleTimeline = [
 ];
 
 export async function GET(request: NextRequest) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+  const scope = getRequestAuthScope(request);
 
-  if (!customerSession && !adminSession) {
+  if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
   const errors: string[] = [];
   let system = null;
   let timeline = sampleTimeline;
-  const adminCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
-  const scopedCompanyId = customerSession?.companyId || adminCompanyId;
 
   try {
     system = await getSystemDiagnostics();
@@ -38,7 +35,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = await getVisitTimeline(scopedCompanyId);
+    const rows = await getVisitTimeline(scope.companyId);
     if (rows.length) timeline = rows;
   } catch (error) {
     errors.push(`방문 히스토리 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);

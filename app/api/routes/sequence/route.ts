@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthScope } from "@/lib/auth";
 import { getCompanyOriginAddress } from "@/lib/store";
 import { calculateRouteDistance } from "@/lib/tmap";
 
@@ -10,15 +10,14 @@ type RoutePoint = {
 
 type RouteLegResult = Awaited<ReturnType<typeof calculateRouteDistance>>;
 
-export async function POST(request: Request) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => null);
+  const scope = getRequestAuthScope(request, body?.companyId);
 
-  if (!customerSession && !adminSession) {
+  if (!scope.ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null);
   const rawDestinations = Array.isArray(body?.destinations) ? body.destinations : [];
   const destinations = Array.from(
     new Set<string>(rawDestinations.map((address: unknown) => String(address || "").trim()).filter(Boolean))
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "경유지 주소가 필요합니다." }, { status: 400 });
   }
 
-  const companyId = customerSession?.companyId || body?.companyId;
+  const companyId = scope.companyId;
   const originAddress = String(body?.originAddress || (await getCompanyOriginAddress(companyId))).trim();
   const optimizedLegs = await optimizeRouteLegs(originAddress, destinations);
   const legs = optimizedLegs.map(({ destinationAddress, fromAddress, order, result }) => ({

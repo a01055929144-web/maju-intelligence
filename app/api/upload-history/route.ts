@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession, getCustomerSession } from "@/lib/auth";
+import { getRequestAuthScope } from "@/lib/auth";
 import { getUploadHistory } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
-  const adminCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
-  const companyId = customerSession?.companyId || (adminSession ? adminCompanyId : undefined);
+  const scope = getRequestAuthScope(request);
 
-  const uploads = await getUploadHistory(companyId);
+  if (!scope.ok) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const uploads = await getUploadHistory(scope.companyId);
   return NextResponse.json({
-    companyId,
+    companyId: scope.companyId,
     uploads
   });
 }
