@@ -807,7 +807,8 @@ function TodayCourseView({
   const [routeQuery, setRouteQuery] = useState("");
   const [routeSelectedStoreId, setRouteSelectedStoreId] = useState("");
   const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
-  const selectedDriver = selectedVehicle?.driver || "전체 담당자";
+  const isVehicleScoped = selectedVehicleId !== "all";
+  const selectedDriver = selectedVehicle?.driver || "배송차 선택 필요";
   const orderedStores = [...stores].sort((a, b) => a.order - b.order);
   const orderedStoreIds = orderedStores.map((store) => store.id).join("|");
   const selectedRouteIdSet = new Set(selectedRouteStoreIds);
@@ -824,11 +825,13 @@ function TodayCourseView({
   const routeRoadPointCount = routeSequence ? countFiniteRoutePoints(routeSequence.path) : 0;
   const tmapLegCount = routeSequence?.legs.filter((leg) => leg.provider === "tmap").length || 0;
   const inactiveSelectedCount = Math.max(0, selectedRouteStoresAll.length - selectedRouteStores.length);
-  const routeCandidateStores = orderedStores.filter((store) => {
-    const keyword = routeQuery.trim().toLowerCase();
-    if (!keyword) return true;
-    return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
-  });
+  const routeCandidateStores = isVehicleScoped
+    ? orderedStores.filter((store) => {
+        const keyword = routeQuery.trim().toLowerCase();
+        if (!keyword) return true;
+        return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
+      })
+    : [];
   const routeSelectedStore = orderedStores.find((store) => store.id === routeSelectedStoreId) || routeCandidateStores[0] || orderedStores[0];
   const originMarker = markers.find((marker) => marker.tone === "origin");
   const sequencedRouteStores = routeSequence?.stops.length
@@ -863,9 +866,14 @@ function TodayCourseView({
   useEffect(() => {
     setRouteSequence(null);
     setRouteBatchIndex(0);
+    if (!isVehicleScoped) {
+      setSelectedRouteStoreIds([]);
+      setRouteSelectedStoreId("");
+      return;
+    }
     setSelectedRouteStoreIds(orderedStores.slice(0, tmapWaypointLimit).map((store) => store.id));
     setRouteSelectedStoreId(orderedStores[0]?.id || "");
-  }, [orderedStoreIds, selectedVehicleId]);
+  }, [isVehicleScoped, orderedStoreIds, selectedVehicleId]);
 
   useEffect(() => {
     setRouteSequence(null);
@@ -923,9 +931,9 @@ function TodayCourseView({
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
             <p className="text-xs font-black text-slate-500">실사용 순서</p>
             <div className="mt-3 grid gap-2">
-              <RouteWorkStep active={selectedVehicleId !== "all"} done={selectedVehicleId !== "all"} label="담당자 선택" />
-              <RouteWorkStep active={selectedRouteStores.length > 0} done={selectedRouteStores.length > 0} label="경유 매장 선택" />
-              <RouteWorkStep active={selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
+              <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
+              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 매장 선택" />
+              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
               <RouteWorkStep active={Boolean(routeSequence)} done={Boolean(routeSequence)} label="코스 확인" />
             </div>
           </div>
@@ -937,9 +945,10 @@ function TodayCourseView({
             type="button"
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-black text-slate-950">전체 담당자</p>
+              <p className="text-sm font-black text-slate-950">전체 매장 보기</p>
               <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
             </div>
+            <p className="mt-1 text-xs font-bold text-slate-500">지도 확인용 · 경유 계산은 배송차 선택 후 진행</p>
           </button>
           {vehicles.map((vehicle) => (
             <button
@@ -1000,7 +1009,7 @@ function TodayCourseView({
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-black text-slate-950">{selectedDriver} 방문 순서</p>
+                  <p className="text-sm font-black text-slate-950">{selectedDriver} 경유 순서</p>
                 <p className="mt-1 text-xs font-bold text-slate-500">
                   선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · 경유 {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
                 </p>
@@ -1021,24 +1030,28 @@ function TodayCourseView({
                   <RouteMetric label={routeSequence ? "경유 코스 거리" : "출발지 기준 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
                   <RouteMetric label={routeSequence ? "경유 코스 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
-                <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
-                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
-                    {routeSequence ? "티맵 계산 완료" : selectedRouteStores.length ? "티맵 계산 대기" : "경유지 선택 필요"}
+                <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
+                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
+                    {routeSequence ? "티맵 계산 완료" : isVehicleScoped && selectedRouteStores.length ? "티맵 계산 대기" : isVehicleScoped ? "경유지 선택 필요" : "배송차 선택 필요"}
                   </p>
-                  <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : selectedRouteStores.length ? "text-blue-700" : "text-amber-800"}`}>
+                  <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : isVehicleScoped && selectedRouteStores.length ? "text-blue-700" : "text-amber-800"}`}>
                     {routeSequence
                       ? `현재 묶음 ${selectedRouteStores.length}곳의 도로 경로를 지도에 반영했습니다.`
-                      : selectedRouteStores.length
+                      : isVehicleScoped && selectedRouteStores.length
                         ? `${activeRouteBatchIndex + 1}묶음 ${selectedRouteStores.length}곳을 계산할 준비가 됐습니다. 버튼을 눌러 도로 기준 경유 거리와 시간을 갱신하세요.`
-                        : "아래 매장 목록에서 오늘 방문할 경유지를 추가하세요."}
+                        : isVehicleScoped
+                          ? "아래 매장 목록에서 경유지를 추가하세요."
+                          : "왼쪽에서 배송차를 선택하면 해당 차량의 매장만 경유 계산 대상으로 표시됩니다."}
                   </p>
                 </div>
-                <RouteSequenceAction
-                  buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
-                  destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
-                  onSequenceChange={setRouteSequence}
-                  showMap={false}
-                />
+                {isVehicleScoped ? (
+                  <RouteSequenceAction
+                    buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
+                    destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
+                    onSequenceChange={setRouteSequence}
+                    showMap={false}
+                  />
+                ) : null}
               </div>
               <div className="space-y-2 border-b border-slate-200/80 p-3">
                 <label className="relative block">
@@ -1051,13 +1064,13 @@ function TodayCourseView({
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white" onClick={selectDefaultRouteStores} type="button">
+                  <button className="h-8 rounded-md bg-slate-950 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
                     기본 15곳 선택
                   </button>
-                  <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={selectAllRouteStores} type="button">
+                  <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={selectAllRouteStores} type="button">
                     전체 선택
                   </button>
-                  <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={clearRouteStores} type="button">
+                  <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={clearRouteStores} type="button">
                     선택 해제
                   </button>
                   <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-700">
@@ -1161,13 +1174,16 @@ function TodayCourseView({
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-black text-slate-950">매장 선택</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">매장을 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다.</p>
+                    <p className="text-sm font-black text-slate-950">{isVehicleScoped ? "매장 선택" : "배송차 선택 필요"}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      {isVehicleScoped ? "매장을 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다." : "왼쪽에서 배송차를 선택하면 해당 차량의 매장이 표시됩니다."}
+                    </p>
                   </div>
                   <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{routeCandidateStores.length}곳</span>
                 </div>
                 <div className="space-y-2">
-                  {routeCandidateStores.map((store, index) => {
+                  {routeCandidateStores.length ? (
+                    routeCandidateStores.map((store, index) => {
                     const selectedForRoute = selectedRouteIdSet.has(store.id);
                     const activeForRoute = activeRouteIdSet.has(store.id);
                     const selectedOrder = selectedRouteStoreIds.indexOf(store.id) + 1;
@@ -1221,7 +1237,15 @@ function TodayCourseView({
                       </div>
                     </button>
                   );
-                  })}
+                    })
+                  ) : (
+                    <div className="rounded-md border border-dashed border-slate-300 bg-white p-4 text-center">
+                      <p className="text-sm font-black text-slate-700">{isVehicleScoped ? "조건에 맞는 매장이 없습니다." : "배송차를 먼저 선택하세요."}</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                        {isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
