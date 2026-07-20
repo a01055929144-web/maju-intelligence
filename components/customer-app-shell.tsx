@@ -138,9 +138,9 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                     운영 체크리스트
                   </div>
                   <div className="mt-3 space-y-1">
-                    <SidebarQuickStep href="/" icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
-                    <SidebarQuickStep href="/crm/timeline" icon={Building2} label="거래처 정보 확인" step="2" />
-                    <SidebarQuickStep href="/routes/today" icon={Route} label="배송차별 코스 확정" step="3" />
+                    <SidebarQuickStep currentPath={pathname} href="/" icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
+                    <SidebarQuickStep currentPath={pathname} href="/crm/timeline" icon={Building2} label="거래처 정보 확인" step="2" />
+                    <SidebarQuickStep currentPath={pathname} href="/routes/today" icon={Route} label="배송차별 코스 확정" step="3" />
                   </div>
                   <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">회사 설정과 출발지를 먼저 맞추면 지도, 히스토리, AI 리포트가 같은 기준으로 계산됩니다.</p>
                 </div>
@@ -197,11 +197,18 @@ function isCurrentNavItem(pathname: string | null, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function SidebarQuickStep({ href, icon: Icon, label, step }: { readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {
+function SidebarQuickStep({ currentPath, href, icon: Icon, label, step }: { readonly currentPath: string | null; readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {
+  const selected = isCurrentNavItem(currentPath, href);
+
   return (
-    <Link className="flex items-center gap-2 rounded-md bg-white px-2.5 py-2 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200 transition hover:bg-emerald-50 hover:text-emerald-800 hover:ring-emerald-200" href={href}>
-      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-900 text-[10px] font-black text-white">{step}</span>
-      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+    <Link
+      className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-black ring-1 ring-inset transition ${
+        selected ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-white text-slate-700 ring-slate-200 hover:bg-emerald-50 hover:text-emerald-800 hover:ring-emerald-200"
+      }`}
+      href={href}
+    >
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black text-white ${selected ? "bg-emerald-700" : "bg-slate-900"}`}>{step}</span>
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-emerald-700" : "text-slate-400"}`} />
       <span className="min-w-0 truncate">{label}</span>
     </Link>
   );
