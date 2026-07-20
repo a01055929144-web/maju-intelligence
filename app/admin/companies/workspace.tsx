@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Building2, CheckCircle2, Eye, EyeOff, FileSpreadsheet, KeyRound, MapPin, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ManagedCompanyAccount, ManagedCompanyAccountInput } from "@/lib/store";
@@ -226,6 +226,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 <p className="font-black">빠른 운영 작업</p>
                 <p className="mt-1 text-xs font-bold text-muted-foreground">선택 고객사의 다음 작업으로 바로 이동합니다.</p>
                 <div className="mt-4 grid gap-2">
+                  <QuickAction href={`/dashboard?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" primary />
                   <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" />
                   <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="데이터 등록/업로드" />
                   <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" />
@@ -352,6 +353,12 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               </span>
               <Link
                 className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                href={`/dashboard?companyId=${encodeURIComponent(form.id)}`}
+              >
+                고객사 대시보드
+              </Link>
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/crm/timeline?companyId=${encodeURIComponent(form.id)}`}
               >
                 이 고객사 거래처 보기
@@ -468,14 +475,19 @@ function ReadinessMeter({ compact, readiness }: { compact?: boolean; readiness: 
   );
 }
 
-function QuickAction({ href, icon: Icon, label }: { href: string; icon: typeof Users; label: string }) {
+function QuickAction({ href, icon: Icon, label, primary }: { href: string; icon: typeof Users; label: string; primary?: boolean }) {
   return (
-    <Link className="inline-flex h-10 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-800 transition hover:bg-white" href={href}>
+    <Link
+      className={`inline-flex h-10 items-center justify-between rounded-md border px-3 text-sm font-black transition ${
+        primary ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800" : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-white"
+      }`}
+      href={href}
+    >
       <span className="inline-flex items-center gap-2">
-        <Icon className="h-4 w-4 text-primary" />
+        <Icon className={`h-4 w-4 ${primary ? "text-white" : "text-primary"}`} />
         {label}
       </span>
-      <span className="text-xs text-muted-foreground">열기</span>
+      <span className={`text-xs ${primary ? "text-white/70" : "text-muted-foreground"}`}>열기</span>
     </Link>
   );
 }
