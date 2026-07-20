@@ -26,6 +26,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [companies, setCompanies] = useState(initialCompanies);
   const [selectedId, setSelectedId] = useState(initialCompanies[0]?.id || "new");
   const [query, setQuery] = useState("");
+  const [companyFilter, setCompanyFilter] = useState<"all" | "active" | "needs-setup" | "paused">("all");
   const [form, setForm] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
   const [showPassword, setShowPassword] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,11 +34,19 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return companies;
-    return companies.filter((company) =>
-      [company.name, company.ownerName, company.customerEmail, company.originAddress].some((value) => value.toLowerCase().includes(keyword))
-    );
-  }, [companies, query]);
+    return companies.filter((company) => {
+      const readiness = getCompanyReadiness(company);
+      const matchesKeyword =
+        !keyword || [company.name, company.ownerName, company.customerEmail, company.originAddress].some((value) => value.toLowerCase().includes(keyword));
+      const matchesFilter =
+        companyFilter === "all" ||
+        (companyFilter === "active" && company.status === "active") ||
+        (companyFilter === "paused" && company.status !== "active") ||
+        (companyFilter === "needs-setup" && readiness.score < 80);
+
+      return matchesKeyword && matchesFilter;
+    });
+  }, [companies, companyFilter, query]);
 
   function selectCompany(company: ManagedCompanyAccount) {
     setSelectedId(company.id);
@@ -107,6 +116,8 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const totalSalesRows = companies.reduce((sum, company) => sum + company.salesTransactionCount, 0);
   const totalUploads = companies.reduce((sum, company) => sum + company.uploadCount, 0);
   const activeCompanies = companies.filter((company) => company.status === "active").length;
+  const needsSetupCompanies = companies.filter((company) => getCompanyReadiness(company).score < 80).length;
+  const pausedCompanies = companies.filter((company) => company.status !== "active").length;
 
   return (
     <div className="space-y-5">
@@ -117,7 +128,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
         <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "DB 연결" : "저장 확인 필요"} />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+      <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
       <aside className="rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -143,6 +154,12 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               <Plus className="h-4 w-4" />
               신규
             </Button>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <CompanyFilterButton active={companyFilter === "all"} count={companies.length} label="전체" onClick={() => setCompanyFilter("all")} />
+            <CompanyFilterButton active={companyFilter === "active"} count={activeCompanies} label="운영중" onClick={() => setCompanyFilter("active")} />
+            <CompanyFilterButton active={companyFilter === "needs-setup"} count={needsSetupCompanies} label="준비 미흡" onClick={() => setCompanyFilter("needs-setup")} tone="warning" />
+            <CompanyFilterButton active={companyFilter === "paused"} count={pausedCompanies} label="중지" onClick={() => setCompanyFilter("paused")} />
           </div>
         </div>
 
@@ -176,11 +193,23 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 </span>
                 <span>{company.ownerName || "대표자 미입력"}</span>
               </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <ListStatusBadge ok={Boolean(company.customerEmail && company.customerPassword)} label="계정" />
+                <ListStatusBadge ok={Boolean(company.originAddress)} label="출발지" />
+                <ListStatusBadge ok={company.customerCount > 0} label="거래처" />
+                <ListStatusBadge ok={company.salesTransactionCount > 0} label="매출" />
+              </div>
               <div className="mt-3">
                 <ReadinessMeter readiness={getCompanyReadiness(company)} compact />
               </div>
             </button>
           ))}
+          {!filteredCompanies.length ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+              <p className="text-sm font-black text-slate-800">조건에 맞는 고객사가 없습니다.</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">검색어 또는 운영 필터를 바꾸거나 신규 고객사를 등록하세요.</p>
+            </div>
+          ) : null}
         </div>
       </aside>
 
@@ -454,6 +483,46 @@ function AdminSummaryCard({ helper, icon: Icon, label, value }: { helper: string
       <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
       <p className="mt-1 text-xs font-bold text-muted-foreground">{helper}</p>
     </div>
+  );
+}
+
+function CompanyFilterButton({
+  active,
+  count,
+  label,
+  onClick,
+  tone = "default"
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+  tone?: "default" | "warning";
+}) {
+  const activeClass =
+    tone === "warning"
+      ? "border-amber-300 bg-amber-50 text-amber-900"
+      : "border-slate-950 bg-slate-950 text-white";
+
+  return (
+    <button
+      className={`flex h-10 items-center justify-between rounded-md border px-3 text-xs font-black transition ${
+        active ? activeClass : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
+      }`}
+      type="button"
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <span className={`rounded-full px-2 py-0.5 ${active ? "bg-white/20" : "bg-white text-slate-600"}`}>{count.toLocaleString()}</span>
+    </button>
+  );
+}
+
+function ListStatusBadge({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <span className={`rounded-md px-2 py-1 text-[11px] font-black ${ok ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+      {label} {ok ? "완료" : "필요"}
+    </span>
   );
 }
 
