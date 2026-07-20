@@ -25,6 +25,26 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const pipeline = await getRevenuePipeline(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const pipelineActions = [
+    {
+      description: "견적 요청 건은 단가표와 방문 일정을 바로 확정해야 합니다.",
+      label: "견적 요청",
+      tone: "blue" as const,
+      value: `${pipeline.quoteRequests}건`
+    },
+    {
+      description: "관심 거래처는 품목 제안과 샘플 납품 가능 여부를 확인합니다.",
+      label: "관심 있음",
+      tone: "emerald" as const,
+      value: `${pipeline.interested}건`
+    },
+    {
+      description: "보류·실패 건은 메모를 남기고 다음 연락 시점을 분리 관리합니다.",
+      label: "재관리",
+      tone: "slate" as const,
+      value: `${pipeline.pending + pipeline.failed}건`
+    }
+  ];
 
   return (
     <CustomerAppShell
@@ -47,6 +67,12 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           <Metric icon={CircleDollarSign} label="가중 매출" value={`${pipeline.weightedRevenue.toLocaleString()}만원`} />
           <Metric icon={TrendingUp} label="견적 요청" value={`${pipeline.quoteRequests}건`} />
           <Metric icon={Percent} label="전환 기대율" value={`${pipeline.conversionRate}%`} />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          {pipelineActions.map((action) => (
+            <PipelineActionCard key={action.label} {...action} />
+          ))}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
@@ -104,6 +130,37 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: st
         <p className="mt-1 text-3xl font-black">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function PipelineActionCard({
+  description,
+  label,
+  tone,
+  value
+}: {
+  description: string;
+  label: string;
+  tone: "blue" | "emerald" | "slate";
+  value: string;
+}) {
+  const toneClassName = {
+    blue: "border-blue-100 bg-blue-50/70 text-blue-800",
+    emerald: "border-emerald-100 bg-emerald-50/70 text-emerald-800",
+    slate: "border-slate-200 bg-slate-50/80 text-slate-800"
+  }[tone];
+
+  return (
+    <div className={`rounded-md border p-4 ${toneClassName}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase opacity-70">{label}</p>
+          <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
+        </div>
+        <Badge className="bg-white/80 text-slate-700">다음 액션</Badge>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
+    </div>
   );
 }
 

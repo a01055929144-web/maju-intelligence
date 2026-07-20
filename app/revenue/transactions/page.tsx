@@ -19,6 +19,33 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const sales = await getSalesTransactions(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const hasSalesData = sales.transactionCount > 0;
+  const salesSignals = [
+    {
+      actionHref: companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/",
+      actionLabel: "매출 업로드",
+      description: hasSalesData ? `${sales.transactionCount.toLocaleString()}건의 거래내역이 원장에 누적되어 있습니다.` : "ERP 매출 거래내역서를 업로드하면 거래처별, 품목별 분석이 시작됩니다.",
+      label: "원장 적재",
+      ready: hasSalesData,
+      value: hasSalesData ? `${sales.transactionCount.toLocaleString()}건` : "업로드 필요"
+    },
+    {
+      actionHref: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
+      actionLabel: "거래처 확인",
+      description: sales.customerCount ? "매출 거래처와 거래처 원장 연결 상태를 확인합니다." : "사업자번호 또는 거래처명으로 매출과 거래처 원장을 연결해야 합니다.",
+      label: "거래처 연결",
+      ready: sales.customerCount > 0,
+      value: `${sales.customerCount.toLocaleString()}곳`
+    },
+    {
+      actionHref: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
+      actionLabel: "파이프라인 보기",
+      description: sales.topProducts.length ? "품목별 매출 비중을 기반으로 이탈·감소 품목을 추적할 수 있습니다." : "품목 컬럼이 포함된 거래원장을 올리면 품목 이탈 분석이 가능합니다.",
+      label: "품목 분석",
+      ready: sales.topProducts.length > 0,
+      value: sales.topProducts.length ? `${sales.topProducts.length}개 품목` : "품목 필요"
+    }
+  ];
 
   return (
     <CustomerAppShell
@@ -46,6 +73,12 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
           <Metric icon={Store} label="거래처 수" value={`${sales.customerCount.toLocaleString()}곳`} />
           <Metric icon={FileSpreadsheet} label="최근 매출일" value={sales.latestSalesDate || "-"} />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          {salesSignals.map((signal) => (
+            <SalesSignalCard key={signal.label} {...signal} />
+          ))}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
@@ -179,6 +212,40 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="min-w-[150px] rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-right">
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function SalesSignalCard({
+  actionHref,
+  actionLabel,
+  description,
+  label,
+  ready,
+  value
+}: {
+  actionHref: string;
+  actionLabel: string;
+  description: string;
+  label: string;
+  ready: boolean;
+  value: string;
+}) {
+  return (
+    <div className={`rounded-md border p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+          <p className="mt-1 truncate text-xl font-black text-slate-950">{value}</p>
+        </div>
+        <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+          {ready ? "준비" : "확인"}
+        </Badge>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
+      <Link className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" href={actionHref}>
+        {actionLabel}
+      </Link>
     </div>
   );
 }
