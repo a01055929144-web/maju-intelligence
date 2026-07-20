@@ -11,6 +11,7 @@ import {
   HeartPulse,
   HelpCircle,
   LayoutDashboard,
+  LogOut,
   LucideIcon,
   MapPinned,
   MessageSquareText,
@@ -185,6 +186,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   AI 도우미
                 </Link>
                 {rightAction}
+                {mode === "customer" ? <CustomerAccountActions /> : null}
               </div>
             </div>
           </header>
@@ -193,6 +195,24 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </section>
       </div>
     </main>
+  );
+}
+
+function CustomerAccountActions() {
+  async function logout() {
+    await fetch("/api/customer/logout", { method: "POST" });
+    window.location.href = "/dashboard/login";
+  }
+
+  return (
+    <button
+      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+      onClick={logout}
+      type="button"
+    >
+      <LogOut className="h-4 w-4" />
+      로그아웃
+    </button>
   );
 }
 

@@ -31,7 +31,6 @@ import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getCustomerSession } from "@/lib/auth";
 import { createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getCompanyDashboardPayload, getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
-import { CustomerLogoutButton } from "./logout-button";
 
 export default async function DashboardPage() {
   const session = getCustomerSession();
@@ -72,7 +71,6 @@ export default async function DashboardPage() {
     <CustomerAppShell
       active="dashboard"
       companyName={session.companyName}
-      rightAction={<CustomerLogoutButton />}
       subtitle="거래처 히스토리, 배송 동선, 신규 리드 현황"
       title="대시보드"
       userName={session.name}

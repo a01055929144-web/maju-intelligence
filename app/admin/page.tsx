@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, BarChart3, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, MessageSquareText, Route, ServerCog, Settings, ShieldCheck, Sparkles, Target, TrendingUp, UploadCloud } from "lucide-react";
+import { Activity, BarChart3, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, ServerCog, Settings, ShieldCheck, Target, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -35,38 +35,10 @@ export default async function AdminPage() {
           <div className="flex items-center gap-2">
             <Link
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/routes/today"
-            >
-              <Route className="h-4 w-4" />
-              방문 계획
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/crm/timeline"
-            >
-              <MessageSquareText className="h-4 w-4" />
-              방문 이력
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/revenue/pipeline"
-            >
-              <TrendingUp className="h-4 w-4" />
-              매출 파이프라인
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/assistant"
-            >
-              <Sparkles className="h-4 w-4" />
-              AI Assistant
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
               href="/admin/companies"
             >
               <Building2 className="h-4 w-4" />
-              고객사 관리
+              고객사 선택·관리
             </Link>
             <Link
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
@@ -91,9 +63,9 @@ export default async function AdminPage() {
             </Link>
             <Link
               className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/"
+              href="/admin/companies"
             >
-              사용자 앱
+              고객사 화면 선택
             </Link>
             <AdminLogoutButton />
           </div>
