@@ -25,6 +25,26 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
   const followUps = drafts.filter((draft) => draft.type === "follow-up").length;
   const quotes = drafts.filter((draft) => draft.type === "quote").length;
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const assistantActions = [
+    {
+      description: "방문 결과와 메모를 기준으로 고객에게 보낼 후속 문장을 정리합니다.",
+      href: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
+      label: "방문 기록 확인",
+      value: `${drafts.length}개 초안`
+    },
+    {
+      description: "견적 요청 건은 매출 파이프라인에서 금액과 다음 액션으로 관리합니다.",
+      href: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
+      label: "견적 후속 관리",
+      value: `${quotes}건`
+    },
+    {
+      description: "오늘 방문할 거래처를 정하고 차량별 코스와 경유 순서를 확인합니다.",
+      href: companyId ? `/routes/today?companyId=${encodeURIComponent(companyId)}` : "/routes/today",
+      label: "방문 코스 연결",
+      value: "코스 확인"
+    }
+  ];
 
   return (
     <CustomerAppShell
@@ -46,6 +66,12 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           <Metric icon={Sparkles} label="생성 초안" value={`${drafts.length}개`} />
           <Metric icon={MessageSquareText} label="후속 메시지" value={`${followUps}개`} />
           <Metric icon={FileText} label="견적 메모" value={`${quotes}개`} />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          {assistantActions.map((action) => (
+            <AssistantActionCard key={action.label} {...action} />
+          ))}
         </div>
 
         <Card>
@@ -79,6 +105,32 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
         </Card>
       </section>
     </CustomerAppShell>
+  );
+}
+
+function AssistantActionCard({
+  description,
+  href,
+  label,
+  value
+}: {
+  description: string;
+  href: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <Link className="group rounded-md border border-slate-200 bg-white p-4 transition hover:border-teal-200 hover:bg-teal-50/40" href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+          <p className="mt-1 truncate text-xl font-black text-slate-950">{value}</p>
+        </div>
+        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">연결</Badge>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
+      <span className="mt-4 inline-flex text-xs font-black text-teal-800 transition group-hover:translate-x-0.5">바로가기</span>
+    </Link>
   );
 }
 
