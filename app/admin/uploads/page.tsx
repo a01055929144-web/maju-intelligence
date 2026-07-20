@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AlertTriangle, FileSpreadsheet, Gauge, Rows3, ServerCog, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Gauge, Rows3, ServerCog, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
@@ -13,20 +13,22 @@ export default async function AdminUploadsPage() {
 
   const uploads = await getUploadHistory();
   const completed = uploads.filter((item) => item.status === "completed").length;
-  const failed = uploads.filter((item) => item.status === "failed").length;
+  const needsAction = uploads.filter((item) => item.status === "failed" || item.qualityScore < 80 || item.duplicateCount > 0 || !item.reportId).length;
   const processedRows = uploads.reduce((sum, item) => sum + item.rows, 0);
   const avgQuality = uploads.length ? Math.round(uploads.reduce((sum, item) => sum + item.qualityScore, 0) / uploads.length) : 0;
+  const completeRate = uploads.length ? Math.round((completed / uploads.length) * 100) : 0;
 
   return (
     <main className="min-h-screen bg-background">
       <AdminPageHeader active="uploads" badge="Operations" session={session} subtitle="거래처 마스터와 매출 거래내역의 적재 상태, 품질, 리포트 생성 여부를 확인합니다" title="업로드/분석 이력" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Metric icon={FileSpreadsheet} label="최근 업로드" value={`${uploads.length.toLocaleString()}건`} />
           <Metric icon={Rows3} label="처리 행 수" value={processedRows.toLocaleString()} />
           <Metric icon={Gauge} label="평균 품질" value={`${avgQuality}%`} />
-          <Metric icon={AlertTriangle} label="실패 건수" value={`${failed.toLocaleString()}건`} />
+          <Metric icon={AlertTriangle} label="보완 필요" value={`${needsAction.toLocaleString()}건`} />
+          <Metric icon={CheckCircle2} label="완료율" value={`${completeRate}%`} />
         </div>
 
         <Card>

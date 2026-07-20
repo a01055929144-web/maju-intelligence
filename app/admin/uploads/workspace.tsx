@@ -21,18 +21,32 @@ type UploadStatusFilter = keyof typeof statusCopy;
 export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[] }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<UploadStatusFilter>("all");
+  const [companyId, setCompanyId] = useState("all");
+
+  const companyOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; total: number; issues: number }>();
+    uploads.forEach((upload) => {
+      const current = map.get(upload.companyId) || { id: upload.companyId, name: upload.company, total: 0, issues: 0 };
+      current.total += 1;
+      if (needsReview(upload)) current.issues += 1;
+      map.set(upload.companyId, current);
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }, [uploads]);
 
   const filteredUploads = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return uploads.filter((upload) => {
       const matchesStatus = status === "all" || (status === "needsAction" ? needsReview(upload) : upload.status === status);
+      const matchesCompany = companyId === "all" || upload.companyId === companyId;
       const matchesQuery =
         !normalizedQuery ||
         [upload.filename, upload.company, upload.createdAt, upload.status].some((value) => value.toLowerCase().includes(normalizedQuery));
-      return matchesStatus && matchesQuery;
+      return matchesCompany && matchesStatus && matchesQuery;
     });
-  }, [query, status, uploads]);
+  }, [companyId, query, status, uploads]);
   const issueUploads = useMemo(() => uploads.filter(needsReview), [uploads]);
+  const activeCompany = companyOptions.find((company) => company.id === companyId);
 
   function downloadCsv() {
     const rows = filteredUploads.map((upload) => ({
@@ -78,7 +92,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         </div>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_260px_auto_auto] xl:items-center">
         <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-white px-3">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
@@ -87,6 +101,21 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             placeholder="파일명, 고객사, 날짜 검색..."
             value={query}
           />
+        </label>
+        <label className="block">
+          <span className="sr-only">고객사 필터</span>
+          <select
+            className="h-11 w-full rounded-md border border-border bg-white px-3 text-sm font-black outline-none transition focus:ring-2 focus:ring-ring"
+            value={companyId}
+            onChange={(event) => setCompanyId(event.target.value)}
+          >
+            <option value="all">전체 고객사</option>
+            {companyOptions.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name} · {company.total}건
+              </option>
+            ))}
+          </select>
         </label>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(statusCopy) as UploadStatusFilter[]).map((key) => (
@@ -109,8 +138,19 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       </div>
 
       <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
-        <span className="font-bold text-muted-foreground">검색 결과</span>
-        <span className="font-black">{filteredUploads.length.toLocaleString()}건</span>
+        <div>
+          <span className="font-bold text-muted-foreground">검색 결과</span>
+          <span className="ml-2 font-black">{filteredUploads.length.toLocaleString()}건</span>
+        </div>
+        <div className="text-right text-xs font-bold text-muted-foreground">
+          {activeCompany ? (
+            <span>
+              {activeCompany.name} · 보완 {activeCompany.issues.toLocaleString()}건 / 전체 {activeCompany.total.toLocaleString()}건
+            </span>
+          ) : (
+            <span>고객사 {companyOptions.length.toLocaleString()}곳</span>
+          )}
+        </div>
       </div>
 
       {filteredUploads.length ? (
