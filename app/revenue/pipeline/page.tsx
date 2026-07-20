@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Banknote, CircleDollarSign, Percent, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getRevenuePipeline } from "@/lib/store";
@@ -23,25 +24,22 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const pipeline = await getRevenuePipeline(companyId);
+  const isAdminPreview = Boolean(adminSession && !customerSession);
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">Revenue Intelligence</Badge>
-            <h1 className="text-2xl font-black">예상 매출 파이프라인</h1>
-            <p className="mt-1 text-sm text-muted-foreground">방문 결과를 기반으로 이번 달 열려 있는 추가매출을 추정합니다.</p>
-          </div>
-          <Link
-            className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-            href={customerSession ? "/dashboard" : "/admin"}
-          >
-            돌아가기
-          </Link>
-        </div>
-      </header>
-
+    <CustomerAppShell
+      active="revenue"
+      companyName={customerSession?.companyName || "선택 고객사"}
+      mode={isAdminPreview ? "admin-preview" : "customer"}
+      rightAction={
+        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
+          돌아가기
+        </Link>
+      }
+      subtitle="방문 결과를 기반으로 이번 달 열려 있는 추가매출을 추정합니다."
+      title="예상 매출 파이프라인"
+      userName={customerSession?.name || "관리자"}
+    >
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Banknote} label="예상 총매출" value={`${pipeline.expectedRevenue.toLocaleString()}만원`} />
@@ -92,7 +90,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           </Card>
         </div>
       </section>
-    </main>
+    </CustomerAppShell>
   );
 }
 

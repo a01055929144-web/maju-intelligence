@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartPulse, MapPin, Route, Target, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getLatestReport, getReportById } from "@/lib/store";
@@ -55,27 +56,22 @@ export default async function ReportDetailPage({ params, searchParams }: { param
     ["이번 달", "매출 거래원장을 다시 업로드해 거래처 등급 변화와 품목 이탈 여부를 비교합니다."]
   ] as const;
   const dataConfidence = Math.min(100, Math.max(45, Math.round(report.customers * 0.8 + report.regions * 4 + (report.totalRevenue > 0 ? 20 : 0))));
+  const isAdminPreview = Boolean(adminSession && !customerSession);
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">MAJU AI Report</Badge>
-            <h1 className="text-2xl font-black">{report.companyName} 상세 리포트</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              거래처 {report.customers}개 · 거래지역 {report.regions}개 · 예상 추가매출 월 {report.potentialRevenue.toLocaleString()}만원
-            </p>
-          </div>
-          <Link
-            className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-            href={customerSession ? "/dashboard" : "/admin"}
-          >
-            돌아가기
-          </Link>
-        </div>
-      </header>
-
+    <CustomerAppShell
+      active="dashboard"
+      companyName={customerSession?.companyName || "선택 고객사"}
+      mode={isAdminPreview ? "admin-preview" : "customer"}
+      rightAction={
+        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
+          돌아가기
+        </Link>
+      }
+      subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 예상 추가매출 월 ${report.potentialRevenue.toLocaleString()}만원`}
+      title={`${report.companyName} 상세 리포트`}
+      userName={customerSession?.name || "관리자"}
+    >
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Building2} label="거래처" value={`${report.customers}개`} />
@@ -208,7 +204,7 @@ export default async function ReportDetailPage({ params, searchParams }: { param
           </CardContent>
         </Card>
       </section>
-    </main>
+    </CustomerAppShell>
   );
 }
 

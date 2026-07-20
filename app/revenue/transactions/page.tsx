@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store, TrendingUp, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions } from "@/lib/store";
 
@@ -17,33 +18,27 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const sales = await getSalesTransactions(companyId);
+  const isAdminPreview = Boolean(adminSession && !customerSession);
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">Revenue Ledger</Badge>
-            <h1 className="text-2xl font-black">매출 거래내역서</h1>
-            <p className="mt-1 text-sm text-muted-foreground">ERP 엑셀로 업로드된 일자·거래처·품목·금액 단위 원장입니다.</p>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}
-            >
-              매출 업로드
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-              href={customerSession ? "/dashboard" : "/admin/companies"}
-            >
-              돌아가기
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <CustomerAppShell
+      active="revenue"
+      companyName={customerSession?.companyName || "선택 고객사"}
+      mode={isAdminPreview ? "admin-preview" : "customer"}
+      rightAction={
+        <>
+          <Link className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
+            매출 업로드
+          </Link>
+          <Link className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
+            돌아가기
+          </Link>
+        </>
+      }
+      subtitle="ERP 엑셀로 업로드된 일자·거래처·품목·금액 단위 원장입니다."
+      title="매출 거래내역서"
+      userName={customerSession?.name || "관리자"}
+    >
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
@@ -162,7 +157,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </CardContent>
         </Card>
       </section>
-    </main>
+    </CustomerAppShell>
   );
 }
 
