@@ -8,6 +8,7 @@ export type ColumnMapping = Record<string, string>;
 export type UploadHistoryItem = {
   id: string;
   company: string;
+  companyId: string;
   filename: string;
   reportId: string;
   rows: number;
@@ -698,6 +699,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
         uploads.push({
           id: row.id,
           company: "",
+          companyId: row.company_id,
           filename: row.uploaded_files?.original_filename || "업로드 파일",
           reportId: row.ai_reports?.[0]?.id || "",
           rows: row.row_count,
@@ -2441,6 +2443,7 @@ export async function getUploadHistory(companyId?: string): Promise<UploadHistor
   const rows = await supabaseRequest<
     Array<{
       id: string;
+      company_id: string;
       row_count: number;
       status: "completed" | "running" | "failed";
       quality_score: number;
@@ -2451,12 +2454,13 @@ export async function getUploadHistory(companyId?: string): Promise<UploadHistor
       ai_reports: Array<{ id: string; health_score: number }>;
     }>
   >(
-    `customer_imports?select=id,row_count,status,quality_score,duplicate_count,created_at,companies(name),uploaded_files(original_filename),ai_reports(id,health_score)${companyFilter}&order=created_at.desc&limit=12`
+    `customer_imports?select=id,company_id,row_count,status,quality_score,duplicate_count,created_at,companies(name),uploaded_files(original_filename),ai_reports(id,health_score)${companyFilter}&order=created_at.desc&limit=12`
   );
 
   return rows.map((row) => ({
     id: row.id,
     company: row.companies?.name || "고객사",
+    companyId: row.company_id,
     filename: row.uploaded_files?.original_filename || "업로드 파일",
     reportId: row.ai_reports?.[0]?.id || "",
     rows: row.row_count,
@@ -2889,11 +2893,13 @@ function encodeStoragePath(path: string) {
 
 function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {
   const company = companyId ? "마주식자재" : "마주식자재";
+  const resolvedCompanyId = companyId || getDefaultCompanyId();
 
   return [
     {
       id: "sample-import-003",
       company,
+      companyId: resolvedCompanyId,
       filename: "거래처_현황_2026_06.xlsx",
       reportId: "sample-report-003",
       rows: 483,
@@ -2906,6 +2912,7 @@ function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {
     {
       id: "sample-import-002",
       company,
+      companyId: resolvedCompanyId,
       filename: "6월_매출거래처.xlsx",
       reportId: "sample-report-002",
       rows: 321,
@@ -2918,6 +2925,7 @@ function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {
     {
       id: "sample-import-001",
       company,
+      companyId: resolvedCompanyId,
       filename: "신규영업리스트.csv",
       reportId: "sample-report-001",
       rows: 147,

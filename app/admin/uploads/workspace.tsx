@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { Download, ExternalLink, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       중복건수: upload.duplicateCount,
       건강도: upload.healthScore,
       리포트ID: upload.reportId || "",
+      고객사ID: upload.companyId,
       생성일시: upload.createdAt
     }));
     const csv = toCsv(rows);
@@ -114,15 +115,15 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 
       {filteredUploads.length ? (
         <div className="overflow-x-auto rounded-md border border-border">
-          <div className="min-w-[980px]">
-            <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
+          <div className="min-w-[1180px]">
+            <div className="grid grid-cols-[1.35fr_1fr_100px_110px_100px_100px_220px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
               <span>파일</span>
               <span>고객사</span>
               <span className="text-right">행 수</span>
               <span>상태</span>
               <span className="text-right">품질</span>
               <span className="text-right">중복</span>
-              <span className="text-center">리포트</span>
+              <span className="text-center">운영 액션</span>
             </div>
             <div className="divide-y divide-border">
               {filteredUploads.map((upload) => (
@@ -143,9 +144,10 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 
 function UploadRow({ upload }: { upload: UploadHistoryItem }) {
   const reviewNeeded = needsReview(upload);
+  const companyQuery = `companyId=${encodeURIComponent(upload.companyId)}`;
 
   return (
-    <div className="grid grid-cols-[1.4fr_1fr_100px_110px_100px_100px_120px] items-center px-4 py-3 text-sm">
+    <div className="grid grid-cols-[1.35fr_1fr_100px_110px_100px_100px_220px] items-center px-4 py-3 text-sm">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate font-black">{upload.filename}</p>
@@ -153,7 +155,13 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{upload.createdAt}</p>
       </div>
-      <p className="truncate font-bold">{upload.company}</p>
+      <div className="min-w-0">
+        <p className="truncate font-bold">{upload.company}</p>
+        <Link className="mt-1 inline-flex items-center gap-1 text-xs font-black text-primary hover:underline" href={`/dashboard?${companyQuery}`}>
+          대시보드
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
       <p className="text-right font-black">{upload.rows.toLocaleString()}</p>
       <Badge className={statusClass(upload.status)}>{statusCopy[upload.status]}</Badge>
       <div className="text-right">
@@ -161,14 +169,20 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         <Progress className="mt-1 h-1.5" value={upload.qualityScore} />
       </div>
       <p className="text-right font-black">{upload.duplicateCount.toLocaleString()}건</p>
-      <div className="text-center">
+      <div className="flex justify-center gap-2">
         {upload.reportId ? (
-          <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}`}>
-            보기
+          <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}?${companyQuery}`}>
+            리포트
           </Link>
         ) : (
-          <span className="text-xs font-bold text-muted-foreground">미생성</span>
+          <span className="inline-flex h-8 items-center justify-center rounded-md bg-muted px-2.5 text-xs font-bold text-muted-foreground">미생성</span>
         )}
+        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/?${companyQuery}`}>
+          등록
+        </Link>
+        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
+          매출
+        </Link>
       </div>
     </div>
   );
