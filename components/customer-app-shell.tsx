@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import {
@@ -75,6 +76,7 @@ const navigationGroups: NavigationGroup[] = [
 
 export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, rightAction, subtitle, title, userName }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
 
   return (
     <main className="min-h-screen bg-[#f6f8fb] text-slate-950">
@@ -107,7 +109,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   {!collapsed ? <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p> : null}
                   <div className="space-y-1">
                     {group.items.map((item) => {
-                      const selected = active === item.active && !["AI 리포트", "관리자"].includes(item.label);
+                      const selected = isCurrentNavItem(pathname, item.href) || (!pathname && active === item.active);
                       return (
                         <Link
                           key={`${group.label}-${item.label}`}
@@ -187,6 +189,12 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
       </div>
     </main>
   );
+}
+
+function isCurrentNavItem(pathname: string | null, href: string) {
+  if (!pathname) return false;
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function SidebarQuickStep({ href, icon: Icon, label, step }: { readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {
