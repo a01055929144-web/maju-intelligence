@@ -171,10 +171,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
-  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 담당자";
+  const isVehicleFiltered = vehicleFilterId !== "all";
+  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 매장";
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
+  const distanceKpiHelper = kpiSummary ? "티맵 경유 순서 계산값" : "출발지에서 각 매장까지의 단건 거리 합계";
+  const durationKpiHelper = kpiSummary ? "티맵 경유 순서 계산값" : "출발지에서 각 매장까지의 단건 시간 합계";
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -249,14 +252,19 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/70 md:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
-          label={kpiSummary ? "선택 경유지" : `등급 매장 · ${selectedGradeLabel}`}
+          label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
           tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
           value={`${kpiSummary?.selectedCount ?? selectedGradeCount}곳`}
         />
-        <Kpi label="배송차량" tone="blue" value={`${deliveryVehicles.length}대`} />
+        <Kpi
+          helper={selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "전체 배송차 기준"}
+          label={selectedVehicle ? "선택 배송차" : "배송차량"}
+          tone="blue"
+          value={selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`}
+        />
         <Kpi label="매장 매출합" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
-        <Kpi label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
-        <Kpi label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
+        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
+        <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
       <section className="flex flex-col gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:flex-row lg:items-center">
@@ -338,7 +346,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <StoreManagementPanel
             onSelectStore={setSelectedId}
             selectedStoreId={selectedId}
-            title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 담당자 거래처"}
+            title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 매장 거래처"}
             stores={visibleStores}
           />
         </section>
