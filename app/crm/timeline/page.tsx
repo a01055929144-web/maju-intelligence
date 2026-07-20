@@ -473,7 +473,7 @@ export default function CrmTimelinePage() {
   return (
     <CustomerAppShell
       active="customers"
-      companyName="관리자 미리보기"
+      companyName="마주식자재"
       rightAction={
         <Link
           className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
@@ -484,7 +484,7 @@ export default function CrmTimelinePage() {
       }
       subtitle="매장 기본정보, 사업자 상태, 배송 적재위치, 메모와 방문 기록을 거래처별로 관리합니다."
       title="거래처 히스토리"
-      userName="관리자"
+      userName="정두영"
     >
       <section className="mx-auto max-w-[1760px] space-y-4">
         <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">

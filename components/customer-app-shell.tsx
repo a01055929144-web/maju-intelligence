@@ -7,7 +7,6 @@ import { useState } from "react";
 import {
   BarChart3,
   Building2,
-  ClipboardList,
   FileSpreadsheet,
   HeartPulse,
   HelpCircle,
@@ -29,6 +28,7 @@ type CustomerAppShellProps = {
   readonly children: ReactNode;
   readonly companyName: string;
   readonly hidePageTitle?: boolean;
+  readonly mode?: "admin-preview" | "customer";
   readonly rightAction?: ReactNode;
   readonly title: string;
   readonly subtitle?: string;
@@ -68,15 +68,16 @@ const navigationGroups: NavigationGroup[] = [
     label: "관리",
     items: [
       { active: "settings", href: "/dashboard/settings", icon: Settings, label: "회사 설정" },
-      { active: "dashboard", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" },
-      { active: "dashboard", href: "/admin", icon: ClipboardList, label: "관리자" }
+      { active: "dashboard", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
     ]
   }
 ];
 
-export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, rightAction, subtitle, title, userName }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, mode = "customer", rightAction, subtitle, title, userName }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "고객사 작업공간";
+  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700";
 
   return (
     <main className="min-h-screen bg-[#f6f8fb] text-slate-950">
@@ -142,7 +143,11 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                     <SidebarQuickStep currentPath={pathname} href="/crm/timeline" icon={Building2} label="거래처 정보 확인" step="2" />
                     <SidebarQuickStep currentPath={pathname} href="/routes/today" icon={Route} label="배송차별 코스 확정" step="3" />
                   </div>
-                  <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">회사 설정과 출발지를 먼저 맞추면 지도, 히스토리, AI 리포트가 같은 기준으로 계산됩니다.</p>
+                  <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">
+                    {mode === "admin-preview"
+                      ? "관리자는 고객사 화면을 확인만 하고, 계정과 회사 권한 관리는 어드민에서 처리합니다."
+                      : "회사 설정과 출발지를 먼저 맞추면 지도, 히스토리, AI 리포트가 같은 기준으로 계산됩니다."}
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -155,7 +160,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <Badge className="bg-slate-100 text-slate-700">고객사 작업공간</Badge>
+                    <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
                     {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
                   <h1 className="truncate text-[22px] font-black tracking-normal text-slate-950">{title}</h1>
