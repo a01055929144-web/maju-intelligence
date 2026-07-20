@@ -112,10 +112,22 @@ export function getRequestAuthScope(request: NextRequest, bodyCompanyId?: string
   }
 
   const queryCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
+  const adminCompanyId = bodyCompanyId || queryCompanyId;
+
+  if (!adminCompanyId) {
+    return {
+      adminSession,
+      companyId: undefined,
+      customerSession: null,
+      ok: false as const,
+      reason: "missing_company_id" as const,
+      role: "admin" as const
+    };
+  }
 
   return {
     adminSession,
-    companyId: bodyCompanyId || queryCompanyId,
+    companyId: adminCompanyId,
     customerSession: null,
     ok: true as const,
     role: "admin" as const

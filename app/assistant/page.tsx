@@ -17,6 +17,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
+  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const drafts = await getSalesAssistantDrafts(companyId);

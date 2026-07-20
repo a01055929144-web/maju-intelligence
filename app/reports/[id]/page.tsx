@@ -14,6 +14,7 @@ export default async function ReportDetailPage({ params, searchParams }: { param
   if (!customerSession && !adminSession) {
     redirect("/dashboard/login");
   }
+  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const report = params.id === "latest" ? await getLatestReport(companyId) : await getReportById(params.id, companyId);

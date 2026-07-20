@@ -11,6 +11,7 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
+  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const routePlan = await getTodayRoutePlan(companyId);

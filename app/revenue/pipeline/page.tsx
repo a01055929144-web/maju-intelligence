@@ -19,6 +19,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
+  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const pipeline = await getRevenuePipeline(companyId);

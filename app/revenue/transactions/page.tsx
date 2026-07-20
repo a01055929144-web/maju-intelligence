@@ -13,6 +13,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
   const adminSession = getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
+  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
   const sales = await getSalesTransactions(companyId);
