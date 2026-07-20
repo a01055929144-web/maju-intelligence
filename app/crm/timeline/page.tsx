@@ -113,6 +113,7 @@ export default function CrmTimelinePage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [customerSearch, setCustomerSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
+  const [operationFilter, setOperationFilter] = useState<"all" | "business-check" | "loading-missing" | "contact-missing">("all");
 
   useEffect(() => {
     let active = true;
@@ -249,6 +250,11 @@ export default function CrmTimelinePage() {
       .map((customer, index) => ({ customer, index }))
       .filter(({ customer }) => {
         const matchesGrade = gradeFilter === "all" || customer.grade === gradeFilter;
+        const matchesOperation =
+          operationFilter === "all" ||
+          (operationFilter === "business-check" && customer.businessStatus !== "정상") ||
+          (operationFilter === "loading-missing" && !customer.loadingPosition) ||
+          (operationFilter === "contact-missing" && (!customer.phone || !customer.representativeName));
         const matchesKeyword =
           !keyword ||
           [
@@ -263,9 +269,12 @@ export default function CrmTimelinePage() {
             .filter(Boolean)
             .some((value) => String(value).toLowerCase().includes(keyword));
 
-        return matchesGrade && matchesKeyword;
+        return matchesGrade && matchesOperation && matchesKeyword;
       });
-  }, [customerSearch, customers, gradeFilter]);
+  }, [customerSearch, customers, gradeFilter, operationFilter]);
+  const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
+  const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
+  const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
   const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
   const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
@@ -543,6 +552,34 @@ export default function CrmTimelinePage() {
                   </button>
                 ))}
               </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <CustomerFilterButton
+                  active={operationFilter === "business-check"}
+                  count={businessCheckCount}
+                  label="사업자 확인"
+                  onClick={() => setOperationFilter(operationFilter === "business-check" ? "all" : "business-check")}
+                  tone="danger"
+                />
+                <CustomerFilterButton
+                  active={operationFilter === "loading-missing"}
+                  count={loadingMissingCount}
+                  label="적재위치 미등록"
+                  onClick={() => setOperationFilter(operationFilter === "loading-missing" ? "all" : "loading-missing")}
+                  tone="warning"
+                />
+                <CustomerFilterButton
+                  active={operationFilter === "contact-missing"}
+                  count={contactMissingCount}
+                  label="연락처 미등록"
+                  onClick={() => setOperationFilter(operationFilter === "contact-missing" ? "all" : "contact-missing")}
+                />
+                <CustomerFilterButton
+                  active={operationFilter === "all"}
+                  count={customers.length}
+                  label="운영 전체"
+                  onClick={() => setOperationFilter("all")}
+                />
+              </div>
             </div>
             <div className="max-h-[calc(100vh-390px)] space-y-2 overflow-auto p-3">
               {filteredCustomers.map(({ customer, index }) => (
@@ -572,7 +609,7 @@ export default function CrmTimelinePage() {
               {!filteredCustomers.length ? (
                 <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
                   <p className="text-sm font-black text-slate-700">조건에 맞는 거래처가 없습니다.</p>
-                  <p className="mt-1 text-xs font-bold text-slate-400">검색어 또는 등급 필터를 바꿔보세요.</p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">검색어, 등급 또는 운영 필터를 바꿔보세요.</p>
                 </div>
               ) : null}
             </div>
@@ -900,6 +937,40 @@ function useAdminCompanyId() {
   }, []);
 
   return companyId;
+}
+
+function CustomerFilterButton({
+  active,
+  count,
+  label,
+  onClick,
+  tone = "default"
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+  tone?: "danger" | "default" | "warning";
+}) {
+  const activeClassName =
+    tone === "danger"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-slate-950 bg-slate-950 text-white";
+
+  return (
+    <button
+      className={`flex h-9 items-center justify-between rounded-md border px-2.5 text-xs font-black transition ${
+        active ? activeClassName : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="truncate">{label}</span>
+      <span className={`ml-2 rounded-full px-1.5 py-0.5 ${active ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{count}</span>
+    </button>
+  );
 }
 
 function OperationalReadinessCard({
