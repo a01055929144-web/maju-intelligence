@@ -30,6 +30,7 @@ type CustomerAppShellProps = {
   readonly companyName: string;
   readonly hidePageTitle?: boolean;
   readonly mode?: "admin-preview" | "customer";
+  readonly previewCompanyId?: string;
   readonly rightAction?: ReactNode;
   readonly title: string;
   readonly subtitle?: string;
@@ -74,11 +75,22 @@ const navigationGroups: NavigationGroup[] = [
   }
 ];
 
-export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, mode = "customer", rightAction, subtitle, title, userName }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, userName }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "고객사 작업공간";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700";
+  const scopedHref = (href: string) => {
+    if (mode !== "admin-preview" || !previewCompanyId) return href;
+    if (href === "/dashboard" || href === "/dashboard/settings") return "/admin/companies";
+
+    const [path, query = ""] = href.split("?");
+    const params = new URLSearchParams(query);
+    params.set("companyId", previewCompanyId);
+    const nextQuery = params.toString();
+
+    return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
+  };
 
   return (
     <main className="min-h-screen bg-[#f6f8fb] text-slate-950">
@@ -87,7 +99,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200 p-4">
               <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
-              <Link className="flex min-w-0 items-center gap-3" href="/dashboard">
+              <Link className="flex min-w-0 items-center gap-3" href={mode === "admin-preview" ? "/admin/companies" : "/dashboard"}>
                 <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-700 text-sm font-black text-white">M</span>
                 {!collapsed ? <span className="min-w-0">
                   <span className="block truncate text-sm font-black">MAJU Intelligence</span>
@@ -112,13 +124,14 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       const selected = isCurrentNavItem(pathname, item.href) || (!pathname && active === item.active);
+                      const itemHref = scopedHref(item.href);
                       return (
                         <Link
                           key={`${group.label}-${item.label}`}
                           className={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-black transition ${collapsed ? "justify-center" : ""} ${
                             selected ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                           }`}
-                          href={item.href}
+                          href={itemHref}
                           title={collapsed ? item.label : undefined}
                         >
                           <item.icon className={`h-4 w-4 ${selected ? "text-emerald-700" : "text-slate-400"}`} />
@@ -140,9 +153,9 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                     운영 체크리스트
                   </div>
                   <div className="mt-3 space-y-1">
-                    <SidebarQuickStep currentPath={pathname} href="/" icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
-                    <SidebarQuickStep currentPath={pathname} href="/crm/timeline" icon={Building2} label="거래처 정보 확인" step="2" />
-                    <SidebarQuickStep currentPath={pathname} href="/routes/today" icon={Route} label="배송차별 코스 확정" step="3" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/")} icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 정보 확인" step="2" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="배송차별 코스 확정" step="3" />
                   </div>
                   <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">
                     {mode === "admin-preview"
@@ -173,14 +186,14 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               <div className={`flex flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                  href="/dashboard/settings"
+                  href={mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings"}
                 >
                   <MapPinned className="h-4 w-4" />
                   출발지 설정
                 </Link>
                 <Link
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                  href="/assistant"
+                  href={scopedHref("/assistant")}
                 >
                   <MessageSquareText className="h-4 w-4" />
                   AI 도우미
@@ -218,8 +231,9 @@ function CustomerAccountActions() {
 
 function isCurrentNavItem(pathname: string | null, href: string) {
   if (!pathname) return false;
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const hrefPath = href.split("?")[0] || "/";
+  if (hrefPath === "/") return pathname === "/";
+  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }
 
 function SidebarQuickStep({ currentPath, href, icon: Icon, label, step }: { readonly currentPath: string | null; readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {

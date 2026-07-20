@@ -477,6 +477,7 @@ export default function CrmTimelinePage() {
       active="customers"
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
+      previewCompanyId={adminCompanyId || undefined}
       rightAction={
         <Link
           className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"

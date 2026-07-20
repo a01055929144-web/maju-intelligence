@@ -63,6 +63,7 @@ export default async function ReportDetailPage({ params, searchParams }: { param
       active="dashboard"
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
+      previewCompanyId={isAdminPreview ? companyId : undefined}
       rightAction={
         <Link className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
           돌아가기

@@ -24,6 +24,7 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
       companyName={customerSession?.companyName || "관리자 미리보기"}
       hidePageTitle
       mode={customerSession ? "customer" : "admin-preview"}
+      previewCompanyId={customerSession ? undefined : companyId}
       rightAction={
         <Link
           className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"

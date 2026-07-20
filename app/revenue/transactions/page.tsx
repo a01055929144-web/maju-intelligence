@@ -25,6 +25,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
       active="revenue"
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
+      previewCompanyId={isAdminPreview ? companyId : undefined}
       rightAction={
         <>
           <Link className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
