@@ -20,12 +20,41 @@ export default async function AdminPage() {
     ["처리 행 수", dashboard.overview.processedRows.toLocaleString(), ClipboardList],
     ["평균 건강도", `${dashboard.overview.avgHealthScore}점`, Gauge]
   ];
+  const adminSignals = [
+    {
+      description: "고객사별 로그인 계정과 미리보기 진입을 관리합니다.",
+      href: "/admin/companies",
+      label: "고객사 운영",
+      ready: dashboard.overview.companies > 0,
+      value: `${dashboard.overview.companies}곳`
+    },
+    {
+      description: "거래처 마스터와 매출 거래원장 업로드 반영 상태를 확인합니다.",
+      href: "/admin/uploads",
+      label: "데이터 적재",
+      ready: dashboard.overview.uploadedFiles > 0,
+      value: `${dashboard.overview.uploadedFiles}개`
+    },
+    {
+      description: "Supabase, Storage, 지도·경로 API 환경을 점검합니다.",
+      href: "/admin/system",
+      label: "시스템 상태",
+      ready: dashboard.source !== "sample",
+      value: dashboard.source === "sample" ? "확인 필요" : "연결됨"
+    }
+  ];
 
   return (
     <main className="min-h-screen bg-background">
       <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+        <div className="grid gap-3 lg:grid-cols-3">
+          {adminSignals.map((signal) => (
+            <AdminSignalCard key={signal.label} {...signal} />
+          ))}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-4">
           {overview.map(([label, value, Icon]) => (
             <Card key={label as string} className="shadow-none">
@@ -261,6 +290,39 @@ function AdminActionCard({ description, href, icon: Icon, label }: { description
       </div>
       <p className="mt-4 text-sm font-black text-slate-950">{label}</p>
       <p className="mt-2 text-xs font-semibold leading-5 text-muted-foreground">{description}</p>
+    </Link>
+  );
+}
+
+function AdminSignalCard({
+  description,
+  href,
+  label,
+  ready,
+  value
+}: {
+  description: string;
+  href: string;
+  label: string;
+  ready: boolean;
+  value: string;
+}) {
+  return (
+    <Link className={`group rounded-md border p-4 transition ${ready ? "border-emerald-100 bg-emerald-50/70 hover:bg-emerald-50" : "border-amber-200 bg-amber-50/80 hover:bg-amber-50"}`} href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+          <p className="mt-1 truncate text-2xl font-black text-slate-950">{value}</p>
+        </div>
+        <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+          {ready ? "정상" : "확인"}
+        </Badge>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
+      <span className="mt-4 inline-flex items-center gap-1 text-xs font-black text-slate-800">
+        바로가기
+        <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+      </span>
     </Link>
   );
 }

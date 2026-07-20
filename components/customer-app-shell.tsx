@@ -206,6 +206,33 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
             </div>
           </header>
 
+          {mode === "admin-preview" ? (
+            <div className="border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-6">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-amber-900">관리자 미리보기 모드</p>
+                  <p className="mt-0.5 text-xs font-bold leading-5 text-amber-800">
+                    현재 화면은 고객사 운영 화면을 관리자 권한으로 확인하는 모드입니다. 계정, 권한, 고객사 생성·수정은 어드민에서 관리하세요.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Link
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-amber-900 px-3 text-xs font-black text-white transition hover:bg-amber-950"
+                    href="/admin/companies"
+                  >
+                    고객사 관리로 돌아가기
+                  </Link>
+                  <Link
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-amber-200 bg-white px-3 text-xs font-black text-amber-900 transition hover:bg-amber-100"
+                    href="/admin"
+                  >
+                    어드민 홈
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="px-4 py-4 sm:px-6">{children}</div>
         </section>
       </div>
