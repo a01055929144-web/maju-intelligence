@@ -80,6 +80,8 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   const pathname = usePathname();
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "고객사 작업공간";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700";
+  const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
+  const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
   const scopedHref = (href: string) => {
     if (mode !== "admin-preview" || !previewCompanyId) return href;
     if (href === "/dashboard/settings") return "/admin/companies";
@@ -186,10 +188,10 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               <div className={`flex flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                  href={mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings"}
+                  href={settingsHref}
                 >
                   <MapPinned className="h-4 w-4" />
-                  출발지 설정
+                  {settingsLabel}
                 </Link>
                 <Link
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
