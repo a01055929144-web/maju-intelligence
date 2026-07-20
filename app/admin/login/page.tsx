@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { Lock, LogIn, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,9 @@ export default function AdminLoginPage() {
             MAJU Admin
           </Badge>
           <CardTitle className="text-2xl">관리자 로그인</CardTitle>
-          <p className="text-sm leading-6 text-muted-foreground">고객사 데이터와 분석 작업을 관리하는 운영자 전용 화면입니다.</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            고객사 계정을 생성하고 회사별 데이터 접근을 관리하는 관리자 전용 화면입니다. 로그인하면 고객사 운영 세션은 자동으로 종료됩니다.
+          </p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -69,6 +72,9 @@ export default function AdminLoginPage() {
               {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
               로그인
             </Button>
+            <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/dashboard/login">
+              고객사 운영계정으로 로그인
+            </Link>
           </form>
         </CardContent>
       </Card>

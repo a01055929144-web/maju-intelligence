@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { Building2, Lock, LogIn } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +56,7 @@ export default function CustomerLoginPage() {
           </Badge>
           <CardTitle className="text-2xl">고객사 로그인</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            관리자가 생성한 고객사 계정으로 로그인합니다. 어드민의 계정 관리 화면에서 아이디와 비밀번호를 수정할 수 있습니다.
+            관리자가 생성한 고객사 운영계정으로 로그인합니다. 로그인하면 관리자 세션은 자동으로 종료되고, 내 회사 데이터만 접근합니다.
           </p>
         </CardHeader>
         <CardContent>
@@ -91,6 +92,9 @@ export default function CustomerLoginPage() {
             <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleDemoLogin}>
               현재 계정으로 로그인
             </Button>
+            <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/admin/login">
+              관리자 계정으로 로그인
+            </Link>
           </form>
         </CardContent>
       </Card>
