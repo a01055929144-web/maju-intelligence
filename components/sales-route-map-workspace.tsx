@@ -135,6 +135,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [activeView, setActiveView] = useState<WorkspaceView>("map");
+  const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
@@ -155,9 +156,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             .toLowerCase()
             .includes(keyword);
         const matchesVehicle = vehicleFilterId === "all" || store.deliveryVehicleId === vehicleFilterId;
-        return matchesQuery && matchesVehicle;
+        const matchesStatus = !excludeClosedStores || store.businessStatus !== "closed";
+        return matchesQuery && matchesVehicle && matchesStatus;
       }),
-    [allStores, query, vehicleFilterId]
+    [allStores, excludeClosedStores, query, vehicleFilterId]
   );
   const visibleStores = useMemo(
     () => gradeBaseStores.filter((store) => gradeFilter === "all" || store.grade === gradeFilter),
@@ -291,8 +293,15 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               {filter.label}
             </button>
           ))}
-          <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
-            이탈 제외
+          <button
+            aria-pressed={excludeClosedStores}
+            className={`h-10 rounded-md border px-4 text-sm font-black transition ${
+              excludeClosedStores ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            onClick={() => setExcludeClosedStores((value) => !value)}
+            type="button"
+          >
+            {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
           </button>
           <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
             내 위치
