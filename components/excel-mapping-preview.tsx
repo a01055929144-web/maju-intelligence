@@ -73,6 +73,7 @@ export function ExcelHeaderMappingPreview({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{rows.length.toLocaleString()}행 전체 보기</Badge>
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 완료"}
             </Badge>
@@ -232,8 +233,8 @@ function MappingWorkspaceModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
-      <div className="mx-auto flex h-full max-w-[1680px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+      <div className="mx-auto flex h-full max-w-[1720px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <Badge className="mb-2 bg-blue-700 text-white">매핑 전용 화면</Badge>
             <h3 className="text-xl font-black text-slate-950">엑셀 컬럼과 MAJU 표준 필드 연결</h3>
@@ -256,13 +257,18 @@ function MappingWorkspaceModal({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_500px]">
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_460px]">
           <section className="flex min-h-0 flex-col border-r border-slate-200 bg-slate-50/50">
-            <div className="border-b border-slate-200 bg-white px-5 py-3">
-              <p className="text-sm font-black text-slate-950">좌측: 업로드 엑셀 원본 전체 보기</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                {rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼을 그대로 확인하면서 컬럼별 표준 필드를 지정합니다.
-              </p>
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-slate-950">엑셀 원본 데이터</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼을 그대로 보면서 각 컬럼의 의미를 판단합니다.
+                  </p>
+                </div>
+                <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">좌측 작업</Badge>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-3">
               <input
@@ -304,9 +310,14 @@ function MappingWorkspaceModal({
           </section>
 
           <aside className="flex min-h-0 flex-col bg-white">
-            <div className="border-b border-slate-200 bg-white px-5 py-3">
-              <p className="text-sm font-black text-slate-950">우측: MAJU 표준 필드 설정</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">필수값부터 연결하면 저장 가능 여부가 바로 갱신됩니다.</p>
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-slate-950">MAJU 표준 필드</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">필수값부터 연결하면 저장 가능 여부가 바로 갱신됩니다.</p>
+                </div>
+                <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">우측 결정</Badge>
+              </div>
             </div>
             <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <input
