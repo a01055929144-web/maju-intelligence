@@ -128,15 +128,22 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               ))}
             </nav>
 
-            {!collapsed ? <div className="border-t border-slate-200 p-3">
-              <div className="rounded-md bg-slate-50 p-3">
-                <div className="flex items-center gap-2 text-xs font-black text-slate-500">
-                  <HelpCircle className="h-4 w-4 text-slate-400" />
-                  고객 지원
+            {!collapsed ? (
+              <div className="border-t border-slate-200 p-3">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center gap-2 text-xs font-black text-slate-500">
+                    <HelpCircle className="h-4 w-4 text-slate-400" />
+                    운영 체크리스트
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    <SidebarQuickStep href="/" icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
+                    <SidebarQuickStep href="/crm/timeline" icon={Building2} label="거래처 정보 확인" step="2" />
+                    <SidebarQuickStep href="/routes/today" icon={Route} label="배송차별 코스 확정" step="3" />
+                  </div>
+                  <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">회사 설정과 출발지를 먼저 맞추면 지도, 히스토리, AI 리포트가 같은 기준으로 계산됩니다.</p>
                 </div>
-                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">데이터 등록, 배송 경로, AI 리포트 설정을 한 곳에서 관리합니다.</p>
               </div>
-            </div> : null}
+            ) : null}
           </div>
         </aside>
 
@@ -179,5 +186,15 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </section>
       </div>
     </main>
+  );
+}
+
+function SidebarQuickStep({ href, icon: Icon, label, step }: { readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {
+  return (
+    <Link className="flex items-center gap-2 rounded-md bg-white px-2.5 py-2 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200 transition hover:bg-emerald-50 hover:text-emerald-800 hover:ring-emerald-200" href={href}>
+      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-900 text-[10px] font-black text-white">{step}</span>
+      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+      <span className="min-w-0 truncate">{label}</span>
+    </Link>
   );
 }
