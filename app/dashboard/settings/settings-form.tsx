@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import type { ReactNode } from "react";
 import { FormEvent, useState } from "react";
-import { Building2, Check, MapPin, Save } from "lucide-react";
+import { Building2, Check, ClipboardCheck, Database, MapPin, Route, Save, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +18,9 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const hasOrigin = Boolean(form.originAddress.trim());
+  const hasCompanyName = Boolean(form.name.trim());
+  const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim())].filter(Boolean).length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,7 +39,31 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
 
   return (
     <form className="grid gap-6 lg:grid-cols-[1fr_360px]" onSubmit={handleSubmit}>
-      <Card>
+      <div className="space-y-5">
+        <Card className="overflow-hidden">
+          <CardContent className="grid gap-4 p-5 md:grid-cols-3">
+            <OperationSignal
+              icon={<Building2 className="h-4 w-4" />}
+              label="회사 기준값"
+              ok={hasCompanyName}
+              value={hasCompanyName ? "설정됨" : "확인 필요"}
+            />
+            <OperationSignal
+              icon={<MapPin className="h-4 w-4" />}
+              label="물류 출발지"
+              ok={hasOrigin}
+              value={hasOrigin ? "거리 계산 가능" : "주소 필요"}
+            />
+            <OperationSignal
+              icon={<ClipboardCheck className="h-4 w-4" />}
+              label="운영 준비도"
+              ok={completedItems >= 3}
+              value={`${completedItems}/3 완료`}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
         <CardHeader>
           <Badge className="mb-3 w-fit bg-primary/10 text-primary">
             <Building2 className="mr-1 h-3.5 w-3.5" />
@@ -90,31 +119,75 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             설정 저장
           </Button>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="h-fit">
+        <CardHeader className="space-y-3">
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-primary" />
             운영 기준값
           </CardTitle>
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+            <p className="text-xs font-black text-primary">현재 출발지</p>
+            <p className="mt-1 text-sm font-black text-foreground">{hasOrigin ? form.originAddress : "출발지 주소를 입력해주세요"}</p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4 text-sm leading-6 text-muted-foreground">
-          <div className="rounded-md border border-border p-4">
-            <p className="font-black text-foreground">계정 생성</p>
-            <p className="mt-1">관리자가 회사와 관리자 계정을 먼저 생성합니다.</p>
-          </div>
-          <div className="rounded-md border border-border p-4">
-            <p className="font-black text-foreground">설정 수정</p>
-            <p className="mt-1">고객사는 회사명, 담당자, 업태, 물류 출발지를 수정합니다.</p>
-          </div>
-          <div className="rounded-md border border-border p-4">
-            <p className="font-black text-foreground">동선 계산</p>
-            <p className="mt-1">물류 출발지는 거래처 배송주소까지의 거리/시간 계산 기준으로 사용됩니다.</p>
+          <WorkflowItem
+            icon={<Database className="h-4 w-4" />}
+            title="고객사 계정"
+            description="관리자가 회사 ID와 로그인 계정을 생성하면 고객사 데이터가 회사별로 분리됩니다."
+          />
+          <WorkflowItem
+            icon={<Upload className="h-4 w-4" />}
+            title="거래처 등록"
+            description="수기 등록 또는 엑셀 업로드로 매장 기본정보, 사업자번호, 배송주소를 저장합니다."
+          />
+          <WorkflowItem
+            icon={<Truck className="h-4 w-4" />}
+            title="배송 기준"
+            description="물류 출발지는 모든 거래처 거리, 차량별 경유 코스, 티맵 계산의 기준점입니다."
+          />
+          <div className="grid gap-2 pt-1">
+            <QuickLink href="/routes/today" label="영업·배송 코스 보기" />
+            <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" />
+            <QuickLink href="/" label="데이터 등록으로 이동" />
           </div>
           <p className="text-xs">마지막 수정: {initial.updatedAt}</p>
         </CardContent>
       </Card>
     </form>
+  );
+}
+
+function OperationSignal({ icon, label, ok, value }: { icon: ReactNode; label: string; ok: boolean; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-white p-4">
+      <div className={ok ? "text-primary" : "text-amber-600"}>{icon}</div>
+      <p className="mt-3 text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-black text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function WorkflowItem({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <div className="rounded-md border border-border p-4">
+      <div className="flex items-center gap-2 font-black text-foreground">
+        <span className="text-primary">{icon}</span>
+        {title}
+      </div>
+      <p className="mt-1">{description}</p>
+    </div>
+  );
+}
+
+function QuickLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link className="inline-flex h-10 items-center justify-between rounded-md border border-border bg-white px-3 text-sm font-black text-foreground transition hover:bg-muted" href={href}>
+      {label}
+      <Route className="h-4 w-4 text-primary" />
+    </Link>
   );
 }
