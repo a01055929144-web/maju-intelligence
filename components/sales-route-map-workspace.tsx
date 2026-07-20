@@ -239,20 +239,20 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex h-[calc(100vh-154px)] min-h-[740px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <div className="flex h-[calc(100vh-112px)] min-h-[680px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="min-w-0">
-          <h2 className="whitespace-nowrap text-[20px] font-black leading-tight">영업·배송 통합 지도</h2>
-          <p className="mt-1 text-sm font-semibold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
+          <h2 className="whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 지도</h2>
+          <p className="mt-1 text-xs font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
             {[
               { label: "매장 등급별", value: "grade" },
               { label: "배송차별", value: "vehicle" }
             ].map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-sm font-black transition ${markerViewMode === item.value ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-blue-800"}`}
+                className={`h-8 rounded-md px-3 text-xs font-black transition ${markerViewMode === item.value ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-blue-800"}`}
                 key={item.value}
                 onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
                 type="button"
@@ -264,7 +264,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
             {workspaceViews.map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-teal-800"}`}
+                className={`h-8 rounded-md px-3 text-xs font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-teal-800"}`}
                 key={item.value}
                 onClick={() => setActiveView(item.value)}
                 type="button"
@@ -286,7 +286,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-white/70 md:grid-cols-5">
+      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/60 md:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
@@ -304,7 +304,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
-      <section className="flex flex-col gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:flex-row lg:items-center">
+      <section className="grid gap-2 border-b border-slate-200/80 bg-white px-4 py-2.5 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -314,11 +314,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             value={query}
           />
         </label>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
           {gradeFilters.map((filter) => (
             <button
-              className={`h-10 rounded-md border px-4 text-sm font-black transition ${
+              className={`h-9 rounded-md border px-3 text-xs font-black transition ${
                 gradeFilter === filter.value ? "border-teal-700 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               }`}
               key={filter.value}
@@ -330,7 +330,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           ))}
           <button
             aria-pressed={excludeClosedStores}
-            className={`h-10 rounded-md border px-4 text-sm font-black transition ${
+            className={`h-9 rounded-md border px-3 text-xs font-black transition ${
               excludeClosedStores ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
             }`}
             onClick={() => setExcludeClosedStores((value) => !value)}
@@ -338,17 +338,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           >
             {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
           </button>
-          <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800" onClick={focusOrigin} type="button">
+          <button className="h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800" onClick={focusOrigin} type="button">
             내 위치
           </button>
-          <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-black text-slate-700">
+          <span className="rounded-md bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">
             {selectedVehicleLabel}
           </span>
-          <span className="ml-2 text-sm font-black text-slate-500">
+          <span className="ml-1 text-xs font-black text-slate-500">
             {visibleStores.length}/{allStores.length}개
           </span>
         </div>
-        <div className="flex min-h-8 basis-full flex-wrap items-center gap-2">
+        <div className="flex min-h-7 flex-wrap items-center gap-2 xl:col-span-2">
           <span className="text-xs font-black text-slate-400">적용 조건</span>
           {activeFilterLabels.length ? (
             activeFilterLabels.map((label) => (
@@ -363,7 +363,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_400px]" : "xl:grid-cols-[340px_minmax(0,1fr)_400px]"}`}>
+        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}

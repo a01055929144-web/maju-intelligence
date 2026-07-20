@@ -96,7 +96,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
 
   return (
     <main className="min-h-screen bg-transparent text-slate-950">
-      <div className={`grid min-h-screen transition-[grid-template-columns] duration-100 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}>
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-100 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200/80 bg-white/[0.86] backdrop-blur-2xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 p-4">
@@ -119,7 +119,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               </div>
             </div>
 
-            <nav className="flex-1 space-y-5 overflow-auto p-3">
+            <nav className="flex-1 space-y-4 overflow-auto p-3">
               {navigationGroups.map((group) => (
                 <div key={group.label}>
                   {!collapsed ? <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p> : null}
@@ -171,8 +171,8 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </aside>
 
         <section className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/78 backdrop-blur-2xl">
-            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-3" : "py-4"}`}>
+          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/86 backdrop-blur-xl">
+            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2.5" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -206,7 +206,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
             </div>
           </header>
 
-          <div className="px-4 py-5 sm:px-6">{children}</div>
+          <div className="px-4 py-4 sm:px-6">{children}</div>
         </section>
       </div>
     </main>

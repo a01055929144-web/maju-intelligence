@@ -499,27 +499,24 @@ export default function CrmTimelinePage() {
       title="거래처 히스토리"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
-      <section className="mx-auto max-w-[1760px] space-y-4">
-        <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Badge className={dbSummary.tone === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{dbSummary.label}</Badge>
-              <span className="text-sm font-black text-slate-950">전체 {customers.length}곳</span>
-              <span className="text-sm font-black text-emerald-700">A등급 {customers.filter((customer) => customer.grade === "A").length}곳</span>
-              <span className="text-sm font-black text-blue-700">현재 목록 {filteredCustomers.length}곳</span>
-              <span className="text-sm font-black text-violet-700">예상매출 {expectedRevenue.toLocaleString()}만원</span>
+      <section className="mx-auto max-w-[1560px] space-y-4">
+        <div className="rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 lg:grid-cols-[180px_repeat(4,minmax(0,1fr))]">
+            <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
+              <p className="text-[11px] font-black text-slate-400">DB 상태</p>
+              <Badge className={`mt-2 ${dbSummary.tone === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{dbSummary.label}</Badge>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs font-black text-slate-500">
-              <span className="rounded-md bg-slate-100 px-3 py-2">정제 거래처 {formatDbCount(dbSummary.normalizedCustomers)}</span>
-              <span className="rounded-md bg-slate-100 px-3 py-2">방문 결과 {formatDbCount(dbSummary.visitResults)}</span>
-            </div>
+            <SummaryCard helper={`정제 ${formatDbCount(dbSummary.normalizedCustomers)}`} label="전체 거래처" value={`${customers.length}곳`} />
+            <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
+            <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
+            <SummaryCard helper={`방문 결과 ${formatDbCount(dbSummary.visitResults)}`} label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} tone="violet" />
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <aside className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
-            <div className="border-b border-slate-200/80 p-5">
+        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
+            <div className="border-b border-slate-200/80 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
@@ -528,7 +525,7 @@ export default function CrmTimelinePage() {
                 <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
               </div>
             </div>
-            <div className="border-b border-slate-200/80 bg-slate-50/70 p-4">
+            <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
               <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
                 <Search className="h-4 w-4 text-slate-400" />
                 <input
@@ -538,7 +535,7 @@ export default function CrmTimelinePage() {
                   value={customerSearch}
                 />
               </label>
-              <div className="mt-2 grid grid-cols-4 gap-2">
+              <div className="mt-2 grid grid-cols-4 gap-1.5">
                 {(["all", "A", "B", "C"] as const).map((grade) => (
                   <button
                     className={`h-9 rounded-md border text-xs font-black transition ${
@@ -552,7 +549,7 @@ export default function CrmTimelinePage() {
                   </button>
                 ))}
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
                 <CustomerFilterButton
                   active={operationFilter === "business-check"}
                   count={businessCheckCount}
@@ -581,11 +578,11 @@ export default function CrmTimelinePage() {
                 />
               </div>
             </div>
-            <div className="max-h-[calc(100vh-390px)] space-y-2 overflow-auto p-3">
+            <div className="max-h-[calc(100vh-360px)] space-y-2 overflow-auto p-3">
               {filteredCustomers.map(({ customer, index }) => (
                 <button
                   key={`${customer.customerName}-${customer.address}`}
-                  className={`w-full rounded-md border p-4 text-left transition ${
+                  className={`w-full rounded-md border p-3 text-left transition ${
                     index === selectedIndex ? "border-slate-900 bg-slate-50 shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                   }`}
                   onClick={() => setSelectedIndex(index)}
@@ -616,7 +613,7 @@ export default function CrmTimelinePage() {
           </aside>
 
           <div className="min-w-0 space-y-4">
-            <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
+            <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>

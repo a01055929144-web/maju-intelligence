@@ -89,9 +89,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       title="대시보드"
       userName={customerSession?.name || adminSession?.email || "관리자"}
     >
-      <section className="mx-auto max-w-[1760px] space-y-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
+      <section className="mx-auto max-w-[1560px] space-y-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
               <div className="min-w-0">
                 <Badge className="mb-3 bg-slate-100 text-slate-700">오늘 운영 요약</Badge>
@@ -120,7 +120,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             </div>
           </div>
 
-          <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase text-slate-400">Company Health Score</p>
             <div className="mt-3 flex items-end gap-3">
               <span className="text-6xl font-black text-emerald-700">{report.health.total}</span>
@@ -140,7 +140,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)_360px]">
+        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
           <Card className="border-slate-200/80 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -174,7 +174,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                 <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
                 <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
               </div>
-              <KakaoAddressMap mapClassName="h-[420px]" markers={mapMarkers} showList={false} />
+              <KakaoAddressMap mapClassName="h-[460px]" markers={mapMarkers} showList={false} />
             </CardContent>
           </Card>
 
@@ -239,7 +239,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <Card className="border-slate-200/80 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-3">
@@ -287,15 +287,13 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
-    <Card className="border-slate-200/80 bg-white shadow-sm">
-      <CardContent className="p-5">
+    <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-4">
         <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-500">
           <Icon className="h-4 w-4" />
         </div>
         <p className="text-xs font-black uppercase text-muted-foreground">{label}</p>
         <p className="mt-2 text-[26px] font-black leading-none">{value}</p>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
