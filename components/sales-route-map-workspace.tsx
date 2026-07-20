@@ -215,6 +215,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     setSelectedId("");
     setVehicleFilterId("all");
   };
+  const changeWorkspaceView = (nextView: WorkspaceView) => {
+    setActiveView(nextView);
+    setPreviewStoreId("");
+    setMapFocusId("");
+    if (nextView === "course" && vehicleFilterId === "all" && deliveryVehicles[0]) {
+      selectVehicle(deliveryVehicles[0].id);
+    }
+  };
 
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
@@ -266,7 +274,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               <button
                 className={`h-8 rounded-md px-3 text-xs font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-teal-800"}`}
                 key={item.value}
-                onClick={() => setActiveView(item.value)}
+                onClick={() => changeWorkspaceView(item.value)}
                 type="button"
               >
                 {item.label}
@@ -303,6 +311,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
+
+      <RouteWorkspaceGuide
+        activeView={activeView}
+        courseSummary={courseSummary}
+        markerViewMode={markerViewMode}
+        selectedVehicleLabel={selectedVehicleLabel}
+        visibleStoreCount={visibleStores.length}
+      />
 
       <section className="grid gap-2 border-b border-slate-200/80 bg-white px-4 py-2.5 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
         <label className="relative min-w-0 flex-1">
@@ -610,6 +626,44 @@ function DeliveryAssignmentPanel({
         })}
       </div>
     </aside>
+  );
+}
+
+function RouteWorkspaceGuide({
+  activeView,
+  courseSummary,
+  markerViewMode,
+  selectedVehicleLabel,
+  visibleStoreCount
+}: {
+  readonly activeView: WorkspaceView;
+  readonly courseSummary: CourseSummary | null;
+  readonly markerViewMode: MarkerViewMode;
+  readonly selectedVehicleLabel: string;
+  readonly visibleStoreCount: number;
+}) {
+  const viewLabel = activeView === "map" ? "지도 확인" : activeView === "customers" ? "거래처 목록" : "경유 코스";
+  const markerLabel = markerViewMode === "grade" ? "매장 등급별 마커" : "배송차별 마커";
+  const guide =
+    activeView === "course"
+      ? courseSummary
+        ? `${selectedVehicleLabel} 기준 경유 ${courseSummary.selectedCount}곳의 도로 거리와 시간이 계산되었습니다.`
+        : `${selectedVehicleLabel} 기준 경유 매장을 선택한 뒤 티맵 계산을 실행하세요.`
+      : activeView === "customers"
+        ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
+        : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 원장을 확인합니다.";
+
+  return (
+    <section className="border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200">{viewLabel}</span>
+          <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{markerLabel}</span>
+          <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">{visibleStoreCount.toLocaleString()}개 표시</span>
+        </div>
+        <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
+      </div>
+    </section>
   );
 }
 
