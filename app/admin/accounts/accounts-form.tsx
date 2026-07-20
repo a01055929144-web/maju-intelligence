@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { Eye, EyeOff, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AuthCredentials } from "@/lib/store";
@@ -51,7 +52,8 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
         />
         <AccountPanel
           email={form.customerEmail}
-          label="고객사 계정"
+          helper="기본 고객사 계정입니다. 실제 회사별 계정은 고객사 선택·관리에서 다룹니다."
+          label="기본 고객사 계정"
           password={form.customerPassword}
           passwordVisible={showPasswords}
           onEmailChange={(value) => update("customerEmail", value)}
@@ -60,7 +62,7 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
       </div>
 
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold text-muted-foreground">고객사 회사 ID</span>
+        <span className="text-xs font-bold text-muted-foreground">기본 고객사 회사 ID</span>
         <input
           className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           value={form.customerCompanyId}
@@ -83,6 +85,9 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
           {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           {showPasswords ? "비밀번호 숨기기" : "비밀번호 보기"}
         </Button>
+        <Link className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted" href="/admin/companies">
+          고객사별 계정으로 이동
+        </Link>
       </div>
     </form>
   );
@@ -90,6 +95,7 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
 
 function AccountPanel({
   email,
+  helper,
   label,
   onEmailChange,
   onPasswordChange,
@@ -97,6 +103,7 @@ function AccountPanel({
   passwordVisible
 }: {
   email: string;
+  helper?: string;
   label: string;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
@@ -106,6 +113,7 @@ function AccountPanel({
   return (
     <div className="rounded-lg border border-border bg-muted/25 p-4">
       <p className="mb-4 font-black">{label}</p>
+      {helper ? <p className="-mt-2 mb-4 text-xs font-semibold leading-5 text-muted-foreground">{helper}</p> : null}
       <div className="space-y-3">
         <label className="block space-y-1.5">
           <span className="text-xs font-bold text-muted-foreground">아이디/이메일</span>
