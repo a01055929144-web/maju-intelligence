@@ -219,6 +219,26 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           </div>
         </div>
 
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                  운영 바로가기
+                </CardTitle>
+                <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서 확인한 문제를 바로 처리할 수 있는 주요 작업입니다.</p>
+              </div>
+              <Badge className="w-fit bg-slate-100 text-slate-700">고객사 작업 흐름</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {quickActions.map((action) => (
+              <QuickActionCard key={action.href} {...action} />
+            ))}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="border-slate-200/80 shadow-sm">
             <CardHeader className="pb-3">
@@ -290,6 +310,31 @@ function NextAction({ description, href, label, value }: { description: string; 
         <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
       </div>
       <p className="mt-3 text-xs font-bold leading-5 text-slate-500">{description}</p>
+    </Link>
+  );
+}
+
+function QuickActionCard({
+  description,
+  href,
+  icon: Icon,
+  label
+}: {
+  description: string;
+  href: string;
+  icon: typeof Route;
+  label: string;
+}) {
+  return (
+    <Link className="group rounded-md border border-slate-200/80 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50" href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-600">
+          <Icon className="h-4 w-4" />
+        </div>
+        <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
+      </div>
+      <p className="mt-4 text-sm font-black text-slate-950">{label}</p>
+      <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{description}</p>
     </Link>
   );
 }
