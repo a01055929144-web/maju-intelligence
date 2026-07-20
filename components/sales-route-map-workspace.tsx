@@ -182,6 +182,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
   const distanceKpiHelper = kpiSummary ? "티맵 경유 순서 계산값" : "출발지에서 각 매장까지의 단건 거리 합계";
   const durationKpiHelper = kpiSummary ? "티맵 경유 순서 계산값" : "출발지에서 각 매장까지의 단건 시간 합계";
+  const activeFilterLabels = [
+    query.trim() ? `검색: ${query.trim()}` : "",
+    isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
+    gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
+    excludeClosedStores ? "이탈 제외" : ""
+  ].filter(Boolean);
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -341,6 +347,18 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <span className="ml-2 text-sm font-black text-slate-500">
             {visibleStores.length}/{allStores.length}개
           </span>
+        </div>
+        <div className="flex min-h-8 basis-full flex-wrap items-center gap-2">
+          <span className="text-xs font-black text-slate-400">적용 조건</span>
+          {activeFilterLabels.length ? (
+            activeFilterLabels.map((label) => (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
+                {label}
+              </span>
+            ))
+          ) : (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
+          )}
         </div>
       </section>
 
