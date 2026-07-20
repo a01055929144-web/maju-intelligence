@@ -58,7 +58,7 @@ export default async function AdminPage() {
               description="회사 정보와 고객사 로그인 계정을 만들고, 선택 고객사 대시보드로 진입합니다."
               href="/admin/companies"
               icon={Users}
-              label="1. 고객사 선택·관리"
+              label="1. 고객사 관리"
             />
             <AdminActionCard
               description="거래처 마스터와 매출 거래원장이 실제 DB에 쌓였는지 확인합니다."

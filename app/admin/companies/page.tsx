@@ -14,7 +14,7 @@ export default async function AdminCompaniesPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <AdminPageHeader active="companies" badge="Company Control" session={session} subtitle="회사별 로그인 계정과 거래처 데이터를 분리해서 운영합니다" title="고객사 생성/수정" />
+      <AdminPageHeader active="companies" badge="Company Control" session={session} subtitle="회사별 로그인 계정과 거래처 데이터를 분리해서 운영합니다" title="고객사 관리" />
 
       <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
         <Card className="border-amber-200 bg-amber-50 shadow-none">

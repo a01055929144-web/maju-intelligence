@@ -15,10 +15,10 @@ type AdminPageHeaderProps = {
 };
 
 const navItems = [
-  { active: "overview", href: "/admin", icon: Home, label: "운영 홈" },
-  { active: "companies", href: "/admin/companies", icon: Building2, label: "고객사 선택·관리" },
-  { active: "uploads", href: "/admin/uploads", icon: FileSpreadsheet, label: "업로드 이력" },
-  { active: "accounts", href: "/admin/accounts", icon: ShieldCheck, label: "계정 관리" },
+  { active: "overview", href: "/admin", icon: Home, label: "운영 현황" },
+  { active: "companies", href: "/admin/companies", icon: Building2, label: "고객사 관리" },
+  { active: "uploads", href: "/admin/uploads", icon: FileSpreadsheet, label: "업로드·분석" },
+  { active: "accounts", href: "/admin/accounts", icon: ShieldCheck, label: "전역 계정" },
   { active: "system", href: "/admin/system", icon: ServerCog, label: "시스템 점검" }
 ] satisfies Array<{ active: AdminNavKey; href: string; icon: typeof Database; label: string }>;
 
