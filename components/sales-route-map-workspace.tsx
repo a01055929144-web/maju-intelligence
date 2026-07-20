@@ -197,6 +197,19 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     setSelectedId("");
   };
 
+  const resetWorkspace = () => {
+    setActiveView("map");
+    setCourseSummary(null);
+    setExcludeClosedStores(false);
+    setGradeFilter("all");
+    setMapFocusId("");
+    setMarkerViewMode("grade");
+    setPreviewStoreId("");
+    setQuery("");
+    setSelectedId("");
+    setVehicleFilterId("all");
+  };
+
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
@@ -255,7 +268,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             ))}
           </nav>
           <span className="text-xs font-bold text-slate-400">기존 영업·배송 데이터 기준</span>
-          <button className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" type="button">
+          <button
+            aria-label="필터 초기화"
+            className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+            onClick={resetWorkspace}
+            title="필터 초기화"
+            type="button"
+          >
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
