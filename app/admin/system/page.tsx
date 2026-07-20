@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Database, KeyRound, LayoutDashboard, ServerCog, ShieldAlert, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -19,6 +19,36 @@ export default async function AdminSystemPage() {
   if (!session) redirect("/admin/login");
 
   const system = await getSystemDiagnostics();
+  const priorityActions = [
+    {
+      description: system.mode === "production-db" ? "실 DB 연결 상태입니다. 테이블 카운트와 Storage만 확인하면 됩니다." : "Supabase 환경변수와 schema.sql 적용 여부를 먼저 확인해야 합니다.",
+      href: "#database-checks",
+      icon: Database,
+      label: "1. DB 연결 확인",
+      tone: system.mode === "production-db" ? "ready" : "warning"
+    },
+    {
+      description: system.adminConfigured && system.customerConfigured ? "운영 계정이 설정되어 있습니다. 고객사별 계정 분리만 확인하세요." : "관리자/고객사 기본 계정이 남아 있으면 운영값으로 바꾸세요.",
+      href: "/admin/accounts",
+      icon: KeyRound,
+      label: "2. 계정 설정 점검",
+      tone: system.adminConfigured && system.customerConfigured ? "ready" : "warning"
+    },
+    {
+      description: "고객사별 거래처 마스터와 매출 거래원장 업로드 이력을 확인합니다.",
+      href: "/admin/uploads",
+      icon: UploadCloud,
+      label: "3. 업로드 검증",
+      tone: "default"
+    },
+    {
+      description: "고객사 데이터가 분리되어 보이는지 관리자 미리보기로 최종 확인합니다.",
+      href: "/admin/companies",
+      icon: LayoutDashboard,
+      label: "4. 고객사 미리보기",
+      tone: "default"
+    }
+  ] as const;
 
   return (
     <main className="min-h-screen bg-background">
@@ -77,6 +107,23 @@ export default async function AdminSystemPage() {
           </CardContent>
         </Card>
 
+        <Card className="shadow-none">
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle>운영 조치 순서</CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">점검 결과를 보고 바로 조치할 수 있는 관리자 작업 흐름입니다.</p>
+              </div>
+              <Badge className="w-fit bg-slate-100 text-slate-700">실운영 기준</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {priorityActions.map((action) => (
+              <SystemActionCard key={action.label} {...action} />
+            ))}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Database} label="데이터 모드" value={system.mode === "production-db" ? "실 DB" : "저장 확인 필요"} />
           <Metric icon={ServerCog} label="앱 URL" value={system.appUrlConfigured ? "설정됨" : "미설정"} />
@@ -122,7 +169,7 @@ export default async function AdminSystemPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card id="database-checks">
           <CardHeader>
             <CardTitle>Supabase 데이터 점검</CardTitle>
           </CardHeader>
@@ -174,7 +221,7 @@ export default async function AdminSystemPage() {
               ["DB", "companies, normalized_customers, customer_imports 테이블 카운트 확인"],
               ["Storage", "customer-attachments 버킷 생성 및 파일 업로드 테스트"],
               ["Auth", "관리자 비밀번호와 세션 시크릿 운영값으로 교체"],
-              ["Auth", "고객사별 계정은 고객사 선택·관리에서 생성"],
+              ["Auth", "고객사별 계정은 고객사 관리에서 생성"],
               ["Deploy", "Vercel Production 환경변수 등록 및 재배포"],
               ["Data", "거래처 마스터 엑셀 업로드 후 업로드 이력 확인"],
               ["Data", "매출 거래원장 업로드 후 매출 원장 화면 확인"],
@@ -215,6 +262,40 @@ function ReadinessList({ empty, icon, items, title }: { empty: string; icon: "da
         <div className="rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary">{empty}</div>
       )}
     </div>
+  );
+}
+
+function SystemActionCard({
+  description,
+  href,
+  icon: Icon,
+  label,
+  tone
+}: {
+  description: string;
+  href: string;
+  icon: typeof Database;
+  label: string;
+  tone: "default" | "ready" | "warning";
+}) {
+  const toneClass =
+    tone === "ready"
+      ? "border-primary/20 bg-primary/5 text-primary"
+      : tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-border bg-white text-slate-900";
+
+  return (
+    <Link className={`group rounded-md border p-4 transition hover:border-slate-300 hover:bg-slate-50 ${toneClass}`} href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/80">
+          <Icon className="h-4 w-4" />
+        </div>
+        <ArrowRight className="h-4 w-4 text-current opacity-60 transition group-hover:translate-x-0.5" />
+      </div>
+      <p className="mt-4 text-sm font-black">{label}</p>
+      <p className="mt-2 text-xs font-semibold leading-5 opacity-75">{description}</p>
+    </Link>
   );
 }
 
