@@ -311,6 +311,10 @@ export default function CrmTimelinePage() {
     }
   ];
   const operationalReadyCount = operationalChecks.filter((check) => check.ok).length;
+  const urgentOperationalChecks = operationalChecks.filter((check) => !check.ok).slice(0, 3);
+  const operationalActionItems = urgentOperationalChecks.length
+    ? urgentOperationalChecks
+    : operationalChecks.slice(0, 3);
   const draftBusinessNumberChanged = Boolean(
     draftCustomer && normalizeBusinessRegistrationNumber(draftCustomer.businessNumber) !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber)
   );
@@ -656,6 +660,13 @@ export default function CrmTimelinePage() {
                 <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
                 <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager} helper={`${selectedCustomer.region} 권역`} tone="emerald" />
               </div>
+              <OperationalActionStrip
+                actionItems={operationalActionItems}
+                completeCount={operationalReadyCount}
+                isEditing={isEditing}
+                onEdit={() => setIsEditing(true)}
+                totalCount={operationalChecks.length}
+              />
               <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
             </div>
 
@@ -1003,6 +1014,58 @@ function OperationalReadinessCard({
               {check.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
             </div>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{check.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OperationalActionStrip({
+  actionItems,
+  completeCount,
+  isEditing,
+  onEdit,
+  totalCount
+}: {
+  actionItems: Array<{ description: string; ok: boolean; title: string }>;
+  completeCount: number;
+  isEditing: boolean;
+  onEdit: () => void;
+  totalCount: number;
+}) {
+  const ready = completeCount === totalCount;
+
+  return (
+    <div className={`mt-4 rounded-md border p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-blue-100 bg-blue-50/70"}`}>
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={ready ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}>{ready ? "운영 준비 완료" : "운영 보완 필요"}</Badge>
+            <span className="text-sm font-black text-slate-950">{completeCount}/{totalCount} 항목 완료</span>
+          </div>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
+            {ready ? "이 거래처는 원장, 배송, 첨부, 메모 기준이 준비되어 있습니다." : "부족한 항목부터 보완하면 지도, 배송, 히스토리 품질이 좋아집니다."}
+          </p>
+        </div>
+        <button
+          className="inline-flex h-9 w-fit items-center gap-2 rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 disabled:cursor-default disabled:opacity-60"
+          disabled={isEditing}
+          onClick={onEdit}
+          type="button"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          {isEditing ? "편집 중" : "부족 항목 수정"}
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        {actionItems.map((item) => (
+          <div key={item.title} className="rounded-md border border-white/80 bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-slate-900">{item.title}</p>
+              {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
           </div>
         ))}
       </div>
