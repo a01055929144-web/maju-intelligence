@@ -24,12 +24,12 @@ const navItems = [
 
 export function AdminPageHeader({ active, badge, session, subtitle, title }: AdminPageHeaderProps) {
   return (
-    <header className="border-b border-border bg-white">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+    <header className="border-b border-slate-200/80 bg-white/[0.82] backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <Badge className="mb-2 bg-primary/10 text-primary">{badge}</Badge>
-          <h1 className="truncate text-2xl font-black">{title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <Badge className="mb-2 bg-slate-100 text-slate-700">{badge}</Badge>
+          <h1 className="truncate text-[26px] font-black tracking-normal text-slate-950">{title}</h1>
+          <p className="mt-1 text-sm font-semibold text-slate-500">
             {subtitle} · {session.name} · {session.role}
           </p>
         </div>
@@ -39,8 +39,8 @@ export function AdminPageHeader({ active, badge, session, subtitle, title }: Adm
             return (
               <Link
                 key={item.href}
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
-                  selected ? "border-slate-950 bg-slate-950 text-white" : "border-border bg-white text-slate-700 hover:bg-muted"
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-black transition ${
+                  selected ? "border-slate-950 bg-slate-950 text-white shadow-[0_8px_18px_rgba(15,23,42,0.12)]" : "border-slate-200 bg-white/90 text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-slate-300 hover:bg-slate-50"
                 }`}
                 href={item.href}
               >
