@@ -33,7 +33,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
       rightAction={
-        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
+        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700" href={customerSession ? "/dashboard" : "/admin/companies"}>
           돌아가기
         </Link>
       }

@@ -304,7 +304,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
           <div className="flex flex-wrap gap-2 text-xs font-black">
             <Badge className="bg-emerald-50 text-emerald-700">전체 매장 {allDeliveryStops.length}곳</Badge>
             <Badge className="bg-blue-50 text-blue-700">영업 후보 {filteredStops.length}곳</Badge>
-            <Badge className={deliverySequence ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}>
+            <Badge className={deliverySequence ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "bg-slate-100 text-slate-700"}>
               {deliverySequence ? "티맵 경로 반영" : "경로 계산 전"}
             </Badge>
           </div>
@@ -375,7 +375,7 @@ export function RoutePlanWorkspace({ mapMarkers, routePlan }: RoutePlanWorkspace
                   <Badge className="bg-violet-50 text-violet-700">A 고매출</Badge>
                   <Badge className="bg-blue-50 text-blue-700">B 안정</Badge>
                   <Badge className="bg-slate-100 text-slate-700">C 육성</Badge>
-                  <Badge className={deliverySequence ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}>
+                  <Badge className={deliverySequence ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "bg-slate-100 text-slate-700"}>
                     {deliverySequence ? "티맵 경로 반영" : "선택 지도"}
                   </Badge>
                 </div>
@@ -476,7 +476,7 @@ function DeliveryVehicleSidebar({
               key={vehicle.id}
               className={`w-full rounded-md border p-3 text-left transition ${
                 selected
-                  ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                  ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)]"
                   : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
               }`}
               onClick={() => onSelectVehicle(vehicle.id)}
@@ -546,7 +546,7 @@ function DeliveryStopList({
         <Badge className="bg-emerald-50 text-emerald-700">{selectedStoreIds.length}/15곳 선택</Badge>
       </div>
       <div className="mb-3 flex flex-wrap gap-2">
-        <button className="h-8 rounded-md border border-slate-200 bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800" onClick={onSelectAssigned} type="button">
+        <button className="h-8 rounded-md border border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700" onClick={onSelectAssigned} type="button">
           기본 권역 15곳
         </button>
         <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={onClear} type="button">
@@ -747,7 +747,7 @@ function FilterButton({ active, label, onClick }: { readonly active: boolean; re
   return (
     <button
       className={`h-8 rounded-md border px-3 text-xs font-black transition ${
-        active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        active ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-teal-50 hover:text-teal-800"
       }`}
       onClick={onClick}
       type="button"
@@ -775,7 +775,7 @@ function GradeButton({
         ? "border-blue-600 bg-blue-600 text-white"
         : tone === "C"
           ? "border-slate-600 bg-slate-600 text-white"
-          : "border-slate-950 bg-slate-950 text-white";
+          : "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white";
 
   return (
     <button

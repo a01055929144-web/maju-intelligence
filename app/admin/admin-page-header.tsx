@@ -24,11 +24,11 @@ const navItems = [
 
 export function AdminPageHeader({ active, badge, session, subtitle, title }: AdminPageHeaderProps) {
   return (
-    <header className="border-b border-slate-200/80 bg-white/[0.82] backdrop-blur-xl">
+    <header className="border-b border-slate-200/80 bg-white/[0.78] backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <Badge className="mb-2 bg-slate-100 text-slate-700">{badge}</Badge>
-          <h1 className="truncate text-[26px] font-black tracking-normal text-slate-950">{title}</h1>
+          <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">{badge}</Badge>
+          <h1 className="truncate text-[26px] font-black tracking-normal text-slate-900">{title}</h1>
           <p className="mt-1 text-sm font-semibold text-slate-500">
             {subtitle} · {session.name} · {session.role}
           </p>
@@ -40,7 +40,7 @@ export function AdminPageHeader({ active, badge, session, subtitle, title }: Adm
               <Link
                 key={item.href}
                 className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-black transition ${
-                  selected ? "border-slate-950 bg-slate-950 text-white shadow-[0_8px_18px_rgba(15,23,42,0.12)]" : "border-slate-200 bg-white/90 text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-slate-300 hover:bg-slate-50"
+                  selected ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)]" : "border-slate-200 bg-white/92 text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                 }`}
                 href={item.href}
               >

@@ -7,10 +7,10 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const variants = {
-  default: "bg-slate-950 text-white shadow-[0_8px_18px_rgba(15,23,42,0.12)] hover:bg-slate-800",
-  outline: "border border-slate-200 bg-white/90 text-slate-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-slate-300 hover:bg-slate-50",
-  ghost: "text-slate-700 hover:bg-slate-100",
-  accent: "bg-blue-600 text-white shadow-[0_8px_18px_rgba(37,99,235,0.18)] hover:bg-blue-700"
+  default: "bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)] hover:from-teal-700 hover:to-blue-700",
+  outline: "border border-slate-200 bg-white/95 text-slate-800 shadow-[0_1px_0_rgba(15,23,42,0.04)] hover:border-teal-200 hover:bg-teal-50/70 hover:text-teal-900",
+  ghost: "text-slate-700 hover:bg-teal-50 hover:text-teal-900",
+  accent: "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_12px_24px_rgba(37,99,235,0.18)] hover:from-blue-700 hover:to-indigo-700"
 };
 
 const sizes = {

@@ -412,7 +412,7 @@ export default function Home() {
       previewCompanyId={adminCompanyId || undefined}
       rightAction={
         <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700"
           href={adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today"}
         >
           영업·배송 코스
@@ -612,7 +612,7 @@ function Briefing({
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-slate-950 p-5 text-white">
+        <div className="rounded-xl border border-teal-100 bg-gradient-to-br from-teal-700 to-blue-700 p-5 text-white shadow-[0_18px_42px_rgba(13,148,136,0.18)]">
           <p className="text-xs font-bold text-white/60">등록 후 생성되는 결과</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             {reportOutcomes.map(([label, value, hint]) => (
@@ -1098,7 +1098,7 @@ function Onboarding({
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
                         {lastManualCustomerHref ? (
-                          <Link className="inline-flex h-7 items-center justify-center rounded-md bg-slate-950 px-2.5 text-xs font-black text-white" href={lastManualCustomerHref}>
+                          <Link className="inline-flex h-7 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-2.5 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)]" href={lastManualCustomerHref}>
                             히스토리에서 확인
                           </Link>
                         ) : null}
@@ -1321,7 +1321,7 @@ function DataRegistrationFlowCard({
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <Badge className="mb-3 bg-slate-950 text-white">운영 등록 플로우</Badge>
+          <Badge className="mb-3 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">운영 등록 플로우</Badge>
           <h2 className="text-xl font-black text-slate-950">데이터가 운영 화면에 반영되는 순서</h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처 기본정보와 매출 거래내역은 같은 등록 흐름을 거치지만, 저장 후 쓰임이 다릅니다.</p>
         </div>
@@ -1813,7 +1813,7 @@ function Report({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800" href="/dashboard">
+              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-4 text-sm font-black text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)] transition hover:from-teal-700 hover:to-blue-700" href="/dashboard">
                 대시보드 보기
               </Link>
               <Link
@@ -1834,7 +1834,7 @@ function Report({
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-slate-950 p-5 text-white">
+        <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-700 to-indigo-700 p-5 text-white shadow-[0_18px_42px_rgba(37,99,235,0.18)]">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold text-white/55">Company Health Score</p>

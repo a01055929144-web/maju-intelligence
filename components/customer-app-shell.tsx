@@ -79,7 +79,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "고객사 작업공간";
-  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700";
+  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
   const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
   const scopedHref = (href: string) => {
@@ -97,12 +97,12 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   return (
     <main className="min-h-screen bg-transparent text-slate-950">
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-100 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-200/80 bg-white/[0.92] backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+        <aside className="border-b border-slate-200/80 bg-white/[0.86] backdrop-blur-2xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 p-4">
               <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
               <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 text-sm font-black text-white shadow-[0_10px_22px_rgba(15,23,42,0.18)]">M</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-blue-600 text-sm font-black text-white shadow-[0_12px_24px_rgba(13,148,136,0.24)]">M</span>
                 {!collapsed ? <span className="min-w-0">
                   <span className="block truncate text-sm font-black">MAJU Intelligence</span>
                   <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
@@ -110,7 +110,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               </Link>
               <button
                 aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white/90 text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-slate-300 hover:bg-slate-50 lg:inline-flex"
+                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white/90 text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 lg:inline-flex"
                 onClick={() => setCollapsed((value) => !value)}
                 type="button"
               >
@@ -131,14 +131,14 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                         <Link
                           key={`${group.label}-${item.label}`}
                           className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-black transition ${collapsed ? "justify-center" : ""} ${
-                            selected ? "bg-slate-950 text-white shadow-[0_8px_18px_rgba(15,23,42,0.12)]" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                            selected ? "bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)]" : "text-slate-600 hover:bg-teal-50 hover:text-teal-900"
                           }`}
                           href={itemHref}
                           title={collapsed ? item.label : undefined}
                         >
                           <item.icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/15 px-1.5 py-0 text-[10px] text-white" : "bg-teal-50 px-1.5 py-0 text-[10px] text-teal-700"}>{item.badge}</Badge> : null}
+                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/20 px-1.5 py-0 text-[10px] text-white" : "bg-blue-50 px-1.5 py-0 text-[10px] text-blue-700 ring-1 ring-inset ring-blue-100"}>{item.badge}</Badge> : null}
                         </Link>
                       );
                     })}
@@ -149,9 +149,9 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
 
             {!collapsed ? (
               <div className="border-t border-slate-200/80 p-3">
-                <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-                  <div className="flex items-center gap-2 text-xs font-black text-slate-500">
-                    <HelpCircle className="h-4 w-4 text-slate-400" />
+                <div className="rounded-xl border border-teal-100 bg-gradient-to-br from-teal-50/90 to-blue-50/70 p-3 shadow-[0_10px_28px_rgba(13,148,136,0.08)]">
+                  <div className="flex items-center gap-2 text-xs font-black text-teal-800">
+                    <HelpCircle className="h-4 w-4 text-teal-500" />
                     운영 체크리스트
                   </div>
                   <div className="mt-3 space-y-1">
@@ -171,7 +171,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </aside>
 
         <section className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
+          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/78 backdrop-blur-2xl">
             <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-3" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -179,7 +179,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                     <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
                     {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
-                  <h1 className="truncate text-[24px] font-black tracking-normal text-slate-950">{title}</h1>
+                  <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
                   {subtitle ? <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p> : null}
                 </div>
               ) : (
@@ -187,14 +187,14 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               )}
               <div className={`flex flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/90 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-slate-300 hover:bg-slate-50"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                   href={settingsHref}
                 >
                   <MapPinned className="h-4 w-4" />
                   {settingsLabel}
                 </Link>
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/90 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-slate-300 hover:bg-slate-50"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50/80 px-3 text-sm font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-blue-200 hover:bg-blue-100"
                   href={scopedHref("/assistant")}
                 >
                   <MessageSquareText className="h-4 w-4" />
@@ -221,7 +221,7 @@ function CustomerAccountActions() {
 
   return (
     <button
-      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/90 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-slate-300 hover:bg-slate-50"
+      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
       onClick={logout}
       type="button"
     >
@@ -244,12 +244,12 @@ function SidebarQuickStep({ currentPath, href, icon: Icon, label, step }: { read
   return (
     <Link
       className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-black ring-1 ring-inset transition ${
-        selected ? "bg-slate-950 text-white ring-slate-950" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100 hover:text-slate-950 hover:ring-slate-300"
+        selected ? "bg-gradient-to-r from-teal-600 to-blue-600 text-white ring-teal-500" : "bg-white/90 text-slate-700 ring-slate-200 hover:bg-teal-50 hover:text-teal-900 hover:ring-teal-200"
       }`}
       href={href}
     >
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black ${selected ? "bg-white text-slate-950" : "bg-slate-900 text-white"}`}>{step}</span>
-      <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black ${selected ? "bg-white text-teal-700" : "bg-teal-100 text-teal-700"}`}>{step}</span>
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-teal-500"}`} />
       <span className="min-w-0 truncate">{label}</span>
     </Link>
   );

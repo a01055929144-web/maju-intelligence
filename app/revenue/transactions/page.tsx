@@ -31,7 +31,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           <Link className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
             매출 업로드
           </Link>
-          <Link className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
+          <Link className="inline-flex h-9 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700" href={customerSession ? "/dashboard" : "/admin/companies"}>
             돌아가기
           </Link>
         </>
@@ -203,7 +203,7 @@ function RankedRevenueRow({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-950 text-xs font-black text-white">{index}</span>
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-500 to-blue-600 text-xs font-black text-white">{index}</span>
             <p className="truncate text-sm font-black text-slate-950">{label}</p>
             {badge ? <Badge className="bg-emerald-100 text-emerald-800">{badge}</Badge> : null}
           </div>
