@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -58,6 +59,20 @@ export default async function AdminSystemPage() {
                 items={system.warningIssues}
                 title="권장 점검"
               />
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800" href="/admin/companies">
+                <Users className="h-4 w-4" />
+                고객사 데이터 확인
+              </Link>
+              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted" href="/admin/uploads">
+                <UploadCloud className="h-4 w-4" />
+                업로드 이력 확인
+              </Link>
+              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted" href="/admin/accounts">
+                <KeyRound className="h-4 w-4" />
+                계정 설정 점검
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -155,18 +170,20 @@ export default async function AdminSystemPage() {
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             {[
-              "Supabase 프로젝트 생성",
-              "supabase/schema.sql 실행",
-              "Vercel 환경변수 등록",
-              "customer-attachments Storage 버킷 생성",
-              "GitHub 저장소 연결",
-              "관리자 비밀번호 교체",
-              "고객사 로그인 정책 확정",
-              "실제 엑셀 업로드 테스트",
-              "리포트 품질 검수"
-            ].map((item) => (
-              <div key={item} className="rounded-md border border-border bg-muted/35 p-3 text-sm font-bold">
-                {item}
+              ["DB", "Supabase 프로젝트 생성 및 schema.sql 실행"],
+              ["DB", "companies, normalized_customers, customer_imports 테이블 카운트 확인"],
+              ["Storage", "customer-attachments 버킷 생성 및 파일 업로드 테스트"],
+              ["Auth", "관리자 비밀번호와 세션 시크릿 운영값으로 교체"],
+              ["Auth", "고객사별 계정은 고객사 선택·관리에서 생성"],
+              ["Deploy", "Vercel Production 환경변수 등록 및 재배포"],
+              ["Data", "거래처 마스터 엑셀 업로드 후 업로드 이력 확인"],
+              ["Data", "매출 거래원장 업로드 후 매출 원장 화면 확인"],
+              ["Route", "출발지 주소와 TMAP API로 실제 경유 계산 확인"],
+              ["Report", "AI 리포트가 선택 고객사 companyId 기준으로 열리는지 확인"]
+            ].map(([group, item]) => (
+              <div key={item} className="flex items-start gap-3 rounded-md border border-border bg-muted/35 p-3 text-sm font-bold">
+                <Badge className="mt-0.5 shrink-0 bg-slate-100 text-slate-700">{group}</Badge>
+                <span>{item}</span>
               </div>
             ))}
           </CardContent>
