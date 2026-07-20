@@ -47,7 +47,7 @@ export default async function AdminAccountsPage() {
                 회사별 고객사 로그인 계정은 <strong>고객사 관리</strong>에서 생성/수정합니다. 이 화면은 운영 초기값과 전역 관리자 계정을 점검하는 보조 화면입니다.
               </p>
             </div>
-            <Link className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700" href="/admin/companies">
+            <Link className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800" href="/admin/companies">
               고객사별 계정 관리
             </Link>
           </CardContent>

@@ -412,7 +412,7 @@ export default function Home() {
       previewCompanyId={adminCompanyId || undefined}
       rightAction={
         <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
           href={adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today"}
         >
           영업·배송 코스
@@ -612,14 +612,14 @@ function Briefing({
           </div>
         </div>
 
-        <div className="rounded-xl border border-teal-100 bg-gradient-to-br from-teal-700 to-blue-700 p-5 text-white shadow-[0_18px_42px_rgba(13,148,136,0.18)]">
-          <p className="text-xs font-bold text-white/60">등록 후 생성되는 결과</p>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-bold text-slate-500">등록 후 생성되는 결과</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             {reportOutcomes.map(([label, value, hint]) => (
-              <div key={label} className="rounded-md border border-white/10 bg-white/5 p-3">
-                <p className="text-xs font-bold text-white/55">{label}</p>
-                <p className="mt-1 text-2xl font-black text-white">{value}</p>
-                <p className="mt-2 text-xs leading-5 text-white/55">{hint}</p>
+              <div key={label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-bold text-slate-500">{label}</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{value}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{hint}</p>
               </div>
             ))}
           </div>
@@ -1098,7 +1098,7 @@ function Onboarding({
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
                         {lastManualCustomerHref ? (
-                          <Link className="inline-flex h-7 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-2.5 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)]" href={lastManualCustomerHref}>
+                          <Link className="inline-flex h-7 items-center justify-center rounded-md bg-teal-700 px-2.5 text-xs font-black text-white shadow-sm" href={lastManualCustomerHref}>
                             히스토리에서 확인
                           </Link>
                         ) : null}
@@ -1813,7 +1813,7 @@ function Report({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-4 text-sm font-black text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)] transition hover:from-teal-700 hover:to-blue-700" href="/dashboard">
+              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href="/dashboard">
                 대시보드 보기
               </Link>
               <Link
@@ -1834,26 +1834,26 @@ function Report({
           </div>
         </div>
 
-        <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-700 to-indigo-700 p-5 text-white shadow-[0_18px_42px_rgba(37,99,235,0.18)]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold text-white/55">Company Health Score</p>
+              <p className="text-xs font-bold text-slate-500">Company Health Score</p>
               <div className="mt-3 flex items-end gap-2">
-                <span className="text-6xl font-black text-emerald-300">{analysis.health.total}</span>
-                <span className="pb-2 text-sm font-black text-white/55">점</span>
+                <span className="text-6xl font-black text-teal-700">{analysis.health.total}</span>
+                <span className="pb-2 text-sm font-black text-slate-500">점</span>
               </div>
             </div>
-            <HeartPulse className="h-6 w-6 text-emerald-300" />
+            <HeartPulse className="h-6 w-6 text-teal-700" />
           </div>
           <div className="mt-5 space-y-3">
             {scoreRows.map(([label, value]) => (
               <div key={label as string}>
-                <div className="mb-1 flex justify-between text-xs font-bold text-white/70">
+                <div className="mb-1 flex justify-between text-xs font-bold text-slate-500">
                   <span>{label as string}</span>
                   <span>{value as number}</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-emerald-300" style={{ width: `${value as number}%` }} />
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-teal-600" style={{ width: `${value as number}%` }} />
                 </div>
               </div>
             ))}

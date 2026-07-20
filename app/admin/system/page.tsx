@@ -91,7 +91,7 @@ export default async function AdminSystemPage() {
               />
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-4 text-sm font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700" href="/admin/companies">
+              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href="/admin/companies">
                 <Users className="h-4 w-4" />
                 고객사 데이터 확인
               </Link>

@@ -252,7 +252,7 @@ function MapControls({
         <MapPin className="h-3.5 w-3.5" />
         로드뷰
       </button>
-      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700" onClick={onLargeMap} type="button">
+      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={onLargeMap} type="button">
         <ExternalLink className="h-3.5 w-3.5" />
         큰 지도
       </button>
@@ -413,7 +413,7 @@ function FallbackAddressMap({
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
         <div className="absolute right-3 top-3 z-30">
           <button
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800"
             onClick={() => openPopup(firstMarker ? `https://map.kakao.com/link/search/${encodeURIComponent(firstMarker.address)}` : "https://map.kakao.com", "maju-kakao-large-map")}
             type="button"
           >
@@ -487,7 +487,7 @@ function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarke
                     : marker.grade === "C"
                       ? "bg-slate-500 text-white"
                       : marker.tone === "origin"
-                        ? "bg-gradient-to-r from-teal-600 to-blue-600 text-white"
+                        ? "bg-teal-700 text-white"
                         : marker.tone === "lead"
                           ? "bg-emerald-600 text-white"
                           : ""

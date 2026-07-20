@@ -239,8 +239,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex h-[calc(100vh-154px)] min-h-[740px] flex-col overflow-hidden rounded-xl border border-white/80 bg-white/92 text-slate-900 shadow-[0_22px_60px_rgba(15,23,42,0.08)] ring-1 ring-slate-900/[0.03] backdrop-blur-sm">
-      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-gradient-to-r from-white via-teal-50/70 to-blue-50/80 px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div className="flex h-[calc(100vh-154px)] min-h-[740px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="min-w-0">
           <h2 className="whitespace-nowrap text-[20px] font-black leading-tight">영업·배송 통합 지도</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
@@ -252,7 +252,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               { label: "배송차별", value: "vehicle" }
             ].map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-sm font-black transition ${markerViewMode === item.value ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_8px_18px_rgba(37,99,235,0.18)]" : "text-slate-500 hover:bg-white hover:text-blue-800"}`}
+                className={`h-8 rounded-md px-3 text-sm font-black transition ${markerViewMode === item.value ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-blue-800"}`}
                 key={item.value}
                 onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
                 type="button"
@@ -264,7 +264,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
             {workspaceViews.map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_8px_18px_rgba(13,148,136,0.18)]" : "text-slate-500 hover:bg-white hover:text-teal-800"}`}
+                className={`h-8 rounded-md px-3 text-sm font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-teal-800"}`}
                 key={item.value}
                 onClick={() => setActiveView(item.value)}
                 type="button"
@@ -319,7 +319,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           {gradeFilters.map((filter) => (
             <button
               className={`h-10 rounded-md border px-4 text-sm font-black transition ${
-                gradeFilter === filter.value ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)]" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                gradeFilter === filter.value ? "border-teal-700 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               }`}
               key={filter.value}
               onClick={() => setGradeFilter(filter.value)}
@@ -644,7 +644,7 @@ function StoreQuickCard({
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
         <div className="mt-2.5 flex justify-end">
-          <button className="h-7 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-2.5 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700" onClick={onOpenDetail} type="button">
+          <button className="h-7 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={onOpenDetail} type="button">
             상세
           </button>
         </div>
@@ -706,7 +706,7 @@ function VehicleEditForm({
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" onChange={(event) => setArea(event.target.value)} value={area} />
       <div className="flex gap-2">
-        <button className="h-8 flex-1 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700" onClick={() => onSave({ area, driver })} type="button">
+        <button className="h-8 flex-1 rounded-md bg-teal-700 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={() => onSave({ area, driver })} type="button">
           저장
         </button>
         <button className="h-8 flex-1 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-600" onClick={onCancel} type="button">
@@ -1129,7 +1129,7 @@ function TodayCourseView({
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className="h-8 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
+                  <button className="h-8 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
                     기본 15곳 선택
                   </button>
                   <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={selectAllRouteStores} type="button">
@@ -1189,7 +1189,7 @@ function TodayCourseView({
                         type="button"
                       >
                         <div className="flex items-start gap-3">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-teal-500 to-blue-600 text-xs font-black text-white shadow-[0_8px_16px_rgba(13,148,136,0.18)]">{routeBatchStart + index + 1}</span>
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-700 text-xs font-black text-white shadow-sm">{routeBatchStart + index + 1}</span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
@@ -1270,7 +1270,7 @@ function TodayCourseView({
                       <div className="flex items-start gap-3">
                         <span
                           className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${
-                            activeForRoute ? "bg-gradient-to-br from-teal-500 to-blue-600 text-white" : selectedForRoute ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                            activeForRoute ? "bg-teal-700 text-white" : selectedForRoute ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
                           }`}
                         >
                           {selectedForRoute ? selectedOrder : index + 1}
@@ -1568,7 +1568,7 @@ function StoreDetail({
                   value={historyMemo}
                 />
                 <button
-                  className="mt-2 h-9 w-full rounded-md bg-gradient-to-r from-teal-600 to-blue-600 text-sm font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700"
+                  className="mt-2 h-9 w-full rounded-md bg-teal-700 text-sm font-black text-white shadow-sm transition hover:bg-teal-800"
                   onClick={() => {
                     const memo = historyMemo.trim();
                     if (!memo) return;

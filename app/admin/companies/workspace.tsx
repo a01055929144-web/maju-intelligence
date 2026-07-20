@@ -502,7 +502,7 @@ function CompanyFilterButton({
   const activeClass =
     tone === "warning"
       ? "border-amber-300 bg-amber-50 text-amber-900"
-      : "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white";
+      : "border-teal-500 bg-teal-700 text-white";
 
   return (
     <button
@@ -548,7 +548,7 @@ function QuickAction({ href, icon: Icon, label, primary }: { href: string; icon:
   return (
     <Link
       className={`inline-flex h-10 items-center justify-between rounded-md border px-3 text-sm font-black transition ${
-        primary ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700" : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-white"
+        primary ? "border-teal-500 bg-teal-700 text-white shadow-sm hover:bg-teal-800" : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-white"
       }`}
       href={href}
     >

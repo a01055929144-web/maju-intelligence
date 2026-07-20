@@ -101,7 +101,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-4 text-sm font-black text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)] hover:from-teal-700 hover:to-blue-700" href={withCompanyQuery("/routes/today")}>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/routes/today")}>
                   <Route className="h-4 w-4" />
                   코스 관리 열기
                 </Link>
@@ -196,7 +196,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                     <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>{item.ready ? "준비" : "필요"}</Badge>
                   </div>
                 ))}
-                <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 text-sm font-black text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)] hover:from-teal-700 hover:to-blue-700" href={withCompanyQuery("/")}>
+                <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/")}>
                   <Upload className="h-4 w-4" />
                   데이터 등록
                 </Link>

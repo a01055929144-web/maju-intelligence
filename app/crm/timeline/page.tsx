@@ -489,7 +489,7 @@ export default function CrmTimelinePage() {
       previewCompanyId={adminCompanyId || undefined}
       rightAction={
         <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
           href={withCompanyQuery("/routes/today")}
         >
           영업·배송 코스
@@ -542,7 +542,7 @@ export default function CrmTimelinePage() {
                 {(["all", "A", "B", "C"] as const).map((grade) => (
                   <button
                     className={`h-9 rounded-md border text-xs font-black transition ${
-                      gradeFilter === grade ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)]" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                      gradeFilter === grade ? "border-teal-500 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                     }`}
                     key={grade}
                     onClick={() => setGradeFilter(grade)}
@@ -879,7 +879,7 @@ export default function CrmTimelinePage() {
                       value={newNextAction}
                     />
                     <button
-                      className="h-10 rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-4 text-sm font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300"
+                      className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
                       disabled={!newMemo.trim() || isNoteSaving}
                       onClick={saveNote}
                       type="button"
@@ -957,7 +957,7 @@ function CustomerFilterButton({
       ? "border-rose-200 bg-rose-50 text-rose-700"
       : tone === "warning"
         ? "border-amber-200 bg-amber-50 text-amber-800"
-        : "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white";
+        : "border-teal-500 bg-teal-700 text-white";
 
   return (
     <button

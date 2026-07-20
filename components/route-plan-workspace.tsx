@@ -476,7 +476,7 @@ function DeliveryVehicleSidebar({
               key={vehicle.id}
               className={`w-full rounded-md border p-3 text-left transition ${
                 selected
-                  ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)]"
+                  ? "border-teal-500 bg-teal-700 text-white shadow-sm"
                   : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
               }`}
               onClick={() => onSelectVehicle(vehicle.id)}
@@ -546,7 +546,7 @@ function DeliveryStopList({
         <Badge className="bg-emerald-50 text-emerald-700">{selectedStoreIds.length}/15곳 선택</Badge>
       </div>
       <div className="mb-3 flex flex-wrap gap-2">
-        <button className="h-8 rounded-md border border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] hover:from-teal-700 hover:to-blue-700" onClick={onSelectAssigned} type="button">
+        <button className="h-8 rounded-md border border-teal-500 bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={onSelectAssigned} type="button">
           기본 권역 15곳
         </button>
         <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={onClear} type="button">
@@ -747,7 +747,7 @@ function FilterButton({ active, label, onClick }: { readonly active: boolean; re
   return (
     <button
       className={`h-8 rounded-md border px-3 text-xs font-black transition ${
-        active ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-teal-50 hover:text-teal-800"
+        active ? "border-teal-500 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-teal-50 hover:text-teal-800"
       }`}
       onClick={onClick}
       type="button"
@@ -775,7 +775,7 @@ function GradeButton({
         ? "border-blue-600 bg-blue-600 text-white"
         : tone === "C"
           ? "border-slate-600 bg-slate-600 text-white"
-          : "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white";
+          : "border-teal-500 bg-teal-700 text-white";
 
   return (
     <button

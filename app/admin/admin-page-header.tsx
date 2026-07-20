@@ -40,7 +40,7 @@ export function AdminPageHeader({ active, badge, session, subtitle, title }: Adm
               <Link
                 key={item.href}
                 className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-black transition ${
-                  selected ? "border-teal-500 bg-gradient-to-r from-teal-600 to-blue-600 text-white shadow-[0_12px_24px_rgba(13,148,136,0.18)]" : "border-slate-200 bg-white/92 text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                  selected ? "border-teal-500 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white/92 text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                 }`}
                 href={item.href}
               >

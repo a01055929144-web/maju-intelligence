@@ -27,7 +27,7 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
       previewCompanyId={customerSession ? undefined : companyId}
       rightAction={
         <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-gradient-to-r from-teal-600 to-blue-600 px-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(13,148,136,0.16)] transition hover:from-teal-700 hover:to-blue-700"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
           href={customerSession ? "/dashboard" : "/admin"}
         >
           돌아가기
