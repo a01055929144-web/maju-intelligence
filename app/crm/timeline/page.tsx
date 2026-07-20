@@ -105,6 +105,8 @@ function withCompanyQuery(path: string) {
 }
 
 export default function CrmTimelinePage() {
+  const adminCompanyId = useAdminCompanyId();
+  const isAdminPreview = Boolean(adminCompanyId);
   const [timeline, setTimeline] = useState<TimelineItem[]>(sampleVisitTimeline);
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
@@ -473,18 +475,19 @@ export default function CrmTimelinePage() {
   return (
     <CustomerAppShell
       active="customers"
-      companyName="마주식자재"
+      companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
+      mode={isAdminPreview ? "admin-preview" : "customer"}
       rightAction={
         <Link
           className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
-          href="/routes/today"
+          href={withCompanyQuery("/routes/today")}
         >
           영업·배송 코스
         </Link>
       }
       subtitle="매장 기본정보, 사업자 상태, 배송 적재위치, 메모와 방문 기록을 거래처별로 관리합니다."
       title="거래처 히스토리"
-      userName="정두영"
+      userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1760px] space-y-4">
         <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
@@ -886,6 +889,16 @@ export default function CrmTimelinePage() {
       </section>
     </CustomerAppShell>
   );
+}
+
+function useAdminCompanyId() {
+  const [companyId, setCompanyId] = useState("");
+
+  useEffect(() => {
+    setCompanyId(getAdminCompanyIdFromUrl());
+  }, []);
+
+  return companyId;
 }
 
 function OperationalReadinessCard({

@@ -105,6 +105,8 @@ function getAdminCompanyIdFromUrl() {
 }
 
 export default function Home() {
+  const adminCompanyId = useAdminCompanyId();
+  const isAdminPreview = Boolean(adminCompanyId);
   const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("onboarding");
   const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
@@ -405,18 +407,19 @@ export default function Home() {
   return (
     <CustomerAppShell
       active="data"
-      companyName="마주식자재"
+      companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
+      mode={isAdminPreview ? "admin-preview" : "customer"}
       rightAction={
         <Link
           className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-bold text-white transition hover:bg-slate-800"
-          href="/routes/today"
+          href={adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today"}
         >
           영업·배송 코스
         </Link>
       }
       subtitle="거래처 마스터와 매출 거래내역을 등록하고, 업로드 양식과 현재 데이터를 내려받습니다."
       title="데이터 등록"
-      userName="정두영"
+      userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <div className="mx-auto max-w-[1880px] space-y-4">
         <WorkspaceModeTabs active={screen} onMove={setScreen} />
@@ -459,6 +462,16 @@ export default function Home() {
       </div>
     </CustomerAppShell>
   );
+}
+
+function useAdminCompanyId() {
+  const [companyId, setCompanyId] = useState("");
+
+  useEffect(() => {
+    setCompanyId(getAdminCompanyIdFromUrl());
+  }, []);
+
+  return companyId;
 }
 
 function WorkspaceModeTabs({ active, onMove }: { active: string; onMove: (screen: "briefing" | "onboarding" | "report") => void }) {
