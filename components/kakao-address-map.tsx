@@ -47,6 +47,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
+  const focusedMarker = useMemo(() => markers.find((marker) => marker.id === focusedMarkerId), [focusedMarkerId, markers]);
 
   useEffect(() => {
     let ignore = false;
@@ -184,13 +185,14 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
     if (!center) return;
     const kakao = window.kakao;
     if (!kakao?.maps?.RoadviewClient) {
-      openPopup(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
+      openPopup(createKakaoSearchUrl(focusedMarker) || `https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
       return;
     }
 
     const client = new kakao.maps.RoadviewClient();
     client.getNearestPanoId(center, 180, (panoId: number | null) => {
       if (!panoId) {
+        openPopup(createKakaoSearchUrl(focusedMarker) || `https://map.kakao.com/link/map/MAJU%20지도,${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
         return;
       }
       openPopup(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
@@ -199,7 +201,8 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
   const openLargeMap = () => {
     const center = mapInstanceRef.current?.getCenter?.();
-    const url = center ? `https://map.kakao.com/link/map/MAJU%20지도,${center.getLat()},${center.getLng()}` : "https://map.kakao.com";
+    const markerUrl = createKakaoSearchUrl(focusedMarker);
+    const url = markerUrl || (center ? `https://map.kakao.com/link/map/MAJU%20지도,${center.getLat()},${center.getLng()}` : "https://map.kakao.com");
     openPopup(url, "maju-kakao-large-map");
   };
 
@@ -259,6 +262,12 @@ function MapControls({
 
 function openPopup(url: string, name: string) {
   window.open(url, name, "popup=yes,width=1440,height=920,left=80,top=40,noopener,noreferrer");
+}
+
+function createKakaoSearchUrl(marker?: KakaoMapMarker) {
+  if (!marker) return "";
+  const query = `${marker.name} ${marker.address}`.trim();
+  return query ? `https://map.kakao.com/link/search/${encodeURIComponent(query)}` : "";
 }
 
 function drawRoadRoutePolylines(kakao: any, map: any, roadPathSegments: any[][]) {
