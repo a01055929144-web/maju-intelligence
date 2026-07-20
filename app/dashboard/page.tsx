@@ -28,17 +28,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
-import { getCustomerSession } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getCompanyDashboardPayload, getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
+import { getCompanyDashboardPayload, getCompanyOriginAddress, getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 
-export default async function DashboardPage() {
-  const session = getCustomerSession();
-  if (!session) redirect("/dashboard/login");
+export default async function DashboardPage({ searchParams }: { searchParams?: { companyId?: string } }) {
+  const customerSession = getCustomerSession();
+  const adminSession = getAdminSession();
 
-  const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(session.companyId);
-  const routePlan = await getTodayRoutePlan(session.companyId);
-  const originAddress = await getCompanyOriginAddress(session.companyId);
+  if (!customerSession && !adminSession) redirect("/dashboard/login");
+  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
+
+  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const isAdminPreview = Boolean(adminSession && !customerSession);
+  const company = await getCompanySettings(companyId, customerSession?.companyName || "선택 고객사");
+  const withCompanyQuery = (href: string) => {
+    if (!isAdminPreview || !companyId) return href;
+    if (href === "/dashboard/settings") return "/admin/companies";
+    return `${href}${href.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
+  };
+
+  const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(companyId);
+  const routePlan = await getTodayRoutePlan(companyId);
+  const originAddress = await getCompanyOriginAddress(companyId);
   const referenceFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
@@ -57,11 +69,11 @@ export default async function DashboardPage() {
     ["리스크", report.health.risk]
   ];
   const quickActions = [
-    { href: "/routes/today", label: "방문·배송 코스", icon: Route, description: "출발지와 매장 주소를 기준으로 차량별 경유지를 관리합니다." },
-    { href: "/revenue/pipeline", label: "매출 파이프라인", icon: TrendingUp, description: "방문 결과가 예상 매출로 얼마나 전환되는지 봅니다." },
-    { href: "/revenue/transactions", label: "매출 거래내역", icon: ReceiptText, description: "ERP 엑셀에서 누적된 일자·품목·금액 원장을 확인합니다." },
-    { href: "/assistant", label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
-    { href: "/dashboard/settings", label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
+    { href: withCompanyQuery("/routes/today"), label: "방문·배송 코스", icon: Route, description: "출발지와 매장 주소를 기준으로 차량별 경유지를 관리합니다." },
+    { href: withCompanyQuery("/revenue/pipeline"), label: "매출 파이프라인", icon: TrendingUp, description: "방문 결과가 예상 매출로 얼마나 전환되는지 봅니다." },
+    { href: withCompanyQuery("/revenue/transactions"), label: "매출 거래내역", icon: ReceiptText, description: "ERP 엑셀에서 누적된 일자·품목·금액 원장을 확인합니다." },
+    { href: withCompanyQuery("/assistant"), label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
+    { href: withCompanyQuery("/dashboard/settings"), label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
   const routeStops = routePlan.groups.flatMap((group) => group.stops);
   const mapMarkers = createRouteMapMarkers(originAddress, routeStops);
@@ -70,10 +82,12 @@ export default async function DashboardPage() {
   return (
     <CustomerAppShell
       active="dashboard"
-      companyName={session.companyName}
+      companyName={customerSession?.companyName || company.name}
+      mode={isAdminPreview ? "admin-preview" : "customer"}
+      previewCompanyId={isAdminPreview ? companyId : undefined}
       subtitle="거래처 히스토리, 배송 동선, 신규 리드 현황"
       title="대시보드"
-      userName={session.name}
+      userName={customerSession?.name || adminSession?.email || "관리자"}
     >
       <section className="mx-auto max-w-[1760px] space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -87,11 +101,11 @@ export default async function DashboardPage() {
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800" href="/routes/today">
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800" href={withCompanyQuery("/routes/today")}>
                   <Route className="h-4 w-4" />
                   코스 관리 열기
                 </Link>
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" href="/crm/timeline">
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" href={withCompanyQuery("/crm/timeline")}>
                   <Building2 className="h-4 w-4" />
                   거래처 관리
                 </Link>
@@ -135,9 +149,9 @@ export default async function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <NextAction description="사업자 상태와 배송 적재위치를 먼저 확인합니다." href="/crm/timeline" label="1. 거래처 원장 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
-              <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 코스를 계산합니다." href="/routes/today" label="2. 코스 관리" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-              <NextAction description="ERP 거래원장 업로드 상태와 매출 변화를 봅니다." href="/revenue/transactions" label="3. 매출 데이터 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
+              <NextAction description="사업자 상태와 배송 적재위치를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
+              <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 코스를 계산합니다." href={withCompanyQuery("/routes/today")} label="2. 코스 관리" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+              <NextAction description="ERP 거래원장 업로드 상태와 매출 변화를 봅니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 데이터 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
             </CardContent>
           </Card>
 
@@ -150,7 +164,7 @@ export default async function DashboardPage() {
                 </CardTitle>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서는 현황만 보고, 상세 코스는 영업·배송 코스에서 조정합니다.</p>
               </div>
-              <Link className="inline-flex h-9 shrink-0 items-center rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href="/routes/today">
+              <Link className="inline-flex h-9 shrink-0 items-center rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={withCompanyQuery("/routes/today")}>
                 상세 열기
               </Link>
             </CardHeader>
@@ -182,7 +196,7 @@ export default async function DashboardPage() {
                     <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>{item.ready ? "준비" : "필요"}</Badge>
                   </div>
                 ))}
-                <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 text-sm font-black text-white hover:bg-slate-800" href="/">
+                <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 text-sm font-black text-white hover:bg-slate-800" href={withCompanyQuery("/")}>
                   <Upload className="h-4 w-4" />
                   데이터 등록
                 </Link>

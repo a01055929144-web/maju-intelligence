@@ -82,7 +82,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700";
   const scopedHref = (href: string) => {
     if (mode !== "admin-preview" || !previewCompanyId) return href;
-    if (href === "/dashboard" || href === "/dashboard/settings") return "/admin/companies";
+    if (href === "/dashboard/settings") return "/admin/companies";
 
     const [path, query = ""] = href.split("?");
     const params = new URLSearchParams(query);
@@ -99,7 +99,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200 p-4">
               <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
-              <Link className="flex min-w-0 items-center gap-3" href={mode === "admin-preview" ? "/admin/companies" : "/dashboard"}>
+              <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
                 <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-700 text-sm font-black text-white">M</span>
                 {!collapsed ? <span className="min-w-0">
                   <span className="block truncate text-sm font-black">MAJU Intelligence</span>
