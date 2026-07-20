@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, BarChart3, ClipboardList, Database, FileSpreadsheet, Gauge, Settings, ShieldCheck, Target } from "lucide-react";
+import { Activity, ArrowRight, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, Settings, ShieldCheck, Target, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -37,6 +37,49 @@ export default async function AdminPage() {
             </Card>
           ))}
         </div>
+
+        <Card className="border-slate-200 shadow-none">
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-primary" />
+                  운영 시작 작업
+                </CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  어드민은 고객사 생성, 데이터 적재 확인, 고객사 미리보기 순서로 운영합니다.
+                </p>
+              </div>
+              <Badge className="w-fit bg-slate-100 text-slate-700">권장 순서</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-4">
+            <AdminActionCard
+              description="회사 정보와 고객사 로그인 계정을 만들고, 선택 고객사 대시보드로 진입합니다."
+              href="/admin/companies"
+              icon={Users}
+              label="1. 고객사 선택·관리"
+            />
+            <AdminActionCard
+              description="거래처 마스터와 매출 거래원장이 실제 DB에 쌓였는지 확인합니다."
+              href="/admin/uploads"
+              icon={UploadCloud}
+              label="2. 업로드 이력 확인"
+            />
+            <AdminActionCard
+              description="관리자 기본 계정과 기본 고객사 계정 설정을 점검합니다."
+              href="/admin/accounts"
+              icon={ShieldCheck}
+              label="3. 계정 설정"
+            />
+            <AdminActionCard
+              description="Supabase, 지도 API, 인증 환경변수와 테이블 상태를 확인합니다."
+              href="/admin/system"
+              icon={Settings}
+              label="4. 시스템 점검"
+            />
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card>
@@ -184,20 +227,41 @@ export default async function AdminPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              백엔드 엔드포인트
+              <Settings className="h-5 w-5 text-primary" />
+              운영 기준 API
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm md:grid-cols-5">
-            {["/api/briefing", "/api/report", "/api/leads", "/api/admin", "/api/analyze"].map((endpoint) => (
-              <code key={endpoint} className="rounded-md border border-border bg-muted px-3 py-2 font-bold">
-                {endpoint}
-              </code>
+          <CardContent className="grid gap-3 text-sm md:grid-cols-4">
+            {[
+              ["고객사/계정", "/api/admin/companies"],
+              ["거래처 원장", "/api/customers"],
+              ["매출 원장", "/api/revenue/transactions"],
+              ["배송 코스", "/api/routes/today"]
+            ].map(([label, endpoint]) => (
+              <div key={endpoint} className="rounded-md border border-border bg-muted px-3 py-2">
+                <p className="text-xs font-black text-muted-foreground">{label}</p>
+                <code className="mt-1 block font-bold">{endpoint}</code>
+              </div>
             ))}
           </CardContent>
         </Card>
       </section>
     </main>
+  );
+}
+
+function AdminActionCard({ description, href, icon: Icon, label }: { description: string; href: string; icon: typeof Users; label: string }) {
+  return (
+    <Link className="group rounded-md border border-border bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50" href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+        <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5" />
+      </div>
+      <p className="mt-4 text-sm font-black text-slate-950">{label}</p>
+      <p className="mt-2 text-xs font-semibold leading-5 text-muted-foreground">{description}</p>
+    </Link>
   );
 }
 
