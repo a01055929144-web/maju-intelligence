@@ -52,7 +52,7 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
         />
         <AccountPanel
           email={form.customerEmail}
-          helper="기본 고객사 계정입니다. 실제 회사별 계정은 고객사 선택·관리에서 다룹니다."
+          helper="기본 고객사 계정입니다. 실제 회사별 계정은 고객사 관리에서 다룹니다."
           label="기본 고객사 계정"
           password={form.customerPassword}
           passwordVisible={showPasswords}
@@ -68,6 +68,9 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
           value={form.customerCompanyId}
           onChange={(event) => update("customerCompanyId", event.target.value)}
         />
+        <span className="block text-xs font-semibold leading-5 text-muted-foreground">
+          이 값은 기본 고객사 계정이 로그인했을 때 연결될 회사 ID입니다. 실 고객사별 ID는 고객사 관리 화면의 회사 ID를 기준으로 사용합니다.
+        </span>
       </label>
 
       {message ? (
@@ -86,7 +89,7 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
           {showPasswords ? "비밀번호 숨기기" : "비밀번호 보기"}
         </Button>
         <Link className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted" href="/admin/companies">
-          고객사별 계정으로 이동
+          고객사 관리로 이동
         </Link>
       </div>
     </form>
