@@ -60,6 +60,35 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
     { label: "코스 데이터", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 등록` }
   ];
+  const operationalSignals = [
+    {
+      actionHref: withCompanyQuery("/"),
+      actionLabel: latestUpload ? "업로드 이력 보기" : "데이터 등록",
+      description: latestUpload ? `${latestUpload.filename} · ${latestUpload.rows.toLocaleString()}행` : "거래처 마스터와 매출 거래내역을 먼저 등록하세요.",
+      icon: FileSpreadsheet,
+      label: "데이터 최신성",
+      ready: Boolean(latestUpload),
+      value: latestUpload ? latestUpload.createdAt : "업로드 필요"
+    },
+    {
+      actionHref: withCompanyQuery("/crm/timeline"),
+      actionLabel: "거래처 원장",
+      description: "사업자번호, 주소, 배송 적재위치, 메모 히스토리를 관리합니다.",
+      icon: Building2,
+      label: "거래처 관리",
+      ready: briefing.currentCustomers > 0,
+      value: `${briefing.currentCustomers.toLocaleString()}개`
+    },
+    {
+      actionHref: withCompanyQuery("/routes/today"),
+      actionLabel: "코스 확정",
+      description: "차량별 경유 매장을 선택하고 티맵 도로 기준으로 계산합니다.",
+      icon: Truck,
+      label: "배송 운영",
+      ready: routePlan.totalStops > 0,
+      value: `${routePlan.totalStops.toLocaleString()}곳`
+    }
+  ];
   const scoreRows = [
     ["영업력", report.health.salesPower],
     ["배송효율", report.health.deliveryEfficiency],
@@ -95,7 +124,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
               <div className="min-w-0">
                 <Badge className="mb-3 bg-slate-100 text-slate-700">오늘 운영 요약</Badge>
-                <h1 className="text-[26px] font-black leading-tight text-slate-950">오늘 확인할 거래처와 배송 코스를 정리했습니다.</h1>
+                <h1 className="text-[26px] font-black leading-tight text-slate-950">오늘의 거래처, 매출 데이터, 배송 코스를 한 번에 확인합니다.</h1>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
                   거래처 {briefing.currentCustomers.toLocaleString()}개 중 오늘 추천 {briefing.todayRecommendations}곳, 동선 내 신규 리드 {briefing.routeLeads}곳을 먼저 확인하세요.
                 </p>
@@ -113,7 +142,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <Metric icon={Building2} label="전체 거래처" value={`${briefing.currentCustomers}개`} />
-              <Metric icon={Route} label="등록 코스 매장" value={`${routePlan.totalStops}곳`} />
+              <Metric icon={Route} label="배송 코스 매장" value={`${routePlan.totalStops}곳`} />
               <Metric icon={Fuel} label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
               <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
               <Metric icon={Lightbulb} label="고확률 리드" value={`${briefing.highProbability}곳`} />
@@ -127,7 +156,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
               <span className="pb-2 text-sm font-bold text-slate-400">/ 100</span>
             </div>
             <div className="mt-4 space-y-2">
-              {scoreRows.slice(0, 4).map(([label, value]) => (
+              {scoreRows.map(([label, value]) => (
                 <div key={label as string}>
                   <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
                     <span>{label as string}</span>
@@ -138,6 +167,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          {operationalSignals.map((signal) => (
+            <OperationalSignalCard key={signal.label} {...signal} />
+          ))}
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
@@ -309,6 +344,48 @@ function NextAction({ description, href, label, value }: { description: string; 
       </div>
       <p className="mt-3 text-xs font-bold leading-5 text-slate-500">{description}</p>
     </Link>
+  );
+}
+
+function OperationalSignalCard({
+  actionHref,
+  actionLabel,
+  description,
+  icon: Icon,
+  label,
+  ready,
+  value
+}: {
+  actionHref: string;
+  actionLabel: string;
+  description: string;
+  icon: typeof FileSpreadsheet;
+  label: string;
+  ready: boolean;
+  value: string;
+}) {
+  return (
+    <div className={`rounded-lg border p-4 shadow-sm ${ready ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white ${ready ? "text-emerald-700" : "text-amber-700"}`}>
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+            <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
+          </div>
+        </div>
+        <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+          {ready ? "준비됨" : "확인 필요"}
+        </Badge>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
+      <Link className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" href={actionHref}>
+        {actionLabel}
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
   );
 }
 
