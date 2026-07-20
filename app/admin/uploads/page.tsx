@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, FileSpreadsheet, Gauge, Rows3, ServerCog, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
 import { getUploadHistory } from "@/lib/store";
+import { AdminPageHeader } from "../admin-page-header";
 import { AdminUploadsWorkspace } from "./workspace";
 
 export default async function AdminUploadsPage() {
@@ -19,23 +19,7 @@ export default async function AdminUploadsPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">Operations</Badge>
-            <h1 className="text-2xl font-black">업로드/분석 이력</h1>
-            <p className="mt-1 text-sm text-muted-foreground">거래처 마스터와 매출 거래내역의 적재 상태, 품질, 리포트 생성 여부를 확인합니다.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted" href="/admin/system">
-              시스템 점검
-            </Link>
-            <Link className="inline-flex h-11 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800" href="/admin">
-              관리자 홈
-            </Link>
-          </div>
-        </div>
-      </header>
+      <AdminPageHeader active="uploads" badge="Operations" session={session} subtitle="거래처 마스터와 매출 거래내역의 적재 상태, 품질, 리포트 생성 여부를 확인합니다" title="업로드/분석 이력" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-4">

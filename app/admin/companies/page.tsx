@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, ShieldAlert } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ShieldAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
 import { getManagedCompanyAccounts } from "@/lib/store";
+import { AdminPageHeader } from "../admin-page-header";
 import { AdminCompaniesWorkspace } from "./workspace";
 
 export default async function AdminCompaniesPage() {
@@ -15,32 +14,7 @@ export default async function AdminCompaniesPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">
-              <Building2 className="mr-1 h-3.5 w-3.5" />
-              Company Control
-            </Badge>
-            <h1 className="text-2xl font-black">고객사 생성/수정</h1>
-            <p className="mt-1 text-sm text-muted-foreground">회사별 로그인 계정과 거래처 데이터를 분리해서 운영합니다.</p>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/accounts"
-            >
-              관리자 계정
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-              href="/admin"
-            >
-              관리자 홈
-            </Link>
-          </div>
-        </div>
-      </header>
+      <AdminPageHeader active="companies" badge="Company Control" session={session} subtitle="회사별 로그인 계정과 거래처 데이터를 분리해서 운영합니다" title="고객사 생성/수정" />
 
       <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
         <Card className="border-amber-200 bg-amber-50 shadow-none">

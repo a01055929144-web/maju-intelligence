@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Database, KeyRound, ServerCog, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession } from "@/lib/auth";
 import { getSystemDiagnostics } from "@/lib/store";
+import { AdminPageHeader } from "../admin-page-header";
 
 const statusLabels = {
   ready: "준비됨",
@@ -21,21 +21,7 @@ export default async function AdminSystemPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">System Check</Badge>
-            <h1 className="text-2xl font-black">운영 설정 점검</h1>
-            <p className="mt-1 text-sm text-muted-foreground">실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다.</p>
-          </div>
-          <Link
-            className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-            href="/admin"
-          >
-            관리자 홈
-          </Link>
-        </div>
-      </header>
+      <AdminPageHeader active="system" badge="System Check" session={session} subtitle="실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다" title="운영 설정 점검" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <Card className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>

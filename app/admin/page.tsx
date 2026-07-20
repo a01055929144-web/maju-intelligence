@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, BarChart3, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, ServerCog, Settings, ShieldCheck, Target, UploadCloud } from "lucide-react";
+import { Activity, BarChart3, ClipboardList, Database, FileSpreadsheet, Gauge, Settings, ShieldCheck, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getAdminSession } from "@/lib/auth";
 import { getAdminDashboardPayload } from "@/lib/store";
-import { AdminLogoutButton } from "./logout-button";
+import { AdminPageHeader } from "./admin-page-header";
 
 export default async function AdminPage() {
   const session = getAdminSession();
@@ -23,54 +23,7 @@ export default async function AdminPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <Badge className="mb-2 bg-primary/10 text-primary">MAJU Admin</Badge>
-            <h1 className="text-2xl font-black">AI Sales Intelligence 운영 콘솔</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {session.name} · {session.role}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/companies"
-            >
-              <Building2 className="h-4 w-4" />
-              고객사 선택·관리
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/uploads"
-            >
-              <UploadCloud className="h-4 w-4" />
-              업로드 이력
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/accounts"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              계정 관리
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/system"
-            >
-              <ServerCog className="h-4 w-4" />
-              시스템 점검
-            </Link>
-            <Link
-              className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-semibold transition hover:bg-muted"
-              href="/admin/companies"
-            >
-              고객사 화면 선택
-            </Link>
-            <AdminLogoutButton />
-          </div>
-        </div>
-      </header>
+      <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <div className="grid gap-4 md:grid-cols-4">
