@@ -118,6 +118,7 @@ const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
   { label: "거래처 목록", value: "customers" },
   { label: "경유 코스", value: "course" }
 ];
+const originMarkerId = "origin-hub";
 const tmapWaypointLimit = 15;
 const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
@@ -132,6 +133,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [activeView, setActiveView] = useState<WorkspaceView>("map");
@@ -183,6 +185,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
+    setMapFocusId("");
+    setPreviewStoreId("");
+    setSelectedId("");
+  };
+
+  const focusOrigin = () => {
+    setActiveView("map");
+    setMapFocusId(originMarkerId);
     setPreviewStoreId("");
     setSelectedId("");
   };
@@ -303,7 +313,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           >
             {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
           </button>
-          <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" type="button">
+          <button className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" onClick={focusOrigin} type="button">
             내 위치
           </button>
           <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-black text-slate-700">
@@ -330,11 +340,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <div className="relative min-h-0 min-w-0 bg-slate-100">
             <div className="h-full [&>div]:h-full">
               <KakaoAddressMap
-                focusedMarkerId={previewStoreId || selectedId || undefined}
+                focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                 mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
                 markers={markers}
                 onMarkerClick={(marker) => {
                   if (!marker.id || marker.tone === "origin") return;
+                  setMapFocusId("");
                   setPreviewStoreId(marker.id);
                 }}
                 showList={false}
@@ -2077,6 +2088,7 @@ function createVehicleMarkerMeta(vehicles: DeliveryVehicle[]) {
 
 function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mode: MarkerViewMode, vehicleMeta: Record<string, { color: string; label: string }>): KakaoMapMarker[] {
   const origin = existingMarkers.find((marker) => marker.tone === "origin");
+  const originWithId = origin ? { ...origin, id: origin.id || originMarkerId } : undefined;
   const storeMarkers = spreadMarkers(
     stores.map((store) => {
       const vehicle = store.deliveryVehicleId ? vehicleMeta[store.deliveryVehicleId] : undefined;
@@ -2095,7 +2107,7 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
     })
   );
 
-  return mergeMarkers(origin ? [origin, ...storeMarkers] : storeMarkers);
+  return mergeMarkers(originWithId ? [originWithId, ...storeMarkers] : storeMarkers);
 }
 
 function spreadMarkers(markers: KakaoMapMarker[]) {
