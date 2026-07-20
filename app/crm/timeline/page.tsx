@@ -645,13 +645,13 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber} />
                 <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone} />
                 <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
                 <InfoTile icon={Route} label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
                 <PriorityTile label="배송 적재위치" value={selectedCustomer.loadingPosition || "미등록"} helper={`${loadingPositionAttachments}개 자료 등록`} tone="blue" />
                 <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
                 <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager} helper={`${selectedCustomer.region} 권역`} tone="emerald" />
@@ -659,12 +659,13 @@ export default function CrmTimelinePage() {
               <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
             </div>
 
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_440px]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-black text-slate-950">기본 정보</h3>
-                    <p className="mt-1 text-sm font-medium text-slate-500">현장에서 바로 수정하고 저장하는 거래처 원장입니다.</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-blue-600">Customer Ledger</p>
+                    <h3 className="mt-1 text-base font-black text-slate-950">거래처 원장</h3>
+                    <p className="mt-1 text-sm font-medium text-slate-500">사업자정보, 연락처, 주소, 배송 담당자를 한 곳에서 관리합니다.</p>
                   </div>
                   {isEditing ? (
                     <button
@@ -736,7 +737,7 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
@@ -761,12 +762,12 @@ export default function CrmTimelinePage() {
                       <EditableField label="배송거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
-                      <EditableField className="md:col-span-2" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
-                      <EditableField className="md:col-span-2" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
                     </div>
                   </>
                 ) : (
-                  <div className="mt-4 grid gap-x-8 gap-y-4 md:grid-cols-2">
+                  <div className="mt-4 grid gap-x-8 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
                     <DetailRow label="상호명" value={selectedCustomer.customerName} />
                     <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
                     <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
@@ -780,9 +781,11 @@ export default function CrmTimelinePage() {
               </div>
 
               <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
-                <h3 className="text-base font-black text-slate-950">배송 적재위치</h3>
-                <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
+                <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
+                <h3 className="mt-1 text-base font-black text-slate-950">현장 첨부자료</h3>
+                <p className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
                 <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
+                  <p className="mb-3 text-xs font-black text-slate-500">자료 추가</p>
                   <div className="grid gap-2">
                     <select
                       className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -852,12 +855,13 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_440px]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-black text-slate-950">메모 히스토리</h3>
-                    <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 누적합니다.</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-violet-600">History</p>
+                    <h3 className="mt-1 text-base font-black text-slate-950">메모 히스토리</h3>
+                    <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 시간순으로 누적합니다.</p>
                   </div>
                   <Badge className="bg-slate-100 text-slate-700">{customerNotes.length || selectedCustomer.memoCount}건</Badge>
                 </div>
@@ -885,7 +889,7 @@ export default function CrmTimelinePage() {
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   {customerNotes.map((note) => (
                     <div key={note.id} className="rounded-md border border-slate-200 p-4">
                       <div className="flex items-center justify-between gap-3">
@@ -902,7 +906,7 @@ export default function CrmTimelinePage() {
               <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <Badge className="mb-3 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
                 <h3 className="text-base font-black text-slate-950">최근 액션</h3>
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 max-h-[520px] space-y-3 overflow-auto pr-1">
                   {timeline.map((item) => (
                     <div key={item.id} className="rounded-md border border-slate-200 p-4">
                       <div className="mb-2 flex flex-wrap items-center gap-2">

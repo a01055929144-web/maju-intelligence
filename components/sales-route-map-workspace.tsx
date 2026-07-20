@@ -623,7 +623,7 @@ function StoreQuickCard({
   readonly store: StoreRow;
 }) {
   return (
-    <div className="absolute left-4 top-4 z-30 h-auto w-[min(320px,calc(100%-32px))] rounded-md border border-slate-200 bg-white/95 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur">
+    <div className="absolute left-4 top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] rounded-lg border border-slate-200 bg-white/95 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur">
       <div className="flex items-start justify-between gap-2 px-3.5 py-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -986,11 +986,11 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[340px_minmax(0,1fr)_60px]" : "xl:grid-cols-[340px_minmax(0,1fr)_500px]"}`}>
+    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
       <aside className="min-h-0 border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">배송담당자별 방문 코스를 선택합니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 매장을 계산합니다.</p>
         </div>
         <div className="border-b border-slate-200/80 p-3">
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1013,7 +1013,7 @@ function TodayCourseView({
               <p className="text-sm font-black text-slate-950">전체 매장 보기</p>
               <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
             </div>
-            <p className="mt-1 text-xs font-bold text-slate-500">지도 확인용 · 경유 계산은 배송차 선택 후 진행</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">전체 위치 확인용 · 경유 계산은 차량 선택 후 진행</p>
           </button>
           {vehicles.map((vehicle) => (
             <button
@@ -1075,7 +1075,7 @@ function TodayCourseView({
             <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
               <div className="min-w-0">
                   <p className="text-sm font-black text-slate-950">{selectedDriver} 경유 순서</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">
+                  <p className="mt-1 text-xs font-bold text-slate-500">
                   선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · 경유 {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
                 </p>
               </div>
@@ -1091,9 +1091,9 @@ function TodayCourseView({
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="border-b border-slate-200/80 p-3">
                 <div className="mb-3 grid grid-cols-3 gap-2">
-                  <RouteMetric label="선택 경유지" value={`${selectedRouteStores.length}곳`} />
-                  <RouteMetric label={routeSequence ? "경유 코스 거리" : "출발지 기준 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
-                  <RouteMetric label={routeSequence ? "경유 코스 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
+                  <RouteMetric label="계산 대상" value={`${selectedRouteStores.length}곳`} />
+                  <RouteMetric label={routeSequence ? "도로 경유 거리" : "출발지 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
+                  <RouteMetric label={routeSequence ? "도로 경유 시간" : "출발지 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
                 <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
                   <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
@@ -1164,7 +1164,7 @@ function TodayCourseView({
                   </div>
                 ) : null}
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-500">
-                  전체 선택 후에도 실제 도로 계산은 최대 {tmapWaypointLimit}곳씩 나눠 처리합니다.
+                  티맵 경유지 제한 때문에 실제 도로 계산은 최대 {tmapWaypointLimit}곳씩 나눠 처리합니다.
                 </div>
               </div>
               <div className="border-b border-slate-200 bg-slate-50/80 p-3">
