@@ -19,6 +19,40 @@ export default async function AdminSystemPage() {
   if (!session) redirect("/admin/login");
 
   const system = await getSystemDiagnostics();
+  const databaseReady = system.mode === "production-db" && system.databaseChecks.length > 0 && system.databaseChecks.every((check) => check.status === "ready");
+  const storageReady = system.storageChecks.length > 0 && system.storageChecks.every((check) => check.status === "ready");
+  const authReady = system.adminConfigured && system.customerConfigured;
+  const deployReady = system.appUrlConfigured;
+  const operationDataReady = system.databaseChecks.some((check) => check.name === "정제 거래처" && Number(check.count || 0) > 0);
+  const launchGates = [
+    {
+      description: databaseReady ? "Supabase 테이블 연결과 카운트 확인이 완료되었습니다." : "Supabase 환경변수와 schema.sql 적용, 테이블 카운트를 확인하세요.",
+      label: "DB 저장",
+      ready: databaseReady
+    },
+    {
+      description: authReady ? "관리자와 고객사 로그인 환경값이 설정되었습니다." : "관리자/고객사 인증값과 세션 시크릿을 운영값으로 교체하세요.",
+      label: "권한 분리",
+      ready: authReady
+    },
+    {
+      description: storageReady ? "첨부자료 Storage 접근이 준비되었습니다." : "사업자등록증, 통장사본, 적재위치 파일 업로드 Storage를 확인하세요.",
+      label: "첨부자료",
+      ready: storageReady
+    },
+    {
+      description: deployReady ? "Production URL 기준 링크 확인이 가능합니다." : "NEXT_PUBLIC_APP_URL을 Production URL로 등록하세요.",
+      label: "배포 URL",
+      ready: deployReady
+    },
+    {
+      description: operationDataReady ? "정제 거래처 데이터가 DB에 적재되어 있습니다." : "거래처 마스터를 업로드하거나 수기 등록 후 정제 테이블을 확인하세요.",
+      label: "운영 데이터",
+      ready: operationDataReady
+    }
+  ];
+  const launchReadyCount = launchGates.filter((gate) => gate.ready).length;
+  const launchProgress = Math.round((launchReadyCount / launchGates.length) * 100);
   const priorityActions = [
     {
       description: system.mode === "production-db" ? "실 DB 연결 상태입니다. 테이블 카운트와 Storage만 확인하면 됩니다." : "Supabase 환경변수와 schema.sql 적용 여부를 먼저 확인해야 합니다.",
@@ -104,6 +138,28 @@ export default async function AdminSystemPage() {
                 계정 설정 점검
               </Link>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-none">
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle>운영 오픈 판정표</CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">실사용 전 반드시 확인할 5가지 기준입니다. 모두 준비되면 고객사 운영 화면을 안정적으로 열 수 있습니다.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={launchReadyCount === launchGates.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
+                  {launchReadyCount}/{launchGates.length} 준비 · {launchProgress}%
+                </Badge>
+                <Progress className="h-2 w-32" value={launchProgress} />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-5">
+            {launchGates.map((gate) => (
+              <LaunchGateCard key={gate.label} {...gate} />
+            ))}
           </CardContent>
         </Card>
 
@@ -296,6 +352,19 @@ function SystemActionCard({
       <p className="mt-4 text-sm font-black">{label}</p>
       <p className="mt-2 text-xs font-semibold leading-5 opacity-75">{description}</p>
     </Link>
+  );
+}
+
+function LaunchGateCard({ description, label, ready }: { description: string; label: string; ready: boolean }) {
+  return (
+    <div className={`rounded-md border p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-100 bg-amber-50/70"}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-black text-slate-950">{label}</p>
+        {ready ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+      </div>
+      <Badge className={ready ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{ready ? "준비" : "점검"}</Badge>
+      <p className="mt-3 text-xs font-bold leading-5 text-slate-600">{description}</p>
+    </div>
   );
 }
 
