@@ -188,6 +188,29 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
     excludeClosedStores ? "이탈 제외" : ""
   ].filter(Boolean);
+  const selectedVehicleStoreCount = selectedVehicle?.stops.length ?? allStores.length;
+  const routeReadinessItems = [
+    {
+      done: isVehicleFiltered,
+      label: "배송차 선택",
+      value: isVehicleFiltered ? selectedVehicleLabel : "전체 매장 보기"
+    },
+    {
+      done: selectedVehicleStoreCount > 0,
+      label: "관리 매장",
+      value: `${selectedVehicleStoreCount.toLocaleString()}곳`
+    },
+    {
+      done: activeView === "course",
+      label: "작업 화면",
+      value: activeView === "course" ? "경유 코스" : "지도 확인"
+    },
+    {
+      done: Boolean(kpiSummary),
+      label: "티맵 계산",
+      value: kpiSummary ? `${kpiSummary.selectedCount.toLocaleString()}곳 완료` : "계산 전"
+    }
+  ];
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -318,6 +341,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         markerViewMode={markerViewMode}
         selectedVehicleLabel={selectedVehicleLabel}
         visibleStoreCount={visibleStores.length}
+      />
+      <RouteReadinessPanel
+        activeView={activeView}
+        items={routeReadinessItems}
+        onOpenCourse={() => changeWorkspaceView("course")}
+        selectedVehicle={selectedVehicle}
       />
 
       <section className="grid gap-2 border-b border-slate-200/80 bg-white px-4 py-2.5 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
@@ -662,6 +691,60 @@ function RouteWorkspaceGuide({
           <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">{visibleStoreCount.toLocaleString()}개 표시</span>
         </div>
         <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
+      </div>
+    </section>
+  );
+}
+
+function RouteReadinessPanel({
+  activeView,
+  items,
+  onOpenCourse,
+  selectedVehicle
+}: {
+  readonly activeView: WorkspaceView;
+  readonly items: Array<{ done: boolean; label: string; value: string }>;
+  readonly onOpenCourse: () => void;
+  readonly selectedVehicle?: DeliveryVehicle;
+}) {
+  const readyCount = items.filter((item) => item.done).length;
+  const needsCourse = activeView !== "course";
+
+  return (
+    <section className="border-b border-slate-200/80 bg-white px-4 py-3">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-center">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {items.map((item) => (
+            <div key={item.label} className={`rounded-md border p-3 ${item.done ? "border-emerald-100 bg-emerald-50/70" : "border-amber-100 bg-amber-50/70"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-black text-slate-500">{item.label}</p>
+                {item.done ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-amber-700" />}
+              </div>
+              <p className="mt-2 truncate text-sm font-black text-slate-950" title={item.value}>
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black text-slate-500">코스 준비도</p>
+              <p className="mt-1 text-lg font-black text-slate-950">{readyCount}/{items.length}</p>
+            </div>
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
+              onClick={onOpenCourse}
+              type="button"
+            >
+              <Navigation className="h-3.5 w-3.5" />
+              {needsCourse ? "경유 코스 열기" : selectedVehicle ? "계산 진행" : "차량 선택"}
+            </button>
+          </div>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
+            {selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "차량을 선택하면 해당 담당 매장만 경유 계산 대상으로 좁혀집니다."}
+          </p>
+        </div>
       </div>
     </section>
   );
