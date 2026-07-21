@@ -258,7 +258,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-3 lg:grid-cols-5">
+          <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {operationChecklist.map((item, index) => (
               <ChecklistStep key={item.label} index={index + 1} {...item} />
             ))}
@@ -497,7 +497,7 @@ function ChecklistStep({
   value: string;
 }) {
   return (
-    <div className={`flex min-h-56 flex-col rounded-md border p-4 ${done ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"}`}>
+    <div className={`flex min-h-0 flex-col rounded-md border p-4 ${done ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className={`grid h-8 w-8 place-items-center rounded-md text-xs font-black ${done ? "bg-emerald-700 text-white" : "bg-amber-500 text-white"}`}>

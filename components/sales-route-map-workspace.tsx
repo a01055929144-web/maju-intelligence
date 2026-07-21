@@ -271,13 +271,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex h-[calc(100vh-112px)] min-h-[680px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div className="flex h-[calc(100vh-112px)] min-h-[720px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <h2 className="whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 지도</h2>
           <p className="mt-1 text-xs font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
             {[
               { label: "매장 등급별", value: "grade" },
@@ -305,7 +305,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               </button>
             ))}
           </nav>
-          <span className="text-xs font-bold text-slate-400">기존 영업·배송 데이터 기준</span>
+          <span className="hidden text-xs font-bold text-slate-400 2xl:inline">기존 영업·배송 데이터 기준</span>
           <button
             aria-label="필터 초기화"
             className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
@@ -318,7 +318,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/60 md:grid-cols-5">
+      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/60 lg:grid-cols-3 2xl:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
@@ -2095,14 +2095,14 @@ function RouteBasisStrip({
   readonly routePlan: RoutePlan;
 }) {
   return (
-    <section className="grid gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:grid-cols-[1fr_auto] lg:items-center">
+    <section className="grid gap-3 border-b border-slate-200/80 bg-white px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,auto)] xl:items-center">
       <div className="min-w-0">
         <p className="text-xs font-black text-slate-500">운영 기준값</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+        <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
           대시보드와 이 화면은 동일한 거래처/코스 데이터 기준입니다. 위 KPI는 검색, 등급, 배송차 필터에 따라 바뀌고 아래 값은 전체 기준을 고정 표시합니다.
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
         <RouteBasisMetric label="대시보드 기준 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
         <RouteBasisMetric label="전체 출발지 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} />
         <RouteBasisMetric label="전체 출발지 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} />
@@ -2114,7 +2114,7 @@ function RouteBasisStrip({
 
 function RouteBasisMetric({ helper, label, value }: { readonly helper?: string; readonly label: string; readonly value: string }) {
   return (
-    <div className="min-w-32 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+    <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
       <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
       {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{helper}</p> : null}

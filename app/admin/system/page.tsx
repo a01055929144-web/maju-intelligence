@@ -156,7 +156,7 @@ export default async function AdminSystemPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-5">
+          <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             {launchGates.map((gate) => (
               <LaunchGateCard key={gate.label} {...gate} />
             ))}
