@@ -171,6 +171,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const previewStore = allStores.find((store) => store.id === previewStoreId);
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
+  const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
@@ -334,6 +335,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
+
+      <RouteBasisStrip
+        allStoreCount={allStores.length}
+        allStoreTotals={allStoreTotals}
+        currentStoreCount={visibleStores.length}
+        currentTotals={routeTotals}
+        routePlan={routePlan}
+      />
 
       <RouteWorkspaceGuide
         activeView={activeView}
@@ -2068,6 +2077,47 @@ function Kpi({
       <p className="truncate text-[11px] font-black uppercase text-slate-400">{label}</p>
       <p className={`mt-1 truncate text-[24px] font-black leading-none ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-2 truncate text-[11px] font-semibold text-slate-500">{helper}</p> : null}
+    </div>
+  );
+}
+
+function RouteBasisStrip({
+  allStoreCount,
+  allStoreTotals,
+  currentStoreCount,
+  currentTotals,
+  routePlan
+}: {
+  readonly allStoreCount: number;
+  readonly allStoreTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
+  readonly currentStoreCount: number;
+  readonly currentTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
+  readonly routePlan: RoutePlan;
+}) {
+  return (
+    <section className="grid gap-2 border-b border-slate-200/80 bg-white px-4 py-3 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div className="min-w-0">
+        <p className="text-xs font-black text-slate-500">운영 기준값</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+          대시보드와 이 화면은 동일한 거래처/코스 데이터 기준입니다. 위 KPI는 검색, 등급, 배송차 필터에 따라 바뀌고 아래 값은 전체 기준을 고정 표시합니다.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <RouteBasisMetric label="대시보드 기준 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+        <RouteBasisMetric label="전체 출발지 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} />
+        <RouteBasisMetric label="전체 출발지 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} />
+        <RouteBasisMetric label="현재 화면 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`${currentTotals.distanceKm.toLocaleString()}km · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
+      </div>
+    </section>
+  );
+}
+
+function RouteBasisMetric({ helper, label, value }: { readonly helper?: string; readonly label: string; readonly value: string }) {
+  return (
+    <div className="min-w-32 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+      {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{helper}</p> : null}
     </div>
   );
 }
