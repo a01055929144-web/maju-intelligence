@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
+  AlertTriangle,
   BarChart3,
   Building2,
   CalendarDays,
+  CheckCircle2,
   ClipboardList,
   Clock,
   FileSpreadsheet,
@@ -60,6 +62,49 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
     { label: "코스 데이터", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 등록` }
   ];
+  const operationChecklist = [
+    {
+      actionHref: withCompanyQuery("/dashboard/settings"),
+      actionLabel: "회사 기준값 확인",
+      description: "회사명, 담당자, 물류 출발지 주소가 맞아야 지도와 티맵 계산 기준이 통일됩니다.",
+      done: Boolean(company.originAddress),
+      label: "회사 설정",
+      value: company.originAddress ? "출발지 설정됨" : "출발지 필요"
+    },
+    {
+      actionHref: withCompanyQuery("/"),
+      actionLabel: "거래처 등록",
+      description: "거래처 마스터를 저장하면 히스토리, 지도, 배송차 배정의 기준 데이터가 됩니다.",
+      done: briefing.currentCustomers > 0,
+      label: "거래처 기본정보",
+      value: `${briefing.currentCustomers.toLocaleString()}개`
+    },
+    {
+      actionHref: withCompanyQuery("/revenue/transactions"),
+      actionLabel: "매출 원장 확인",
+      description: "ERP 거래원장을 업로드하면 매출 등급, 품목 이탈, 리포트 수치가 갱신됩니다.",
+      done: Boolean(latestUpload),
+      label: "매출 거래내역",
+      value: latestUpload ? "업데이트됨" : "업로드 필요"
+    },
+    {
+      actionHref: withCompanyQuery("/routes/today"),
+      actionLabel: "코스 확정",
+      description: "배송차별 매장을 선택하고 실제 도로 경유 순서를 계산해 현장 실행 코스를 만듭니다.",
+      done: routePlan.totalStops > 0,
+      label: "영업·배송 코스",
+      value: `${routePlan.totalStops.toLocaleString()}곳`
+    },
+    {
+      actionHref: withCompanyQuery("/assistant"),
+      actionLabel: "리포트 확인",
+      description: "거래처와 매출 데이터가 쌓이면 Company Health Score와 실행 제안이 더 정확해집니다.",
+      done: report.health.total > 0,
+      label: "AI 리포트",
+      value: `${report.health.total}점`
+    }
+  ];
+  const completedChecklistCount = operationChecklist.filter((item) => item.done).length;
   const operationalSignals = [
     {
       actionHref: withCompanyQuery("/"),
@@ -174,6 +219,33 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             <OperationalSignalCard key={signal.label} {...signal} />
           ))}
         </div>
+
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                  운영 시작 체크리스트
+                </CardTitle>
+                <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                  고객사가 실제로 쓰기 전 반드시 맞춰야 하는 기준값입니다. 완료되지 않은 항목부터 처리하세요.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={completedChecklistCount === operationChecklist.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
+                  {completedChecklistCount}/{operationChecklist.length} 완료
+                </Badge>
+                <Progress className="h-2 w-32" value={(completedChecklistCount / operationChecklist.length) * 100} />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 lg:grid-cols-5">
+            {operationChecklist.map((item, index) => (
+              <ChecklistStep key={item.label} index={index + 1} {...item} />
+            ))}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
           <Card className="border-slate-200/80 shadow-sm">
@@ -382,6 +454,49 @@ function OperationalSignalCard({
       </div>
       <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
       <Link className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" href={actionHref}>
+        {actionLabel}
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+function ChecklistStep({
+  actionHref,
+  actionLabel,
+  description,
+  done,
+  index,
+  label,
+  value
+}: {
+  actionHref: string;
+  actionLabel: string;
+  description: string;
+  done: boolean;
+  index: number;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={`flex min-h-56 flex-col rounded-md border p-4 ${done ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className={`grid h-8 w-8 place-items-center rounded-md text-xs font-black ${done ? "bg-emerald-700 text-white" : "bg-amber-500 text-white"}`}>
+            {index}
+          </span>
+          <Badge className={done ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+            {done ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <AlertTriangle className="mr-1 h-3.5 w-3.5" />}
+            {done ? "완료" : "필요"}
+          </Badge>
+        </div>
+      </div>
+      <div className="mt-4 min-w-0">
+        <p className="text-sm font-black text-slate-950">{label}</p>
+        <p className="mt-2 text-xl font-black leading-none text-slate-950">{value}</p>
+        <p className="mt-3 text-xs font-bold leading-5 text-slate-600">{description}</p>
+      </div>
+      <Link className="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" href={actionHref}>
         {actionLabel}
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
