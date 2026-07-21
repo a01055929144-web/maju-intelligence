@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Download, ExternalLink, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
   }, [companyId, query, status, uploads]);
   const issueUploads = useMemo(() => uploads.filter(needsReview), [uploads]);
   const activeCompany = companyOptions.find((company) => company.id === companyId);
+  const issueReasons = useMemo(() => getIssueReasonSummary(uploads), [uploads]);
 
   function downloadCsv() {
     const rows = filteredUploads.map((upload) => ({
@@ -74,21 +75,45 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
   return (
     <div className="space-y-4">
       {issueUploads.length ? (
-        <div className="grid gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
-            <p className="font-black text-amber-950">보완이 필요한 업로드 {issueUploads.length.toLocaleString()}건</p>
-            <p className="mt-1 text-sm font-semibold leading-6 text-amber-800">
-              실패, 품질 80% 미만, 중복 후보, 리포트 미생성 건을 먼저 확인하세요.
-            </p>
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-800" />
+              <div>
+                <p className="font-black text-amber-950">보완이 필요한 업로드 {issueUploads.length.toLocaleString()}건</p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-amber-800">
+                  실패, 품질 80% 미만, 중복 후보, 리포트 미생성 건을 먼저 확인하세요.
+                </p>
+              </div>
+            </div>
+            <Button className="w-fit bg-amber-900 text-white hover:bg-amber-950" onClick={() => setStatus("needsAction")} type="button">
+              보완 필요만 보기
+            </Button>
           </div>
-          <Button className="w-fit bg-amber-900 text-white hover:bg-amber-950" onClick={() => setStatus("needsAction")} type="button">
-            보완 필요만 보기
-          </Button>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {issueReasons.map((reason) => (
+              <button
+                key={reason.label}
+                className="rounded-md border border-amber-200 bg-white p-3 text-left transition hover:border-amber-300 hover:bg-amber-100/40"
+                type="button"
+                onClick={() => setStatus("needsAction")}
+              >
+                <p className="text-xs font-black text-amber-700">{reason.label}</p>
+                <p className="mt-1 text-xl font-black text-amber-950">{reason.count.toLocaleString()}건</p>
+                <p className="mt-1 text-xs font-bold leading-5 text-amber-800">{reason.description}</p>
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
-          <p className="font-black text-primary">현재 보완이 필요한 업로드가 없습니다.</p>
-          <p className="mt-1 text-sm font-semibold text-muted-foreground">실패, 중복, 품질 저하, 리포트 미생성 상태가 발견되면 이곳에 표시됩니다.</p>
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 text-primary" />
+            <div>
+              <p className="font-black text-primary">현재 보완이 필요한 업로드가 없습니다.</p>
+              <p className="mt-1 text-sm font-semibold text-muted-foreground">실패, 중복, 품질 저하, 리포트 미생성 상태가 발견되면 이곳에 표시됩니다.</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -156,13 +181,14 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       {filteredUploads.length ? (
         <div className="overflow-x-auto rounded-md border border-border">
           <div className="min-w-[1180px]">
-            <div className="grid grid-cols-[1.35fr_1fr_100px_110px_100px_100px_220px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
+            <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_240px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
               <span>파일</span>
               <span>고객사</span>
               <span className="text-right">행 수</span>
               <span>상태</span>
               <span className="text-right">품질</span>
               <span className="text-right">중복</span>
+              <span>보완 사유</span>
               <span className="text-center">운영 액션</span>
             </div>
             <div className="divide-y divide-border">
@@ -184,10 +210,11 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 
 function UploadRow({ upload }: { upload: UploadHistoryItem }) {
   const reviewNeeded = needsReview(upload);
+  const reasons = getUploadIssueReasons(upload);
   const companyQuery = `companyId=${encodeURIComponent(upload.companyId)}`;
 
   return (
-    <div className="grid grid-cols-[1.35fr_1fr_100px_110px_100px_100px_220px] items-center px-4 py-3 text-sm">
+    <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_240px] items-center gap-2 px-4 py-3 text-sm">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate font-black">{upload.filename}</p>
@@ -209,6 +236,17 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         <Progress className="mt-1 h-1.5" value={upload.qualityScore} />
       </div>
       <p className="text-right font-black">{upload.duplicateCount.toLocaleString()}건</p>
+      <div className="flex flex-wrap gap-1.5">
+        {reasons.length ? (
+          reasons.map((reason) => (
+            <span key={reason} className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-800">
+              {reason}
+            </span>
+          ))
+        ) : (
+          <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">정상 반영</span>
+        )}
+      </div>
       <div className="flex justify-center gap-2">
         {upload.reportId ? (
           <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}?${companyQuery}`}>
@@ -223,6 +261,9 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
           매출
         </Link>
+        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/admin/companies`}>
+          고객사
+        </Link>
       </div>
     </div>
   );
@@ -236,6 +277,29 @@ function statusClass(status: UploadHistoryItem["status"]) {
 
 function needsReview(upload: UploadHistoryItem) {
   return upload.status === "failed" || upload.qualityScore < 80 || upload.duplicateCount > 0 || !upload.reportId;
+}
+
+function getUploadIssueReasons(upload: UploadHistoryItem) {
+  const reasons: string[] = [];
+  if (upload.status === "failed") reasons.push("업로드 실패");
+  if (upload.qualityScore < 80) reasons.push("품질 낮음");
+  if (upload.duplicateCount > 0) reasons.push("중복 후보");
+  if (!upload.reportId) reasons.push("리포트 미생성");
+  return reasons;
+}
+
+function getIssueReasonSummary(uploads: UploadHistoryItem[]) {
+  const failed = uploads.filter((upload) => upload.status === "failed").length;
+  const lowQuality = uploads.filter((upload) => upload.qualityScore < 80).length;
+  const duplicates = uploads.filter((upload) => upload.duplicateCount > 0).length;
+  const missingReport = uploads.filter((upload) => !upload.reportId).length;
+
+  return [
+    { count: failed, description: "파일 처리 자체가 실패한 건입니다.", label: "업로드 실패" },
+    { count: lowQuality, description: "필수 컬럼, 주소, 지역 값 보완이 필요합니다.", label: "품질 낮음" },
+    { count: duplicates, description: "거래처명, 주소, 사업자번호 중복 후보입니다.", label: "중복 후보" },
+    { count: missingReport, description: "분석 리포트가 생성되지 않은 업로드입니다.", label: "리포트 미생성" }
+  ];
 }
 
 function toCsv(rows: Record<string, string | number>[]) {
