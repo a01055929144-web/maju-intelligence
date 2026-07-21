@@ -105,6 +105,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     }
   ];
   const completedChecklistCount = operationChecklist.filter((item) => item.done).length;
+  const operationalProgress = Math.round((completedChecklistCount / operationChecklist.length) * 100);
+  const nextChecklistItem = operationChecklist.find((item) => !item.done) || operationChecklist[operationChecklist.length - 1];
   const operationalSignals = [
     {
       actionHref: withCompanyQuery("/"),
@@ -173,6 +175,22 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
                   거래처 {briefing.currentCustomers.toLocaleString()}개 중 오늘 추천 {briefing.todayRecommendations}곳, 동선 내 신규 리드 {briefing.routeLeads}곳을 먼저 확인하세요.
                 </p>
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black text-slate-500">실운영 전환 진행률</p>
+                      <p className="mt-1 text-2xl font-black text-slate-950">{operationalProgress}%</p>
+                    </div>
+                    <div className="min-w-0 sm:w-[360px]">
+                      <div className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
+                        <span>{completedChecklistCount}/{operationChecklist.length} 완료</span>
+                        <span>다음: {nextChecklistItem.label}</span>
+                      </div>
+                      <Progress className="mt-2 h-2" value={operationalProgress} />
+                      <p className="mt-2 truncate text-xs font-bold text-slate-500">{nextChecklistItem.description}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/routes/today")}>
@@ -234,9 +252,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
               </div>
               <div className="flex items-center gap-2">
                 <Badge className={completedChecklistCount === operationChecklist.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
-                  {completedChecklistCount}/{operationChecklist.length} 완료
+                  {completedChecklistCount}/{operationChecklist.length} 완료 · {operationalProgress}%
                 </Badge>
-                <Progress className="h-2 w-32" value={(completedChecklistCount / operationChecklist.length) * 100} />
+                <Progress className="h-2 w-32" value={operationalProgress} />
               </div>
             </div>
           </CardHeader>
