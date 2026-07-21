@@ -280,6 +280,29 @@ export default function CrmTimelinePage() {
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
   const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
   const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
+  const attachmentChecklist = [
+    {
+      count: loadingPositionAttachments,
+      description: "기사님이 현장에서 바로 보는 핵심 자료입니다.",
+      label: "배송 적재위치",
+      required: true,
+      type: "loading_position"
+    },
+    {
+      count: businessCertificateAttachments,
+      description: "OCR로 기본정보를 채우고 사업자 상태를 검수합니다.",
+      label: "사업자등록증",
+      required: true,
+      type: "business_license"
+    },
+    {
+      count: bankAccountAttachments,
+      description: "정산과 결제정보 확인에 사용합니다.",
+      label: "통장사본",
+      required: true,
+      type: "bank_account"
+    }
+  ];
   const operationalChecks = [
     {
       description: selectedCustomer.businessStatus === "정상" ? "사업자 상태가 정상으로 관리 중입니다." : "사업자 상태 확인 또는 재조회가 필요합니다.",
@@ -313,6 +336,7 @@ export default function CrmTimelinePage() {
     }
   ];
   const operationalReadyCount = operationalChecks.filter((check) => check.ok).length;
+  const ledgerProgress = Math.round((operationalReadyCount / operationalChecks.length) * 100);
   const urgentOperationalChecks = operationalChecks.filter((check) => !check.ok).slice(0, 3);
   const operationalActionItems = urgentOperationalChecks.length
     ? urgentOperationalChecks
@@ -699,6 +723,7 @@ export default function CrmTimelinePage() {
                 actionItems={operationalActionItems}
                 completeCount={operationalReadyCount}
                 isEditing={isEditing}
+                progress={ledgerProgress}
                 onEdit={() => setIsEditing(true)}
                 totalCount={operationalChecks.length}
               />
@@ -830,6 +855,38 @@ export default function CrmTimelinePage() {
                 <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
                 <h3 className="mt-1 text-base font-black text-slate-950">현장 첨부자료</h3>
                 <p className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800">{selectedCustomer.loadingPosition}</p>
+                <div className="mt-4 grid gap-2">
+                  {attachmentChecklist.map((item) => (
+                    <button
+                      key={item.type}
+                      className={`rounded-md border p-3 text-left transition hover:bg-slate-50 ${
+                        item.type === "loading_position"
+                          ? "border-blue-200 bg-blue-50/70"
+                          : item.count > 0
+                            ? "border-emerald-100 bg-emerald-50/60"
+                            : "border-amber-100 bg-amber-50/60"
+                      }`}
+                      type="button"
+                      onClick={() => {
+                        setNewAttachmentType(item.type);
+                        setNewAttachmentTitle(attachmentTitleFromType(item.type));
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-950">
+                            {item.label}
+                            {item.type === "loading_position" ? <span className="ml-2 text-xs text-blue-700">최우선</span> : null}
+                          </p>
+                          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
+                        </div>
+                        <Badge className={item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                          {item.count > 0 ? `${item.count}건` : "필요"}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))}
+                </div>
                 <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
                   <p className="mb-3 text-xs font-black text-slate-500">자료 추가</p>
                   <div className="grid gap-2">
@@ -936,16 +993,25 @@ export default function CrmTimelinePage() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                  {customerNotes.map((note) => (
-                    <div key={note.id} className="rounded-md border border-slate-200 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
-                        <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
+                  {customerNotes.length ? (
+                    customerNotes.map((note) => (
+                      <div key={note.id} className="rounded-md border border-slate-200 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
+                          <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
+                        </div>
+                        <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{note.memo}</p>
+                        {note.nextAction ? <p className="mt-2 text-xs font-black text-blue-700">다음 액션: {note.nextAction}</p> : null}
                       </div>
-                      <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{note.memo}</p>
-                      {note.nextAction ? <p className="mt-2 text-xs font-black text-blue-700">다음 액션: {note.nextAction}</p> : null}
+                    ))
+                  ) : (
+                    <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 lg:col-span-2">
+                      <p className="text-sm font-black text-slate-700">아직 서버 메모가 없습니다.</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                        상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 샘플 기준 메모는 {selectedCustomer.memoCount}건입니다.
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -1061,12 +1127,14 @@ function OperationalActionStrip({
   completeCount,
   isEditing,
   onEdit,
+  progress,
   totalCount
 }: {
   actionItems: Array<{ description: string; ok: boolean; title: string }>;
   completeCount: number;
   isEditing: boolean;
   onEdit: () => void;
+  progress: number;
   totalCount: number;
 }) {
   const ready = completeCount === totalCount;
@@ -1077,11 +1145,14 @@ function OperationalActionStrip({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={ready ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}>{ready ? "운영 준비 완료" : "운영 보완 필요"}</Badge>
-            <span className="text-sm font-black text-slate-950">{completeCount}/{totalCount} 항목 완료</span>
+            <span className="text-sm font-black text-slate-950">{completeCount}/{totalCount} 항목 완료 · {progress}%</span>
           </div>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
             {ready ? "이 거래처는 원장, 배송, 첨부, 메모 기준이 준비되어 있습니다." : "부족한 항목부터 보완하면 지도, 배송, 히스토리 품질이 좋아집니다."}
           </p>
+          <div className="mt-3 h-2 max-w-md overflow-hidden rounded-full bg-white">
+            <div className={`h-full rounded-full ${ready ? "bg-emerald-600" : "bg-blue-700"}`} style={{ width: `${progress}%` }} />
+          </div>
         </div>
         <button
           className="inline-flex h-9 w-fit items-center gap-2 rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 disabled:cursor-default disabled:opacity-60"
