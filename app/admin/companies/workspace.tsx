@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Building2, CheckCircle2, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, ClipboardList, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ManagedCompanyAccount, ManagedCompanyAccountInput } from "@/lib/store";
@@ -118,6 +118,11 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const activeCompanies = companies.filter((company) => company.status === "active").length;
   const needsSetupCompanies = companies.filter((company) => getCompanyReadiness(company).score < 80).length;
   const pausedCompanies = companies.filter((company) => company.status !== "active").length;
+  const adminActionQueue = companies
+    .map((company) => ({ company, missingCheck: getFirstMissingCheck(company), readiness: getCompanyReadiness(company) }))
+    .filter((item) => item.missingCheck)
+    .sort((a, b) => a.readiness.score - b.readiness.score)
+    .slice(0, 4);
 
   return (
     <div className="space-y-5">
@@ -127,6 +132,58 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
         <AdminSummaryCard icon={ReceiptText} label="매출 거래행" value={`${totalSalesRows.toLocaleString()}건`} helper="거래원장 누적" />
         <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "DB 연결" : "저장 확인 필요"} />
       </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-primary">
+              <ClipboardList className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-black text-primary">어드민 운영 큐</p>
+              <h2 className="mt-1 text-xl font-black text-slate-950">오늘 먼저 확인할 고객사</h2>
+              <p className="mt-1 text-sm font-bold text-muted-foreground">계정, 출발지, 거래처, 매출 원장, 업로드 이력 중 빠진 항목이 있는 회사를 우선 정렬합니다.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <AdminQueueMetric label="준비 미흡" value={`${needsSetupCompanies}곳`} tone="warning" />
+            <AdminQueueMetric label="운영중" value={`${activeCompanies}곳`} />
+            <AdminQueueMetric label="DB 상태" value={source === "supabase" ? "연결" : "확인"} tone={source === "supabase" ? "default" : "warning"} />
+          </div>
+        </div>
+        <div className="grid gap-3 p-5 lg:grid-cols-4">
+          {adminActionQueue.map(({ company, missingCheck, readiness }) => (
+            <button
+              key={company.id}
+              className="group rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-teal-300 hover:bg-white hover:shadow-sm"
+              type="button"
+              onClick={() => selectCompany(company)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-black text-slate-950">{company.name}</p>
+                  <p className="mt-1 text-xs font-bold text-muted-foreground">{company.customerEmail || "로그인 계정 미등록"}</p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-black text-amber-800">{readiness.score}%</span>
+              </div>
+              <div className="mt-4 rounded-md border border-amber-100 bg-white p-3">
+                <p className="text-xs font-black text-amber-800">{missingCheck?.label} 필요</p>
+                <p className="mt-1 min-h-10 text-xs font-bold leading-5 text-muted-foreground">{missingCheck?.description}</p>
+              </div>
+              <span className="mt-4 inline-flex items-center gap-1 text-xs font-black text-primary">
+                고객사 선택
+                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+              </span>
+            </button>
+          ))}
+          {!adminActionQueue.length ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 lg:col-span-4">
+              <p className="font-black text-emerald-900">모든 고객사가 운영 준비 기준을 충족했습니다.</p>
+              <p className="mt-1 text-sm font-bold text-emerald-700">신규 업로드 실패, 출발지 변경, 계정 변경 요청만 수시로 확인하면 됩니다.</p>
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
       <aside className="rounded-lg border border-slate-200 bg-white">
@@ -475,6 +532,10 @@ function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
   };
 }
 
+function getFirstMissingCheck(company: ManagedCompanyAccount) {
+  return getCompanyReadiness(company).checks.find((check) => !check.ok);
+}
+
 function AdminSummaryCard({ helper, icon: Icon, label, value }: { helper: string; icon: typeof Building2; label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -482,6 +543,15 @@ function AdminSummaryCard({ helper, icon: Icon, label, value }: { helper: string
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
       <p className="mt-1 text-xs font-bold text-muted-foreground">{helper}</p>
+    </div>
+  );
+}
+
+function AdminQueueMetric({ label, tone = "default", value }: { label: string; tone?: "default" | "warning"; value: string }) {
+  return (
+    <div className={`min-w-24 rounded-lg border px-3 py-2 ${tone === "warning" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+      <p className={`text-[11px] font-black ${tone === "warning" ? "text-amber-700" : "text-slate-500"}`}>{label}</p>
+      <p className={`mt-1 text-sm font-black ${tone === "warning" ? "text-amber-950" : "text-slate-950"}`}>{value}</p>
     </div>
   );
 }
