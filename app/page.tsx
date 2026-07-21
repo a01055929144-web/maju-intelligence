@@ -849,6 +849,7 @@ function Onboarding({
     : "매출 엑셀은 거래내역으로 누적 저장하고, 같은 거래처는 매출 추이와 품목 변화를 다시 계산합니다.";
   const hasDataRows = rawRows.length > 0;
   const hasBlockingQualityIssues = dataQuality.issueRows.length > 0 || dataQuality.invalidBusinessNumbers.length > 0;
+  const latestUpload = uploadHistory[0];
   const flowSteps = [
     {
       description: isMaster ? "거래처 마스터는 히스토리와 배송 코스의 기준값입니다." : "매출 거래내역은 등급, 이탈, 리포트의 기준값입니다.",
@@ -993,6 +994,12 @@ function Onboarding({
     <section className="space-y-4">
       <div className="space-y-4">
         <DataRegistrationFlowCard steps={flowSteps} />
+        <OperationalDataSplit
+          activeType={uploadType}
+          latestUploadAt={latestUpload?.createdAt}
+          onSelect={onUploadType}
+          rowsWaiting={rawRows.length}
+        />
 
         <div className="rounded-md border border-l-4 border-slate-200 border-l-emerald-600 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
@@ -1370,6 +1377,101 @@ function DataRegistrationFlowCard({
             <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{step.description}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function OperationalDataSplit({
+  activeType,
+  latestUploadAt,
+  onSelect,
+  rowsWaiting
+}: {
+  activeType: UploadTemplateType;
+  latestUploadAt?: string;
+  onSelect: (type: UploadTemplateType) => void;
+  rowsWaiting: number;
+}) {
+  const cards = [
+    {
+      checks: ["사업자번호/상호명", "배송주소/권역", "대표자/연락처", "첨부자료/메모"],
+      description: "거래처 히스토리, 지도 마커, 배송차 배정의 기준 데이터입니다.",
+      icon: Building2,
+      key: "customer-master" as UploadTemplateType,
+      label: "거래처 마스터",
+      rhythm: "최초 1회 등록 후 수정",
+      target: "히스토리 · 지도 · 배송 코스"
+    },
+    {
+      checks: ["거래처 key", "매출일자", "품목/수량", "공급가/총매출"],
+      description: "매출 등급, 품목 이탈, 리포트 수치와 영업 우선순위를 갱신합니다.",
+      icon: Banknote,
+      key: "sales-analysis" as UploadTemplateType,
+      label: "매출 거래내역",
+      rhythm: "일/월/분기 반복 업데이트",
+      target: "등급 · 이탈 · AI 리포트"
+    }
+  ];
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <Badge className="mb-3 bg-slate-900 text-white">운영 데이터 구분</Badge>
+          <h2 className="text-xl font-black text-slate-950">먼저 등록할 데이터의 목적을 선택하세요</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+            거래처 마스터는 기준값이고, 매출 거래내역은 반복 업데이트 데이터입니다. 선택에 따라 필수 컬럼과 검증 기준이 달라집니다.
+          </p>
+        </div>
+        <div className="grid gap-2 text-xs font-black text-slate-500 sm:grid-cols-2">
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">저장 대기 {rowsWaiting.toLocaleString()}행</span>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">최근 반영 {latestUploadAt || "확인 필요"}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          const active = activeType === card.key;
+
+          return (
+            <button
+              key={card.key}
+              className={`rounded-md border p-4 text-left transition ${
+                active ? "border-blue-300 bg-blue-50 ring-1 ring-blue-100" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+              }`}
+              onClick={() => onSelect(card.key)}
+              type="button"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 gap-3">
+                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-md ${active ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-base font-black text-slate-950">{card.label}</p>
+                    <p className="mt-1 text-sm font-bold leading-6 text-slate-500">{card.description}</p>
+                  </div>
+                </div>
+                <Badge className={active ? "bg-white text-blue-800 ring-1 ring-inset ring-blue-100" : "bg-slate-100 text-slate-600"}>
+                  {active ? "선택됨" : "선택"}
+                </Badge>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                <MiniStatus label="업데이트 주기" value={card.rhythm} />
+                <MiniStatus label="반영 화면" value={card.target} />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {card.checks.map((check) => (
+                  <span key={check} className="rounded-md bg-white px-2 py-1 text-xs font-black text-slate-600 ring-1 ring-inset ring-slate-200">
+                    {check}
+                  </span>
+                ))}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
