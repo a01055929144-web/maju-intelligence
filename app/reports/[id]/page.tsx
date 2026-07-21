@@ -55,6 +55,36 @@ export default async function ReportDetailPage({ params, searchParams }: { param
     ["이번 주", `${report.missingRegions.slice(0, 3).join(", ") || "White Space"} 지역에 신규 리드 후보를 넣고 방문 코스를 계산합니다.`],
     ["이번 달", "매출 거래원장을 다시 업로드해 거래처 등급 변화와 품목 이탈 여부를 비교합니다."]
   ] as const;
+  const scoreActions = [
+    {
+      href: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
+      label: "CRM관리",
+      score: report.health.crmManagement,
+      title: "거래처 원장 보완",
+      description: "사업자 상태, 연락처, 배송주소, 적재위치, 메모 이력을 정리합니다."
+    },
+    {
+      href: companyId ? `/routes/today?companyId=${encodeURIComponent(companyId)}` : "/routes/today",
+      label: "배송효율",
+      score: report.health.deliveryEfficiency,
+      title: "경유 코스 계산",
+      description: "배송차별 담당 매장을 선택하고 티맵 기준 경유 순서를 계산합니다."
+    },
+    {
+      href: companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/",
+      label: "신규영업",
+      score: report.health.newSales,
+      title: "매출/거래처 업데이트",
+      description: "거래처 마스터와 매출 거래내역을 갱신해 등급과 추천 리드를 재계산합니다."
+    },
+    {
+      href: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
+      label: "영업력",
+      score: report.health.salesPower,
+      title: "파이프라인 확인",
+      description: "방문 결과와 견적 요청을 매출 기회로 전환하는 흐름을 점검합니다."
+    }
+  ].sort((a, b) => a.score - b.score);
   const operationLinks = [
     {
       description: "사업자 상태, 배송주소, 적재위치, 메모를 보완합니다.",
@@ -188,6 +218,26 @@ export default async function ReportDetailPage({ params, searchParams }: { param
           </Card>
         </div>
 
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                  점수 기반 실행 보드
+                </CardTitle>
+                <p className="mt-1 text-sm font-semibold text-muted-foreground">낮은 점수 항목부터 실제 운영 화면으로 이동해 보완합니다.</p>
+              </div>
+              <Badge className="w-fit bg-slate-100 text-slate-700">낮은 점수 우선</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {scoreActions.map((item) => (
+              <ScoreActionCard key={item.label} {...item} />
+            ))}
+          </CardContent>
+        </Card>
+
         <Card className="border-teal-100 bg-teal-50/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -253,6 +303,42 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
         <p className="mt-1 text-3xl font-black">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function ScoreActionCard({
+  description,
+  href,
+  label,
+  score,
+  title
+}: {
+  description: string;
+  href: string;
+  label: string;
+  score: number;
+  title: string;
+}) {
+  const tone =
+    score < 60
+      ? { badge: "bg-rose-100 text-rose-800", text: "집중 보완", value: "text-rose-700" }
+      : score < 75
+        ? { badge: "bg-amber-100 text-amber-800", text: "운영 보완", value: "text-amber-700" }
+        : { badge: "bg-emerald-100 text-emerald-800", text: "양호", value: "text-emerald-700" };
+
+  return (
+    <Link className="group flex min-h-56 flex-col rounded-md border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:bg-teal-50/40" href={href}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black text-slate-400">{label}</p>
+          <p className={`mt-2 text-4xl font-black leading-none ${tone.value}`}>{score}</p>
+        </div>
+        <Badge className={tone.badge}>{tone.text}</Badge>
+      </div>
+      <p className="mt-4 text-sm font-black text-slate-950">{title}</p>
+      <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{description}</p>
+      <span className="mt-auto inline-flex text-xs font-black text-teal-800 transition group-hover:translate-x-0.5">작업 화면 열기</span>
+    </Link>
   );
 }
 
