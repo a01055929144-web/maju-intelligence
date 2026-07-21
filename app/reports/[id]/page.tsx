@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartPulse, MapPin, Route, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartPulse, MapPin, Route, Target, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -85,6 +85,7 @@ export default async function ReportDetailPage({ params, searchParams }: { param
       description: "방문 결과와 견적 요청을 매출 기회로 전환하는 흐름을 점검합니다."
     }
   ].sort((a, b) => a.score - b.score);
+  const primaryAction = scoreActions[0];
   const operationLinks = [
     {
       description: "사업자 상태, 배송주소, 적재위치, 메모를 보완합니다.",
@@ -121,6 +122,35 @@ export default async function ReportDetailPage({ params, searchParams }: { param
       userName={customerSession?.name || "관리자"}
     >
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+        <Card className="border-teal-100 bg-gradient-to-br from-white to-teal-50/70 shadow-sm">
+          <CardContent className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+            <div>
+              <Badge className="mb-3 bg-teal-700 text-white">실행형 AI 리포트</Badge>
+              <h2 className="text-2xl font-black leading-tight text-slate-950">이번 리포트의 첫 작업은 {primaryAction.title}입니다.</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                가장 낮은 점수 항목부터 보완하면 리포트 수치, 거래처 히스토리, 배송 코스, 매출 분석이 같은 방향으로 개선됩니다.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white transition hover:bg-teal-800" href={primaryAction.href}>
+                  우선 작업 열기
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50" href={companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard"}>
+                  대시보드로 이동
+                </Link>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/80 bg-white p-4 shadow-sm">
+              <p className="text-xs font-black text-slate-400">리포트 운영 기준</p>
+              <div className="mt-3 grid gap-2">
+                <ReportRunMetric label="회사 건강도" value={`${report.health.total}점`} />
+                <ReportRunMetric label="우선 보완 항목" value={primaryAction.label} />
+                <ReportRunMetric label="리포트 신뢰도" value={`${dataConfidence}%`} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Building2} label="거래처" value={`${report.customers}개`} />
           <Metric icon={MapPin} label="거래지역" value={`${report.regions}개`} />
@@ -303,6 +333,15 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
         <p className="mt-1 text-3xl font-black">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function ReportRunMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 
