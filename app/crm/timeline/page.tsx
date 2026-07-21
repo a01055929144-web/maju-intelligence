@@ -275,6 +275,8 @@ export default function CrmTimelinePage() {
   const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
+  const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
+  const readyCustomerCount = customers.length - needsAttentionCustomers.length;
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
   const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
   const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
@@ -518,6 +520,29 @@ export default function CrmTimelinePage() {
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
         </div>
 
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">거래처 운영 현황</Badge>
+                <p className="text-base font-black text-slate-950">보완이 필요한 거래처를 먼저 정리하세요</p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">사업자 상태, 연락처, 배송주소, 적재위치 기준으로 원장 완성도를 봅니다.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <MiniLedgerMetric label="운영 가능" value={`${readyCustomerCount.toLocaleString()}곳`} tone="ready" />
+                <MiniLedgerMetric label="보완 필요" value={`${needsAttentionCustomers.length.toLocaleString()}곳`} tone="warning" />
+              </div>
+            </div>
+          </div>
+          <Link className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-950 p-4 text-white shadow-sm transition hover:bg-slate-800" href={withCompanyQuery("/")}>
+            <span>
+              <span className="block text-sm font-black">거래처 데이터 보완</span>
+              <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
+            </span>
+            <Plus className="h-5 w-5" />
+          </Link>
+        </div>
+
         <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
           <aside className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-200/80 p-4">
@@ -583,30 +608,40 @@ export default function CrmTimelinePage() {
               </div>
             </div>
             <div className="max-h-[calc(100vh-360px)] space-y-2 overflow-auto p-3">
-              {filteredCustomers.map(({ customer, index }) => (
-                <button
-                  key={`${customer.customerName}-${customer.address}`}
-                  className={`w-full rounded-md border p-3 text-left transition ${
-                    index === selectedIndex ? "border-slate-900 bg-slate-50 shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-                  onClick={() => setSelectedIndex(index)}
-                  type="button"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
-                      <p className="mt-1 truncate text-xs font-bold text-slate-500">{customer.region} · {customer.address}</p>
+              {filteredCustomers.map(({ customer, index }) => {
+                const issues = customerOperationalIssues(customer);
+                const readyScore = Math.round(((4 - issues.length) / 4) * 100);
+                return (
+                  <button
+                    key={`${customer.customerName}-${customer.address}`}
+                    className={`w-full rounded-md border p-3 text-left transition ${
+                      index === selectedIndex ? "border-slate-900 bg-slate-50 shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                    onClick={() => setSelectedIndex(index)}
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
+                        <p className="mt-1 truncate text-xs font-bold text-slate-500">{customer.region} · {customer.address}</p>
+                      </div>
+                      <Badge className={gradeClassName(customer.grade)}>{customer.grade}</Badge>
                     </div>
-                    <Badge className={gradeClassName(customer.grade)}>{customer.grade}</Badge>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                    <span className="rounded bg-slate-100 px-2 py-1">{customer.industry}</span>
-                    <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryKm}km</span>
-                    <span className="rounded bg-slate-100 px-2 py-1">{customer.monthlyRevenue}만원</span>
-                    <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryManager}</span>
-                  </div>
-                </button>
-              ))}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-slate-400">원장 완성도 {readyScore}%</span>
+                      <Badge className={issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
+                        {issues.length ? `${issues[0]} 필요` : "운영 가능"}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                      <span className="rounded bg-slate-100 px-2 py-1">{customer.industry}</span>
+                      <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryKm}km</span>
+                      <span className="rounded bg-slate-100 px-2 py-1">{customer.monthlyRevenue}만원</span>
+                      <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryManager}</span>
+                    </div>
+                  </button>
+                );
+              })}
               {!filteredCustomers.length ? (
                 <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
                   <p className="text-sm font-black text-slate-700">조건에 맞는 거래처가 없습니다.</p>
@@ -1082,6 +1117,17 @@ function MiniMetric({ label, value, wide = false }: { label: string; value: stri
   );
 }
 
+function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready" | "warning"; value: string }) {
+  const toneClassName = tone === "ready" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800";
+
+  return (
+    <div className={`min-w-32 rounded-md border px-4 py-3 ${toneClassName}`}>
+      <p className="text-[11px] font-black opacity-70">{label}</p>
+      <p className="mt-1 text-xl font-black leading-none">{value}</p>
+    </div>
+  );
+}
+
 function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string; label: string; tone?: "slate" | "emerald" | "blue" | "violet"; value: string }) {
   const toneClassName = {
     blue: "text-blue-700",
@@ -1249,6 +1295,15 @@ function gradeClassName(grade: string) {
   if (grade === "A") return "bg-emerald-100 text-emerald-800";
   if (grade === "B") return "bg-blue-100 text-blue-800";
   return "bg-slate-100 text-slate-700";
+}
+
+function customerOperationalIssues(customer: CustomerView) {
+  const issues: string[] = [];
+  if (customer.businessStatus !== "정상") issues.push("사업자 확인");
+  if (!customer.phone || !customer.representativeName) issues.push("연락처");
+  if (!customer.address) issues.push("배송주소");
+  if (!customer.loadingPosition) issues.push("적재위치");
+  return issues;
 }
 
 function formatDbCount(value: number | null) {
