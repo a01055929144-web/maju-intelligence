@@ -69,7 +69,7 @@ export function ExcelHeaderMappingPreview({
               ERP 엑셀 컬럼을 MAJU 표준 필드로 연결
             </p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-              업로드한 ERP 엑셀의 실제 컬럼과 샘플값을 보고 MAJU 표준 필드에 연결합니다.
+              업로드한 ERP 엑셀의 실제 행을 확인하고, 각 컬럼을 MAJU 표준 필드로 확정합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -87,13 +87,18 @@ export function ExcelHeaderMappingPreview({
             남은 필수값: {missingRequiredFields.map((field) => field.label).join(", ")}
           </p>
         ) : null}
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <MappingStep label="1" title="엑셀 원본 확인" description={`${rows.length.toLocaleString()}개 행 전체를 기준으로 누락값과 컬럼 의미를 봅니다.`} />
+          <MappingStep label="2" title="표준 필드 지정" description="거래처명, 주소, 사업자번호, 매출 필드처럼 저장 기준이 되는 값을 연결합니다." />
+          <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 서버 저장과 리포트 갱신을 진행할 수 있습니다." />
+        </div>
       </div>
       <div className="max-h-[520px] overflow-auto bg-white">
         <table className="w-full min-w-[720px] text-left text-xs">
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
             <tr>
               <th className="w-[24%] border-b border-slate-200 px-4 py-3 font-black">엑셀 헤더</th>
-              <th className="w-[42%] border-b border-slate-200 px-4 py-3 font-black">샘플값</th>
+              <th className="w-[42%] border-b border-slate-200 px-4 py-3 font-black">실제 행 미리보기</th>
               <th className="w-[34%] border-b border-slate-200 px-4 py-3 font-black">MAJU 표준 필드</th>
             </tr>
           </thead>
@@ -102,9 +107,9 @@ export function ExcelHeaderMappingPreview({
               const mappedFieldKey = mappedByHeader[header] || "";
               const mappedField = fields.find((field) => field.key === mappedFieldKey);
               const samples = rows
-                .slice(0, 4)
-                .map((row) => String(row[header] ?? "").trim())
-                .filter(Boolean);
+                .slice(0, 6)
+                .map((row, index) => ({ index: index + 2, value: String(row[header] ?? "").trim() }))
+                .filter((sample) => sample.value);
 
               return (
                 <tr key={header} className="border-t border-slate-100 align-top transition hover:bg-blue-50/30">
@@ -121,9 +126,10 @@ export function ExcelHeaderMappingPreview({
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       {samples.length ? (
-                        samples.map((sample, index) => (
-                          <span key={`${header}-${index}`} className="max-w-[220px] truncate rounded-md bg-slate-50 px-2 py-1 font-bold text-slate-700">
-                            {sample}
+                        samples.map((sample) => (
+                          <span key={`${header}-${sample.index}`} className="max-w-[220px] truncate rounded-md bg-slate-50 px-2 py-1 font-bold text-slate-700">
+                            <span className="mr-1 text-slate-400">{sample.index}행</span>
+                            {sample.value}
                           </span>
                         ))
                       ) : (
@@ -168,6 +174,18 @@ export function ExcelHeaderMappingPreview({
           onHeaderMap={updateHeaderMapping}
         />
       ) : null}
+    </div>
+  );
+}
+
+function MappingStep({ description, label, title }: { description: string; label: string; title: string }) {
+  return (
+    <div className="rounded-md border border-blue-100 bg-white px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">{label}</span>
+        <p className="text-xs font-black text-slate-950">{title}</p>
+      </div>
+      <p className="mt-1 text-[11px] font-bold leading-4 text-slate-500">{description}</p>
     </div>
   );
 }
