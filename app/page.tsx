@@ -850,6 +850,28 @@ function Onboarding({
   const hasDataRows = rawRows.length > 0;
   const hasBlockingQualityIssues = dataQuality.issueRows.length > 0 || dataQuality.invalidBusinessNumbers.length > 0;
   const latestUpload = uploadHistory[0];
+  const saveReadinessItems = [
+    {
+      detail: hasDataRows ? `${rawRows.length.toLocaleString()}행 등록 대기` : "엑셀 업로드 또는 수기 입력이 필요합니다.",
+      label: "등록 데이터",
+      ok: hasDataRows
+    },
+    {
+      detail: complete ? "필수 표준 필드 연결 완료" : `${missingRequiredFields.map((field) => field.label).join(", ")} 연결 필요`,
+      label: "필수 매핑",
+      ok: complete
+    },
+    {
+      detail: hasBlockingQualityIssues ? `보완 행 ${dataQuality.issueRows.length.toLocaleString()}개 · 사업자번호 오류 ${dataQuality.invalidBusinessNumbers.length.toLocaleString()}개` : "저장 전 차단 오류 없음",
+      label: "품질 검증",
+      ok: !hasBlockingQualityIssues
+    },
+    {
+      detail: pipelineMeta.persisted ? "운영 화면 반영 확인" : "저장 버튼 실행 후 확인됩니다.",
+      label: "서버 반영",
+      ok: pipelineMeta.persisted
+    }
+  ];
   const flowSteps = [
     {
       description: isMaster ? "거래처 마스터는 히스토리와 배송 코스의 기준값입니다." : "매출 거래내역은 등급, 이탈, 리포트의 기준값입니다.",
@@ -1271,6 +1293,7 @@ function Onboarding({
                   rows={rawRows}
                 />
                 <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} />
+                <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} />
                 <MappingPresetCard
                   canLoad={Boolean(savedPreset)}
                   canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
@@ -1705,6 +1728,47 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
         <Download className="h-4 w-4" />
         보완 필요 행 다운로드
       </Button>
+    </div>
+  );
+}
+
+function SaveReadinessPanel({
+  canAnalyze,
+  items
+}: {
+  canAnalyze: boolean;
+  items: Array<{ detail: string; label: string; ok: boolean }>;
+}) {
+  const readyCount = items.filter((item) => item.ok).length;
+  const blockingItems = items.filter((item) => !item.ok && item.label !== "서버 반영");
+
+  return (
+    <div className={`rounded-md border p-4 ${canAnalyze ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            {canAnalyze ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+            저장 준비 상태
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
+            {canAnalyze ? "이제 업데이트 후 리포트 갱신을 실행할 수 있습니다." : `${blockingItems.map((item) => item.label).join(", ") || "서버 반영"} 확인이 필요합니다.`}
+          </p>
+        </div>
+        <Badge className={canAnalyze ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+          {readyCount}/{items.length} 조건 충족
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-md border border-white/80 bg-white/85 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-black text-slate-500">{item.label}</p>
+              {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+            </div>
+            <p className="mt-2 text-xs font-bold leading-5 text-slate-800">{item.detail}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
