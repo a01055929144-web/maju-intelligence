@@ -254,11 +254,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
 
   return (
     <div className="flex min-h-[720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-      <header className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50 px-5 py-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Route Workbench</p>
-          <h2 className="mt-1 whitespace-nowrap text-[20px] font-black leading-tight">영업·배송 통합 작업공간</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">지도 확인, 거래처 관리, 경유 계산을 업무 탭으로 나눠서 처리합니다.</p>
+          <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">Route Workbench</p>
+          <h2 className="mt-1 whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 작업공간</h2>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">지도 확인, 거래처 관리, 경유 계산을 업무 탭으로 나눠 처리합니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-1.5">
@@ -307,7 +307,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-slate-50/60 lg:grid-cols-3 2xl:grid-cols-5">
+      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-5">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
@@ -333,7 +333,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         visibleStoreCount={visibleStores.length}
       />
 
-      <section className="grid gap-2 border-b border-slate-200/80 bg-white px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
+      <section className="grid gap-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -575,9 +575,9 @@ function DeliveryAssignmentPanel({
           <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
-      <div className="space-y-2 p-3 pb-0">
+      <div className="border-b border-slate-100 p-3">
         <button
-          className={`w-full rounded-md border p-3 text-left transition ${
+          className={`w-full rounded-md border px-3 py-2.5 text-left transition ${
             selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
           onClick={() => onSelectVehicle("all")}
@@ -590,14 +590,14 @@ function DeliveryAssignmentPanel({
           <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
         </button>
       </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3 pt-2">
+      <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-auto">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
           return (
             <div
-              className={`w-full rounded-md border p-3 text-left transition ${
-                selected ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"
+              className={`w-full px-4 py-3 text-left transition ${
+                selected ? "bg-slate-50 shadow-[inset_3px_0_0_#0f172a]" : "bg-white hover:bg-slate-50"
               }`}
               key={vehicle.id}
             >
@@ -852,7 +852,7 @@ function StoreManagementPanel({
   return (
     <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm font-black text-slate-950">{title}</p>
             <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
@@ -875,7 +875,7 @@ function StoreManagementPanel({
                   <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                 </div>
                 <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
                   <p className="text-xs font-bold text-slate-400">
                     {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
                   </p>
@@ -2048,10 +2048,10 @@ function Kpi({
     red: "text-rose-600"
   }[tone];
   return (
-    <div className="border-r border-slate-200/80 px-5 py-3 last:border-r-0">
-      <p className="truncate text-[11px] font-black uppercase text-slate-400">{label}</p>
-      <p className={`mt-1 truncate text-[24px] font-black leading-none ${valueClass}`}>{value}</p>
-      {helper ? <p className="mt-2 truncate text-[11px] font-semibold text-slate-500">{helper}</p> : null}
+    <div className="min-w-0 border-r border-slate-200/80 px-4 py-3 last:border-r-0">
+      <p className="truncate text-[11px] font-black text-slate-500">{label}</p>
+      <p className={`mt-1 truncate text-[22px] font-black leading-none ${valueClass}`}>{value}</p>
+      {helper ? <p className="mt-2 truncate text-[11px] font-bold text-slate-400">{helper}</p> : null}
     </div>
   );
 }
@@ -2070,14 +2070,14 @@ function RouteBasisStrip({
   readonly routePlan: RoutePlan;
 }) {
   return (
-    <section className="grid gap-3 border-b border-slate-200/80 bg-white px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,auto)] xl:items-center">
+    <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,auto)] xl:items-center">
       <div className="min-w-0">
         <p className="text-xs font-black text-slate-500">운영 기준값</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
           대시보드와 이 화면은 동일한 거래처/코스 데이터 기준입니다. 위 KPI는 검색, 등급, 배송차 필터에 따라 바뀌고 아래 값은 전체 기준을 고정 표시합니다.
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-4">
         <RouteBasisMetric label="대시보드 기준 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
         <RouteBasisMetric label="전체 출발지 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} />
         <RouteBasisMetric label="전체 출발지 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} />
@@ -2089,7 +2089,7 @@ function RouteBasisStrip({
 
 function RouteBasisMetric({ helper, label, value }: { readonly helper?: string; readonly label: string; readonly value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+    <div className="min-w-0 border-b border-r border-slate-100 px-3 py-2 last:border-r-0 2xl:border-b-0">
       <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
       {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{helper}</p> : null}
