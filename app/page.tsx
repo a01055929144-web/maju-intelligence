@@ -872,6 +872,31 @@ function Onboarding({
       ok: pipelineMeta.persisted
     }
   ];
+  const readyCheckCount = saveReadinessItems.filter((item) => item.ok).length;
+  const registrationControlState =
+    pipelineMeta.persisted
+      ? {
+          helper: "거래처 히스토리, 배송 코스, AI 리포트에서 같은 데이터 기준으로 확인할 수 있습니다.",
+          label: "운영 반영 완료",
+          tone: "ready" as const
+        }
+      : canAnalyze
+        ? {
+            helper: "검증·저장 실행을 누르면 서버 저장과 리포트 갱신을 함께 시도합니다.",
+            label: "저장 실행 가능",
+            tone: "action" as const
+          }
+        : hasDataRows
+          ? {
+              helper: missingRequiredFields.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 필수 컬럼을 연결하세요.` : "품질 오류를 확인한 뒤 저장을 실행하세요.",
+              label: "매핑 확인 필요",
+              tone: "warning" as const
+            }
+          : {
+              helper: entryMode === "excel" ? "엑셀을 올리면 전체 행 미리보기와 필수 컬럼 매핑이 열립니다." : "주소와 사업자번호를 확인한 뒤 1건씩 저장합니다.",
+              label: "등록 대기",
+              tone: "idle" as const
+            };
   const flowSteps = [
     {
       description: isMaster ? "거래처 마스터는 히스토리와 배송 코스의 기준값입니다." : "매출 거래내역은 등급, 이탈, 리포트의 기준값입니다.",
@@ -1015,6 +1040,15 @@ function Onboarding({
   return (
     <section className="space-y-4">
       <div className="space-y-4">
+        <RegistrationControlStrip
+          entryMode={entryMode}
+          filename={uploadedFilename}
+          readyCount={readyCheckCount}
+          rows={rawRows.length}
+          state={registrationControlState}
+          totalCount={saveReadinessItems.length}
+          typeLabel={template.label}
+        />
         <DataRegistrationFlowCard steps={flowSteps} />
         <OperationalDataSplit
           activeType={uploadType}
@@ -1318,10 +1352,10 @@ function Onboarding({
                         <Check className={canAnalyze ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
                         {canAnalyze ? "저장 준비 완료" : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
                       </p>
-                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">품질 검증과 매핑 프리셋을 확인한 뒤 리포트를 갱신하면 서버 저장 여부가 표시됩니다.</p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">필수 매핑과 품질 검증을 확인한 뒤 서버 저장과 리포트 갱신을 함께 실행합니다.</p>
                     </div>
                     <Button className="h-11 shrink-0" onClick={onAnalyze} disabled={!canAnalyze}>
-                      업데이트 후 리포트 갱신
+                      검증·저장 실행
                       <ArrowRight size={18} />
                     </Button>
                   </div>
@@ -1332,6 +1366,61 @@ function Onboarding({
         </div>
       </aside>
     </section>
+  );
+}
+
+function RegistrationControlStrip({
+  entryMode,
+  filename,
+  readyCount,
+  rows,
+  state,
+  totalCount,
+  typeLabel
+}: {
+  entryMode: "excel" | "manual";
+  filename: string;
+  readyCount: number;
+  rows: number;
+  state: { helper: string; label: string; tone: "action" | "idle" | "ready" | "warning" };
+  totalCount: number;
+  typeLabel: string;
+}) {
+  const toneClassName = {
+    action: "border-blue-200 bg-blue-50/80 text-blue-800",
+    idle: "border-slate-200 bg-white text-slate-700",
+    ready: "border-emerald-200 bg-emerald-50/80 text-emerald-800",
+    warning: "border-amber-200 bg-amber-50/80 text-amber-800"
+  }[state.tone];
+  const progress = Math.round((readyCount / totalCount) * 100);
+
+  return (
+    <div className={`rounded-md border p-4 shadow-sm ${toneClassName}`}>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-white/80 text-slate-800 ring-1 ring-inset ring-slate-200">{typeLabel}</Badge>
+            <Badge className={state.tone === "ready" ? "bg-emerald-700 text-white" : state.tone === "action" ? "bg-blue-700 text-white" : state.tone === "warning" ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-700"}>
+              {state.label}
+            </Badge>
+          </div>
+          <h2 className="mt-3 text-xl font-black text-slate-950">데이터 등록 관제판</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{state.helper}</p>
+        </div>
+        <div className="grid gap-2 rounded-md border border-white/70 bg-white/75 p-3 sm:grid-cols-3 xl:grid-cols-1">
+          <MiniStatus label="등록 방식" value={entryMode === "excel" ? "엑셀 업로드" : "수기 입력"} />
+          <MiniStatus label="대기 데이터" value={rows ? `${rows.toLocaleString()}행` : "없음"} />
+          <MiniStatus label="현재 파일" value={rows ? filename : "업로드 전"} />
+          <div className="sm:col-span-3 xl:col-span-1">
+            <div className="mb-1 flex items-center justify-between text-xs font-black text-slate-500">
+              <span>저장 준비</span>
+              <span>{readyCount}/{totalCount}</span>
+            </div>
+            <Progress value={progress} />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
