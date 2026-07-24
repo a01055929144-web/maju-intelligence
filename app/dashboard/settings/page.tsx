@@ -4,7 +4,6 @@ import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getCustomerSession } from "@/lib/auth";
 import { getCompanySettings, getCompanyStaffInvitations } from "@/lib/store";
-import { canUseWorkspaceFeature } from "@/lib/workspace";
 import { CompanySettingsForm } from "./settings-form";
 import { StaffManagementPanel } from "./staff-management-panel";
 
@@ -14,7 +13,6 @@ export default async function CompanySettingsPage() {
 
   const company = await getCompanySettings(session.companyId, session.companyName);
   const staff = await getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false }));
-  const canManageMembers = canUseWorkspaceFeature(session.workspaceRole || session.role, "manage_members");
 
   return (
     <CustomerAppShell
@@ -37,7 +35,7 @@ export default async function CompanySettingsPage() {
       <section className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6">
         <div className="space-y-5">
           <CompanySettingsForm initial={company} />
-          {canManageMembers ? <StaffManagementPanel initialInvitations={staff.invitations} /> : null}
+          <StaffManagementPanel initialInvitations={staff.invitations} />
         </div>
       </section>
     </CustomerAppShell>

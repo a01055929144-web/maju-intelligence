@@ -21,7 +21,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const heroCopy = getMobileHeroCopy(workspaceRole);
-  const footerItems = getMobileFooterItems(workspaceRole);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -125,9 +124,9 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         </div>
 
         <footer className="grid grid-cols-3 border-t border-slate-200 bg-white px-3 py-2">
-          {footerItems.map((item) => (
-            <FooterItem active={item.active} href={item.href} icon={item.icon} key={item.label} label={item.label} />
-          ))}
+          <FooterItem active href="/mobile/today" icon={Route} label="오늘" />
+          <FooterItem href="/crm/timeline" icon={Building2} label="거래처" />
+          <FooterItem href="/dashboard/settings" icon={CheckCircle2} label="관리" />
         </footer>
       </section>
     </main>
@@ -215,34 +214,6 @@ function getMobileHeroCopy(role: ReturnType<typeof normalizeWorkspaceRole>) {
   };
 }
 
-function getMobileFooterItems(role: ReturnType<typeof normalizeWorkspaceRole>) {
-  if (role === "driver") {
-    return [
-      { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
-      { href: "/mobile/today#loading-position", icon: Camera, label: "적재" },
-      { href: "/mobile/today#visit-memo", icon: CheckCircle2, label: "기록" }
-    ];
-  }
-  if (role === "sales") {
-    return [
-      { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
-      { href: "/crm/timeline", icon: Building2, label: "거래처" },
-      { href: "/mobile/today#visit-memo", icon: MessageSquareText, label: "메모" }
-    ];
-  }
-  if (role === "manager" || role === "owner") {
-    return [
-      { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
-      { href: "/crm/timeline", icon: Building2, label: "거래처" },
-      { href: "/dashboard/settings", icon: CheckCircle2, label: "관리" }
-    ];
-  }
-  return [
-    { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
-    { href: "/crm/timeline", icon: Building2, label: "거래처" },
-    { href: "/mobile/today#visit-memo", icon: CheckCircle2, label: "기록" }
-  ];
-}
 
 function formatMinutes(minutes: number) {
   if (!minutes) return "-";

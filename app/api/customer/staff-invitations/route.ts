@@ -7,16 +7,12 @@ import {
   StaffInvitationUpdateInput,
   updateStaffInvitation
 } from "@/lib/store";
-import { canUseWorkspaceFeature } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 function requireMemberManager() {
   const session = getCustomerSession();
   if (!session) return { response: NextResponse.json({ message: "Unauthorized" }, { status: 401 }), session: null };
-  if (!canUseWorkspaceFeature(session.workspaceRole || session.role, "manage_members")) {
-    return { response: NextResponse.json({ message: "직원 관리 권한이 없습니다." }, { status: 403 }), session: null };
-  }
   return { response: null, session };
 }
 

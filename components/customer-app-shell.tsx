@@ -23,7 +23,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { WorkspaceCapability, canUseWorkspaceFeature, workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
+import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
 
 type CustomerAppShellProps = {
   readonly active: "dashboard" | "customers" | "routes" | "revenue" | "assistant" | "settings" | "data";
@@ -44,7 +44,6 @@ type NavigationGroup = {
   items: Array<{
     active: CustomerAppShellProps["active"];
     badge?: string;
-    capability?: WorkspaceCapability;
     href: string;
     icon: LucideIcon;
     label: string;
@@ -56,24 +55,24 @@ const navigationGroups: NavigationGroup[] = [
     label: "운영",
     items: [
       { active: "dashboard", href: "/dashboard", icon: LayoutDashboard, label: "대시보드" },
-      { active: "routes", capability: "manage_routes", href: "/routes/today", icon: Route, label: "영업·배송 코스", badge: "실시간" },
-      { active: "customers", capability: "manage_customers", href: "/crm/timeline", icon: Building2, label: "거래처 히스토리" }
+      { active: "routes", href: "/routes/today", icon: Route, label: "영업·배송 코스", badge: "실시간" },
+      { active: "customers", href: "/crm/timeline", icon: Building2, label: "거래처 히스토리" }
     ]
   },
   {
     label: "성장",
     items: [
-      { active: "revenue", capability: "manage_sales", href: "/revenue/pipeline", icon: BarChart3, label: "매출 파이프라인" },
-      { active: "revenue", capability: "manage_sales", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
-      { active: "assistant", capability: "capture_field_updates", href: "/assistant", icon: Sparkles, label: "AI 영업 도우미" },
-      { active: "data", capability: "manage_customers", href: "/", icon: FileSpreadsheet, label: "데이터 등록" }
+      { active: "revenue", href: "/revenue/pipeline", icon: BarChart3, label: "매출 파이프라인" },
+      { active: "revenue", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
+      { active: "assistant", href: "/assistant", icon: Sparkles, label: "AI 영업 도우미" },
+      { active: "data", href: "/", icon: FileSpreadsheet, label: "데이터 등록" }
     ]
   },
   {
     label: "관리",
     items: [
-      { active: "settings", capability: "manage_company", href: "/dashboard/settings", icon: Settings, label: "회사 설정" },
-      { active: "dashboard", capability: "view_reports", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
+      { active: "settings", href: "/dashboard/settings", icon: Settings, label: "회사 설정" },
+      { active: "dashboard", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
     ]
   }
 ];
@@ -99,14 +98,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
 
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
-  const visibleNavigationGroups = navigationGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => mode === "admin-preview" || !item.capability || canUseWorkspaceFeature(normalizedRole, item.capability))
-    }))
-    .filter((group) => group.items.length > 0);
-  const canManageCompany = mode === "admin-preview" || canUseWorkspaceFeature(normalizedRole, "manage_company");
-  const canUseAssistant = mode === "admin-preview" || canUseWorkspaceFeature(normalizedRole, "capture_field_updates");
+  const visibleNavigationGroups = navigationGroups;
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -188,9 +180,9 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                     운영 체크리스트
                   </div>
                   <div className="mt-3 space-y-1">
-                    {canUseWorkspaceFeature(normalizedRole, "manage_customers") || mode === "admin-preview" ? <SidebarQuickStep currentPath={pathname} href={scopedHref("/")} icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" /> : null}
-                    {canUseWorkspaceFeature(normalizedRole, "manage_customers") || mode === "admin-preview" ? <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 정보 확인" step="2" /> : null}
-                    {canUseWorkspaceFeature(normalizedRole, "manage_routes") || mode === "admin-preview" ? <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="배송차별 코스 확정" step="3" /> : null}
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/")} icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 정보 확인" step="2" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="배송차별 코스 확정" step="3" />
                   </div>
                   <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">
                     {mode === "admin-preview"
@@ -220,24 +212,20 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                 <div className="hidden xl:block" />
               )}
               <div className={`flex max-w-full flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
-                {canManageCompany ? (
-                  <Link
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-                    href={settingsHref}
-                  >
-                    <MapPinned className="h-4 w-4" />
-                    {settingsLabel}
-                  </Link>
-                ) : null}
-                {canUseAssistant ? (
-                  <Link
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50/80 px-3 text-sm font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-blue-200 hover:bg-blue-100"
-                    href={scopedHref("/assistant")}
-                  >
-                    <MessageSquareText className="h-4 w-4" />
-                    AI 도우미
-                  </Link>
-                ) : null}
+                <Link
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                  href={settingsHref}
+                >
+                  <MapPinned className="h-4 w-4" />
+                  {settingsLabel}
+                </Link>
+                <Link
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50/80 px-3 text-sm font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-blue-200 hover:bg-blue-100"
+                  href={scopedHref("/assistant")}
+                >
+                  <MessageSquareText className="h-4 w-4" />
+                  AI 도우미
+                </Link>
                 {rightAction}
                 {mode === "customer" ? <CustomerAccountActions /> : null}
               </div>
