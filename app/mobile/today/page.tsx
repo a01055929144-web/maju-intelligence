@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, MessageSquareText, Navigation, Phone, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
@@ -63,10 +64,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#loading-position`} icon={Camera} label="적재위치" value={selectedStop.loadingPosition || "확인 필요"} />
                 <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#visit-memo`} icon={MessageSquareText} label="메모" value="방문 기록" />
               </div>
-              <div id="loading-position" className="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-black text-slate-500">배송 적재위치</p>
-                <p className="mt-1 text-sm font-black leading-6 text-slate-950">{selectedStop.loadingPosition || "적재위치 사진/영상 확인이 필요합니다."}</p>
-              </div>
             </section>
           ) : null}
 
@@ -109,7 +106,12 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </div>
           </section>
 
-          {selectedStop ? <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} /> : null}
+          {selectedStop ? (
+            <>
+              <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
+              <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
+            </>
+          ) : null}
 
           <section className="grid gap-2">
             <MobileTask icon={Navigation} title="티맵 경로 열기" description="다음 단계에서 차량별 경유 순서를 티맵 링크로 연결합니다." />
