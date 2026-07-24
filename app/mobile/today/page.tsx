@@ -6,6 +6,7 @@ import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attach
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
+import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
 export default async function MobileTodayPage({ searchParams }: { searchParams?: { customer?: string } }) {
   const session = getCustomerSession();
@@ -17,6 +18,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const driverName = session.name || "모바일 담당자";
   const routeArea = firstGroup?.region || "전체 권역";
   const selectedStop = todayStops.find((stop) => stop.id === searchParams?.customer) || todayStops[0];
+  const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
+  const roleLabel = workspaceRoleLabels[workspaceRole];
+  const heroCopy = getMobileHeroCopy(workspaceRole);
+  const footerItems = getMobileFooterItems(workspaceRole);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -27,16 +32,16 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
               <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{session.name}님 모바일 업무</p>
             </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">직원</Badge>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
           </div>
         </header>
 
         <div className="flex-1 space-y-4 px-5 py-5">
           <section className="rounded-2xl bg-teal-700 p-5 text-white shadow-[0_16px_36px_rgba(15,118,110,0.22)]">
             <p className="text-xs font-black uppercase text-white/70">Today Route</p>
-            <h1 className="mt-2 text-[28px] font-black leading-tight">오늘 배정된 코스를 확인하세요.</h1>
+            <h1 className="mt-2 text-[28px] font-black leading-tight">{heroCopy.title}</h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-white/78">
-              매장을 선택하면 전화, 지도, 적재위치, 방문 메모 액션을 바로 실행할 수 있습니다.
+              {heroCopy.description}
             </p>
           </section>
 
@@ -120,9 +125,9 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         </div>
 
         <footer className="grid grid-cols-3 border-t border-slate-200 bg-white px-3 py-2">
-          <FooterItem active icon={Route} label="오늘" />
-          <FooterItem icon={Building2} label="거래처" />
-          <FooterItem icon={CheckCircle2} label="기록" />
+          {footerItems.map((item) => (
+            <FooterItem active={item.active} href={item.href} icon={item.icon} key={item.label} label={item.label} />
+          ))}
         </footer>
       </section>
     </main>
@@ -176,13 +181,67 @@ function createKakaoMapSearchUrl(query: string) {
   return `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
 }
 
-function FooterItem({ active, icon: Icon, label }: { active?: boolean; icon: typeof Route; label: string }) {
+function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
   return (
-    <button className={`flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-black ${active ? "bg-teal-50 text-teal-800" : "text-slate-400"}`} type="button">
+    <Link className={`flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-black ${active ? "bg-teal-50 text-teal-800" : "text-slate-400"}`} href={href}>
       <Icon className="h-4 w-4" />
       {label}
-    </button>
+    </Link>
   );
+}
+
+function getMobileHeroCopy(role: ReturnType<typeof normalizeWorkspaceRole>) {
+  if (role === "driver") {
+    return {
+      title: "오늘 배송 코스를 확인하세요.",
+      description: "매장을 선택해 지도, 전화, 적재위치 사진/영상, 배송 특이사항을 바로 처리합니다."
+    };
+  }
+  if (role === "sales") {
+    return {
+      title: "오늘 방문할 거래처를 확인하세요.",
+      description: "매장을 선택해 전화, 위치, 상담 메모, 다음 액션을 빠르게 남깁니다."
+    };
+  }
+  if (role === "manager" || role === "owner") {
+    return {
+      title: "현장 코스와 직원 기록을 확인하세요.",
+      description: "배송·영업 담당자의 오늘 코스, 매장 정보, 현장 기록을 모바일에서 함께 관리합니다."
+    };
+  }
+  return {
+    title: "오늘 배정된 업무를 확인하세요.",
+    description: "매장을 선택하면 전화, 지도, 적재위치, 방문 메모 액션을 바로 실행할 수 있습니다."
+  };
+}
+
+function getMobileFooterItems(role: ReturnType<typeof normalizeWorkspaceRole>) {
+  if (role === "driver") {
+    return [
+      { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
+      { href: "/mobile/today#loading-position", icon: Camera, label: "적재" },
+      { href: "/mobile/today#visit-memo", icon: CheckCircle2, label: "기록" }
+    ];
+  }
+  if (role === "sales") {
+    return [
+      { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
+      { href: "/crm/timeline", icon: Building2, label: "거래처" },
+      { href: "/mobile/today#visit-memo", icon: MessageSquareText, label: "메모" }
+    ];
+  }
+  if (role === "manager" || role === "owner") {
+    return [
+      { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
+      { href: "/crm/timeline", icon: Building2, label: "거래처" },
+      { href: "/dashboard/settings", icon: CheckCircle2, label: "관리" }
+    ];
+  }
+  return [
+    { active: true, href: "/mobile/today", icon: Route, label: "오늘" },
+    { href: "/crm/timeline", icon: Building2, label: "거래처" },
+    { href: "/mobile/today#visit-memo", icon: CheckCircle2, label: "기록" }
+  ];
 }
 
 function formatMinutes(minutes: number) {
