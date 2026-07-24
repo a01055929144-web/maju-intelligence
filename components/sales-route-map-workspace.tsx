@@ -272,7 +272,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex min-h-[720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <div className="flex min-h-[720px] flex-col overflow-visible rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50 px-5 py-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">영업·배송 운영</p>
@@ -430,7 +430,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-[760px] grid-cols-1 xl:h-[clamp(760px,calc(100vh-250px),980px)] ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid min-h-[680px] grid-cols-1 overflow-hidden rounded-b-xl xl:h-[clamp(680px,calc(100vh-230px),940px)] ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -441,11 +441,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             vehicles={deliveryVehicles}
           />
 
-          <div className="relative h-full min-h-0 min-w-0 bg-slate-100">
+          <div className="relative h-[680px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
             <div className="h-full min-h-0 [&>div]:h-full">
               <KakaoAddressMap
                 focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                mapClassName="h-full min-h-[760px] rounded-none border-0 xl:min-h-0"
+                mapClassName="h-full min-h-[680px] rounded-none border-0 xl:min-h-0"
                 markers={markers}
                 onMarkerClick={(marker) => {
                   if (!marker.id || marker.tone === "origin") return;
@@ -952,7 +952,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-[760px] overflow-auto bg-[#f6f8fb] p-4 xl:h-[clamp(760px,calc(100vh-250px),980px)]">
+    <section className="min-h-[680px] overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:h-[clamp(680px,calc(100vh-230px),940px)]">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -960,8 +960,9 @@ function CustomerDirectoryView({
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs font-black text-slate-500">
+      <div className="mt-4 h-[calc(100%-96px)] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+        <div className="grid min-w-[840px] grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs font-black text-slate-500">
           <span>거래처</span>
           <span>매출등급</span>
           <span>담당자</span>
@@ -969,7 +970,7 @@ function CustomerDirectoryView({
           <span>거리</span>
           <span>상태</span>
         </div>
-        <div className="max-h-[640px] overflow-auto">
+        <div className="max-h-[calc(100vh-410px)] min-h-[420px] min-w-[840px] overflow-auto">
           {stores.map((store) => (
             <button
               className={`grid w-full grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] items-center gap-0 border-b border-slate-100 px-4 py-3 text-left text-sm transition hover:bg-slate-50 ${
@@ -994,6 +995,7 @@ function CustomerDirectoryView({
               </span>
             </button>
           ))}
+        </div>
         </div>
       </div>
     </section>
@@ -1226,7 +1228,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-[760px] grid-cols-1 bg-[#f6f8fb] xl:h-[clamp(760px,calc(100vh-250px),980px)] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
+    <section className={`grid min-h-[680px] grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:h-[clamp(680px,calc(100vh-230px),940px)] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
@@ -1272,11 +1274,11 @@ function TodayCourseView({
         </div>
       </aside>
 
-      <div className="relative h-full min-h-0 min-w-0 bg-slate-100">
+      <div className="relative h-[680px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
         <div className="h-full min-h-0 [&>div]:h-full">
           <KakaoAddressMap
             focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-            mapClassName="h-full min-h-[760px] rounded-none border-0 xl:min-h-0"
+            mapClassName="h-full min-h-[680px] rounded-none border-0 xl:min-h-0"
             markers={routeMapMarkers}
             onMarkerClick={(marker) => {
               if (!marker.id || marker.tone === "origin") return;
