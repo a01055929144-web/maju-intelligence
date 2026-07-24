@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, MessageSquareText, Navigation, Phone, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
@@ -66,7 +67,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 <ActionLink href={selectedStop.phone ? `tel:${selectedStop.phone}` : "#"} icon={Phone} label="전화" value={selectedStop.phone || "연락처 없음"} />
                 <ActionLink href={createKakaoMapSearchUrl(selectedStop.address || selectedStop.name)} icon={MapPinned} label="지도" value={`${selectedStop.distanceKm || 0}km`} />
                 <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#loading-position`} icon={Camera} label="적재위치" value={selectedStop.loadingPosition || "확인 필요"} />
-                <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#visit-memo`} icon={MessageSquareText} label="메모" value="방문 기록" />
+                <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#delivery-proof`} icon={CheckCircle2} label="배송완료" value="사진·문구" />
               </div>
             </section>
           ) : null}
@@ -113,6 +114,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           {selectedStop ? (
             <>
               <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
+              <MobileDeliveryProofPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
               <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
             </>
           ) : null}
