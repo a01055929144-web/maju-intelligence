@@ -407,7 +407,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             <div className="h-full [&>div]:h-full">
               <KakaoAddressMap
                 focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
+                mapClassName="h-[720px] min-h-[620px] rounded-none border-0"
                 markers={markers}
                 onMarkerClick={(marker) => {
                   if (!marker.id || marker.tone === "origin") return;
@@ -1157,7 +1157,7 @@ function TodayCourseView({
         <div className="h-full [&>div]:h-full">
           <KakaoAddressMap
             focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-            mapClassName="h-[720px] min-h-[620px] rounded-none border-0 xl:h-full"
+            mapClassName="h-[720px] min-h-[620px] rounded-none border-0"
             markers={routeMapMarkers}
             onMarkerClick={(marker) => {
               if (!marker.id || marker.tone === "origin") return;

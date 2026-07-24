@@ -68,7 +68,6 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
           center: initialCenter,
           level: 8
         });
-        map.setZoomable?.(false);
         mapInstanceRef.current = map;
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
