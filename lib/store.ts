@@ -1012,6 +1012,63 @@ export async function createStaffInvitation(input: StaffInvitationInput): Promis
   };
 }
 
+export async function getCompanyStaffInvitations(companyId: string): Promise<{ invitations: StaffInvitation[]; persisted: boolean }> {
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      invitations: [
+        {
+          id: "sample-driver-invite",
+          companyId,
+          employeeName: "김배송 매니저",
+          employeePhone: "010-3000-1000",
+          inviteCode: "SAMPLEDRIVER",
+          inviteUrl: createStaffInviteUrl("SAMPLEDRIVER"),
+          role: "driver",
+          status: "accepted",
+          createdAt: "기준 데이터"
+        },
+        {
+          id: "sample-sales-invite",
+          companyId,
+          employeeName: "박영업 매니저",
+          employeePhone: "010-3000-2000",
+          inviteCode: "SAMPLESALES",
+          inviteUrl: createStaffInviteUrl("SAMPLESALES"),
+          role: "sales",
+          status: "pending",
+          createdAt: "기준 데이터"
+        }
+      ]
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      company_id: string;
+      employee_name: string | null;
+      employee_phone: string | null;
+      invite_code: string;
+      role: StaffInvitation["role"];
+      status: StaffInvitation["status"];
+      expires_at: string | null;
+      created_at: string;
+    }>
+  >(
+    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&company_id=eq.${encodeURIComponent(
+      companyId
+    )}&order=created_at.desc`
+  );
+
+  return {
+    invitations: rows.map(toStaffInvitation),
+    persisted: true
+  };
+}
+
 export async function updateStaffInvitation(input: StaffInvitationUpdateInput): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
   if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
   if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
