@@ -4,6 +4,7 @@ import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, Messag
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
+import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
@@ -113,6 +114,14 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           {selectedStop ? (
             <>
+              <MobileRouteActionPanel
+                address={selectedStop.address || selectedStop.region || selectedStop.name}
+                customerId={selectedStop.id}
+                customerName={selectedStop.name}
+                distanceKm={selectedStop.distanceKm}
+                durationMinutes={selectedStop.durationMinutes}
+                phone={selectedStop.phone}
+              />
               <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
               <MobileDeliveryProofPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
               <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
@@ -120,8 +129,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           ) : null}
 
           <section className="grid gap-2">
-            <MobileTask icon={Navigation} title="티맵 경로 열기" description="다음 단계에서 차량별 경유 순서를 티맵 링크로 연결합니다." />
-            <MobileTask icon={Camera} title="배송 적재위치 확인" description="거래처별 사진/영상 첨부자료를 모바일에서 바로 확인합니다." />
+            <MobileTask icon={Navigation} title="현장 업무 흐름" description="지도 열기, 주소 복사, 전화, 배송완료 기록을 선택 거래처 기준으로 처리합니다." />
+            <MobileTask icon={Camera} title="배송 증빙 관리" description="도착 사진/영상과 점주 발송 문구가 거래처 히스토리에 함께 저장됩니다." />
           </section>
         </div>
 
