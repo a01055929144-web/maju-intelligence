@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
 
-export default async function MobileTodayPage() {
+export default async function MobileTodayPage({ searchParams }: { searchParams?: { customer?: string } }) {
   const session = getCustomerSession();
   if (!session) redirect("/mobile/join");
 
@@ -14,6 +14,7 @@ export default async function MobileTodayPage() {
   const todayStops = firstGroup?.stops.slice(0, 6) || [];
   const driverName = session.name || "모바일 담당자";
   const routeArea = firstGroup?.region || "전체 권역";
+  const selectedStop = todayStops.find((stop) => stop.id === searchParams?.customer) || todayStops[0];
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -33,7 +34,7 @@ export default async function MobileTodayPage() {
             <p className="text-xs font-black uppercase text-white/70">Today Route</p>
             <h1 className="mt-2 text-[28px] font-black leading-tight">오늘 배정된 코스를 확인하세요.</h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-white/78">
-              거래처 상세, 적재위치 사진, 방문 메모는 모바일에서 바로 기록할 수 있도록 준비 중입니다.
+              매장을 선택하면 전화, 지도, 적재위치, 방문 메모 액션을 바로 실행할 수 있습니다.
             </p>
           </section>
 
@@ -42,6 +43,31 @@ export default async function MobileTodayPage() {
             <MobileMetric icon={Route} label="거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
             <MobileMetric icon={Clock} label="시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
           </section>
+
+          {selectedStop ? (
+            <section className="overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]">
+              <div className="border-b border-teal-100 bg-teal-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-teal-700">선택 거래처</p>
+                    <h2 className="mt-1 truncate text-xl font-black text-slate-950">{selectedStop.name}</h2>
+                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{selectedStop.address || selectedStop.region}</p>
+                  </div>
+                  <Badge className="shrink-0 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">{selectedStop.industry || "업종"}</Badge>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 p-4">
+                <ActionLink href={selectedStop.phone ? `tel:${selectedStop.phone}` : "#"} icon={Phone} label="전화" value={selectedStop.phone || "연락처 없음"} />
+                <ActionLink href={createKakaoMapSearchUrl(selectedStop.address || selectedStop.name)} icon={MapPinned} label="지도" value={`${selectedStop.distanceKm || 0}km`} />
+                <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#loading-position`} icon={Camera} label="적재위치" value={selectedStop.loadingPosition || "확인 필요"} />
+                <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#visit-memo`} icon={MessageSquareText} label="메모" value="방문 기록" />
+              </div>
+              <div id="loading-position" className="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-black text-slate-500">배송 적재위치</p>
+                <p className="mt-1 text-sm font-black leading-6 text-slate-950">{selectedStop.loadingPosition || "적재위치 사진/영상 확인이 필요합니다."}</p>
+              </div>
+            </section>
+          ) : null}
 
           <section className="rounded-xl border border-slate-200 bg-white">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
@@ -54,11 +80,11 @@ export default async function MobileTodayPage() {
             <div className="divide-y divide-slate-100">
               {todayStops.map((stop, index) => (
                 <Link
-                  className="flex items-start gap-3 p-4 transition hover:bg-slate-50"
+                  className={`flex items-start gap-3 p-4 transition hover:bg-slate-50 ${selectedStop?.id === stop.id ? "bg-teal-50/70" : ""}`}
                   href={`/mobile/today?customer=${encodeURIComponent(stop.id)}`}
                   key={stop.id}
                 >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-black text-white">{index + 1}</span>
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black text-white ${selectedStop?.id === stop.id ? "bg-teal-700" : "bg-slate-900"}`}>{index + 1}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate font-black text-slate-950">{stop.name}</p>
@@ -85,7 +111,7 @@ export default async function MobileTodayPage() {
           <section className="grid gap-2">
             <MobileTask icon={Navigation} title="티맵 경로 열기" description="다음 단계에서 차량별 경유 순서를 티맵 링크로 연결합니다." />
             <MobileTask icon={Camera} title="배송 적재위치 확인" description="거래처별 사진/영상 첨부자료를 모바일에서 바로 확인합니다." />
-            <MobileTask icon={MessageSquareText} title="방문 메모 남기기" description="상담 결과, 배송 특이사항, 다음 액션을 현장에서 기록합니다." />
+            <MobileTask id="visit-memo" icon={MessageSquareText} title="방문 메모 남기기" description="상담 결과, 배송 특이사항, 다음 액션을 현장에서 기록합니다." />
           </section>
         </div>
 
@@ -96,6 +122,16 @@ export default async function MobileTodayPage() {
         </footer>
       </section>
     </main>
+  );
+}
+
+function ActionLink({ href, icon: Icon, label, value }: { href: string; icon: typeof Phone; label: string; value: string }) {
+  return (
+    <a className="rounded-lg border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50" href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined}>
+      <Icon className="h-4 w-4 text-teal-700" />
+      <p className="mt-2 text-xs font-black text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+    </a>
   );
 }
 
@@ -118,9 +154,9 @@ function SmallAction({ icon: Icon, label }: { icon: typeof MapPinned; label: str
   );
 }
 
-function MobileTask({ description, icon: Icon, title }: { description: string; icon: typeof Navigation; title: string }) {
+function MobileTask({ description, icon: Icon, id, title }: { description: string; icon: typeof Navigation; id?: string; title: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+    <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4" id={id}>
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
         <Icon className="h-5 w-5" />
       </span>
@@ -130,6 +166,10 @@ function MobileTask({ description, icon: Icon, title }: { description: string; i
       </div>
     </div>
   );
+}
+
+function createKakaoMapSearchUrl(query: string) {
+  return `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
 }
 
 function FooterItem({ active, icon: Icon, label }: { active?: boolean; icon: typeof Route; label: string }) {
