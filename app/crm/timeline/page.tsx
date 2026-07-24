@@ -72,6 +72,8 @@ type AddressSearchResult = {
   roadAddress: string;
 };
 
+type CustomerDetailTab = "ledger" | "history";
+
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
   interested: "관심 있음",
@@ -79,6 +81,11 @@ const resultLabels: Record<string, string> = {
   pending: "보류",
   failed: "실패"
 };
+
+const customerDetailTabs: Array<{ description: string; icon: typeof Building2; id: CustomerDetailTab; label: string }> = [
+  { description: "사업자정보, 배송 담당자, 첨부자료를 관리합니다.", icon: Building2, id: "ledger", label: "원장·첨부" },
+  { description: "상담 메모와 영업 방문 기록을 누적합니다.", icon: FileText, id: "history", label: "메모·방문" }
+];
 
 const defaultDbSummary: DbSummary = {
   description: "DB 상태를 확인 중입니다. 실패해도 거래처 화면은 기준 데이터로 표시됩니다.",
@@ -203,6 +210,7 @@ export default function CrmTimelinePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
+  const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
@@ -217,6 +225,7 @@ export default function CrmTimelinePage() {
     setAddressQuery(selectedCustomer?.address || "");
     setAddressResults([]);
     setAddressSearchMessage("");
+    setDetailTab("ledger");
   }, [selectedCustomer]);
 
   useEffect(() => {
@@ -743,7 +752,33 @@ export default function CrmTimelinePage() {
               <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
             </div>
 
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
+            <div className="rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="px-2">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-400">Customer Detail</p>
+                  <p className="mt-1 text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
+                </div>
+                <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                  {customerDetailTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const selected = detailTab === tab.id;
+                    return (
+                      <button
+                        className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-black transition ${selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-950"}`}
+                        key={tab.id}
+                        onClick={() => setDetailTab(tab.id)}
+                        type="button"
+                      >
+                        <Icon className="h-4 w-4" />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
               <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -971,9 +1006,9 @@ export default function CrmTimelinePage() {
                   )}
                 </div>
               </div>
-            </div>
+            </div> : null}
 
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
+            {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
               <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -1049,7 +1084,7 @@ export default function CrmTimelinePage() {
                   ))}
                 </div>
               </div>
-            </div>
+            </div> : null}
           </div>
           </div>
         </div>
