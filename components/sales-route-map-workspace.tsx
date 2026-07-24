@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Camera, Check, CheckCircle2, ChevronDown, Clock, Edit3, FileImage, MapPin, MessageSquareText, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
+import { CalendarDays, Camera, Check, CheckCircle2, ChevronDown, Clock, Copy, Edit3, FileImage, MapPin, MessageSquareText, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -76,6 +76,7 @@ type StoreHistoryItem = {
 };
 
 type DeliveryProof = {
+  deliveryStatus: "arrived" | "partial" | "issue";
   fileName: string;
   messageChannel: "kakao" | "sms";
   memo: string;
@@ -85,6 +86,7 @@ type DeliveryProof = {
 };
 
 type DeliveryProofInput = {
+  deliveryStatus: DeliveryProof["deliveryStatus"];
   file?: File | null;
   fileName: string;
   messageChannel: DeliveryProof["messageChannel"];
@@ -1174,7 +1176,7 @@ function TodayCourseView({
   };
   const saveDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
     let persisted = false;
-    const memo = `${proof.memo}\n\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
+    const memo = `${proof.memo}\n\n배송 상태: ${deliveryStatusLabel(proof.deliveryStatus)}\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
 
     try {
       const noteRequest = fetch("/api/customer-operations", {
@@ -1624,18 +1626,22 @@ function DeliveryProofPanel({
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
+  const [deliveryStatus, setDeliveryStatus] = useState<DeliveryProof["deliveryStatus"]>("arrived");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<DeliveryProof["messageChannel"]>("kakao");
+  const [copyMessage, setCopyMessage] = useState("");
+  const ownerMessage = createDeliveryOwnerMessage(store, memo, deliveryStatus, fileName);
 
   const saveProof = async () => {
     setIsSaving(true);
     setSaveMessage("");
     await onSave({
+      deliveryStatus,
       file,
       fileName: fileName || "현장 사진 미첨부",
-      memo: memo || "배송 도착 완료",
+      memo: ownerMessage,
       messageChannel
     });
     setSaveMessage(file ? "배송완료 사진/영상과 메모를 저장했습니다." : "배송완료 메모를 저장했습니다. 사진은 나중에 추가할 수 있습니다.");
@@ -1643,6 +1649,14 @@ function DeliveryProofPanel({
     setFileName("");
     setIsSaving(false);
     setMemo("");
+  };
+  const copyOwnerMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(ownerMessage);
+      setCopyMessage("점주 발송 문구를 복사했습니다.");
+    } catch {
+      setCopyMessage("복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
+    }
   };
 
   return (
@@ -1695,12 +1709,45 @@ function DeliveryProofPanel({
           </button>
         ))}
       </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[
+          { label: "도착완료", value: "arrived" },
+          { label: "부분배송", value: "partial" },
+          { label: "이슈발생", value: "issue" }
+        ].map((item) => (
+          <button
+            className={`h-9 rounded-md border px-2 text-xs font-black transition ${
+              deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            key={item.value}
+            onClick={() => setDeliveryStatus(item.value as DeliveryProof["deliveryStatus"])}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
       <textarea
         className="mt-3 min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         onChange={(event) => setMemo(event.target.value)}
-        placeholder="점주님께 보낼 메시지 예: 요청하신 위치에 적재 완료했습니다."
+        placeholder="추가 메모 예: 요청하신 냉장고 앞에 적재했습니다."
         value={memo}
       />
+      <div className="mt-3 rounded-md border border-blue-100 bg-white p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+            onClick={copyOwnerMessage}
+            type="button"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            복사
+          </button>
+        </div>
+        <p className="mt-2 whitespace-pre-line rounded-md bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
+        {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
+      </div>
       <button
         className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         disabled={isSaving}
@@ -1721,6 +1768,7 @@ function DeliveryProofPanel({
                   {proof.persisted ? "서버 저장" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
                 </span>
               </div>
+              <p className="mt-1 text-[11px] font-black text-blue-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
               <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
               <p className="mt-1 text-[11px] font-bold text-slate-400">{proof.recordedAt}</p>
             </div>
@@ -1742,6 +1790,20 @@ async function uploadDeliveryProofFile(storeId: string, file: File, title: strin
     method: "POST",
     body: formData
   });
+}
+
+function createDeliveryOwnerMessage(store: StoreRow, memo: string, status: DeliveryProof["deliveryStatus"], fileName: string) {
+  const statusText = deliveryStatusLabel(status);
+  const baseMemo = memo.trim() || (status === "arrived" ? "요청하신 위치에 배송 적재 완료했습니다." : status === "partial" ? "일부 품목은 현장 상황 확인 후 별도 안내드리겠습니다." : "배송 중 확인이 필요한 사항이 있어 안내드립니다.");
+  const proofText = fileName ? `\n증빙자료: ${fileName}` : "";
+
+  return `[MAJU 배송 안내]\n${store.name} ${statusText}\n${baseMemo}${proofText}`;
+}
+
+function deliveryStatusLabel(status: DeliveryProof["deliveryStatus"]) {
+  if (status === "partial") return "부분배송";
+  if (status === "issue") return "이슈발생";
+  return "도착완료";
 }
 
 function getRouteStopAddress(store: StoreRow) {
