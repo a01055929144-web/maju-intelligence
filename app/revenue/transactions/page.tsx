@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store, TrendingUp, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions } from "@/lib/store";
@@ -67,33 +66,44 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
       title="매출 거래내역서"
       userName={customerSession?.name || "관리자"}
     >
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-4">
-          <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
-          <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
-          <Metric icon={Store} label="거래처 수" value={`${sales.customerCount.toLocaleString()}곳`} />
-          <Metric icon={FileSpreadsheet} label="최근 매출일" value={sales.latestSalesDate || "-"} />
+      <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div>
+              <p className="text-sm font-black text-slate-950">매출 원장 현황</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">ERP 거래원장 업로드 기준으로 거래처·품목·금액을 집계합니다.</p>
+            </div>
+            <Badge className={hasSalesData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+              {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
+            </Badge>
+          </div>
+          <div className="grid md:grid-cols-4">
+            <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
+            <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
+            <Metric icon={Store} label="거래처 수" value={`${sales.customerCount.toLocaleString()}곳`} />
+            <Metric icon={FileSpreadsheet} label="최근 매출일" value={sales.latestSalesDate || "-"} />
+          </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-3">
           {salesSignals.map((signal) => (
             <SalesSignalCard key={signal.label} {...signal} />
           ))}
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-          <Card className="shadow-none">
-            <CardHeader>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <Badge className="mb-2 bg-emerald-50 text-emerald-700">거래처 매출 집중도</Badge>
-                  <CardTitle>거래처별 매출 TOP</CardTitle>
+                  <Badge className="mb-2 bg-emerald-100 text-emerald-800">거래처 매출 집중도</Badge>
+                  <h2 className="text-lg font-black text-slate-950">거래처별 매출 TOP</h2>
                   <p className="mt-1 text-sm font-semibold text-muted-foreground">거래원장 업로드 기준으로 매출 기여도가 높은 거래처를 자동 정리합니다.</p>
                 </div>
                 <MiniStat label="평균 거래액" value={`${Math.round(sales.averageOrderAmount).toLocaleString()}원`} />
               </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
+            </div>
+            <div className="divide-y divide-slate-100">
               {sales.topCustomers.length ? (
                 sales.topCustomers.map((customer, index) => (
                   <RankedRevenueRow
@@ -109,17 +119,17 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
               ) : (
                 <EmptyPanel message="거래처별 매출 분석을 위해 매출 거래내역서를 업로드하세요." />
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </section>
 
           <div className="space-y-4">
-            <Card className="shadow-none">
-              <CardHeader>
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
                 <Badge className="mb-2 w-fit bg-blue-50 text-blue-700">품목 이탈 감지 기준</Badge>
-                <CardTitle>품목별 매출 구조</CardTitle>
+                <h2 className="text-lg font-black text-slate-950">품목별 매출 구조</h2>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">품목별 매출 비중을 보고 이탈·감소 품목을 추적할 수 있습니다.</p>
-              </CardHeader>
-              <CardContent className="space-y-3">
+              </div>
+              <div className="divide-y divide-slate-100">
                 {sales.topProducts.length ? (
                   sales.topProducts.map((product, index) => (
                     <RankedRevenueRow
@@ -134,30 +144,35 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
                 ) : (
                   <EmptyPanel message="품목 컬럼이 포함된 거래원장을 업로드하면 품목별 구조가 표시됩니다." />
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </section>
 
-            <Card className="shadow-none">
-              <CardHeader>
-                <CardTitle>운영 체크포인트</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3">
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+                <h2 className="text-lg font-black text-slate-950">운영 체크포인트</h2>
+              </div>
+              <div className="grid gap-2 p-4">
                 <InsightRow icon={UploadCloud} label="업로드 방식" value="ERP 거래원장 반복 업데이트" />
                 <InsightRow icon={CalendarDays} label="분석 기준" value={sales.latestSalesDate ? `${sales.latestSalesDate} 최신 매출일` : "업로드 후 자동 갱신"} />
                 <InsightRow icon={TrendingUp} label="다음 개선" value="월별 증감, 품목 이탈, 거래처 등급 변동 추적" />
-              </CardContent>
-            </Card>
+              </div>
+            </section>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>최근 거래내역</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-950">최근 거래내역</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">업로드된 매출 원장의 최근 행을 그대로 확인합니다.</p>
+            </div>
+            <Badge className="bg-slate-900 text-white">{sales.items.length.toLocaleString()}행 표시</Badge>
+          </div>
+          <div className="max-h-[520px] overflow-auto">
             <table className="w-full min-w-[920px] border-separate border-spacing-0 text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-white">
                 <tr className="text-left text-xs font-black text-slate-500">
+                  <th className="border-b border-slate-200 px-3 py-3 text-center">No</th>
                   <th className="border-b border-slate-200 px-3 py-3">매출일</th>
                   <th className="border-b border-slate-200 px-3 py-3">거래처</th>
                   <th className="border-b border-slate-200 px-3 py-3">사업자번호</th>
@@ -168,8 +183,9 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
                 </tr>
               </thead>
               <tbody>
-                {sales.items.map((item) => (
-                  <tr key={item.id} className="font-bold text-slate-800">
+                {sales.items.map((item, index) => (
+                  <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
+                    <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{index + 1}</td>
                     <td className="border-b border-slate-100 px-3 py-3">{item.salesDate || "-"}</td>
                     <td className="border-b border-slate-100 px-3 py-3">{item.customerName}</td>
                     <td className="border-b border-slate-100 px-3 py-3">{item.businessRegistrationNumber || "-"}</td>
@@ -181,15 +197,15 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
                 ))}
                 {!sales.items.length ? (
                   <tr>
-                    <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={7}>
+                    <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
                       아직 업로드된 매출 거래내역이 없습니다. 매출 거래내역서를 업로드하면 이곳에 누적됩니다.
                     </td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </section>
     </CustomerAppShell>
   );
@@ -197,13 +213,13 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="p-5">
-        <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-black">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+    </div>
   );
 }
 
@@ -232,7 +248,7 @@ function SalesSignalCard({
   value: string;
 }) {
   return (
-    <div className={`rounded-md border p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+    <div className={`border-b border-slate-200 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${ready ? "bg-emerald-50/40" : "bg-amber-50/60"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase text-slate-500">{label}</p>
@@ -266,7 +282,7 @@ function RankedRevenueRow({
   value: string;
 }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
+    <div className="bg-white p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -301,5 +317,5 @@ function InsightRow({ icon: Icon, label, value }: { icon: typeof BarChart3; labe
 }
 
 function EmptyPanel({ message }: { message: string }) {
-  return <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">{message}</div>;
+  return <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">{message}</div>;
 }
