@@ -274,6 +274,20 @@ export type StaffInvitationInput = {
   employeePhone?: string;
   role?: StaffInvitation["role"];
 };
+export type StaffKakaoAcceptInput = {
+  avatarUrl?: string;
+  email?: string;
+  inviteCode: string;
+  kakaoUserId: string;
+  name?: string;
+};
+export type StaffKakaoAcceptResult = {
+  companyId: string;
+  companyName: string;
+  email: string;
+  name: string;
+  persisted: boolean;
+};
 export type DatabaseCheck = {
   name: string;
   status: "ready" | "fallback" | "missing";
@@ -973,6 +987,100 @@ export async function createStaffInvitation(input: StaffInvitationInput): Promis
   return {
     persisted: true,
     invitation: toStaffInvitation(rows[0])
+  };
+}
+
+export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): Promise<StaffKakaoAcceptResult> {
+  const inviteCode = input.inviteCode.trim();
+  const kakaoUserId = input.kakaoUserId.trim();
+  if (!inviteCode) throw new Error("초대 코드가 필요합니다.");
+  if (!kakaoUserId) throw new Error("카카오 사용자 확인이 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    const companyId = getDefaultCompanyId();
+    const company = await getCompanySettings(companyId).catch(() => null);
+    return {
+      companyId,
+      companyName: company?.name || "마주식자재",
+      email: input.email || `kakao-${kakaoUserId}@maju.local`,
+      name: input.name || "모바일 직원",
+      persisted: false
+    };
+  }
+
+  const invitationRows = await supabaseRequest<
+    Array<{
+      id: string;
+      company_id: string;
+      employee_name: string | null;
+      employee_phone: string | null;
+      role: StaffInvitation["role"];
+      status: StaffInvitation["status"];
+    }>
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`);
+
+  const invitation = invitationRows[0];
+  if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
+  if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
+
+  const company = await getCompanySettings(invitation.company_id);
+  const displayName = input.name || invitation.employee_name || "모바일 직원";
+  const loginEmail = input.email || `kakao-${kakaoUserId}@maju.local`;
+  const now = new Date().toISOString();
+
+  const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        auth_provider: "kakao",
+        avatar_url: input.avatarUrl || null,
+        email: loginEmail,
+        kakao_user_id: kakaoUserId,
+        last_login_at: now,
+        name: displayName,
+        phone: invitation.employee_phone || null,
+        role: "customer_member",
+        status: "active"
+      }
+    ])
+  });
+
+  const user = userRows[0];
+  await supabaseRequest("company_members", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        company_id: invitation.company_id,
+        role: invitation.role || "member",
+        user_id: user.id
+      }
+    ])
+  }).catch(() => null);
+
+  await supabaseRequest(`staff_invitations?id=eq.${encodeURIComponent(invitation.id)}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify({
+      accepted_at: now,
+      accepted_by: user.id,
+      status: "accepted"
+    })
+  });
+
+  return {
+    companyId: invitation.company_id,
+    companyName: company.name,
+    email: user.email || loginEmail,
+    name: user.name || displayName,
+    persisted: true
   };
 }
 
