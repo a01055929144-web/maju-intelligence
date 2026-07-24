@@ -333,7 +333,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         visibleStoreCount={visibleStores.length}
       />
 
-      <section className="sticky top-0 z-20 grid gap-2 border-b border-slate-200/80 bg-white/95 px-5 py-3 backdrop-blur xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
+      <section className="grid gap-2 border-b border-slate-200/80 bg-white px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -590,7 +590,7 @@ function DeliveryAssignmentPanel({
           <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
         </button>
       </div>
-      <div className="max-h-[calc(100vh-520px)] min-h-[420px] space-y-2 overflow-auto p-3 pt-2">
+      <div className="max-h-[640px] min-h-[420px] space-y-2 overflow-auto p-3 pt-2">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
@@ -931,7 +931,7 @@ function CustomerDirectoryView({
           <span>거리</span>
           <span>상태</span>
         </div>
-        <div className="max-h-[calc(100vh-430px)] overflow-auto">
+        <div className="max-h-[640px] overflow-auto">
           {stores.map((store) => (
             <button
               className={`grid w-full grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] items-center gap-0 border-b border-slate-100 px-4 py-3 text-left text-sm transition hover:bg-slate-50 ${
