@@ -271,7 +271,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             </>
           }
           route={
-            <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
+            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_300px]">
               <Card className="border-slate-200/80 shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -305,7 +305,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                     <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
                     <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
                   </div>
-                  <KakaoAddressMap mapClassName="h-[460px]" markers={mapMarkers} showList={false} />
+                  <KakaoAddressMap mapClassName="h-[520px]" markers={mapMarkers} showList={false} />
                 </CardContent>
               </Card>
 

@@ -31,48 +31,38 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
   const active = tabs.find((tab) => tab.id === activeTab) || tabs[0];
 
   return (
-    <section className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
-      <div className="border-b border-slate-200/80 px-5 py-4">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="border-b border-slate-200/80 bg-white px-5 py-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-teal-700">Dashboard Sections</p>
-            <h2 className="mt-1 text-lg font-black text-slate-950">목적별로 나눠 보는 운영 화면</h2>
+            <h2 className="mt-1 text-lg font-black text-slate-950">{active.label}</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{active.description}</p>
           </div>
-          <p className="text-sm font-semibold text-slate-500">필요한 업무 탭만 열어 보고 다음 액션으로 이동합니다.</p>
-        </div>
-        <div className="grid gap-2 lg:grid-cols-4">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const selected = activeTab === tab.id;
+          <div className="flex w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1 xl:w-auto xl:overflow-visible">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const selected = activeTab === tab.id;
 
-            return (
-              <button
-                className={`flex min-h-16 items-start gap-3 rounded-md border px-4 py-3 text-left transition ${
-                  selected
-                    ? "border-teal-200 bg-teal-50 text-teal-900 shadow-sm"
-                    : "border-transparent bg-slate-50/70 text-slate-600 hover:border-slate-200 hover:bg-white"
-                }`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-              >
-                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${selected ? "bg-teal-700 text-white" : "bg-white text-slate-400 ring-1 ring-inset ring-slate-200"}`}>
+              return (
+                <button
+                  className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  }`}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  title={tab.description}
+                  type="button"
+                >
                   <Icon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-black">{tab.label}</span>
-                  <span className="mt-1 block text-xs font-semibold leading-5 opacity-75">{tab.description}</span>
-                </span>
-              </button>
-            );
-          })}
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-      <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-3">
-        <p className="text-xs font-black uppercase tracking-wide text-slate-400">현재 탭</p>
-        <p className="mt-1 text-sm font-black text-slate-900">{active.label}</p>
-      </div>
-      <div className="space-y-4 p-4">{content}</div>
+      <div className="space-y-4 bg-slate-50/50 p-4">{content}</div>
     </section>
   );
 }
