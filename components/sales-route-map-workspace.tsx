@@ -285,10 +285,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무 탭</span>
             {workspaceViews.map((item) => (
               <button
-                className={`group h-11 min-w-[86px] rounded-md border px-3 text-left transition ${
+                className={`group h-11 min-w-[104px] rounded-md border px-3 text-left transition ${
                   activeView === item.value
-                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.18)]"
-                    : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.20)]"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                 }`}
                 key={item.value}
                 onClick={() => changeWorkspaceView(item.value)}
@@ -404,7 +404,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid h-[calc(100vh-360px)] min-h-[640px] max-h-[860px] grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid min-h-[760px] grid-cols-1 xl:h-[clamp(760px,calc(100vh-250px),980px)] ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -419,7 +419,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             <div className="h-full min-h-0 [&>div]:h-full">
               <KakaoAddressMap
                 focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                mapClassName="h-full min-h-[640px] rounded-none border-0"
+                mapClassName="h-full min-h-[760px] rounded-none border-0 xl:min-h-0"
                 markers={markers}
                 onMarkerClick={(marker) => {
                   if (!marker.id || marker.tone === "origin") return;
@@ -926,7 +926,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="h-[calc(100vh-360px)] min-h-[640px] max-h-[860px] overflow-auto bg-[#f6f8fb] p-4">
+    <section className="min-h-[760px] overflow-auto bg-[#f6f8fb] p-4 xl:h-[clamp(760px,calc(100vh-250px),980px)]">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -1119,7 +1119,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid h-[calc(100vh-360px)] min-h-[640px] max-h-[860px] grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
+    <section className={`grid min-h-[760px] grid-cols-1 bg-[#f6f8fb] xl:h-[clamp(760px,calc(100vh-250px),980px)] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
@@ -1169,7 +1169,7 @@ function TodayCourseView({
         <div className="h-full min-h-0 [&>div]:h-full">
           <KakaoAddressMap
             focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-            mapClassName="h-full min-h-[640px] rounded-none border-0"
+            mapClassName="h-full min-h-[760px] rounded-none border-0 xl:min-h-0"
             markers={routeMapMarkers}
             onMarkerClick={(marker) => {
               if (!marker.id || marker.tone === "origin") return;
