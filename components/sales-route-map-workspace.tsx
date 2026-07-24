@@ -261,14 +261,18 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">지도 확인, 거래처 관리, 경유 계산을 업무 탭으로 나눠 처리합니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-1.5">
-            <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">마커</span>
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+            <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">마커 보기</span>
             {[
               { label: "매장 등급별", value: "grade" },
               { label: "배송차별", value: "vehicle" }
             ].map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-xs font-black transition ${markerViewMode === item.value ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-blue-800"}`}
+                className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                  markerViewMode === item.value
+                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_14px_rgba(37,99,235,0.18)]"
+                    : "border-transparent bg-slate-50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+                }`}
                 key={item.value}
                 onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
                 type="button"
@@ -277,17 +281,21 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               </button>
             ))}
           </div>
-          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-sm">
+          <nav className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
             <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무 탭</span>
             {workspaceViews.map((item) => (
               <button
-                className={`group h-9 rounded-md px-3 text-left text-xs font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-teal-800"}`}
+                className={`group h-11 min-w-[86px] rounded-md border px-3 text-left transition ${
+                  activeView === item.value
+                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.18)]"
+                    : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                }`}
                 key={item.value}
                 onClick={() => changeWorkspaceView(item.value)}
                 title={workspaceViewDescriptions[item.value]}
                 type="button"
               >
-                <span className="block leading-none">{item.label}</span>
+                <span className="block text-xs font-black leading-none">{item.label}</span>
                 <span className={`mt-1 hidden text-[10px] font-bold leading-none 2xl:block ${activeView === item.value ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>
                   {item.value === "map" ? "현황" : item.value === "customers" ? "관리" : "계산"}
                 </span>
@@ -297,7 +305,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <span className="hidden text-xs font-bold text-slate-400 2xl:inline">기존 영업·배송 데이터 기준</span>
           <button
             aria-label="필터 초기화"
-            className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
+            className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
             onClick={resetWorkspace}
             title="필터 초기화"
             type="button"
@@ -347,8 +355,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
           {gradeFilters.map((filter) => (
             <button
-              className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-                gradeFilter === filter.value ? "border-teal-700 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+              className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
+                gradeFilter === filter.value
+                  ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                  : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               }`}
               key={filter.value}
               onClick={() => setGradeFilter(filter.value)}
@@ -359,15 +369,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           ))}
           <button
             aria-pressed={excludeClosedStores}
-            className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-              excludeClosedStores ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+            className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
+              excludeClosedStores
+                ? "border-rose-300 bg-rose-50 text-rose-700 shadow-[0_1px_0_rgba(15,23,42,0.03)]"
+                : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
             }`}
             onClick={() => setExcludeClosedStores((value) => !value)}
             type="button"
           >
             {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
           </button>
-          <button className="h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800" onClick={focusOrigin} type="button">
+          <button className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800" onClick={focusOrigin} type="button">
             내 위치
           </button>
           <span className="rounded-md bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">

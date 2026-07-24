@@ -610,11 +610,15 @@ export default function CrmTimelinePage() {
                   value={customerSearch}
                 />
               </label>
-              <div className="mt-2 grid grid-cols-4 gap-1.5">
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-1.5">
+                <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">매출 등급</p>
+                <div className="grid grid-cols-4 gap-1.5">
                 {(["all", "A", "B", "C"] as const).map((grade) => (
                   <button
                     className={`h-9 rounded-md border text-xs font-black transition ${
-                      gradeFilter === grade ? "border-teal-500 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                      gradeFilter === grade
+                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                        : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
                     }`}
                     key={grade}
                     onClick={() => setGradeFilter(grade)}
@@ -623,8 +627,11 @@ export default function CrmTimelinePage() {
                     {grade === "all" ? "전체" : `${grade}등급`}
                   </button>
                 ))}
+                </div>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-1.5">
+                <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">운영 상태</p>
+                <div className="grid grid-cols-2 gap-1.5">
                 <CustomerFilterButton
                   active={operationFilter === "business-check"}
                   count={businessCheckCount}
@@ -651,6 +658,7 @@ export default function CrmTimelinePage() {
                   label="운영 전체"
                   onClick={() => setOperationFilter("all")}
                 />
+                </div>
               </div>
             </div>
             <div className="max-h-[calc(100vh-360px)] space-y-2 overflow-auto p-3">
@@ -758,19 +766,28 @@ export default function CrmTimelinePage() {
                   <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Customer Detail</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
-                <div className="flex rounded-md border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+                <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">
                   {customerDetailTabs.map((tab) => {
                     const Icon = tab.icon;
                     const selected = detailTab === tab.id;
                     return (
                       <button
-                        className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-black transition ${selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-950"}`}
+                        className={`group min-w-[132px] rounded-lg border px-3 py-2.5 text-left transition ${
+                          selected
+                            ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.18)]"
+                            : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                        }`}
                         key={tab.id}
                         onClick={() => setDetailTab(tab.id)}
                         type="button"
                       >
-                        <Icon className="h-4 w-4" />
-                        {tab.label}
+                        <span className="flex items-center gap-2 text-sm font-black">
+                          <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
+                          {tab.label}
+                        </span>
+                        <span className={`mt-1 block truncate text-[11px] font-bold ${selected ? "text-white/75" : "text-slate-400"}`}>
+                          {tab.id === "ledger" ? "기본정보" : "이력관리"}
+                        </span>
                       </button>
                     );
                   })}
@@ -1145,15 +1162,15 @@ function CustomerFilterButton({
 }) {
   const activeClassName =
     tone === "danger"
-      ? "border-rose-200 bg-rose-50 text-rose-700"
+      ? "border-rose-300 bg-rose-50 text-rose-700 shadow-[0_4px_10px_rgba(225,29,72,0.08)]"
       : tone === "warning"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : "border-teal-500 bg-teal-700 text-white";
+        ? "border-amber-300 bg-amber-50 text-amber-800 shadow-[0_4px_10px_rgba(217,119,6,0.08)]"
+        : "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]";
 
   return (
     <button
-      className={`flex h-9 items-center justify-between rounded-md border px-2.5 text-xs font-black transition ${
-        active ? activeClassName : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100"
+      className={`flex h-10 items-center justify-between rounded-md border px-2.5 text-xs font-black transition ${
+        active ? activeClassName : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
       }`}
       onClick={onClick}
       type="button"
