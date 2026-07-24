@@ -14,6 +14,14 @@ type Attachment = {
   mimeType: string;
   title: string;
 };
+type OperationNote = {
+  id: string;
+  createdAt: string;
+  createdByName: string;
+  memo: string;
+  nextAction: string;
+  noteType: string;
+};
 
 const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
   { label: "도착완료", value: "arrived" },
@@ -42,16 +50,19 @@ export function MobileDeliveryProofPanel({
   const [loadingProofs, setLoadingProofs] = useState(false);
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
+  const [notes, setNotes] = useState<OperationNote[]>([]);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const deliveryProofAttachments = useMemo(() => attachments.filter((item) => item.attachmentType === "delivery_proof"), [attachments]);
+  const deliveryNotes = useMemo(() => notes.filter((item) => item.noteType === "delivery"), [notes]);
   const ownerMessage = createOwnerMessage(customerName, memo, deliveryStatus, file?.name || "", loadingPosition);
 
   async function loadProofs() {
     setLoadingProofs(true);
     const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
-    const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[] } | null) : null;
+    const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[]; notes?: OperationNote[] } | null) : null;
     setAttachments(payload?.attachments || []);
+    setNotes(payload?.notes || []);
     setLoadingProofs(false);
   }
 
@@ -214,6 +225,24 @@ export function MobileDeliveryProofPanel({
           </a>
         ))}
       </div>
+
+      <div className="mt-4 grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-black text-slate-500">최근 배송 메모</p>
+          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryNotes.length}건</span>
+        </div>
+        {!loadingProofs && !deliveryNotes.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송 메모가 없습니다.</p> : null}
+        {deliveryNotes.slice(0, 3).map((item) => (
+          <div className="rounded-lg border border-blue-100 bg-white p-3" key={item.id}>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs font-black text-blue-700">{item.nextAction || "배송 기록"}</p>
+              <p className="shrink-0 text-[11px] font-bold text-slate-400">{formatHistoryDate(item.createdAt)}</p>
+            </div>
+            <p className="mt-2 whitespace-pre-line text-xs font-bold leading-5 text-slate-700">{item.memo}</p>
+            <p className="mt-2 text-[11px] font-bold text-slate-400">{item.createdByName}</p>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -242,4 +271,15 @@ function deliveryStatusLabel(status: DeliveryStatus) {
   if (status === "partial") return "부분배송";
   if (status === "issue") return "이슈발생";
   return "도착완료";
+}
+
+function formatHistoryDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
