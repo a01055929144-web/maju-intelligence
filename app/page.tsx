@@ -488,20 +488,27 @@ function WorkspaceModeTabs({ active, onMove }: { active: string; onMove: (screen
   }[active as "briefing" | "onboarding" | "report"] || ["매장 기본정보 · 매출 거래내역", "거래처 마스터와 매출 데이터를 운영 자산으로 관리합니다."];
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-4">
-      <div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="min-w-0">
         <p className="text-sm font-black text-slate-950">{copy[0]}</p>
         <p className="mt-1 text-xs font-bold text-slate-500">{copy[1]}</p>
       </div>
-      <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+      <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto sm:grid-cols-3">
         {tabs.map(([key, label]) => (
           <button
             key={key}
-            className={`h-9 rounded-md px-3 text-sm font-black transition ${active === key ? "bg-white text-blue-700 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-950"}`}
+            className={`min-w-[112px] rounded-lg border px-3 py-2.5 text-left transition ${
+              active === key
+                ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
+                : "border-transparent bg-white/50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
+            }`}
             onClick={() => onMove(key)}
             type="button"
           >
-            {label}
+            <span className="block text-sm font-black">{label}</span>
+            <span className={`mt-1 block text-[11px] font-bold ${active === key ? "text-white/75" : "text-slate-400"}`}>
+              {key === "briefing" ? "준비" : key === "onboarding" ? "입력" : "결과"}
+            </span>
           </button>
         ))}
       </div>
@@ -1057,7 +1064,7 @@ function Onboarding({
           rowsWaiting={rawRows.length}
         />
 
-        <div className="rounded-md border border-l-4 border-slate-200 border-l-emerald-600 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-l-4 border-slate-200 border-l-emerald-600 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
             <div>
               <Badge className="mb-3 bg-emerald-50 text-emerald-800">1. 무엇을 등록하나요?</Badge>
@@ -1073,8 +1080,10 @@ function Onboarding({
               return (
                 <button
                   key={key}
-                  className={`rounded-md border p-4 text-left transition ${
-                    selected ? "border-emerald-300 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-100" : "border-slate-200 bg-white hover:bg-slate-50"
+                  className={`rounded-xl border p-4 text-left transition ${
+                    selected
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-[0_10px_22px_rgba(5,150,105,0.12)] ring-1 ring-emerald-200"
+                      : "border-slate-200 bg-white hover:border-emerald-100 hover:bg-emerald-50/40"
                   }`}
                   onClick={() => onUploadType(key as UploadTemplateType)}
                   type="button"
@@ -1089,7 +1098,9 @@ function Onboarding({
                         <span className="mt-1 block text-sm font-medium leading-6 text-slate-500">{item.description}</span>
                       </span>
                     </span>
-                    {selected ? <Check className="h-5 w-5 shrink-0 text-emerald-700" /> : null}
+                    <span className={`inline-flex h-7 shrink-0 items-center rounded-full px-2 text-xs font-black ${selected ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                      {selected ? "선택됨" : "선택"}
+                    </span>
                   </span>
                 </button>
               );
@@ -1097,27 +1108,37 @@ function Onboarding({
           </div>
         </div>
 
-        <div className="rounded-md border border-l-4 border-slate-200 border-l-blue-600 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-l-4 border-slate-200 border-l-blue-600 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Badge className="mb-3 bg-blue-50 text-blue-700">2. 어떻게 등록하나요?</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
               <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{uploadHint}</p>
             </div>
-            <div className="grid grid-cols-2 rounded-md border border-slate-200 bg-slate-50 p-1">
+            <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto">
               <button
-                className={`h-9 rounded-md px-3 text-sm font-black ${entryMode === "excel" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}
+                className={`rounded-lg border px-4 py-2.5 text-left transition ${
+                  entryMode === "excel"
+                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
+                    : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+                }`}
                 onClick={() => setEntryMode("excel")}
                 type="button"
               >
-                엑셀 업로드
+                <span className="block text-sm font-black">엑셀 업로드</span>
+                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "excel" ? "text-white/75" : "text-slate-400"}`}>대량 등록</span>
               </button>
               <button
-                className={`h-9 rounded-md px-3 text-sm font-black ${entryMode === "manual" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}
+                className={`rounded-lg border px-4 py-2.5 text-left transition ${
+                  entryMode === "manual"
+                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
+                    : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+                }`}
                 onClick={() => setEntryMode("manual")}
                 type="button"
               >
-                수기 입력
+                <span className="block text-sm font-black">수기 입력</span>
+                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "manual" ? "text-white/75" : "text-slate-400"}`}>1건 등록</span>
               </button>
             </div>
           </div>

@@ -59,7 +59,7 @@ export function ExcelHeaderMappingPreview({
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -77,8 +77,8 @@ export function ExcelHeaderMappingPreview({
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 완료"}
             </Badge>
-            <Button className="h-9 bg-blue-700 text-white hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
-              큰 화면에서 매핑
+            <Button className="h-10 bg-blue-700 px-4 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)] hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
+              매핑 전용화면 열기
             </Button>
           </div>
         </div>
@@ -257,7 +257,7 @@ function MappingWorkspaceModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
-      <div className="mx-auto flex h-full max-w-[1720px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+      <div className="mx-auto flex h-full max-w-[1720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <Badge className="mb-2 bg-blue-700 text-white">매핑 전용 화면</Badge>
@@ -301,25 +301,29 @@ function MappingWorkspaceModal({
                 onChange={(event) => setColumnQuery(event.target.value)}
                 placeholder="엑셀 컬럼명 검색..."
               />
-              {[
-                ["all", "전체"],
-                ["unmapped", "미연결"],
-                ["mapped", "연결됨"]
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  className={`h-10 rounded-md border px-3 text-xs font-black transition ${
-                    columnFilter === value ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                  type="button"
-                  onClick={() => setColumnFilter(value as "all" | "mapped" | "unmapped")}
-                >
-                  {label}
-                </button>
-              ))}
+              <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-1">
+                {[
+                  ["all", "전체"],
+                  ["unmapped", "미연결"],
+                  ["mapped", "연결됨"]
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                      columnFilter === value
+                        ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_14px_rgba(37,99,235,0.18)]"
+                        : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+                    }`}
+                    type="button"
+                    onClick={() => setColumnFilter(value as "all" | "mapped" | "unmapped")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <Badge className="bg-slate-100 text-slate-700">{filteredHeaders.length}/{headers.length}컬럼</Badge>
               <button
-                className="h-10 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800 transition hover:bg-emerald-100"
+                className="h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-black text-emerald-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:bg-emerald-100"
                 type="button"
                 onClick={() => {
                   const appliedCount = onAutoMap(filteredHeaders);
@@ -350,7 +354,7 @@ function MappingWorkspaceModal({
                 onChange={(event) => setFieldQuery(event.target.value)}
                 placeholder="표준 필드 검색..."
               />
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-1.5 rounded-lg border border-slate-200 bg-white p-1">
                 {[
                   ["all", "전체"],
                   ["required", "필수"],
@@ -360,7 +364,9 @@ function MappingWorkspaceModal({
                   <button
                     key={value}
                     className={`h-9 rounded-md border px-2 text-xs font-black transition ${
-                      fieldFilter === value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      fieldFilter === value
+                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                        : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
                     }`}
                     type="button"
                     onClick={() => setFieldFilter(value as "all" | "required" | "mapped" | "unmapped")}
