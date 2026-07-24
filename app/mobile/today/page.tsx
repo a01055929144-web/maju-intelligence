@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, MessageSquareText, Navigation, Phone, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
 
@@ -108,10 +109,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </div>
           </section>
 
+          {selectedStop ? <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} /> : null}
+
           <section className="grid gap-2">
             <MobileTask icon={Navigation} title="티맵 경로 열기" description="다음 단계에서 차량별 경유 순서를 티맵 링크로 연결합니다." />
             <MobileTask icon={Camera} title="배송 적재위치 확인" description="거래처별 사진/영상 첨부자료를 모바일에서 바로 확인합니다." />
-            <MobileTask id="visit-memo" icon={MessageSquareText} title="방문 메모 남기기" description="상담 결과, 배송 특이사항, 다음 액션을 현장에서 기록합니다." />
           </section>
         </div>
 
