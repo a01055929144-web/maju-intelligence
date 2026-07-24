@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { DashboardTabs } from "@/components/dashboard-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
@@ -232,179 +233,188 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          {operationalSignals.map((signal) => (
-            <OperationalSignalCard key={signal.label} {...signal} />
-          ))}
-        </div>
-
-        <Card className="border-slate-200/80 shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ClipboardList className="h-5 w-5 text-primary" />
-                  운영 시작 체크리스트
-                </CardTitle>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                  고객사가 실제로 쓰기 전 반드시 맞춰야 하는 기준값입니다. 완료되지 않은 항목부터 처리하세요.
-                </p>
+        <DashboardTabs
+          overview={
+            <>
+              <div className="grid gap-3 lg:grid-cols-3">
+                {operationalSignals.map((signal) => (
+                  <OperationalSignalCard key={signal.label} {...signal} />
+                ))}
               </div>
-              <div className="flex items-center gap-2">
-                <Badge className={completedChecklistCount === operationChecklist.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
-                  {completedChecklistCount}/{operationChecklist.length} 완료 · {operationalProgress}%
-                </Badge>
-                <Progress className="h-2 w-32" value={operationalProgress} />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {operationChecklist.map((item, index) => (
-              <ChecklistStep key={item.label} index={index + 1} {...item} />
-            ))}
-          </CardContent>
-        </Card>
 
-        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
-          <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="h-5 w-5 text-primary" />
-                오늘 할 일
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <NextAction description="사업자 상태와 배송 적재위치를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
-              <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 코스를 계산합니다." href={withCompanyQuery("/routes/today")} label="2. 코스 관리" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-              <NextAction description="ERP 거래원장 업로드 상태와 매출 변화를 봅니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 데이터 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <MapPin className="h-5 w-5 text-primary" />
-                  거래처 위치와 배송 코스
-                </CardTitle>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서는 현황만 보고, 상세 코스는 영업·배송 코스에서 조정합니다.</p>
-              </div>
-              <Link className="inline-flex h-9 shrink-0 items-center rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={withCompanyQuery("/routes/today")}>
-                상세 열기
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid gap-2 text-sm sm:grid-cols-3">
-                <MapSummary label="출발지" value={originAddress} />
-                <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
-                <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-              </div>
-              <KakaoAddressMap mapClassName="h-[460px]" markers={mapMarkers} showList={false} />
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            <Card className="border-slate-200/80 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <FileSpreadsheet className="h-5 w-5 text-primary" />
-                  데이터 상태
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {dataReadiness.map((item) => (
-                  <div key={item.label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black">{item.label}</p>
-                      <p className="mt-1 truncate text-xs font-bold text-muted-foreground">{item.detail}</p>
+              <Card className="border-slate-200/80 shadow-sm">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <ClipboardList className="h-5 w-5 text-primary" />
+                        운영 시작 체크리스트
+                      </CardTitle>
+                      <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                        고객사가 실제로 쓰기 전 반드시 맞춰야 하는 기준값입니다. 완료되지 않은 항목부터 처리하세요.
+                      </p>
                     </div>
-                    <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>{item.ready ? "준비" : "필요"}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={completedChecklistCount === operationChecklist.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
+                        {completedChecklistCount}/{operationChecklist.length} 완료 · {operationalProgress}%
+                      </Badge>
+                      <Progress className="h-2 w-32" value={operationalProgress} />
+                    </div>
                   </div>
-                ))}
-                <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/")}>
-                  <Upload className="h-4 w-4" />
-                  데이터 등록
-                </Link>
-              </CardContent>
-            </Card>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  {operationChecklist.map((item, index) => (
+                    <ChecklistStep key={item.label} index={index + 1} {...item} />
+                  ))}
+                </CardContent>
+              </Card>
+            </>
+          }
+          route={
+            <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
+              <Card className="border-slate-200/80 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    오늘 할 일
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <NextAction description="사업자 상태와 배송 적재위치를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
+                  <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 코스를 계산합니다." href={withCompanyQuery("/routes/today")} label="2. 코스 관리" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                  <NextAction description="ERP 거래원장 업로드 상태와 매출 변화를 봅니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 데이터 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
+                </CardContent>
+              </Card>
 
+              <Card className="border-slate-200/80 shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <MapPin className="h-5 w-5 text-primary" />
+                      거래처 위치와 배송 코스
+                    </CardTitle>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서는 현황만 보고, 상세 코스는 영업·배송 코스에서 조정합니다.</p>
+                  </div>
+                  <Link className="inline-flex h-9 shrink-0 items-center rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={withCompanyQuery("/routes/today")}>
+                    상세 열기
+                  </Link>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid gap-2 text-sm sm:grid-cols-3">
+                    <MapSummary label="출발지" value={originAddress} />
+                    <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
+                    <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                  </div>
+                  <KakaoAddressMap mapClassName="h-[460px]" markers={mapMarkers} showList={false} />
+                </CardContent>
+              </Card>
+
+              <div className="space-y-4">
+                <Card className="border-slate-200/80 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <FileSpreadsheet className="h-5 w-5 text-primary" />
+                      데이터 상태
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {dataReadiness.map((item) => (
+                      <div key={item.label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black">{item.label}</p>
+                          <p className="mt-1 truncate text-xs font-bold text-muted-foreground">{item.detail}</p>
+                        </div>
+                        <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>{item.ready ? "준비" : "필요"}</Badge>
+                      </div>
+                    ))}
+                    <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/")}>
+                      <Upload className="h-4 w-4" />
+                      데이터 등록
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-slate-200/80 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">공략 지역</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {briefing.missingRegions.map((region, index) => (
+                      <div key={region} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                        <span className="text-sm font-black">{index + 1}. {region}</span>
+                        <Badge className="bg-blue-50 text-blue-700">우선</Badge>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          }
+          sales={
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <Card className="border-slate-200/80 shadow-sm">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-base">추천 리드 TOP6</CardTitle>
+                    {primaryLead ? <Badge className="bg-accent/20 text-foreground">1순위 {primaryLead.region}</Badge> : null}
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-2 lg:grid-cols-2">
+                  {topLeads.map((lead, index) => (
+                    <div key={lead.id || lead.name} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[34px_1fr_88px_124px] sm:items-center">
+                      <span className="text-sm font-black text-primary">{index + 1}</span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black">{lead.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{lead.region} · 월 {lead.expectedRevenue}만원</p>
+                      </div>
+                      <Badge className="justify-center bg-accent/20 text-foreground">{lead.score}점</Badge>
+                      <LeadStatusSelect leadId={lead.id} value={lead.status} />
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200/80 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Truck className="h-5 w-5 text-primary" />
+                    배송 운영
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    <SmallMetric label="경유 코스 거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+                    <SmallMetric label="경유 코스 시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
+                    <SmallMetric label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                    <SmallMetric label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">주유비는 선택 코스 검토용 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
+                </CardContent>
+              </Card>
+            </div>
+          }
+          shortcuts={
             <Card className="border-slate-200/80 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">공략 지역</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {briefing.missingRegions.map((region, index) => (
-                  <div key={region} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                    <span className="text-sm font-black">{index + 1}. {region}</span>
-                    <Badge className="bg-blue-50 text-blue-700">우선</Badge>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <ClipboardList className="h-5 w-5 text-primary" />
+                      운영 바로가기
+                    </CardTitle>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서 확인한 문제를 바로 처리할 수 있는 주요 작업입니다.</p>
                   </div>
+                  <Badge className="w-fit bg-slate-100 text-slate-700">고객사 작업 흐름</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {quickActions.map((action) => (
+                  <QuickActionCard key={action.href} {...action} />
                 ))}
               </CardContent>
             </Card>
-          </div>
-        </div>
-
-        <Card className="border-slate-200/80 shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ClipboardList className="h-5 w-5 text-primary" />
-                  운영 바로가기
-                </CardTitle>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서 확인한 문제를 바로 처리할 수 있는 주요 작업입니다.</p>
-              </div>
-              <Badge className="w-fit bg-slate-100 text-slate-700">고객사 작업 흐름</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {quickActions.map((action) => (
-              <QuickActionCard key={action.href} {...action} />
-            ))}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-base">추천 리드 TOP6</CardTitle>
-                {primaryLead ? <Badge className="bg-accent/20 text-foreground">1순위 {primaryLead.region}</Badge> : null}
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-2 lg:grid-cols-2">
-              {topLeads.map((lead, index) => (
-                <div key={lead.id || lead.name} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[34px_1fr_88px_124px] sm:items-center">
-                  <span className="text-sm font-black text-primary">{index + 1}</span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">{lead.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{lead.region} · 월 {lead.expectedRevenue}만원</p>
-                  </div>
-                  <Badge className="justify-center bg-accent/20 text-foreground">{lead.score}점</Badge>
-                  <LeadStatusSelect leadId={lead.id} value={lead.status} />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200/80 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Truck className="h-5 w-5 text-primary" />
-                배송 운영
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2">
-                <SmallMetric label="경유 코스 거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-                <SmallMetric label="경유 코스 시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-                <SmallMetric label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-                <SmallMetric label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
-              </div>
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">주유비는 선택 코스 검토용 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
-            </CardContent>
-          </Card>
-        </div>
+          }
+        />
       </section>
     </CustomerAppShell>
   );

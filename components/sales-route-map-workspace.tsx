@@ -118,6 +118,11 @@ const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
   { label: "거래처 목록", value: "customers" },
   { label: "경유 코스", value: "course" }
 ];
+const workspaceViewDescriptions: Record<WorkspaceView, string> = {
+  course: "배송차별 매장을 선택하고 티맵 경유 순서를 계산합니다.",
+  customers: "전체 거래처를 검색, 등급, 배송차 기준으로 정리합니다.",
+  map: "매장 등급 또는 배송차 기준으로 지도 마커를 확인합니다."
+};
 const originMarkerId = "origin-hub";
 const tmapWaypointLimit = 15;
 const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
@@ -278,7 +283,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <p className="mt-1 text-xs font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
+          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-1.5">
+            <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">마커</span>
             {[
               { label: "매장 등급별", value: "grade" },
               { label: "배송차별", value: "vehicle" }
@@ -292,16 +298,21 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
                 {item.label}
               </button>
             ))}
-          </nav>
-          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50/80 p-1">
+          </div>
+          <nav className="flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-sm">
+            <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무 탭</span>
             {workspaceViews.map((item) => (
               <button
-                className={`h-8 rounded-md px-3 text-xs font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-teal-800"}`}
+                className={`group h-9 rounded-md px-3 text-left text-xs font-black transition ${activeView === item.value ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-teal-800"}`}
                 key={item.value}
                 onClick={() => changeWorkspaceView(item.value)}
+                title={workspaceViewDescriptions[item.value]}
                 type="button"
               >
-                {item.label}
+                <span className="block leading-none">{item.label}</span>
+                <span className={`mt-1 hidden text-[10px] font-bold leading-none 2xl:block ${activeView === item.value ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>
+                  {item.value === "map" ? "현황" : item.value === "customers" ? "관리" : "계산"}
+                </span>
               </button>
             ))}
           </nav>
