@@ -530,7 +530,13 @@ export default function CrmTimelinePage() {
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
-        <div className="rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm">
+          <SectionHeader
+            eyebrow="01 · Ledger Summary"
+            title="거래처 원장 요약"
+            description="DB 상태, 전체 거래처 수, 매출 등급, 현재 필터 결과를 먼저 확인합니다."
+          />
+          <div className="p-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[160px_repeat(4,minmax(0,1fr))]">
             <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
               <p className="text-[11px] font-black text-slate-400">DB 상태</p>
@@ -542,6 +548,7 @@ export default function CrmTimelinePage() {
             <SummaryCard helper={`방문 결과 ${formatDbCount(dbSummary.visitResults)}`} label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} tone="violet" />
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+          </div>
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -567,7 +574,13 @@ export default function CrmTimelinePage() {
           </Link>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
+        <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm">
+          <SectionHeader
+            eyebrow="02 · Customer Workspace"
+            title="거래처 목록과 상세 관리"
+            description="왼쪽에서 거래처를 고르고 오른쪽에서 기본정보, 첨부자료, 메모 히스토리를 정리합니다."
+          />
+          <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
           <aside className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-200/80 p-4">
               <div className="flex items-center justify-between gap-3">
@@ -1038,6 +1051,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
           </div>
+          </div>
         </div>
       </section>
     </CustomerAppShell>
@@ -1052,6 +1066,18 @@ function useAdminCompanyId() {
   }, []);
 
   return companyId;
+}
+
+function SectionHeader({ description, eyebrow, title }: { description: string; eyebrow: string; title: string }) {
+  return (
+    <div className="flex flex-col gap-2 border-b border-slate-200/80 px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <p className="text-xs font-black uppercase tracking-wide text-teal-700">{eyebrow}</p>
+        <h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2>
+      </div>
+      <p className="max-w-2xl text-sm font-semibold leading-6 text-slate-500">{description}</p>
+    </div>
+  );
 }
 
 function CustomerFilterButton({

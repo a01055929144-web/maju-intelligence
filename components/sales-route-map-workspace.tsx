@@ -276,11 +276,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex h-[calc(100vh-112px)] min-h-[720px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+    <div className="flex h-[calc(100vh-112px)] min-h-[720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+      <header className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <h2 className="whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 지도</h2>
-          <p className="mt-1 text-xs font-bold text-slate-500">거래처 위치, 매출 등급, 방문·배송 우선순위를 한 화면에서 확인합니다.</p>
+          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Route Workbench</p>
+          <h2 className="mt-1 whitespace-nowrap text-[20px] font-black leading-tight">영업·배송 통합 작업공간</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">지도 확인, 거래처 관리, 경유 계산을 업무 탭으로 나눠서 처리합니다.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-1.5">
@@ -369,7 +370,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         selectedVehicle={selectedVehicle}
       />
 
-      <section className="grid gap-2 border-b border-slate-200/80 bg-white px-4 py-2.5 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
+      <section className="grid gap-2 border-b border-slate-200/80 bg-white px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input

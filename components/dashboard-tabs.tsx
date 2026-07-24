@@ -32,7 +32,14 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
 
   return (
     <section className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
-      <div className="border-b border-slate-200/80 p-3">
+      <div className="border-b border-slate-200/80 px-5 py-4">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-teal-700">Dashboard Sections</p>
+            <h2 className="mt-1 text-lg font-black text-slate-950">목적별로 나눠 보는 운영 화면</h2>
+          </div>
+          <p className="text-sm font-semibold text-slate-500">필요한 업무 탭만 열어 보고 다음 액션으로 이동합니다.</p>
+        </div>
         <div className="grid gap-2 lg:grid-cols-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
