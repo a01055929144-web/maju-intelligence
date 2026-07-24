@@ -253,7 +253,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex min-h-[780px] flex-col overflow-visible rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <div className="flex min-h-[720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <header className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-wide text-teal-700">Route Workbench</p>
@@ -392,7 +392,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-[720px] grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid h-[calc(100vh-360px)] min-h-[640px] max-h-[860px] grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -403,11 +403,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             vehicles={deliveryVehicles}
           />
 
-          <div className="relative min-h-0 min-w-0 bg-slate-100">
-            <div className="h-full [&>div]:h-full">
+          <div className="relative h-full min-h-0 min-w-0 bg-slate-100">
+            <div className="h-full min-h-0 [&>div]:h-full">
               <KakaoAddressMap
                 focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                mapClassName="h-[720px] min-h-[620px] rounded-none border-0"
+                mapClassName="h-full min-h-[640px] rounded-none border-0"
                 markers={markers}
                 onMarkerClick={(marker) => {
                   if (!marker.id || marker.tone === "origin") return;
@@ -557,7 +557,7 @@ function DeliveryAssignmentPanel({
   }
 
   return (
-    <aside className="min-h-0 border-r border-slate-200/80 bg-white">
+    <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
       <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -590,7 +590,7 @@ function DeliveryAssignmentPanel({
           <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
         </button>
       </div>
-      <div className="max-h-[640px] min-h-[420px] space-y-2 overflow-auto p-3 pt-2">
+      <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3 pt-2">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
@@ -914,7 +914,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-[720px] overflow-auto bg-[#f6f8fb] p-4">
+    <section className="h-[calc(100vh-360px)] min-h-[640px] max-h-[860px] overflow-auto bg-[#f6f8fb] p-4">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -1107,8 +1107,8 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-[720px] grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
-      <aside className="min-h-0 border-r border-slate-200/80 bg-white">
+    <section className={`grid h-[calc(100vh-360px)] min-h-[640px] max-h-[860px] grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
+      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
           <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 매장을 계산합니다.</p>
@@ -1124,7 +1124,7 @@ function TodayCourseView({
             </div>
           </div>
         </div>
-        <div className="space-y-2 p-3">
+        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
           <button
             className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
             onClick={() => onSelectVehicle("all")}
@@ -1153,11 +1153,11 @@ function TodayCourseView({
         </div>
       </aside>
 
-      <div className="relative min-h-0 min-w-0 bg-slate-100">
-        <div className="h-full [&>div]:h-full">
+      <div className="relative h-full min-h-0 min-w-0 bg-slate-100">
+        <div className="h-full min-h-0 [&>div]:h-full">
           <KakaoAddressMap
             focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-            mapClassName="h-[720px] min-h-[620px] rounded-none border-0"
+            mapClassName="h-full min-h-[640px] rounded-none border-0"
             markers={routeMapMarkers}
             onMarkerClick={(marker) => {
               if (!marker.id || marker.tone === "origin") return;
