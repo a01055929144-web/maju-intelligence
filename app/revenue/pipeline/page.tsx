@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Banknote, CircleDollarSign, Percent, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
@@ -61,60 +60,91 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       title="예상 매출 파이프라인"
       userName={customerSession?.name || "관리자"}
     >
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-4">
-          <Metric icon={Banknote} label="예상 총매출" value={`${pipeline.expectedRevenue.toLocaleString()}만원`} />
-          <Metric icon={CircleDollarSign} label="가중 매출" value={`${pipeline.weightedRevenue.toLocaleString()}만원`} />
-          <Metric icon={TrendingUp} label="견적 요청" value={`${pipeline.quoteRequests}건`} />
-          <Metric icon={Percent} label="전환 기대율" value={`${pipeline.conversionRate}%`} />
+      <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div>
+              <p className="text-sm font-black text-slate-950">매출 파이프라인 현황</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">방문 결과와 견적 요청을 기준으로 열려 있는 추가매출을 집계합니다.</p>
+            </div>
+            <Badge className="bg-blue-100 text-blue-800">{pipeline.items.length.toLocaleString()}건 관리 중</Badge>
+          </div>
+          <div className="grid md:grid-cols-4">
+            <Metric icon={Banknote} label="예상 총매출" value={`${pipeline.expectedRevenue.toLocaleString()}만원`} />
+            <Metric icon={CircleDollarSign} label="가중 매출" value={`${pipeline.weightedRevenue.toLocaleString()}만원`} />
+            <Metric icon={TrendingUp} label="견적 요청" value={`${pipeline.quoteRequests}건`} />
+            <Metric icon={Percent} label="전환 기대율" value={`${pipeline.conversionRate}%`} />
+          </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-3">
           {pipelineActions.map((action) => (
             <PipelineActionCard key={action.label} {...action} />
           ))}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>파이프라인 상태</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <h2 className="text-lg font-black text-slate-950">파이프라인 상태</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">결과 단계별 건수를 확인합니다.</p>
+            </div>
+            <div className="space-y-4 p-5">
               <PipelineLine label="견적 요청" value={pipeline.quoteRequests} total={pipeline.items.length} />
               <PipelineLine label="관심 있음" value={pipeline.interested} total={pipeline.items.length} />
               <PipelineLine label="보류" value={pipeline.pending} total={pipeline.items.length} />
               <PipelineLine label="실패" value={pipeline.failed} total={pipeline.items.length} />
-            </CardContent>
-          </Card>
+            </div>
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>매출 후보</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {pipeline.items.map((item) => (
-                <div key={item.id} className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-[1fr_100px_120px] md:items-center">
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <p className="font-black">{item.leadName}</p>
-                      <Badge>{item.region}</Badge>
-                      <Badge className="bg-primary/10 text-primary">{resultLabels[item.result] || item.result}</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{item.memo || "메모 없음"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground">확률</p>
-                    <p className="text-xl font-black">{Math.round(item.probability * 100)}%</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground">가중 매출</p>
-                    <p className="text-xl font-black text-primary">{item.weightedRevenue.toLocaleString()}만원</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-950">매출 후보</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500">확률과 가중 매출 기준으로 우선순위를 정합니다.</p>
+              </div>
+              <Badge className="bg-slate-900 text-white">가중 매출 {pipeline.weightedRevenue.toLocaleString()}만원</Badge>
+            </div>
+            <div className="max-h-[640px] overflow-auto">
+              <table className="w-full min-w-[880px] border-separate border-spacing-0 text-sm">
+                <thead className="sticky top-0 z-10 bg-white">
+                  <tr className="text-left text-xs font-black text-slate-500">
+                    <th className="border-b border-slate-200 px-4 py-3 text-center">No</th>
+                    <th className="border-b border-slate-200 px-4 py-3">거래처 후보</th>
+                    <th className="border-b border-slate-200 px-4 py-3">상태</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-right">계약 확률</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-right">가중 매출</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pipeline.items.map((item, index) => (
+                    <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-blue-50/60">
+                      <td className="border-b border-slate-100 px-4 py-3 text-center text-xs text-slate-400">{index + 1}</td>
+                      <td className="border-b border-slate-100 px-4 py-3">
+                        <p className="font-black text-slate-950">{item.leadName}</p>
+                        <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">{item.memo || "메모 없음"}</p>
+                      </td>
+                      <td className="border-b border-slate-100 px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge className="bg-slate-100 text-slate-700">{item.region}</Badge>
+                          <Badge className="bg-blue-100 text-blue-800">{resultLabels[item.result] || item.result}</Badge>
+                        </div>
+                      </td>
+                      <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black">{Math.round(item.probability * 100)}%</td>
+                      <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black text-teal-700">{item.weightedRevenue.toLocaleString()}만원</td>
+                    </tr>
+                  ))}
+                  {!pipeline.items.length ? (
+                    <tr>
+                      <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={5}>
+                        아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </section>
     </CustomerAppShell>
@@ -123,13 +153,13 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="p-5">
-        <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-3xl font-black">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-3xl font-black">{value}</p>
+    </div>
   );
 }
 
@@ -151,7 +181,7 @@ function PipelineActionCard({
   }[tone];
 
   return (
-    <div className={`rounded-md border p-4 ${toneClassName}`}>
+    <div className={`border-b border-slate-200 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${toneClassName}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase opacity-70">{label}</p>
