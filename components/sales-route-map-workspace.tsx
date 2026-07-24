@@ -84,6 +84,13 @@ type DeliveryProof = {
   storeId: string;
 };
 
+type DeliveryProofInput = {
+  file?: File | null;
+  fileName: string;
+  messageChannel: DeliveryProof["messageChannel"];
+  memo: string;
+};
+
 type StoreAttachment = {
   businessCertificate?: AttachmentFile;
   bankbookCopy?: AttachmentFile;
@@ -1165,36 +1172,37 @@ function TodayCourseView({
       { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
     );
   };
-  const saveDeliveryProof = async (storeId: string, proof: Omit<DeliveryProof, "persisted" | "recordedAt" | "storeId">) => {
+  const saveDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
     let persisted = false;
     const memo = `${proof.memo}\n\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
 
     try {
-      const [noteResponse, attachmentResponse] = await Promise.all([
-        fetch("/api/customer-operations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "note",
-            customerId: storeId,
-            memo,
-            nextAction: proof.messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
-            noteType: "delivery"
-          })
-        }),
-        fetch("/api/customer-operations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "attachment",
-            attachmentType: "delivery_proof",
-            customerId: storeId,
-            fileUrl: "",
-            mimeType: proof.fileName.toLowerCase().match(/\.(mp4|mov|webm)$/) ? "video/*" : "image/*",
-            title: proof.fileName || "배송완료 증빙"
-          })
+      const noteRequest = fetch("/api/customer-operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "note",
+          customerId: storeId,
+          memo,
+          nextAction: proof.messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
+          noteType: "delivery"
         })
-      ]);
+      });
+      const attachmentRequest = proof.file
+        ? uploadDeliveryProofFile(storeId, proof.file, proof.fileName || "배송완료 증빙")
+        : fetch("/api/customer-operations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "attachment",
+              attachmentType: "delivery_proof",
+              customerId: storeId,
+              fileUrl: "",
+              mimeType: proof.fileName.toLowerCase().match(/\.(mp4|mov|webm)$/) ? "video/*" : "image/*",
+              title: proof.fileName || "배송완료 증빙"
+            })
+          });
+      const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]);
 
       persisted = noteResponse.ok && attachmentResponse.ok;
     } catch {
@@ -1610,10 +1618,11 @@ function DeliveryProofPanel({
   proofs,
   store
 }: {
-  readonly onSave: (proof: Omit<DeliveryProof, "persisted" | "recordedAt" | "storeId">) => Promise<void>;
+  readonly onSave: (proof: DeliveryProofInput) => Promise<void>;
   readonly proofs: DeliveryProof[];
   readonly store: StoreRow;
 }) {
+  const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
@@ -1624,11 +1633,13 @@ function DeliveryProofPanel({
     setIsSaving(true);
     setSaveMessage("");
     await onSave({
+      file,
       fileName: fileName || "현장 사진 미첨부",
       memo: memo || "배송 도착 완료",
       messageChannel
     });
-    setSaveMessage("배송완료 기록을 저장했습니다. 서버 연결 상태에 따라 로컬 기록으로 남을 수 있습니다.");
+    setSaveMessage(file ? "배송완료 사진/영상과 메모를 저장했습니다." : "배송완료 메모를 저장했습니다. 사진은 나중에 추가할 수 있습니다.");
+    setFile(null);
     setFileName("");
     setIsSaving(false);
     setMemo("");
@@ -1659,7 +1670,11 @@ function DeliveryProofPanel({
         <input
           accept="image/*,video/*"
           className="hidden"
-          onChange={(event) => setFileName(event.target.files?.[0]?.name || "")}
+          onChange={(event) => {
+            const nextFile = event.target.files?.[0] || null;
+            setFile(nextFile);
+            setFileName(nextFile?.name || "");
+          }}
           type="file"
         />
       </label>
@@ -1714,6 +1729,19 @@ function DeliveryProofPanel({
       ) : null}
     </div>
   );
+}
+
+async function uploadDeliveryProofFile(storeId: string, file: File, title: string) {
+  const formData = new FormData();
+  formData.append("attachmentType", "delivery_proof");
+  formData.append("customerId", storeId);
+  formData.append("file", file);
+  formData.append("title", title);
+
+  return fetch("/api/customer-attachments/upload", {
+    method: "POST",
+    body: formData
+  });
 }
 
 function getRouteStopAddress(store: StoreRow) {
