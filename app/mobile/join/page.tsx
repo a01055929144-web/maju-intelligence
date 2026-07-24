@@ -6,6 +6,7 @@ export default function MobileStaffJoinPage({ searchParams }: { searchParams?: {
   const inviteCode = searchParams?.invite || "";
   const kakaoLoginUrl = createKakaoLoginUrl(inviteCode);
   const kakaoReady = Boolean(kakaoLoginUrl);
+  const joinMode = inviteCode ? "company" : "personal";
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -16,7 +17,7 @@ export default function MobileStaffJoinPage({ searchParams }: { searchParams?: {
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]">M</span>
               <div>
                 <p className="text-sm font-black">MAJU Intelligence</p>
-                <p className="text-xs font-bold text-slate-500">직원 모바일 가입</p>
+                <p className="text-xs font-bold text-slate-500">{joinMode === "company" ? "직원 모바일 가입" : "개인 워크스페이스 시작"}</p>
               </div>
             </div>
             <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">Mobile</Badge>
@@ -27,19 +28,23 @@ export default function MobileStaffJoinPage({ searchParams }: { searchParams?: {
           <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <Badge className="mb-4 bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-200">
               <MessageCircle className="mr-1 h-3.5 w-3.5" />
-              카카오톡 초대
+              {joinMode === "company" ? "카카오톡 초대" : "개인으로 시작"}
             </Badge>
-            <h1 className="text-[28px] font-black leading-tight text-slate-950">카카오로 가입하고 오늘 코스를 바로 확인하세요.</h1>
+            <h1 className="text-[28px] font-black leading-tight text-slate-950">
+              {joinMode === "company" ? "카카오로 가입하고 오늘 코스를 바로 확인하세요." : "카카오로 가입하고 내 거래처 관리를 시작하세요."}
+            </h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-              배송기사와 영업직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다.
+              {joinMode === "company"
+                ? "배송기사와 영업직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다."
+                : "초대 코드가 없어도 개인 워크스페이스를 만들고 거래처, 방문 기록, 매출 데이터를 혼자 관리할 수 있습니다."}
             </p>
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-black text-slate-500">초대 코드</p>
+            <p className="text-xs font-black text-slate-500">{joinMode === "company" ? "초대 코드" : "가입 방식"}</p>
             <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-3">
-              <span className="min-w-0 truncate font-mono text-sm font-black text-slate-900">{inviteCode || "초대 코드 없음"}</span>
-              <Badge className={inviteCode ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}>{inviteCode ? "확인" : "필요"}</Badge>
+              <span className="min-w-0 truncate font-mono text-sm font-black text-slate-900">{inviteCode || "개인 워크스페이스"}</span>
+              <Badge className={inviteCode ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}>{inviteCode ? "회사 연결" : "개인"}</Badge>
             </div>
           </section>
 
@@ -55,7 +60,7 @@ export default function MobileStaffJoinPage({ searchParams }: { searchParams?: {
               href={kakaoLoginUrl}
             >
               <MessageCircle className="h-5 w-5" />
-              카카오로 가입하기
+              {joinMode === "company" ? "카카오로 직원 가입" : "카카오로 개인 시작"}
               <ChevronRight className="h-5 w-5" />
             </a>
           ) : (
@@ -76,9 +81,11 @@ export default function MobileStaffJoinPage({ searchParams }: { searchParams?: {
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
               <div>
-                <p className="font-black text-slate-950">회사 권한은 초대 코드로 제한됩니다</p>
+                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 권한은 초대 코드로 제한됩니다" : "나중에 회사 워크스페이스로 전환할 수 있습니다"}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-                  카카오 계정만으로는 접근할 수 없고, 고객사 관리자가 발급한 초대 링크가 있어야 회사 데이터에 연결됩니다.
+                  {joinMode === "company"
+                    ? "카카오 계정만으로는 접근할 수 없고, 고객사 관리자가 발급한 초대 링크가 있어야 회사 데이터에 연결됩니다."
+                    : "개인으로 먼저 시작한 뒤 고객사 관리자 초대를 받으면 회사 직원 또는 관리자로 연결할 수 있습니다."}
                 </p>
               </div>
             </div>
@@ -113,13 +120,13 @@ function MobileBenefit({ description, icon: Icon, title }: { description: string
 function createKakaoLoginUrl(inviteCode: string) {
   const clientId = process.env.KAKAO_CLIENT_ID;
   const redirectUri = process.env.KAKAO_REDIRECT_URI;
-  if (!clientId || !redirectUri || !inviteCode) return "";
+  if (!clientId || !redirectUri) return "";
 
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    state: inviteCode
+    state: inviteCode || "personal"
   });
 
   return `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;

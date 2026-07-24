@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setCustomerSession } from "@/lib/auth";
-import { acceptStaffKakaoInvitation } from "@/lib/store";
+import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +28,10 @@ type KakaoUserResponse = {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code") || "";
-  const inviteCode = request.nextUrl.searchParams.get("state") || "";
+  const state = request.nextUrl.searchParams.get("state") || "";
+  const inviteCode = state === "personal" ? "" : state;
 
-  if (!code || !inviteCode) {
+  if (!code) {
     return redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
 
@@ -45,13 +46,19 @@ export async function GET(request: NextRequest) {
       return redirectJoin(request.url, inviteCode, "kakao_user_failed");
     }
 
-    const result = await acceptStaffKakaoInvitation({
+    const kakaoProfile = {
       avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
       email: kakaoUser.kakao_account?.email,
-      inviteCode,
       kakaoUserId: String(kakaoUser.id),
       name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname
-    });
+    };
+
+    const result = inviteCode
+      ? await acceptStaffKakaoInvitation({
+          ...kakaoProfile,
+          inviteCode
+        })
+      : await createPersonalKakaoWorkspace(kakaoProfile);
 
     setCustomerSession({
       appRole: "customer_user",
@@ -59,12 +66,12 @@ export async function GET(request: NextRequest) {
       companyName: result.companyName,
       email: result.email,
       name: result.name,
-      role: "member",
+      role: inviteCode ? "member" : "owner",
       workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
-      workspaceType: "company"
+      workspaceType: inviteCode ? "company" : "personal"
     });
 
-    return NextResponse.redirect(new URL("/mobile/today", request.url));
+    return NextResponse.redirect(new URL(inviteCode ? "/mobile/today" : "/dashboard", request.url));
   } catch (error) {
     console.error("Kakao staff callback failed:", error);
     return redirectJoin(request.url, inviteCode, error instanceof Error ? error.message : "kakao_callback_failed");

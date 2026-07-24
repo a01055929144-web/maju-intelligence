@@ -281,6 +281,12 @@ export type StaffKakaoAcceptInput = {
   kakaoUserId: string;
   name?: string;
 };
+export type PersonalKakaoWorkspaceInput = {
+  avatarUrl?: string;
+  email?: string;
+  kakaoUserId: string;
+  name?: string;
+};
 export type StaffKakaoAcceptResult = {
   companyId: string;
   companyName: string;
@@ -288,6 +294,14 @@ export type StaffKakaoAcceptResult = {
   name: string;
   persisted: boolean;
   workspaceRole: StaffInvitation["role"];
+};
+export type PersonalKakaoWorkspaceResult = {
+  companyId: string;
+  companyName: string;
+  email: string;
+  name: string;
+  persisted: boolean;
+  workspaceRole: "owner";
 };
 export type DatabaseCheck = {
   name: string;
@@ -1084,6 +1098,104 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     name: user.name || displayName,
     persisted: true,
     workspaceRole: invitation.role || "member"
+  };
+}
+
+export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspaceInput): Promise<PersonalKakaoWorkspaceResult> {
+  const kakaoUserId = input.kakaoUserId.trim();
+  if (!kakaoUserId) throw new Error("카카오 사용자 확인이 필요합니다.");
+
+  const displayName = input.name || "개인 사용자";
+  const loginEmail = input.email || `kakao-${kakaoUserId}@maju.local`;
+
+  if (!isProductionStoreConfigured()) {
+    const companyId = getDefaultCompanyId();
+    return {
+      companyId,
+      companyName: `${displayName} 워크스페이스`,
+      email: loginEmail,
+      name: displayName,
+      persisted: false,
+      workspaceRole: "owner"
+    };
+  }
+
+  const now = new Date().toISOString();
+  const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        auth_provider: "kakao",
+        avatar_url: input.avatarUrl || null,
+        email: loginEmail,
+        kakao_user_id: kakaoUserId,
+        last_login_at: now,
+        name: displayName,
+        role: "customer_user",
+        status: "active"
+      }
+    ])
+  });
+
+  const user = userRows[0];
+  const existingMemberships = await supabaseRequest<
+    Array<{
+      company_id: string;
+      role: StaffInvitation["role"] | "owner" | "member";
+      companies: { business_type: string | null; name: string } | null;
+    }>
+  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&order=created_at.asc&limit=1`).catch(() => []);
+
+  const existing = existingMemberships[0];
+  if (existing?.company_id) {
+    return {
+      companyId: existing.company_id,
+      companyName: existing.companies?.name || `${displayName} 워크스페이스`,
+      email: user.email || loginEmail,
+      name: user.name || displayName,
+      persisted: true,
+      workspaceRole: "owner"
+    };
+  }
+
+  const companyRows = await supabaseRequest<Array<{ id: string; name: string }>>("companies", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        business_type: "personal",
+        name: `${displayName} 워크스페이스`,
+        owner_name: displayName,
+        status: "active",
+        updated_at: now
+      }
+    ])
+  });
+
+  const company = companyRows[0];
+  await supabaseRequest("company_members", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        company_id: company.id,
+        role: "owner",
+        user_id: user.id
+      }
+    ])
+  });
+
+  return {
+    companyId: company.id,
+    companyName: company.name,
+    email: user.email || loginEmail,
+    name: user.name || displayName,
+    persisted: true,
+    workspaceRole: "owner"
   };
 }
 
