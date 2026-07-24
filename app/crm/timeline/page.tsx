@@ -539,9 +539,9 @@ export default function CrmTimelinePage() {
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
-        <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
           <SectionHeader
-            eyebrow="01 · Ledger Summary"
+            eyebrow="01 · 원장 요약"
             title="거래처 원장 요약"
             description="DB 상태, 전체 거래처 수, 매출 등급, 현재 필터 결과를 먼저 확인합니다."
           />
@@ -583,9 +583,9 @@ export default function CrmTimelinePage() {
           </Link>
         </div>
 
-        <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
           <SectionHeader
-            eyebrow="02 · Customer Workspace"
+            eyebrow="02 · 목록과 상세"
             title="거래처 목록과 상세 관리"
             description="왼쪽에서 거래처를 고르고 오른쪽에서 기본정보, 첨부자료, 메모 히스토리를 정리합니다."
           />
@@ -661,7 +661,7 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
             </div>
-            <div className="max-h-[calc(100vh-360px)] space-y-2 overflow-auto p-3">
+            <div className="max-h-[640px] space-y-2 overflow-auto p-3">
               {filteredCustomers.map(({ customer, index }) => {
                 const issues = customerOperationalIssues(customer);
                 const readyScore = Math.round(((4 - issues.length) / 4) * 100);
@@ -763,7 +763,7 @@ export default function CrmTimelinePage() {
             <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
               <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Customer Detail</p>
+                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">거래처 상세 탭</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
                 <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">

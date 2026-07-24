@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Check, CheckCircle2, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Truck, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, CheckCircle2, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -113,10 +113,10 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "B등급", value: "B" },
   { label: "C등급", value: "C" }
 ];
-const workspaceViews: Array<{ label: string; value: WorkspaceView }> = [
-  { label: "지도", value: "map" },
-  { label: "거래처 목록", value: "customers" },
-  { label: "경유 코스", value: "course" }
+const workspaceViews: Array<{ icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
+  { icon: MapPin, label: "지도", shortLabel: "위치 확인", value: "map" },
+  { icon: Store, label: "거래처 목록", shortLabel: "원장 관리", value: "customers" },
+  { icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차별 매장을 선택하고 티맵 경유 순서를 계산합니다.",
@@ -260,9 +260,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <h2 className="mt-1 whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 작업공간</h2>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">지도 확인, 거래처 관리, 경유 계산을 업무 탭으로 나눠 처리합니다.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-            <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">마커 보기</span>
+        <div className="grid gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-[auto_auto_40px] xl:justify-end">
+          <div className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+            <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">지도 표시 기준</p>
+            <div className="grid grid-cols-2 gap-1.5">
             {[
               { label: "매장 등급별", value: "grade" },
               { label: "배송차별", value: "vehicle" }
@@ -280,12 +281,16 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
                 {item.label}
               </button>
             ))}
+            </div>
           </div>
-          <nav className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-            <span className="hidden px-2 text-[11px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무 탭</span>
-            {workspaceViews.map((item) => (
+          <nav className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+            <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 탭</p>
+            <div className="grid grid-cols-3 gap-1.5">
+            {workspaceViews.map((item) => {
+              const Icon = item.icon;
+              return (
               <button
-                className={`group h-11 min-w-[104px] rounded-md border px-3 text-left transition ${
+                className={`group h-11 rounded-md border px-3 text-left transition ${
                   activeView === item.value
                     ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.20)]"
                     : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
@@ -295,17 +300,19 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
                 title={workspaceViewDescriptions[item.value]}
                 type="button"
               >
-                <span className="block text-xs font-black leading-none">{item.label}</span>
-                <span className={`mt-1 hidden text-[10px] font-bold leading-none 2xl:block ${activeView === item.value ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>
-                  {item.value === "map" ? "현황" : item.value === "customers" ? "관리" : "계산"}
+                <span className="flex items-center gap-1.5 text-xs font-black leading-none">
+                  <Icon className={`h-3.5 w-3.5 ${activeView === item.value ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
+                  {item.label}
                 </span>
+                <span className={`mt-1 block truncate text-[10px] font-bold leading-none ${activeView === item.value ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>{item.shortLabel}</span>
               </button>
-            ))}
+              );
+            })}
+            </div>
           </nav>
-          <span className="hidden text-xs font-bold text-slate-400 2xl:inline">기존 영업·배송 데이터 기준</span>
           <button
             aria-label="필터 초기화"
-            className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
+            className="grid h-full min-h-10 w-full place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 xl:w-10"
             onClick={resetWorkspace}
             title="필터 초기화"
             type="button"

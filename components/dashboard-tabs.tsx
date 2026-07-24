@@ -31,15 +31,16 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
   const active = tabs.find((tab) => tab.id === activeTab) || tabs[0];
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
       <div className="border-b border-slate-200/80 bg-white px-5 py-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wide text-teal-700">Dashboard Sections</p>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-teal-700">운영 화면</p>
             <h2 className="mt-1 text-lg font-black text-slate-950">{active.label}</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{active.description}</p>
           </div>
-          <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:grid-cols-2 xl:w-auto xl:grid-cols-4">
+          <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1.5">
+            <div className="grid min-w-[680px] gap-2 sm:grid-cols-4 xl:min-w-[720px]">
             {tabs.map((tab, index) => {
               const Icon = tab.icon;
               const selected = activeTab === tab.id;
@@ -47,7 +48,7 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
               return (
                 <button
                   aria-pressed={selected}
-                  className={`group min-w-[148px] rounded-lg border px-3 py-2.5 text-left transition ${
+                  className={`group rounded-md border px-3 py-2.5 text-left transition ${
                     selected
                       ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.18)]"
                       : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-900"
@@ -68,6 +69,7 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
       </div>
