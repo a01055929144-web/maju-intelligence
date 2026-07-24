@@ -83,8 +83,8 @@ export function RouteSequenceAction({
         {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
       </div>
       {!sequence ? (
-        <p className="text-xs font-bold text-muted-foreground">
-          선택한 배송지 {uniqueDestinations.length}곳을 출발지 기준 가까운 경유지부터 재정렬합니다. 버튼을 누르면 티맵 거리·시간과 실제 도로 경로를 계산합니다.
+        <p className="text-xs font-bold leading-5 text-muted-foreground">
+          선택한 매장 {uniqueDestinations.length}곳을 출발지 기준 경유지로 보내 티맵 도로 거리·시간을 계산합니다. 티맵이 도로 좌표를 반환하면 지도에 실제 경유선도 함께 표시됩니다.
         </p>
       ) : null}
 
