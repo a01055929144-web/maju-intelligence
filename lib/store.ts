@@ -325,6 +325,8 @@ type SupabaseRow = Record<string, unknown>;
 const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 const AUTH_CREDENTIALS_ID = "maju-default";
+const STAFF_INVITATIONS_MIGRATION_MESSAGE =
+  "Supabase에 직원 초대 테이블이 없습니다. Supabase SQL Editor에서 supabase/migrations/20260724_staff_kakao_mobile.sql 파일 내용을 실행한 뒤 다시 시도하세요.";
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -357,6 +359,11 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
 
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+function isMissingStaffInvitationTableError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("PGRST205") && message.includes("staff_invitations");
 }
 
 async function supabaseStorageRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -1004,6 +1011,9 @@ export async function createStaffInvitation(input: StaffInvitationInput): Promis
         expires_at: expiresAt
       }
     ])
+  }).catch((error) => {
+    if (isMissingStaffInvitationTableError(error)) throw new Error(STAFF_INVITATIONS_MIGRATION_MESSAGE);
+    throw error;
   });
 
   return {
@@ -1061,7 +1071,10 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
     `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&company_id=eq.${encodeURIComponent(
       companyId
     )}&order=created_at.desc`
-  );
+  ).catch((error) => {
+    if (isMissingStaffInvitationTableError(error)) throw new Error(STAFF_INVITATIONS_MIGRATION_MESSAGE);
+    throw error;
+  });
 
   return {
     invitations: rows.map(toStaffInvitation),
@@ -1111,6 +1124,9 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput): 
   >(`staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
+  }).catch((error) => {
+    if (isMissingStaffInvitationTableError(error)) throw new Error(STAFF_INVITATIONS_MIGRATION_MESSAGE);
+    throw error;
   });
 
   const invitation = rows[0];
@@ -1169,7 +1185,10 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       role: StaffInvitation["role"];
       status: StaffInvitation["status"];
     }>
-  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`);
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`).catch((error) => {
+    if (isMissingStaffInvitationTableError(error)) throw new Error(STAFF_INVITATIONS_MIGRATION_MESSAGE);
+    throw error;
+  });
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
@@ -1227,6 +1246,9 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       accepted_by: user.id,
       status: "accepted"
     })
+  }).catch((error) => {
+    if (isMissingStaffInvitationTableError(error)) throw new Error(STAFF_INVITATIONS_MIGRATION_MESSAGE);
+    throw error;
   });
 
   return {
