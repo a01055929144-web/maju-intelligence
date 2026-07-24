@@ -2,10 +2,10 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, ClipboardList, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, ClipboardList, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ManagedCompanyAccount, ManagedCompanyAccountInput } from "@/lib/store";
+import type { ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation } from "@/lib/store";
 
 type Props = {
   initialCompanies: ManagedCompanyAccount[];
@@ -31,6 +31,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [showPassword, setShowPassword] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [inviteForm, setInviteForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [creatingInvite, setCreatingInvite] = useState(false);
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -108,6 +111,46 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       customerPassword: saved.customerPassword
     });
     setMessage(payload.persisted ? "고객사와 로그인 계정이 저장되었습니다." : "고객사 정보가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function createInvite() {
+    if (!selectedCompany) return;
+
+    setCreatingInvite(true);
+    setInviteMessage("");
+
+    const response = await fetch("/api/admin/staff-invitations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: selectedCompany.id,
+        employeeName: inviteForm.employeeName,
+        employeePhone: inviteForm.employeePhone,
+        role: inviteForm.role
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    setCreatingInvite(false);
+
+    if (!response.ok) {
+      setInviteMessage(payload?.message || "직원 초대 생성에 실패했습니다.");
+      return;
+    }
+
+    const invitation = payload.invitation as StaffInvitation;
+    setCompanies((prev) =>
+      prev.map((company) =>
+        company.id === selectedCompany.id
+          ? {
+              ...company,
+              staffInvitationCount: (company.staffInvitationCount || 0) + 1,
+              staffInvitations: [invitation, ...(company.staffInvitations || [])].slice(0, 5)
+            }
+          : company
+      )
+    );
+    setInviteForm({ employeeName: "", employeePhone: "", role: "driver" });
+    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크가 생성되었습니다." : "초대 링크가 화면에 생성되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -319,6 +362,82 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   <QuickAction href={`/routes/today?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="영업·배송 코스" />
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {selectedCompany ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <section className="rounded-lg border border-slate-200 bg-white">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-4">
+                  <div>
+                    <p className="flex items-center gap-2 font-black text-slate-950">
+                      <Smartphone className="h-4 w-4 text-primary" />
+                      직원 카카오 가입 초대
+                    </p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">배송기사와 영업직원이 카카오톡 링크로 가입한 뒤 모바일 오늘 코스를 사용합니다.</p>
+                  </div>
+                  <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">모바일 준비</Badge>
+                </div>
+                <div className="grid gap-3 p-4 md:grid-cols-[1fr_160px_150px_auto] md:items-end">
+                  <Field label="직원명" value={inviteForm.employeeName} onChange={(value) => setInviteForm((prev) => ({ ...prev, employeeName: value }))} />
+                  <Field label="연락처" value={inviteForm.employeePhone} onChange={(value) => setInviteForm((prev) => ({ ...prev, employeePhone: value }))} />
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-bold text-muted-foreground">역할</span>
+                    <select
+                      className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      value={inviteForm.role}
+                      onChange={(event) => setInviteForm((prev) => ({ ...prev, role: event.target.value as StaffInvitation["role"] }))}
+                    >
+                      <option value="driver">배송기사</option>
+                      <option value="sales">영업직원</option>
+                      <option value="manager">현장관리자</option>
+                      <option value="member">일반직원</option>
+                    </select>
+                  </label>
+                  <Button className="h-11" disabled={creatingInvite} onClick={createInvite} type="button">
+                    <Send className="h-4 w-4" />
+                    {creatingInvite ? "생성 중" : "초대 생성"}
+                  </Button>
+                </div>
+                {inviteMessage ? (
+                  <p className={inviteMessage.includes("실패") ? "mx-4 mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" : "mx-4 mb-4 rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary"}>
+                    {inviteMessage}
+                  </p>
+                ) : null}
+              </section>
+
+              <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-black text-slate-950">최근 직원 초대</p>
+                    <p className="mt-1 text-xs font-bold text-muted-foreground">카카오톡으로 전달할 가입 링크입니다.</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">{selectedCompany.staffInvitationCount || 0}건</span>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {(selectedCompany.staffInvitations || []).map((invitation) => (
+                    <div key={invitation.id} className="rounded-md border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-slate-950">{invitation.employeeName}</p>
+                          <p className="mt-1 truncate text-xs font-bold text-muted-foreground">{getStaffRoleLabel(invitation.role)} · {invitation.employeePhone || "연락처 미입력"}</p>
+                        </div>
+                        <Badge className={invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                          {getInvitationStatusLabel(invitation.status)}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 rounded-md bg-slate-50 px-2 py-2 font-mono text-[11px] font-bold text-slate-600">
+                        {invitation.inviteUrl}
+                      </div>
+                    </div>
+                  ))}
+                  {!(selectedCompany.staffInvitations || []).length ? (
+                    <div className="rounded-md border border-dashed border-slate-200 bg-white p-4 text-sm font-bold leading-6 text-muted-foreground">
+                      아직 생성된 직원 초대가 없습니다. 배송기사 또는 영업직원을 먼저 초대하세요.
+                    </div>
+                  ) : null}
+                </div>
+              </section>
             </div>
           ) : null}
 
@@ -594,6 +713,20 @@ function ListStatusBadge({ label, ok }: { label: string; ok: boolean }) {
       {label} {ok ? "완료" : "필요"}
     </span>
   );
+}
+
+function getStaffRoleLabel(role: StaffInvitation["role"]) {
+  if (role === "driver") return "배송기사";
+  if (role === "sales") return "영업직원";
+  if (role === "manager") return "현장관리자";
+  return "일반직원";
+}
+
+function getInvitationStatusLabel(status: StaffInvitation["status"]) {
+  if (status === "accepted") return "가입완료";
+  if (status === "expired") return "만료";
+  if (status === "revoked") return "취소";
+  return "대기";
 }
 
 function ReadinessMeter({ compact, readiness }: { compact?: boolean; readiness: CompanyReadiness }) {

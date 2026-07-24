@@ -238,6 +238,8 @@ export type ManagedCompanyAccount = {
   uploadCount: number;
   lastUploadAt?: string;
   recentUploads: UploadHistoryItem[];
+  staffInvitations?: StaffInvitation[];
+  staffInvitationCount?: number;
   updatedAt?: string;
 };
 export type ManagedCompanyAccountInput = {
@@ -253,6 +255,24 @@ export type ManagedCompanyAccountInput = {
 export type CustomerLoginCredentials = AuthCredentials & {
   companyName: string;
   ownerName?: string;
+};
+export type StaffInvitation = {
+  id: string;
+  companyId: string;
+  employeeName: string;
+  employeePhone: string;
+  inviteCode: string;
+  inviteUrl: string;
+  role: "driver" | "sales" | "manager" | "member";
+  status: "pending" | "accepted" | "expired" | "revoked";
+  createdAt: string;
+  expiresAt?: string;
+};
+export type StaffInvitationInput = {
+  companyId: string;
+  employeeName?: string;
+  employeePhone?: string;
+  role?: StaffInvitation["role"];
 };
 export type DatabaseCheck = {
   name: string;
@@ -628,6 +648,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           salesTransactionCount: 0,
           uploadCount: 0,
           recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
+          staffInvitationCount: 0,
+          staffInvitations: [],
           updatedAt: "기준 데이터"
         }
       ]
@@ -635,7 +657,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
   }
 
   try {
-    const [companies, credentialRows, customerRows, salesRows, importRows] = await Promise.all([
+    const [companies, credentialRows, customerRows, salesRows, importRows, invitationRows] = await Promise.all([
       supabaseRequest<
         Array<{
           id: string;
@@ -669,7 +691,20 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           uploaded_files: { original_filename: string } | null;
           ai_reports: Array<{ id: string; health_score: number }>;
         }>
-      >("customer_imports?select=id,company_id,row_count,status,quality_score,duplicate_count,created_at,uploaded_files(original_filename),ai_reports(id,health_score)&order=created_at.desc")
+      >("customer_imports?select=id,company_id,row_count,status,quality_score,duplicate_count,created_at,uploaded_files(original_filename),ai_reports(id,health_score)&order=created_at.desc"),
+      supabaseRequest<
+        Array<{
+          id: string;
+          company_id: string;
+          employee_name: string | null;
+          employee_phone: string | null;
+          invite_code: string;
+          role: StaffInvitation["role"];
+          status: StaffInvitation["status"];
+          expires_at: string | null;
+          created_at: string;
+        }>
+      >("staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&order=created_at.desc").catch(() => [])
     ]);
 
     const credentialsByCompany = new Map(
@@ -713,6 +748,14 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       map.set(row.company_id, uploads);
       return map;
     }, new Map());
+    const invitationsByCompany = invitationRows.reduce<Map<string, StaffInvitation[]>>((map, row) => {
+      const invitations = map.get(row.company_id) || [];
+      if (invitations.length < 5) {
+        invitations.push(toStaffInvitation(row));
+      }
+      map.set(row.company_id, invitations);
+      return map;
+    }, new Map());
 
     return {
       source: "supabase",
@@ -733,6 +776,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           uploadCount: uploadStats?.count || 0,
           lastUploadAt: uploadStats?.latest ? new Date(uploadStats.latest).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined,
           recentUploads: recentUploadsByCompany.get(company.id) || [],
+          staffInvitationCount: invitationsByCompany.get(company.id)?.length || 0,
+          staffInvitations: invitationsByCompany.get(company.id) || [],
           updatedAt: new Date(credentials?.updated_at || company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
         };
       })
@@ -755,6 +800,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           salesTransactionCount: 0,
           uploadCount: 0,
           recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
+          staffInvitationCount: 0,
+          staffInvitations: [],
           updatedAt: "fallback"
         }
       ]
@@ -786,6 +833,8 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         salesTransactionCount: 0,
         uploadCount: 0,
         recentUploads: [],
+        staffInvitationCount: 0,
+        staffInvitations: [],
         updatedAt: "서버 저장 미확인"
       }
     };
@@ -856,9 +905,111 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       salesTransactionCount: 0,
       uploadCount: 0,
       recentUploads: [],
+      staffInvitationCount: 0,
+      staffInvitations: [],
       updatedAt: new Date(company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };
+}
+
+export async function createStaffInvitation(input: StaffInvitationInput): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
+  const companyId = input.companyId;
+  const employeeName = input.employeeName?.trim() || "직원";
+  const employeePhone = input.employeePhone?.trim() || "";
+  const role = input.role || "driver";
+  const inviteCode = createInviteCode(companyId);
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      invitation: {
+        id: globalThis.crypto.randomUUID(),
+        companyId,
+        employeeName,
+        employeePhone,
+        inviteCode,
+        inviteUrl: createStaffInviteUrl(inviteCode),
+        role,
+        status: "pending",
+        createdAt: "서버 저장 미확인",
+        expiresAt
+      }
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      company_id: string;
+      employee_name: string | null;
+      employee_phone: string | null;
+      invite_code: string;
+      role: StaffInvitation["role"];
+      status: StaffInvitation["status"];
+      expires_at: string | null;
+      created_at: string;
+    }>
+  >("staff_invitations", {
+    method: "POST",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify([
+      {
+        company_id: companyId,
+        employee_name: employeeName,
+        employee_phone: employeePhone || null,
+        invite_code: inviteCode,
+        role,
+        status: "pending",
+        expires_at: expiresAt
+      }
+    ])
+  });
+
+  return {
+    persisted: true,
+    invitation: toStaffInvitation(rows[0])
+  };
+}
+
+function toStaffInvitation(row: {
+  id: string;
+  company_id: string;
+  employee_name: string | null;
+  employee_phone: string | null;
+  invite_code: string;
+  role: StaffInvitation["role"];
+  status: StaffInvitation["status"];
+  expires_at: string | null;
+  created_at: string;
+}): StaffInvitation {
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    employeeName: row.employee_name || "직원",
+    employeePhone: row.employee_phone || "",
+    inviteCode: row.invite_code,
+    inviteUrl: createStaffInviteUrl(row.invite_code),
+    role: row.role || "driver",
+    status: row.status || "pending",
+    createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+    expiresAt: row.expires_at ? new Date(row.expires_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined
+  };
+}
+
+function createInviteCode(companyId: string) {
+  const seed = companyId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() || "MAJU";
+  const random = globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase();
+  return `${seed}-${random}`;
+}
+
+function createStaffInviteUrl(inviteCode: string) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return `${appUrl.replace(/\/$/, "")}/mobile/join?invite=${encodeURIComponent(inviteCode)}`;
 }
 
 export function getSystemStatus(): SystemStatus {
