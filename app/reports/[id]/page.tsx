@@ -120,6 +120,7 @@ export default async function ReportDetailPage({ params, searchParams }: { param
       subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 예상 추가매출 월 ${report.potentialRevenue.toLocaleString()}만원`}
       title={`${report.companyName} 상세 리포트`}
       userName={customerSession?.name || "관리자"}
+      workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
         <Card className="border-teal-100 bg-gradient-to-br from-white to-teal-50/70 shadow-sm">

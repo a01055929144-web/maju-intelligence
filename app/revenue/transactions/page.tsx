@@ -65,6 +65,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
       subtitle="ERP 엑셀로 업로드된 일자·거래처·품목·금액 단위 원장입니다."
       title="매출 거래내역서"
       userName={customerSession?.name || "관리자"}
+      workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

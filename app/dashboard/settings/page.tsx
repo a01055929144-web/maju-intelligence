@@ -32,6 +32,7 @@ export default async function CompanySettingsPage() {
       subtitle="회사명, 담당자, 물류 출발지 주소를 운영 기준값으로 관리합니다."
       title="회사 설정"
       userName={session.name}
+      workspaceRole={session.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6">
         <div className="space-y-5">

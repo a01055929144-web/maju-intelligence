@@ -59,6 +59,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       subtitle="방문 결과를 바탕으로 메시지, 요약, 견적 요청 메모를 생성합니다."
       title="영업 후속 작업 초안"
       userName={customerSession?.name || "관리자"}
+      workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

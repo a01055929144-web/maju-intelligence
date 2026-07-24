@@ -165,6 +165,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       subtitle="거래처 히스토리, 배송 동선, 신규 리드 현황"
       title="대시보드"
       userName={customerSession?.name || adminSession?.email || "관리자"}
+      workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">

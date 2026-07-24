@@ -36,6 +36,7 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
       subtitle="방문 관리, 배송 차량 배정, 티맵 경유 도로 계산"
       title="오늘의 영업·배송 코스"
       userName={customerSession?.name || adminSession?.email || "관리자"}
+      workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1760px]">
         <SalesRouteMapWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />

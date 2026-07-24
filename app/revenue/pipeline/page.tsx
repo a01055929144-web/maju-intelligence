@@ -59,6 +59,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       subtitle="방문 결과를 기반으로 이번 달 열려 있는 추가매출을 추정합니다."
       title="예상 매출 파이프라인"
       userName={customerSession?.name || "관리자"}
+      workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
