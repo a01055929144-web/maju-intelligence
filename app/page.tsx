@@ -1679,8 +1679,8 @@ function UploadStatusCard({
   const hasRows = rows.length > 0;
 
   return (
-    <div className="h-full rounded-md border border-slate-200 bg-slate-50 p-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="h-full overflow-hidden rounded-md border border-slate-200 bg-white">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div className="min-w-0">
           <p className="text-xs font-black text-slate-400">{hasRows ? "업로드됨" : "대기 중"}</p>
           <p className="mt-1 truncate text-sm font-black text-slate-950">{hasRows ? filename : "아직 등록할 데이터가 없습니다."}</p>
@@ -1689,12 +1689,12 @@ function UploadStatusCard({
           {complete && hasRows ? "저장 가능" : "확인 필요"}
         </Badge>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100">
         <MiniStatus label="행" value={`${rows.length}개`} />
         <MiniStatus label="컬럼" value={`${headers.length}개`} />
         <MiniStatus label="필수" value={`${mappedRequiredCount}/${requiredCount}`} />
       </div>
-      <div className="mt-3">
+      <div className="p-4">
         <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
           <span>필수 매핑</span>
           <span>{mappingProgress}%</span>
@@ -1760,7 +1760,7 @@ function RegistrationStatusCard({ status }: { status: RegistrationStatus }) {
 
 function MiniStatus({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-2">
+    <div className="min-w-0 bg-white px-3 py-2.5">
       <p className="text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
     </div>
@@ -1774,8 +1774,8 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
   const rowIssueCount = new Set([...summary.issueRows.map((issue) => issue.rowNumber), ...summary.invalidBusinessNumbers.map((issue) => issue.rowNumber)]).size;
 
   return (
-    <div className={`mb-4 rounded-md border p-3 ${hasIssues ? "border-amber-200 bg-amber-50/70" : "border-emerald-100 bg-emerald-50/70"}`}>
-      <div className="flex items-start justify-between gap-3">
+    <div className={`mb-4 overflow-hidden rounded-md border bg-white ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
+      <div className={`flex items-start justify-between gap-3 border-b px-4 py-3 ${hasIssues ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             {hasIssues ? <AlertTriangle className="h-4 w-4 text-amber-700" /> : <Check className="h-4 w-4 text-emerald-700" />}
@@ -1787,14 +1787,14 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
         </div>
         <Badge className={hasIssues ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>{hasIssues ? "보완 권장" : "정상"}</Badge>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 md:grid-cols-4 md:divide-y-0">
         <MiniStatus label="정상 행" value={`${summary.readyRows.toLocaleString()}개`} />
         <MiniStatus label="보완 행" value={`${rowIssueCount.toLocaleString()}개`} />
         <MiniStatus label="사업자 오류" value={`${summary.invalidBusinessNumbers.length.toLocaleString()}개`} />
         <MiniStatus label="중복 후보" value={`${summary.duplicateCandidates.toLocaleString()}개`} />
       </div>
       {summary.issueRows.length ? (
-        <div className="mt-3 space-y-1.5">
+        <div className="space-y-1.5 border-t border-slate-100 p-3">
           {summary.issueRows.slice(0, 3).map((issue) => (
             <div key={issue.rowNumber} className="rounded-md bg-white/80 px-3 py-2 text-xs font-bold text-slate-700">
               {issue.rowNumber}행: {issue.missingLabels.join(", ")} 누락
@@ -1804,7 +1804,7 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
         </div>
       ) : null}
       {summary.invalidBusinessNumbers.length ? (
-        <div className="mt-3 space-y-1.5">
+        <div className="space-y-1.5 border-t border-slate-100 p-3">
           {summary.invalidBusinessNumbers.slice(0, 3).map((issue) => (
             <div key={`business-${issue.rowNumber}`} className="rounded-md bg-white/80 px-3 py-2 text-xs font-bold text-slate-700">
               {issue.rowNumber}행: 사업자번호 {issue.value || "빈 값"} 유효성 오류
@@ -1813,10 +1813,12 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
           {summary.invalidBusinessNumbers.length > 3 ? <p className="px-1 text-xs font-bold text-amber-700">외 {summary.invalidBusinessNumbers.length - 3}개 사업자번호 확인 필요</p> : null}
         </div>
       ) : null}
-      <Button className="mt-3 w-full bg-white" disabled={!hasRowIssues} onClick={onDownloadIssues} size="sm" variant="outline">
+      <div className="border-t border-slate-100 p-3">
+      <Button className="w-full bg-white" disabled={!hasRowIssues} onClick={onDownloadIssues} size="sm" variant="outline">
         <Download className="h-4 w-4" />
         보완 필요 행 다운로드
       </Button>
+      </div>
     </div>
   );
 }
@@ -1832,8 +1834,8 @@ function SaveReadinessPanel({
   const blockingItems = items.filter((item) => !item.ok && item.label !== "서버 반영");
 
   return (
-    <div className={`rounded-md border p-4 ${canAnalyze ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className={`overflow-hidden rounded-md border bg-white ${canAnalyze ? "border-emerald-200" : "border-amber-200"}`}>
+      <div className={`flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-start lg:justify-between ${canAnalyze ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             {canAnalyze ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
@@ -1847,14 +1849,14 @@ function SaveReadinessPanel({
           {readyCount}/{items.length} 조건 충족
         </Badge>
       </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <div className="divide-y divide-slate-100">
         {items.map((item) => (
-          <div key={item.label} className="rounded-md border border-white/80 bg-white/85 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-black text-slate-500">{item.label}</p>
+          <div key={item.label} className="grid gap-2 px-4 py-3 md:grid-cols-[160px_minmax(0,1fr)_32px] md:items-center">
+            <p className="text-xs font-black text-slate-500">{item.label}</p>
+            <p className="text-xs font-bold leading-5 text-slate-800">{item.detail}</p>
+            <div className="flex justify-end">
               {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
             </div>
-            <p className="mt-2 text-xs font-bold leading-5 text-slate-800">{item.detail}</p>
           </div>
         ))}
       </div>
@@ -1998,8 +2000,8 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
   const progress = Math.round((done / steps.length) * 100);
 
   return (
-    <div className="space-y-5 py-2">
-      <div>
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div className="flex items-center gap-3 text-lg font-black">
           <Activity className="h-6 w-6 animate-pulse text-primary" />
           데이터 적재 파이프라인 실행 중
@@ -2008,15 +2010,17 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
           원본 데이터부터 정제 데이터, Health Score, 추천 리드까지 리포트 재생성이 가능하도록 처리합니다.
         </p>
       </div>
+      <div className="p-4">
       <Progress value={progress} />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <PipelineMetric icon={FileSpreadsheet} label="처리 rows" value={`${meta.rows}개`} />
         <PipelineMetric icon={Database} label="저장 상태" value={meta.persisted ? "서버 저장" : "저장 확인 필요"} />
         <PipelineMetric icon={Save} label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "계산 중"} />
       </div>
-      <div className="space-y-3">
+      </div>
+      <div className="divide-y divide-slate-100 border-t border-slate-100">
         {steps.map((step) => (
-          <div key={step.key} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[28px_1fr_auto] sm:items-center">
+          <div key={step.key} className="grid gap-3 px-4 py-3 sm:grid-cols-[28px_1fr_auto] sm:items-center">
             <span
               className={
                 step.status === "done"

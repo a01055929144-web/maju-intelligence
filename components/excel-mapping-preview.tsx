@@ -59,17 +59,17 @@ export function ExcelHeaderMappingPreview({
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm">
-      <div className="border-b border-blue-100 bg-blue-50/70 p-4">
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-slate-50 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <Badge className="mb-2 bg-blue-700 text-white">3-1 헤더 매칭</Badge>
-            <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            <Badge className="mb-2 bg-slate-900 text-white">3-1 헤더 매칭</Badge>
+            <p className="flex items-center gap-2 text-base font-black text-slate-950">
               <FileSpreadsheet className="h-4 w-4 text-blue-700" />
-              ERP 엑셀 컬럼을 MAJU 표준 필드로 연결
+              ERP 컬럼 매핑 작업표
             </p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-              업로드한 ERP 엑셀의 실제 행을 확인하고, 각 컬럼을 MAJU 표준 필드로 확정합니다.
+              실제 엑셀 컬럼과 샘플값을 확인한 뒤 MAJU 표준 필드를 지정합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -93,17 +93,19 @@ export function ExcelHeaderMappingPreview({
           <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 서버 저장과 리포트 갱신을 진행할 수 있습니다." />
         </div>
       </div>
-      <div className="max-h-[520px] overflow-auto bg-white">
-        <table className="w-full min-w-[720px] text-left text-xs">
+      <div className="max-h-[560px] overflow-auto bg-white">
+        <table className="w-full min-w-[880px] border-separate border-spacing-0 text-left text-xs">
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
             <tr>
-              <th className="w-[24%] border-b border-slate-200 px-4 py-3 font-black">엑셀 헤더</th>
-              <th className="w-[42%] border-b border-slate-200 px-4 py-3 font-black">실제 행 미리보기</th>
-              <th className="w-[34%] border-b border-slate-200 px-4 py-3 font-black">MAJU 표준 필드</th>
+              <th className="w-[64px] border-b border-r border-slate-200 px-3 py-3 text-center font-black">No</th>
+              <th className="w-[24%] border-b border-r border-slate-200 px-4 py-3 font-black">ERP 엑셀 헤더</th>
+              <th className="w-[36%] border-b border-r border-slate-200 px-4 py-3 font-black">실제 행 값</th>
+              <th className="w-[120px] border-b border-r border-slate-200 px-4 py-3 font-black">상태</th>
+              <th className="border-b border-slate-200 px-4 py-3 font-black">MAJU 표준 필드</th>
             </tr>
           </thead>
           <tbody>
-            {headers.map((header) => {
+            {headers.map((header, headerIndex) => {
               const mappedFieldKey = mappedByHeader[header] || "";
               const mappedField = fields.find((field) => field.key === mappedFieldKey);
               const samples = rows
@@ -112,18 +114,13 @@ export function ExcelHeaderMappingPreview({
                 .filter((sample) => sample.value);
 
               return (
-                <tr key={header} className="border-t border-slate-100 align-top transition hover:bg-blue-50/30">
-                  <td className="px-4 py-3">
+                <tr key={header} className="align-top transition odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/30">
+                  <td className="border-b border-r border-slate-100 px-3 py-3 text-center font-black text-slate-400">{headerIndex + 1}</td>
+                  <td className="border-b border-r border-slate-100 px-4 py-3">
                     <p className="font-black text-slate-950">{header}</p>
-                    {mappedField ? (
-                      <Badge className={mappedField.required ? "mt-2 bg-blue-100 text-blue-800" : "mt-2 bg-slate-100 text-slate-700"}>
-                        {mappedField.required ? "필수 연결" : "선택 연결"}
-                      </Badge>
-                    ) : (
-                      <Badge className="mt-2 bg-slate-100 text-slate-500">미사용</Badge>
-                    )}
+                    <p className="mt-1 text-[11px] font-bold text-slate-400">원본 컬럼명</p>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="border-b border-r border-slate-100 px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       {samples.length ? (
                         samples.map((sample) => (
@@ -137,9 +134,18 @@ export function ExcelHeaderMappingPreview({
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="border-b border-r border-slate-100 px-4 py-3">
+                    {mappedField ? (
+                      <Badge className={mappedField.required ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-700"}>
+                        {mappedField.required ? "필수 연결" : "선택 연결"}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-slate-100 text-slate-500">미사용</Badge>
+                    )}
+                  </td>
+                  <td className="border-b border-slate-100 px-4 py-3">
                     <select
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       value={mappedFieldKey}
                       onChange={(event) => updateHeaderMapping(header, event.target.value)}
                     >
