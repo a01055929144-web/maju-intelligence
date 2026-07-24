@@ -194,29 +194,6 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
     excludeClosedStores ? "이탈 제외" : ""
   ].filter(Boolean);
-  const selectedVehicleStoreCount = selectedVehicle?.stops.length ?? allStores.length;
-  const routeReadinessItems = [
-    {
-      done: isVehicleFiltered,
-      label: "배송차 선택",
-      value: isVehicleFiltered ? selectedVehicleLabel : "전체 매장 보기"
-    },
-    {
-      done: selectedVehicleStoreCount > 0,
-      label: "관리 매장",
-      value: `${selectedVehicleStoreCount.toLocaleString()}곳`
-    },
-    {
-      done: activeView === "course",
-      label: "작업 화면",
-      value: activeView === "course" ? "경유 코스" : "지도 확인"
-    },
-    {
-      done: Boolean(kpiSummary),
-      label: "티맵 계산",
-      value: kpiSummary ? `${kpiSummary.selectedCount.toLocaleString()}곳 완료` : "계산 전"
-    }
-  ];
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -276,7 +253,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex h-[calc(100vh-112px)] min-h-[720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <div className="flex min-h-[780px] flex-col overflow-visible rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <header className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-wide text-teal-700">Route Workbench</p>
@@ -348,14 +325,6 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
-      <RouteBasisStrip
-        allStoreCount={allStores.length}
-        allStoreTotals={allStoreTotals}
-        currentStoreCount={visibleStores.length}
-        currentTotals={routeTotals}
-        routePlan={routePlan}
-      />
-
       <RouteWorkspaceGuide
         activeView={activeView}
         courseSummary={courseSummary}
@@ -363,14 +332,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         selectedVehicleLabel={selectedVehicleLabel}
         visibleStoreCount={visibleStores.length}
       />
-      <RouteReadinessPanel
-        activeView={activeView}
-        items={routeReadinessItems}
-        onOpenCourse={() => changeWorkspaceView("course")}
-        selectedVehicle={selectedVehicle}
-      />
 
-      <section className="grid gap-2 border-b border-slate-200/80 bg-white px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
+      <section className="sticky top-0 z-20 grid gap-2 border-b border-slate-200/80 bg-white/95 px-5 py-3 backdrop-blur xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -429,7 +392,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-0 flex-1 grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid min-h-[720px] grid-cols-1 ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -951,7 +914,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-0 flex-1 overflow-auto bg-[#f6f8fb] p-4">
+    <section className="min-h-[720px] overflow-auto bg-[#f6f8fb] p-4">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -1144,7 +1107,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-0 flex-1 grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
+    <section className={`grid min-h-[720px] grid-cols-1 bg-[#f6f8fb] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
       <aside className="min-h-0 border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
