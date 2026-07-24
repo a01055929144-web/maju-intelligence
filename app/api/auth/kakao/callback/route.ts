@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setCustomerSession } from "@/lib/auth";
 import { acceptStaffKakaoInvitation } from "@/lib/store";
+import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +54,14 @@ export async function GET(request: NextRequest) {
     });
 
     setCustomerSession({
+      appRole: "customer_user",
       companyId: result.companyId,
       companyName: result.companyName,
       email: result.email,
       name: result.name,
-      role: "member"
+      role: "member",
+      workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
+      workspaceType: "company"
     });
 
     return NextResponse.redirect(new URL("/mobile/today", request.url));

@@ -2,19 +2,24 @@ import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { getAuthCredentials, getCustomerLoginCredentials } from "./store";
+import { AppUserRole, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
 export type AdminSession = {
   email: string;
   role: "super_admin" | "operator";
+  appRole: Extract<AppUserRole, "maju_super_admin" | "maju_operator">;
   name: string;
 };
 
 export type CustomerSession = {
+  appRole: Extract<AppUserRole, "customer_user">;
   companyId: string;
   companyName: string;
   email: string;
   role: "owner" | "member";
   name: string;
+  workspaceRole: WorkspaceRole;
+  workspaceType: WorkspaceType;
 };
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
@@ -147,6 +152,7 @@ export async function validateAdminCredentials(email: string, password: string):
   if (password !== adminPassword) return null;
 
   return {
+    appRole: "maju_super_admin",
     email: adminEmail,
     role: "super_admin",
     name: "MAJU 관리자"
@@ -168,11 +174,14 @@ export async function validateCustomerCredentials(email: string, password: strin
   if (password !== customerPassword) return null;
 
   return {
+    appRole: "customer_user",
     companyId: credentials.customerCompanyId || process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
     companyName: credentials.companyName,
     email: customerEmail,
     role: "owner",
-    name: credentials.ownerName || credentials.companyName
+    name: credentials.ownerName || credentials.companyName,
+    workspaceRole: normalizeWorkspaceRole("owner"),
+    workspaceType: "company"
   };
 }
 

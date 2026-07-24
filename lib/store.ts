@@ -287,6 +287,7 @@ export type StaffKakaoAcceptResult = {
   email: string;
   name: string;
   persisted: boolean;
+  workspaceRole: StaffInvitation["role"];
 };
 export type DatabaseCheck = {
   name: string;
@@ -1004,7 +1005,8 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       companyName: company?.name || "마주식자재",
       email: input.email || `kakao-${kakaoUserId}@maju.local`,
       name: input.name || "모바일 직원",
-      persisted: false
+      persisted: false,
+      workspaceRole: "driver"
     };
   }
 
@@ -1080,7 +1082,8 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     companyName: company.name,
     email: user.email || loginEmail,
     name: user.name || displayName,
-    persisted: true
+    persisted: true,
+    workspaceRole: invitation.role || "member"
   };
 }
 
