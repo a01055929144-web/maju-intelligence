@@ -37,10 +37,11 @@ npm run dev
 - Admin console: `http://localhost:3000/admin`
 - Admin system check: `http://localhost:3000/admin/system`
 - Admin login: `http://localhost:3000/admin/login`
+- Staff mobile join: `http://localhost:3000/mobile/join?invite=YOUR_INVITE_CODE`
 
 ## Staff Mobile
 
-고객사 직원은 향후 카카오톡 초대 링크로 가입하고 모바일에서 오늘 코스, 거래처 간략 정보, 배송 적재위치 사진/영상, 방문 메모를 처리합니다. 설계 기준은 `STAFF_MOBILE_AUTH.ko.md`에서 관리합니다.
+고객사 직원은 카카오톡 초대 링크로 `/mobile/join?invite=...`에 접속해 가입하고, 모바일에서 오늘 코스, 거래처 간략 정보, 배송 적재위치 사진/영상, 방문 메모를 처리합니다. 설계 기준은 `STAFF_MOBILE_AUTH.ko.md`에서 관리합니다.
 
 ## Backend Routes
 
