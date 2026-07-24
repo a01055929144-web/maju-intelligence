@@ -58,6 +58,10 @@ CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 COMPANY_ORIGIN_ADDRESS=경기도 하남시 초이로 133 1층
 TMAP_API_KEY=replace-with-tmap-api-key
 NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
+
+KAKAO_CLIENT_ID=your-kakao-rest-api-key
+KAKAO_CLIENT_SECRET=optional-kakao-client-secret
+KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
 ```
 
 주의: `SUPABASE_SERVICE_ROLE_KEY`는 절대 브라우저나 공개 문서에 노출하면 안 됩니다.
@@ -103,15 +107,18 @@ NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
 - 매출 엑셀 업로드와 사업자 기본정보 확장을 적용하려면 `supabase/migrations/20260701_sales_transactions.sql`도 한 번 실행합니다.
 - ERP/유통사별 엑셀 매핑 프리셋 저장을 준비하려면 `supabase/migrations/20260701_excel_mapping_presets.sql`도 한 번 실행합니다.
 - 회사 출발지에서 거래처까지 티맵 거리/시간/경로 캐시를 저장하려면 `supabase/migrations/20260701_tmap_route_cache.sql`도 한 번 실행합니다.
+- 고객사 직원 카카오 가입과 모바일 앱 사용을 준비하려면 `supabase/migrations/20260724_staff_kakao_mobile.sql`도 한 번 실행합니다.
 - Supabase RLS 정책은 기본 운영 기준으로 켜져 있으며, 고객사별 사용자 초대와 세부 권한은 다음 운영 단계에서 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 
 ## 8. 다음 개발 우선순위
 
-1. 관리자 업로드 이력 상세 화면
-2. 고객사별 사용자 초대와 권한 분리
-3. 거래처 첨부자료 OCR 자동 입력
-4. 사업자 상태 정기 조회 작업
-5. 리드 추천 TOP50 필터/검색
-6. OpenAI 기반 AI 리포트 문장 고도화
-7. Vercel 커스텀 도메인 연결
+1. 고객사 직원 초대와 카카오 가입
+2. 모바일 오늘 코스 화면
+3. 관리자 업로드 이력 상세 화면
+4. 고객사별 사용자 권한 분리
+5. 거래처 첨부자료 OCR 자동 입력
+6. 사업자 상태 정기 조회 작업
+7. 리드 추천 TOP50 필터/검색
+8. OpenAI 기반 AI 리포트 문장 고도화
+9. Vercel 커스텀 도메인 연결

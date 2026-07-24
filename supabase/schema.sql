@@ -19,6 +19,10 @@ create table if not exists public.app_users (
   phone text unique,
   name text not null,
   role text not null default 'customer_member',
+  kakao_user_id text,
+  auth_provider text not null default 'password',
+  avatar_url text,
+  last_login_at timestamptz,
   status text not null default 'active',
   created_at timestamptz not null default now()
 );
@@ -29,6 +33,32 @@ create table if not exists public.company_members (
   user_id uuid references public.app_users(id) on delete set null,
   role text not null default 'member',
   invited_email text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.staff_invitations (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  invited_by uuid references public.app_users(id) on delete set null,
+  invite_code text not null unique,
+  employee_name text,
+  employee_phone text,
+  role text not null default 'driver',
+  status text not null default 'pending',
+  expires_at timestamptz,
+  accepted_by uuid references public.app_users(id) on delete set null,
+  accepted_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.staff_mobile_devices (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  user_id uuid not null references public.app_users(id) on delete cascade,
+  device_label text,
+  platform text not null default 'mobile_web',
+  push_token text,
+  last_seen_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -239,6 +269,9 @@ create table if not exists public.admin_audit_logs (
 );
 
 create index if not exists idx_company_members_company on public.company_members(company_id);
+create unique index if not exists idx_app_users_kakao_user_id on public.app_users(kakao_user_id) where kakao_user_id is not null;
+create index if not exists idx_staff_invitations_company_status on public.staff_invitations(company_id, status, created_at desc);
+create index if not exists idx_staff_mobile_devices_user on public.staff_mobile_devices(user_id, last_seen_at desc);
 create index if not exists idx_uploaded_files_company_created on public.uploaded_files(company_id, created_at desc);
 create index if not exists idx_customer_imports_company_created on public.customer_imports(company_id, created_at desc);
 create index if not exists idx_column_mappings_import on public.column_mappings(import_id);
@@ -261,6 +294,8 @@ create index if not exists idx_admin_audit_logs_company_created on public.admin_
 alter table public.companies enable row level security;
 alter table public.app_users enable row level security;
 alter table public.company_members enable row level security;
+alter table public.staff_invitations enable row level security;
+alter table public.staff_mobile_devices enable row level security;
 alter table public.uploaded_files enable row level security;
 alter table public.customer_imports enable row level security;
 alter table public.column_mappings enable row level security;
