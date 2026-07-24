@@ -752,13 +752,13 @@ export default function CrmTimelinePage() {
               <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
             </div>
 
-            <div className="rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="px-2">
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-400">Customer Detail</p>
-                  <p className="mt-1 text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
+            <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Customer Detail</p>
+                  <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
-                <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1">
+                <div className="flex rounded-md border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
                   {customerDetailTabs.map((tab) => {
                     const Icon = tab.icon;
                     const selected = detailTab === tab.id;
@@ -778,13 +778,12 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
-              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
                   <div>
                     <p className="text-xs font-black uppercase tracking-wide text-blue-600">Customer Ledger</p>
-                    <h3 className="mt-1 text-base font-black text-slate-950">거래처 원장</h3>
-                    <p className="mt-1 text-sm font-medium text-slate-500">사업자정보, 연락처, 주소, 배송 담당자를 한 곳에서 관리합니다.</p>
+                    <h3 className="mt-1 text-base font-black text-slate-950">기본정보 / 배송정보</h3>
                   </div>
                   {isEditing ? (
                     <button
@@ -799,13 +798,13 @@ export default function CrmTimelinePage() {
                   ) : null}
                 </div>
                 {saveMessage ? (
-                  <p className={`mt-3 rounded-md p-3 text-xs font-bold ${saveMessage.includes("실패") || saveMessage.includes("오류") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                  <p className={`m-4 rounded-md p-3 text-xs font-bold ${saveMessage.includes("실패") || saveMessage.includes("오류") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
                     {saveMessage}
                   </p>
                 ) : null}
                 {isEditing && draftCustomer ? (
-                  <>
-                    <div className="mt-4 rounded-md border border-blue-100 bg-blue-50/60 p-3">
+                  <div className="p-4">
+                    <div className="rounded-md border border-blue-100 bg-blue-50/60 p-3">
                       <div className="flex items-center gap-2 text-sm font-black text-slate-950">
                         <MapPin className="h-4 w-4 text-blue-700" />
                         주소 API 검색
@@ -856,7 +855,7 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="mt-4 grid gap-x-3 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
@@ -884,25 +883,36 @@ export default function CrmTimelinePage() {
                       <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <div className="mt-4 grid gap-x-8 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
-                    <DetailRow label="상호명" value={selectedCustomer.customerName} />
-                    <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
-                    <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
-                    <DetailRow label="업종" value={selectedCustomer.industry} />
-                    <DetailRow label="지역" value={selectedCustomer.region} />
-                    <DetailRow label="주소" value={selectedCustomer.address} />
-                    <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
-                    <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
+                  <div className="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
+                    <div className="p-4">
+                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">사업자 정보</p>
+                      <DetailRow label="상호명" value={selectedCustomer.customerName} />
+                      <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
+                      <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
+                      <DetailRow label="업종" value={selectedCustomer.industry} />
+                      <DetailRow label="사업자상태" value={selectedCustomer.businessStatus} />
+                    </div>
+                    <div className="p-4">
+                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">배송 / 운영 정보</p>
+                      <DetailRow label="지역" value={selectedCustomer.region} />
+                      <DetailRow label="주소" value={selectedCustomer.address} />
+                      <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
+                      <DetailRow label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
+                      <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
-                <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
-                <h3 className="mt-1 text-base font-black text-slate-950">현장 첨부자료</h3>
-                <p className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800 break-keep">
+              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+                <div className="border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
+                  <h3 className="mt-1 text-base font-black text-slate-950">첨부자료 / 적재위치</h3>
+                </div>
+                <div className="p-4">
+                <p className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800 break-keep">
                   {selectedCustomer.loadingPosition || "배송 적재위치 미등록"}
                 </p>
                 <div className="mt-4 grid gap-2">
@@ -1005,12 +1015,13 @@ export default function CrmTimelinePage() {
                     </>
                   )}
                 </div>
+                </div>
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
-              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
                   <div>
                     <p className="text-xs font-black uppercase tracking-wide text-violet-600">History</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">메모 히스토리</h3>
@@ -1018,7 +1029,8 @@ export default function CrmTimelinePage() {
                   </div>
                   <Badge className="bg-slate-100 text-slate-700">{customerNotes.length || selectedCustomer.memoCount}건</Badge>
                 </div>
-                <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
+                <div className="border-b border-slate-200/80 bg-slate-50/50 p-4">
+                <div className="rounded-md border border-slate-200/80 bg-white p-3">
                   <textarea
                     className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     onChange={(event) => setNewMemo(event.target.value)}
@@ -1042,10 +1054,11 @@ export default function CrmTimelinePage() {
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                </div>
+                <div className="grid gap-0 divide-y divide-slate-100">
                   {customerNotes.length ? (
                     customerNotes.map((note) => (
-                      <div key={note.id} className="rounded-md border border-slate-200 p-4">
+                      <div key={note.id} className="p-4">
                         <div className="flex items-center justify-between gap-3">
                           <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
                           <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
@@ -1055,7 +1068,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 lg:col-span-2">
+                    <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
                       <p className="text-sm font-black text-slate-700">아직 서버 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 샘플 기준 메모는 {selectedCustomer.memoCount}건입니다.
@@ -1065,12 +1078,14 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
 
-              <div className="rounded-md border border-slate-200/80 bg-white p-5 shadow-sm">
-                <Badge className="mb-3 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
-                <h3 className="text-base font-black text-slate-950">최근 액션</h3>
-                <div className="mt-4 max-h-[520px] space-y-3 overflow-auto pr-1">
+              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+                <div className="border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+                  <Badge className="mb-2 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
+                  <h3 className="text-base font-black text-slate-950">최근 액션</h3>
+                </div>
+                <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto">
                   {timeline.map((item) => (
-                    <div key={item.id} className="rounded-md border border-slate-200 p-4">
+                    <div key={item.id} className="p-4">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <p className="font-black text-slate-950">{item.leadName}</p>
                         <Badge className="bg-blue-50 text-blue-700">{resultLabels[item.result] || item.result}</Badge>
@@ -1283,7 +1298,7 @@ function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string;
 
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/70 p-4">
+    <div className="min-w-0 rounded-md border border-slate-200/80 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-400" />
         <p className="text-xs font-black text-slate-500">{label}</p>
@@ -1325,9 +1340,9 @@ function PriorityTile({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[108px_minmax(0,1fr)] gap-4 border-b border-slate-100 py-2.5 text-sm last:border-b-0">
-      <p className="font-bold text-slate-400">{label}</p>
-      <p className="font-black text-slate-800">{value}</p>
+    <div className="grid min-h-10 grid-cols-[112px_minmax(0,1fr)] items-center border-b border-slate-100 text-sm last:border-b-0">
+      <p className="h-full bg-slate-50 px-3 py-2.5 font-black text-slate-500">{label}</p>
+      <p className="min-w-0 px-3 py-2.5 font-black text-slate-900 break-keep">{value}</p>
     </div>
   );
 }
@@ -1354,10 +1369,10 @@ function EditableField({
   }[helperTone];
 
   return (
-    <label className={`block min-w-0 ${className}`}>
+    <label className={`block min-w-0 rounded-md border border-slate-200 bg-slate-50/60 p-2 ${className}`}>
       <span className="mb-1.5 block text-xs font-black text-slate-500">{label}</span>
       <input
-        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
@@ -1368,8 +1383,10 @@ function EditableField({
 
 function AttachmentRow({ icon: Icon, label, url = "", value }: { icon: typeof PackageCheck; label: string; url?: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-md border border-slate-200 p-3">
-      <Icon className="h-4 w-4 text-slate-400" />
+    <div className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
+      <span className="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-slate-500">
+        <Icon className="h-4 w-4" />
+      </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-black text-slate-800">{label}</p>
         <p className="text-xs font-bold text-slate-500">{value}</p>
