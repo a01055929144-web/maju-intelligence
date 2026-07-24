@@ -32,8 +32,10 @@ create table if not exists public.company_members (
   company_id uuid not null references public.companies(id) on delete cascade,
   user_id uuid references public.app_users(id) on delete set null,
   role text not null default 'member',
+  status text not null default 'active',
   invited_email text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.staff_invitations (

@@ -34,6 +34,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [inviteForm, setInviteForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
   const [inviteMessage, setInviteMessage] = useState("");
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [updatingStaffId, setUpdatingStaffId] = useState("");
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -151,6 +152,43 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
     );
     setInviteForm({ employeeName: "", employeePhone: "", role: "driver" });
     setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크가 생성되었습니다." : "초대 링크가 화면에 생성되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function updateStaffInvitation(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
+    if (!selectedCompany) return;
+
+    setUpdatingStaffId(invitation.id);
+    setInviteMessage("");
+
+    const response = await fetch("/api/admin/staff-invitations", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: selectedCompany.id,
+        invitationId: invitation.id,
+        ...patch
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    setUpdatingStaffId("");
+
+    if (!response.ok) {
+      setInviteMessage(payload?.message || "직원 권한 변경에 실패했습니다.");
+      return;
+    }
+
+    const updated = payload.invitation as StaffInvitation;
+    setCompanies((prev) =>
+      prev.map((company) =>
+        company.id === selectedCompany.id
+          ? {
+              ...company,
+              staffInvitations: (company.staffInvitations || []).map((item) => (item.id === updated.id ? updated : item))
+            }
+          : company
+      )
+    );
+    setInviteMessage(payload.persisted ? "직원 권한/상태가 저장되었습니다." : "직원 권한/상태가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -428,6 +466,31 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                       </div>
                       <div className="mt-3 rounded-md bg-slate-50 px-2 py-2 font-mono text-[11px] font-bold text-slate-600">
                         {invitation.inviteUrl}
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <label className="block space-y-1.5">
+                          <span className="text-[11px] font-black text-muted-foreground">직원 권한</span>
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-white px-2 text-xs font-bold outline-none focus:ring-2 focus:ring-ring"
+                            disabled={updatingStaffId === invitation.id}
+                            value={invitation.role}
+                            onChange={(event) => updateStaffInvitation(invitation, { role: event.target.value as StaffInvitation["role"] })}
+                          >
+                            <option value="driver">배송기사</option>
+                            <option value="sales">영업직원</option>
+                            <option value="manager">현장관리자</option>
+                            <option value="member">일반직원</option>
+                          </select>
+                        </label>
+                        <Button
+                          className="self-end"
+                          disabled={updatingStaffId === invitation.id}
+                          onClick={() => updateStaffInvitation(invitation, { status: invitation.status === "revoked" ? "pending" : "revoked" })}
+                          type="button"
+                          variant="outline"
+                        >
+                          {updatingStaffId === invitation.id ? "저장 중" : invitation.status === "revoked" ? "재활성화" : invitation.status === "accepted" ? "직원 비활성화" : "초대 취소"}
+                        </Button>
                       </div>
                     </div>
                   ))}

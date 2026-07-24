@@ -274,6 +274,12 @@ export type StaffInvitationInput = {
   employeePhone?: string;
   role?: StaffInvitation["role"];
 };
+export type StaffInvitationUpdateInput = {
+  companyId: string;
+  invitationId: string;
+  role?: StaffInvitation["role"];
+  status?: Extract<StaffInvitation["status"], "pending" | "revoked">;
+};
 export type StaffKakaoAcceptInput = {
   avatarUrl?: string;
   email?: string;
@@ -971,6 +977,7 @@ export async function createStaffInvitation(input: StaffInvitationInput): Promis
 
   const rows = await supabaseRequest<
     Array<{
+      accepted_by: string | null;
       id: string;
       company_id: string;
       employee_name: string | null;
@@ -1002,6 +1009,78 @@ export async function createStaffInvitation(input: StaffInvitationInput): Promis
   return {
     persisted: true,
     invitation: toStaffInvitation(rows[0])
+  };
+}
+
+export async function updateStaffInvitation(input: StaffInvitationUpdateInput): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
+  if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
+
+  const patch: Record<string, string> = {};
+  if (input.role) patch.role = input.role;
+  if (input.status) patch.status = input.status;
+  if (!Object.keys(patch).length) throw new Error("변경할 직원 권한 또는 상태가 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      invitation: {
+        id: input.invitationId,
+        companyId: input.companyId,
+        employeeName: "직원",
+        employeePhone: "",
+        inviteCode: input.invitationId,
+        inviteUrl: createStaffInviteUrl(input.invitationId),
+        role: input.role || "driver",
+        status: input.status || "pending",
+        createdAt: "서버 저장 미확인"
+      }
+    };
+  }
+
+  const rows = await supabaseRequest<
+    Array<{
+      accepted_by: string | null;
+      id: string;
+      company_id: string;
+      employee_name: string | null;
+      employee_phone: string | null;
+      invite_code: string;
+      role: StaffInvitation["role"];
+      status: StaffInvitation["status"];
+      expires_at: string | null;
+      created_at: string;
+    }>
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+
+  const invitation = rows[0];
+  if (!invitation) throw new Error("직원 초대 정보를 찾을 수 없습니다.");
+
+  if (invitation.accepted_by) {
+    const memberPatch: Record<string, string> = {
+      updated_at: new Date().toISOString()
+    };
+    if (input.role) memberPatch.role = input.role;
+    if (input.status) memberPatch.status = input.status === "revoked" ? "inactive" : "active";
+
+    await supabaseRequest(
+      `company_members?company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(invitation.accepted_by)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify(memberPatch)
+      }
+    ).catch(() => null);
+  }
+
+  return {
+    invitation: toStaffInvitation(invitation),
+    persisted: true
   };
 }
 
@@ -1074,6 +1153,8 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       {
         company_id: invitation.company_id,
         role: invitation.role || "member",
+        status: "active",
+        updated_at: now,
         user_id: user.id
       }
     ])
@@ -1184,6 +1265,8 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       {
         company_id: company.id,
         role: "owner",
+        status: "active",
+        updated_at: now,
         user_id: user.id
       }
     ])
