@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Check, CheckCircle2, ChevronDown, Clock, Edit3, FileImage, MapPin, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
+import { CalendarDays, Camera, Check, CheckCircle2, ChevronDown, Clock, Edit3, FileImage, MapPin, MessageSquareText, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -75,6 +75,14 @@ type StoreHistoryItem = {
   recordedAt: string;
 };
 
+type DeliveryProof = {
+  fileName: string;
+  messageChannel: "kakao" | "sms";
+  memo: string;
+  recordedAt: string;
+  storeId: string;
+};
+
 type StoreAttachment = {
   businessCertificate?: AttachmentFile;
   bankbookCopy?: AttachmentFile;
@@ -129,6 +137,7 @@ const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580
 
 const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
+  deliveryProofs: "maju:sales-route:delivery-proofs",
   histories: "maju:sales-route:histories",
   storeEdits: "maju:sales-route:store-edits",
   vehicleEdits: "maju:sales-route:vehicle-edits"
@@ -1012,6 +1021,10 @@ function TodayCourseView({
   const [routeQuery, setRouteQuery] = useState("");
   const [routeSelectedStoreId, setRouteSelectedStoreId] = useState("");
   const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
+  const [routeOriginMode, setRouteOriginMode] = useState<"company" | "current">("company");
+  const [currentLocationOrigin, setCurrentLocationOrigin] = useState("");
+  const [currentLocationMessage, setCurrentLocationMessage] = useState("");
+  const [deliveryProofs, setDeliveryProofs] = useState<Record<string, DeliveryProof[]>>(() => readLocalJson(localStoreKeys.deliveryProofs, {}));
   const isVehicleScoped = selectedVehicleId !== "all";
   const selectedDriver = selectedVehicle?.driver || "배송차 선택 필요";
   const orderedStores = [...stores].sort((a, b) => a.order - b.order);
@@ -1039,6 +1052,8 @@ function TodayCourseView({
     : [];
   const routeSelectedStore = orderedStores.find((store) => store.id === routeSelectedStoreId) || routeCandidateStores[0] || orderedStores[0];
   const originMarker = markers.find((marker) => marker.tone === "origin");
+  const routeOriginAddress = routeOriginMode === "current" && currentLocationOrigin ? currentLocationOrigin : originMarker?.address || "";
+  const routeOriginLabel = routeOriginMode === "current" && currentLocationOrigin ? "현위치 출발" : "회사 출발지";
   const sequencedRouteStores = routeSequence?.stops.length
     ? routeSequence.stops
         .map((address) => selectedRouteStores.find((store) => getRouteStopAddress(store) === address))
@@ -1050,7 +1065,7 @@ function TodayCourseView({
           {
             ...originMarker,
             label: "출발",
-            name: "물류 출발지"
+            name: routeOriginLabel
           }
         ]
       : []),
@@ -1094,6 +1109,8 @@ function TodayCourseView({
     });
   }, [onSummaryChange, routeDistanceKm, routeDurationMinutes, routeRevenue, selectedRouteStores.length]);
 
+  useEffect(() => saveLocalJson(localStoreKeys.deliveryProofs, deliveryProofs), [deliveryProofs]);
+
   const toggleRouteStore = (storeId: string) => {
     setSelectedRouteStoreIds((current) => {
       if (current.includes(storeId)) return current.filter((id) => id !== storeId);
@@ -1123,6 +1140,42 @@ function TodayCourseView({
   };
   const openRouteStore = (storeId: string) => {
     setRouteSelectedStoreId(storeId);
+  };
+  const useCurrentLocationAsOrigin = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setCurrentLocationMessage("이 브라우저에서는 현위치 기능을 사용할 수 없습니다.");
+      return;
+    }
+
+    setCurrentLocationMessage("현위치를 확인 중입니다.");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = roundToSix(position.coords.latitude);
+        const lng = roundToSix(position.coords.longitude);
+        setCurrentLocationOrigin(`${lat},${lng}`);
+        setRouteOriginMode("current");
+        setRouteSequence(null);
+        setCurrentLocationMessage("현위치를 출발 기준으로 설정했습니다.");
+      },
+      () => {
+        setRouteOriginMode("company");
+        setCurrentLocationMessage("현위치 권한을 받을 수 없어 회사 출발지를 사용합니다.");
+      },
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
+    );
+  };
+  const saveDeliveryProof = (storeId: string, proof: Omit<DeliveryProof, "recordedAt" | "storeId">) => {
+    setDeliveryProofs((current) => ({
+      ...current,
+      [storeId]: [
+        {
+          ...proof,
+          recordedAt: new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }),
+          storeId
+        },
+        ...(current[storeId] || [])
+      ]
+    }));
   };
 
   return (
@@ -1230,6 +1283,43 @@ function TodayCourseView({
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="border-b border-slate-200/80 p-3">
+                <div className="mb-3 rounded-md border border-slate-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-950">출발 기준</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                        회사 출발지 또는 현재 위치에서 바로 경유 계산을 시작할 수 있습니다.
+                      </p>
+                    </div>
+                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{routeOriginLabel}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                        routeOriginMode === "company" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
+                      }`}
+                      onClick={() => {
+                        setRouteOriginMode("company");
+                        setRouteSequence(null);
+                      }}
+                      type="button"
+                    >
+                      회사 출발지
+                    </button>
+                    <button
+                      className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                        routeOriginMode === "current" ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-blue-50 text-blue-800 hover:bg-white"
+                      }`}
+                      onClick={useCurrentLocationAsOrigin}
+                      type="button"
+                    >
+                      현위치 출발
+                    </button>
+                  </div>
+                  <p className="mt-2 truncate text-xs font-bold text-slate-500" title={routeOriginAddress || currentLocationMessage}>
+                    {currentLocationMessage || (routeOriginMode === "current" ? routeOriginAddress || "현위치를 먼저 확인하세요." : originMarker?.address || "회사 출발지 확인 필요")}
+                  </p>
+                </div>
                 <div className="mb-3 grid grid-cols-3 gap-2">
                   <RouteMetric label="계산 대상" value={`${selectedRouteStores.length}곳`} />
                   <RouteMetric label={routeSequence ? "도로 경유 거리" : "출발지 개별거리"} value={`${routeDistanceKm.toLocaleString()}km`} />
@@ -1254,7 +1344,15 @@ function TodayCourseView({
                     buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
                     destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
                     onSequenceChange={setRouteSequence}
+                    originAddress={routeOriginAddress}
                     showMap={false}
+                  />
+                ) : null}
+                {routeSelectedStore ? (
+                  <DeliveryProofPanel
+                    onSave={(proof) => saveDeliveryProof(routeSelectedStore.id, proof)}
+                    proofs={deliveryProofs[routeSelectedStore.id] || []}
+                    store={routeSelectedStore}
                   />
                 ) : null}
               </div>
@@ -1466,6 +1564,107 @@ function DirectoryStat({ label, tone = "slate", value }: { readonly label: strin
     <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs font-black uppercase text-slate-400">{label}</p>
       <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    </div>
+  );
+}
+
+function DeliveryProofPanel({
+  onSave,
+  proofs,
+  store
+}: {
+  readonly onSave: (proof: Omit<DeliveryProof, "recordedAt" | "storeId">) => void;
+  readonly proofs: DeliveryProof[];
+  readonly store: StoreRow;
+}) {
+  const [fileName, setFileName] = useState("");
+  const [memo, setMemo] = useState("");
+  const [messageChannel, setMessageChannel] = useState<DeliveryProof["messageChannel"]>("kakao");
+
+  const saveProof = () => {
+    onSave({
+      fileName: fileName || "현장 사진 미첨부",
+      memo: memo || "배송 도착 완료",
+      messageChannel
+    });
+    setFileName("");
+    setMemo("");
+  };
+
+  return (
+    <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/70 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            <Camera className="h-4 w-4 text-blue-700" />
+            배송완료 증빙
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
+            {store.name} 도착 후 사진을 남기고 점주님께 발송할 알림을 준비합니다.
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{proofs.length}건</span>
+      </div>
+      <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-white px-3 py-3 text-left transition hover:border-blue-400 hover:bg-blue-50">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
+          <Plus className="h-4 w-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-black text-slate-900">{fileName || "도착 사진/영상 선택"}</span>
+          <span className="mt-1 block text-xs font-bold text-slate-500">실제 발송 API 연결 전까지는 파일명과 발송 대기 상태를 기록합니다.</span>
+        </span>
+        <input
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={(event) => setFileName(event.target.files?.[0]?.name || "")}
+          type="file"
+        />
+      </label>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {[
+          { label: "카톡 발송 대기", value: "kakao" },
+          { label: "문자 발송 대기", value: "sms" }
+        ].map((item) => (
+          <button
+            className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+              messageChannel === item.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+            key={item.value}
+            onClick={() => setMessageChannel(item.value as DeliveryProof["messageChannel"])}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <textarea
+        className="mt-3 min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        onChange={(event) => setMemo(event.target.value)}
+        placeholder="점주님께 보낼 메시지 예: 요청하신 위치에 적재 완료했습니다."
+        value={memo}
+      />
+      <button
+        className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-blue-800"
+        onClick={saveProof}
+        type="button"
+      >
+        <MessageSquareText className="h-3.5 w-3.5" />
+        배송완료 기록 저장
+      </button>
+      {proofs.length ? (
+        <div className="mt-3 space-y-2">
+          {proofs.slice(0, 3).map((proof) => (
+            <div className="rounded-md border border-blue-100 bg-white p-2" key={`${proof.recordedAt}-${proof.fileName}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-xs font-black text-slate-900">{proof.fileName}</p>
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">{proof.messageChannel === "kakao" ? "카톡" : "문자"}</span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
+              <p className="mt-1 text-[11px] font-bold text-slate-400">{proof.recordedAt}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2543,6 +2742,10 @@ function businessStatusClass(status: StoreRow["businessStatus"]) {
 
 function roundToOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+function roundToSix(value: number) {
+  return Math.round(value * 1000000) / 1000000;
 }
 
 function gradeBadgeClass(grade: RevenueGrade) {

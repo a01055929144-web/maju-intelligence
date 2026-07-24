@@ -9,6 +9,7 @@ type RouteSequenceActionProps = {
   readonly buttonLabel?: string;
   readonly destinations: readonly string[];
   readonly onSequenceChange?: (sequence: RouteSequence | null) => void;
+  readonly originAddress?: string;
   readonly resultTitle?: string;
   readonly showMap?: boolean;
 };
@@ -35,6 +36,7 @@ export function RouteSequenceAction({
   buttonLabel = "경유 동선 연결",
   destinations,
   onSequenceChange,
+  originAddress,
   resultTitle = "티맵 실제 도로 경로",
   showMap = true
 }: RouteSequenceActionProps) {
@@ -53,7 +55,7 @@ export function RouteSequenceAction({
     const response = await fetch("/api/routes/sequence", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ destinations: uniqueDestinations })
+      body: JSON.stringify({ destinations: uniqueDestinations, originAddress })
     }).catch(() => null);
 
     if (!response?.ok) {
@@ -84,7 +86,7 @@ export function RouteSequenceAction({
       </div>
       {!sequence ? (
         <p className="text-xs font-bold leading-5 text-muted-foreground">
-          선택한 매장 {uniqueDestinations.length}곳을 출발지 기준 경유지로 보내 티맵 도로 거리·시간을 계산합니다. 티맵이 도로 좌표를 반환하면 지도에 실제 경유선도 함께 표시됩니다.
+          선택한 매장 {uniqueDestinations.length}곳을 {originAddress ? "선택한 출발 기준" : "회사 출발지"}에서 경유지로 보내 티맵 도로 거리·시간을 계산합니다. 티맵이 도로 좌표를 반환하면 지도에 실제 경유선도 함께 표시됩니다.
         </p>
       ) : null}
 

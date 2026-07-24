@@ -53,7 +53,7 @@ export async function calculateRouteDistance(originAddress: string, destinationA
 
   try {
     const [originPoint, destinationPoint] = await Promise.all([
-      geocodeTmapAddress(normalizedOrigin, appKey),
+      parseGeoPointFromText(normalizedOrigin) || geocodeTmapAddress(normalizedOrigin, appKey),
       geocodeTmapAddress(normalizedDestination, appKey)
     ]);
 
@@ -84,6 +84,21 @@ export async function calculateRouteDistance(originAddress: string, destinationA
   } catch {
     return estimateRouteDistance(normalizedOrigin, normalizedDestination);
   }
+}
+
+function parseGeoPointFromText(value: string): GeoPoint | null {
+  const coordinateMatch = value.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!coordinateMatch) return null;
+
+  const first = Number(coordinateMatch[1]);
+  const second = Number(coordinateMatch[2]);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
+
+  const lat = Math.abs(first) <= 90 ? first : second;
+  const lng = Math.abs(first) <= 90 ? second : first;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  return { lat, lng };
 }
 
 async function geocodeTmapAddress(address: string, appKey: string): Promise<GeoPoint | null> {
