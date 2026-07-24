@@ -1427,6 +1427,7 @@ function attachmentLabel(type: string, title: string) {
   if (type === "business_license") return "사업자등록증";
   if (type === "bank_account") return "통장사본";
   if (type === "loading_position") return "배송 적재위치 사진/영상";
+  if (type === "delivery_proof") return "배송완료 증빙";
   return title || "첨부자료";
 }
 
@@ -1441,6 +1442,7 @@ function attachmentTitleFromType(type: string) {
   if (type === "business_license") return "사업자등록증";
   if (type === "bank_account") return "통장사본";
   if (type === "loading_position") return "배송 적재위치 사진/영상";
+  if (type === "delivery_proof") return "배송완료 증빙";
   return "기타 첨부자료";
 }
 

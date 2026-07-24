@@ -79,6 +79,7 @@ type DeliveryProof = {
   fileName: string;
   messageChannel: "kakao" | "sms";
   memo: string;
+  persisted?: boolean;
   recordedAt: string;
   storeId: string;
 };
@@ -1164,12 +1165,48 @@ function TodayCourseView({
       { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
     );
   };
-  const saveDeliveryProof = (storeId: string, proof: Omit<DeliveryProof, "recordedAt" | "storeId">) => {
+  const saveDeliveryProof = async (storeId: string, proof: Omit<DeliveryProof, "persisted" | "recordedAt" | "storeId">) => {
+    let persisted = false;
+    const memo = `${proof.memo}\n\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
+
+    try {
+      const [noteResponse, attachmentResponse] = await Promise.all([
+        fetch("/api/customer-operations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "note",
+            customerId: storeId,
+            memo,
+            nextAction: proof.messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
+            noteType: "delivery"
+          })
+        }),
+        fetch("/api/customer-operations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "attachment",
+            attachmentType: "delivery_proof",
+            customerId: storeId,
+            fileUrl: "",
+            mimeType: proof.fileName.toLowerCase().match(/\.(mp4|mov|webm)$/) ? "video/*" : "image/*",
+            title: proof.fileName || "배송완료 증빙"
+          })
+        })
+      ]);
+
+      persisted = noteResponse.ok && attachmentResponse.ok;
+    } catch {
+      persisted = false;
+    }
+
     setDeliveryProofs((current) => ({
       ...current,
       [storeId]: [
         {
           ...proof,
+          persisted,
           recordedAt: new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }),
           storeId
         },
@@ -1573,21 +1610,27 @@ function DeliveryProofPanel({
   proofs,
   store
 }: {
-  readonly onSave: (proof: Omit<DeliveryProof, "recordedAt" | "storeId">) => void;
+  readonly onSave: (proof: Omit<DeliveryProof, "persisted" | "recordedAt" | "storeId">) => Promise<void>;
   readonly proofs: DeliveryProof[];
   readonly store: StoreRow;
 }) {
   const [fileName, setFileName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<DeliveryProof["messageChannel"]>("kakao");
 
-  const saveProof = () => {
-    onSave({
+  const saveProof = async () => {
+    setIsSaving(true);
+    setSaveMessage("");
+    await onSave({
       fileName: fileName || "현장 사진 미첨부",
       memo: memo || "배송 도착 완료",
       messageChannel
     });
+    setSaveMessage("배송완료 기록을 저장했습니다. 서버 연결 상태에 따라 로컬 기록으로 남을 수 있습니다.");
     setFileName("");
+    setIsSaving(false);
     setMemo("");
   };
 
@@ -1644,20 +1687,24 @@ function DeliveryProofPanel({
         value={memo}
       />
       <button
-        className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-blue-800"
+        className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        disabled={isSaving}
         onClick={saveProof}
         type="button"
       >
         <MessageSquareText className="h-3.5 w-3.5" />
-        배송완료 기록 저장
+        {isSaving ? "저장 중" : "배송완료 기록 저장"}
       </button>
+      {saveMessage ? <p className="mt-2 text-xs font-bold leading-5 text-blue-700">{saveMessage}</p> : null}
       {proofs.length ? (
         <div className="mt-3 space-y-2">
           {proofs.slice(0, 3).map((proof) => (
             <div className="rounded-md border border-blue-100 bg-white p-2" key={`${proof.recordedAt}-${proof.fileName}`}>
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-xs font-black text-slate-900">{proof.fileName}</p>
-                <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">{proof.messageChannel === "kakao" ? "카톡" : "문자"}</span>
+                <span className={`rounded px-2 py-0.5 text-[11px] font-black ${proof.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                  {proof.persisted ? "서버 저장" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
+                </span>
               </div>
               <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
               <p className="mt-1 text-[11px] font-bold text-slate-400">{proof.recordedAt}</p>
