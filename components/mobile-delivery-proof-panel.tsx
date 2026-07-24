@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { Camera, CheckCircle2, Copy, Loader2, MessageSquareText, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MessageSquareText, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type DeliveryStatus = "arrived" | "partial" | "issue";
 type MessageChannel = "kakao" | "sms";
+type Attachment = {
+  id: string;
+  attachmentType: string;
+  createdAt: string;
+  fileUrl: string;
+  mimeType: string;
+  title: string;
+};
 
 const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
   { label: "도착완료", value: "arrived" },
@@ -29,12 +37,23 @@ export function MobileDeliveryProofPanel({
 }) {
   const [copyMessage, setCopyMessage] = useState("");
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>("arrived");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [loadingProofs, setLoadingProofs] = useState(false);
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const deliveryProofAttachments = useMemo(() => attachments.filter((item) => item.attachmentType === "delivery_proof"), [attachments]);
   const ownerMessage = createOwnerMessage(customerName, memo, deliveryStatus, file?.name || "", loadingPosition);
+
+  async function loadProofs() {
+    setLoadingProofs(true);
+    const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
+    const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[] } | null) : null;
+    setAttachments(payload?.attachments || []);
+    setLoadingProofs(false);
+  }
 
   async function submit() {
     if (saving) return;
@@ -67,6 +86,7 @@ export function MobileDeliveryProofPanel({
     setFile(null);
     setMemo("");
     setStatus("saved");
+    await loadProofs();
   }
 
   async function copyOwnerMessage() {
@@ -78,16 +98,26 @@ export function MobileDeliveryProofPanel({
     }
   }
 
+  useEffect(() => {
+    loadProofs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
+
   return (
     <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-4" id="delivery-proof">
-      <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-700 text-white">
-          <Camera className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <p className="font-black text-slate-950">배송완료 기록</p>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{customerName} 도착 사진과 점주 발송 문구를 저장합니다.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-700 text-white">
+            <Camera className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-black text-slate-950">배송완료 기록</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{customerName} 도착 사진과 점주 발송 문구를 저장합니다.</p>
+          </div>
         </div>
+        <button className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700" onClick={loadProofs} type="button">
+          <RefreshCw className={`h-4 w-4 ${loadingProofs ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -157,6 +187,33 @@ export function MobileDeliveryProofPanel({
 
       {status === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요.</p> : null}
       {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">거래처 히스토리에 배송완료 기록이 저장되었습니다.</p> : null}
+
+      <div className="mt-4 grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-black text-slate-500">최근 배송완료 증빙</p>
+          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryProofAttachments.length}건</span>
+        </div>
+        {loadingProofs ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">증빙자료를 불러오는 중입니다.</p> : null}
+        {!loadingProofs && !deliveryProofAttachments.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송완료 증빙이 없습니다.</p> : null}
+        {deliveryProofAttachments.slice(0, 4).map((item) => (
+          <a
+            className="flex items-center gap-3 rounded-lg border border-blue-100 bg-white p-3 transition hover:border-blue-300"
+            href={item.fileUrl || "#"}
+            key={item.id}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+              {item.mimeType?.startsWith("video") ? <FileVideo className="h-5 w-5" /> : <ImageIcon className="h-5 w-5" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-black text-slate-950">{item.title}</span>
+              <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">{item.createdAt}</span>
+            </span>
+            <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+          </a>
+        ))}
+      </div>
     </section>
   );
 }
