@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardEdit, FileText, MessageSquareText, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesAssistantDrafts } from "@/lib/store";
@@ -61,48 +60,69 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       title="영업 후속 작업 초안"
       userName={customerSession?.name || "관리자"}
     >
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Metric icon={Sparkles} label="생성 초안" value={`${drafts.length}개`} />
-          <Metric icon={MessageSquareText} label="후속 메시지" value={`${followUps}개`} />
-          <Metric icon={FileText} label="견적 메모" value={`${quotes}개`} />
+      <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div>
+              <p className="text-sm font-black text-slate-950">AI 영업 후속함</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">방문 기록, 견적 요청, 코스 데이터를 보고 바로 실행할 초안을 정리합니다.</p>
+            </div>
+            <Badge className={drafts.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{drafts.length ? "초안 생성됨" : "방문 기록 필요"}</Badge>
+          </div>
+          <div className="grid md:grid-cols-3">
+            <Metric icon={Sparkles} label="생성 초안" value={`${drafts.length}개`} />
+            <Metric icon={MessageSquareText} label="후속 메시지" value={`${followUps}개`} />
+            <Metric icon={FileText} label="견적 메모" value={`${quotes}개`} />
+          </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-3">
           {assistantActions.map((action) => (
             <AssistantActionCard key={action.label} {...action} />
           ))}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardEdit className="h-5 w-5 text-primary" />
-              초안 목록
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 lg:grid-cols-2">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
+                <ClipboardEdit className="h-5 w-5 text-teal-700" />
+                초안 목록
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">거래처별 후속 메시지, 견적 메모, 방문 요약을 검토합니다.</p>
+            </div>
+            <Badge className="bg-slate-900 text-white">{drafts.length.toLocaleString()}개 표시</Badge>
+          </div>
+          <div className="divide-y divide-slate-100">
             {drafts.map((draft) => (
-              <div key={draft.id} className="rounded-md border border-border p-4">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Badge className="bg-primary/10 text-primary">{typeLabels[draft.type]}</Badge>
-                  <Badge>{draft.region}</Badge>
-                  <span className="text-sm font-black">{draft.leadName}</span>
+              <article key={draft.id} className="grid gap-4 p-5 hover:bg-slate-50/60 xl:grid-cols-[220px_minmax(0,1fr)_220px]">
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <Badge className="bg-teal-100 text-teal-800">{typeLabels[draft.type]}</Badge>
+                    <Badge className="bg-slate-100 text-slate-700">{draft.region}</Badge>
+                  </div>
+                  <p className="truncate text-sm font-black text-slate-950">{draft.leadName}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">영업 후속 대상</p>
                 </div>
-                <p className="mb-2 font-black">{draft.title}</p>
-                <p className="min-h-24 rounded-md bg-muted/35 p-3 text-sm leading-6 text-muted-foreground">{draft.body}</p>
-                <p className="mt-3 text-xs font-bold text-muted-foreground">다음 액션: {draft.nextAction}</p>
-              </div>
+                <div className="min-w-0">
+                  <p className="font-black text-slate-950">{draft.title}</p>
+                  <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">{draft.body}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-black text-slate-400">다음 액션</p>
+                  <p className="mt-2 text-sm font-black leading-6 text-slate-950">{draft.nextAction}</p>
+                </div>
+              </article>
             ))}
             {!drafts.length ? (
-              <div className="rounded-md border border-border bg-muted/35 p-6 text-center lg:col-span-2">
-                <Sparkles className="mx-auto mb-3 h-8 w-8 text-primary" />
-                <p className="font-black">생성할 후속 초안이 없습니다.</p>
-                <p className="mt-1 text-sm text-muted-foreground">방문 결과를 먼저 기록하면 초안이 생성됩니다.</p>
+              <div className="p-10 text-center">
+                <Sparkles className="mx-auto mb-3 h-8 w-8 text-teal-700" />
+                <p className="font-black text-slate-950">생성할 후속 초안이 없습니다.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">방문 결과를 먼저 기록하면 초안이 생성됩니다.</p>
               </div>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </section>
     </CustomerAppShell>
   );
@@ -120,7 +140,7 @@ function AssistantActionCard({
   value: string;
 }) {
   return (
-    <Link className="group rounded-md border border-slate-200 bg-white p-4 transition hover:border-teal-200 hover:bg-teal-50/40" href={href}>
+    <Link className="group border-b border-slate-200 p-4 transition hover:bg-teal-50/40 lg:border-b-0 lg:border-r last:lg:border-r-0" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase text-slate-500">{label}</p>
@@ -136,12 +156,12 @@ function AssistantActionCard({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Sparkles; label: string; value: string }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="p-5">
-        <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-3xl font-black">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-3xl font-black">{value}</p>
+    </div>
   );
 }
