@@ -96,26 +96,28 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
 
   return (
     <main className="min-h-screen bg-transparent text-slate-950">
-      <div className={`grid min-h-screen transition-[grid-template-columns] duration-100 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-200/80 bg-white/[0.86] backdrop-blur-2xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
+        <aside className="border-b border-slate-200/80 bg-white/[0.94] backdrop-blur-2xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 p-4">
               <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
-              <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
-                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]">M</span>
-                {!collapsed ? <span className="min-w-0">
-                  <span className="block truncate text-sm font-black">MAJU Intelligence</span>
-                  <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
-                </span> : null}
-              </Link>
-              <button
-                aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white/90 text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 lg:inline-flex"
-                onClick={() => setCollapsed((value) => !value)}
-                type="button"
-              >
-                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-              </button>
+                <Link className={`flex min-w-0 items-center gap-3 ${collapsed ? "justify-center" : ""}`} href={scopedHref("/dashboard")}>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]">M</span>
+                  {!collapsed ? (
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-black">MAJU Intelligence</span>
+                      <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
+                    </span>
+                  ) : null}
+                </Link>
+                <button
+                  aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
+                  className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white/90 text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 lg:inline-flex"
+                  onClick={() => setCollapsed((value) => !value)}
+                  type="button"
+                >
+                  {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
@@ -130,12 +132,13 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                       return (
                         <Link
                           key={`${group.label}-${item.label}`}
-                          className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-black transition ${collapsed ? "justify-center" : ""} ${
-                            selected ? "border-l-4 border-teal-600 bg-teal-50 pl-2 text-teal-900 ring-1 ring-inset ring-teal-100" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                          className={`relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-black transition ${collapsed ? "justify-center" : ""} ${
+                            selected ? "bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-100" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                           }`}
                           href={itemHref}
                           title={collapsed ? item.label : undefined}
                         >
+                          {selected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-teal-600" /> : null}
                           <item.icon className={`h-4 w-4 ${selected ? "text-teal-700" : "text-slate-400"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
                           {!collapsed && item.badge ? <Badge className={selected ? "bg-white px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
@@ -185,7 +188,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               ) : (
                 <div className="hidden xl:block" />
               )}
-              <div className={`flex flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
+              <div className={`flex max-w-full flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                   href={settingsHref}
