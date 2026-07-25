@@ -938,18 +938,24 @@ function Onboarding({
   ];
   const reviewTabs = [
     {
+      description: "ERP 헤더와 MAJU 표준 필드를 연결합니다.",
       key: "mapping" as const,
       label: "컬럼 매핑",
+      step: "3-1",
       value: rawRows.length ? `${mappedRequiredCount}/${requiredFields.length}` : "대기"
     },
     {
+      description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.",
       key: "quality" as const,
       label: "품질 검증",
+      step: "3-2",
       value: hasBlockingQualityIssues ? "보완 필요" : hasDataRows ? "정상" : "대기"
     },
     {
+      description: "서버 저장 조건과 최근 등록 이력을 확인합니다.",
       key: "save" as const,
       label: "저장·이력",
+      step: "3-3",
       value: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "실행 가능" : "대기"
     }
   ];
@@ -1461,24 +1467,32 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-1.5">
-                  <div className="grid gap-1.5 md:grid-cols-3">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                  <div className="grid gap-2 md:grid-cols-3">
                     {reviewTabs.map((tab) => {
                       const selected = reviewTab === tab.key;
                       return (
                         <button
                           key={tab.key}
-                          className={`flex items-center justify-between rounded-md border px-4 py-3 text-left transition ${
+                          className={`rounded-md border p-3 text-left transition ${
                             selected
-                              ? "border-violet-200 bg-white text-violet-800 shadow-sm ring-1 ring-violet-100"
-                              : "border-transparent bg-transparent text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                              ? "border-violet-300 bg-white text-violet-900 shadow-sm ring-1 ring-violet-100"
+                              : "border-transparent bg-transparent text-slate-500 hover:bg-white/80 hover:text-slate-800"
                           }`}
                           onClick={() => setReviewTab(tab.key)}
                           type="button"
                         >
-                          <span className="text-sm font-black">{tab.label}</span>
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-100 text-violet-800" : "bg-white text-slate-500"}`}>
-                            {tab.value}
+                          <span className="flex items-start justify-between gap-3">
+                            <span className="min-w-0">
+                              <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-100 text-violet-800" : "bg-white text-slate-500"}`}>
+                                {tab.step}
+                              </span>
+                              <span className="mt-2 block text-sm font-black">{tab.label}</span>
+                              <span className={`mt-1 block text-xs font-bold leading-5 ${selected ? "text-violet-700" : "text-slate-500"}`}>{tab.description}</span>
+                            </span>
+                            <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-700 text-white" : "bg-white text-slate-500"}`}>
+                              {tab.value}
+                            </span>
                           </span>
                         </button>
                       );
