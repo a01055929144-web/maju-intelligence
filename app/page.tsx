@@ -1046,8 +1046,13 @@ function Onboarding({
     <section className="space-y-4">
       <div className="space-y-4">
         <RegistrationControlStrip
+          canAnalyze={canAnalyze}
           entryMode={entryMode}
           filename={uploadedFilename}
+          isAnalyzing={isAnalyzing}
+          latestUploadAt={latestUpload?.createdAt}
+          onAnalyze={onAnalyze}
+          persisted={pipelineMeta.persisted}
           readyCount={readyCheckCount}
           rows={rawRows.length}
           state={registrationControlState}
@@ -1389,16 +1394,26 @@ function Onboarding({
 }
 
 function RegistrationControlStrip({
+  canAnalyze,
   entryMode,
   filename,
+  isAnalyzing,
+  latestUploadAt,
+  onAnalyze,
+  persisted,
   readyCount,
   rows,
   state,
   totalCount,
   typeLabel
 }: {
+  canAnalyze: boolean;
   entryMode: "excel" | "manual";
   filename: string;
+  isAnalyzing: boolean;
+  latestUploadAt?: string;
+  onAnalyze: () => void;
+  persisted: boolean;
   readyCount: number;
   rows: number;
   state: { helper: string; label: string; tone: "action" | "idle" | "ready" | "warning" };
@@ -1415,7 +1430,7 @@ function RegistrationControlStrip({
 
   return (
     <div className={`rounded-md border p-4 shadow-sm ${toneClassName}`}>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-center">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px_220px] xl:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-white/80 text-slate-800 ring-1 ring-inset ring-slate-200">{typeLabel}</Badge>
@@ -1425,6 +1440,14 @@ function RegistrationControlStrip({
           </div>
           <h2 className="mt-3 text-xl font-black text-slate-950">데이터 등록 관제판</h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{state.helper}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
+            <span className="rounded-md border border-white/80 bg-white/70 px-2.5 py-1 text-slate-600">
+              서버 반영: {persisted ? "완료" : "확인 전"}
+            </span>
+            <span className="rounded-md border border-white/80 bg-white/70 px-2.5 py-1 text-slate-600">
+              최근 이력: {latestUploadAt || "없음"}
+            </span>
+          </div>
         </div>
         <div className="grid gap-2 rounded-md border border-white/70 bg-white/75 p-3 sm:grid-cols-3 xl:grid-cols-1">
           <MiniStatus label="등록 방식" value={entryMode === "excel" ? "엑셀 업로드" : "수기 입력"} />
@@ -1437,6 +1460,19 @@ function RegistrationControlStrip({
             </div>
             <Progress value={progress} />
           </div>
+        </div>
+        <div className="rounded-md border border-white/80 bg-white/80 p-3">
+          <p className="text-xs font-black text-slate-500">다음 실행</p>
+          <p className="mt-1 text-sm font-black text-slate-950">
+            {canAnalyze ? "검증 후 서버 저장" : rows ? "필수 매핑 확인" : "데이터 등록 시작"}
+          </p>
+          <Button className="mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
+            {isAnalyzing ? "저장 중" : "검증·저장 실행"}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
+            {canAnalyze ? "아래로 내려가지 않아도 바로 서버 저장을 실행할 수 있습니다." : "파일 업로드 후 필수 컬럼을 모두 연결하면 버튼이 활성화됩니다."}
+          </p>
         </div>
       </div>
     </div>
