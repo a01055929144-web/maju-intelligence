@@ -1211,6 +1211,13 @@ function Onboarding({
               requiredCount={requiredFields.length}
               rows={rawRows.length}
             />
+            <BulkNextActionPanel
+              canAnalyze={canAnalyze}
+              hasBlockingQualityIssues={hasBlockingQualityIssues}
+              missingRequiredFields={missingRequiredFields}
+              rows={rawRows.length}
+              onOpenTab={setReviewTab}
+            />
             </>
           ) : entryMode === "document" ? (
             <DocumentOcrRegistrationPanel
@@ -2260,6 +2267,91 @@ function BulkEntryProgress({
             <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.detail}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function BulkNextActionPanel({
+  canAnalyze,
+  hasBlockingQualityIssues,
+  missingRequiredFields,
+  onOpenTab,
+  rows
+}: {
+  canAnalyze: boolean;
+  hasBlockingQualityIssues: boolean;
+  missingRequiredFields: UploadTemplateField[];
+  onOpenTab: (tab: "mapping" | "quality" | "save") => void;
+  rows: number;
+}) {
+  const hasRows = rows > 0;
+  const nextAction = !hasRows
+    ? {
+        badge: "파일 필요",
+        body: "먼저 거래처 마스터 또는 매출 거래내역 엑셀을 업로드하세요.",
+        buttonLabel: "업로드 후 매핑 확인",
+        disabled: true,
+        icon: Upload,
+        tab: "mapping" as const,
+        title: "엑셀 파일을 기다리고 있습니다."
+      }
+    : missingRequiredFields.length
+      ? {
+          badge: "매핑 필요",
+          body: `${missingRequiredFields.map((field) => field.label).join(", ")} 필수 컬럼을 연결하면 저장 조건이 열립니다.`,
+          buttonLabel: "컬럼 매핑 열기",
+          disabled: false,
+          icon: FileSpreadsheet,
+          tab: "mapping" as const,
+          title: "필수 컬럼 연결이 남아 있습니다."
+        }
+      : hasBlockingQualityIssues
+        ? {
+            badge: "품질 확인",
+            body: "중복 후보, 누락값, 사업자번호 오류를 확인한 뒤 저장하는 것이 안전합니다.",
+            buttonLabel: "품질 검증 열기",
+            disabled: false,
+            icon: AlertTriangle,
+            tab: "quality" as const,
+            title: "보완 필요 행을 확인하세요."
+          }
+        : {
+            badge: canAnalyze ? "저장 가능" : "저장 확인",
+            body: "서버 저장, 거래처 원장 반영, AI 리포트 갱신을 실행할 준비가 됐습니다.",
+            buttonLabel: "저장·이력 열기",
+            disabled: false,
+            icon: Check,
+            tab: "save" as const,
+            title: "운영 데이터 반영 준비가 끝났습니다."
+          };
+  const Icon = nextAction.icon;
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="flex items-start gap-3 p-4">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${nextAction.disabled ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <Badge className={nextAction.disabled ? "bg-slate-100 text-slate-600" : "bg-blue-50 text-blue-700"}>{nextAction.badge}</Badge>
+            <p className="mt-2 text-base font-black text-slate-950">{nextAction.title}</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{nextAction.body}</p>
+          </div>
+        </div>
+        <div className="border-t border-slate-100 bg-slate-50 p-4 lg:border-l lg:border-t-0">
+          <p className="text-xs font-black text-slate-500">바로가기</p>
+          <Button
+            className="mt-2 h-11 w-full"
+            disabled={nextAction.disabled}
+            onClick={() => onOpenTab(nextAction.tab)}
+            type="button"
+          >
+            {nextAction.buttonLabel}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
