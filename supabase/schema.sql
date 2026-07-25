@@ -147,6 +147,10 @@ create table if not exists public.normalized_customers (
   business_status_checked_at timestamptz,
   business_license_file_url text,
   bank_account_file_url text,
+  naver_place_url text,
+  kakao_place_url text,
+  google_map_url text,
+  place_links_checked_at timestamptz,
   normalized_key text not null,
   duplicate_of uuid references public.normalized_customers(id) on delete set null,
   created_at timestamptz not null default now()

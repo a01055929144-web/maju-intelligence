@@ -1312,6 +1312,7 @@ function Onboarding({
                   {template.fields.map((field) => {
                     const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
                     const isAddressField = field.key === "address" && isMaster;
+                    const isExternalPlaceLink = ["naverPlaceUrl", "kakaoPlaceUrl", "googleMapUrl"].includes(field.key);
                     return (
                       <label key={field.key} className={`space-y-1.5 rounded-md border bg-white p-3 ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
                         <span className="text-xs font-black text-slate-500">
@@ -1332,6 +1333,7 @@ function Onboarding({
                           </span>
                         ) : null}
                         {isAddressField ? <span className="block text-xs font-bold text-blue-700">검색 결과 선택 시 지역이 자동 반영됩니다.</span> : null}
+                        {isExternalPlaceLink ? <span className="block text-xs font-bold text-teal-700">리뷰, 영업시간, 폐업 여부 추적에 활용할 외부 장소 링크입니다.</span> : null}
                       </label>
                     );
                   })}
@@ -3303,7 +3305,10 @@ function buildCustomerExportRows(customers: CustomerRow[]): RawRow[] {
     월방문횟수: customer.visitCount,
     "기존 계산거리(km)": customer.deliveryKm,
     연락처: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
-    이메일: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`
+    이메일: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
+    "네이버 플레이스 링크": customer.naverPlaceUrl || "",
+    "카카오맵 링크": customer.kakaoPlaceUrl || "",
+    "구글맵 링크": customer.googleMapUrl || ""
   }));
 }
 
@@ -3337,6 +3342,9 @@ function templateSampleValue(key: string) {
     birthDate: "1974-01-01",
     region: "성동구",
     industry: "한식",
+    naverPlaceUrl: "https://naver.me/x0UEyxqb",
+    kakaoPlaceUrl: "https://place.map.kakao.com/1386668708",
+    googleMapUrl: "https://maps.app.goo.gl/Yi95hRHRViVUYoqm6",
     salesDate: "2026-07-01",
     salesAmount: 2340000,
     productName: "육류",
@@ -3475,8 +3483,11 @@ function buildManualCustomerPayload(row: RawRow) {
     deliveryKm: toNumber(row.deliveryKm),
     email: String(row.email || ""),
     industry: String(row.industry || "미분류"),
+    kakaoPlaceUrl: String(row.kakaoPlaceUrl || ""),
     lastOrderDays: 0,
     monthlyRevenue: 0,
+    googleMapUrl: String(row.googleMapUrl || ""),
+    naverPlaceUrl: String(row.naverPlaceUrl || ""),
     openingDate: String(row.openingDate || ""),
     phone: String(row.phone || ""),
     region: String(row.region || extractRegion(String(row.address || "")) || "미분류"),

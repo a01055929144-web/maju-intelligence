@@ -38,6 +38,9 @@ type CustomerView = {
   industry: string;
   lastOrderDays: number;
   loadingPosition: string;
+  naverPlaceUrl?: string;
+  kakaoPlaceUrl?: string;
+  googleMapUrl?: string;
   memoCount: number;
   monthlyRevenue: number;
   phone: string;
@@ -163,6 +166,9 @@ export default function CrmTimelinePage() {
         phone: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
         email: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
         loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역",
+        naverPlaceUrl: customer.naverPlaceUrl || "",
+        kakaoPlaceUrl: customer.kakaoPlaceUrl || "",
+        googleMapUrl: customer.googleMapUrl || "",
         representativeName: index % 2 === 0 ? "김민준" : "이서연"
       })),
     []
@@ -423,6 +429,9 @@ export default function CrmTimelinePage() {
           industry: draftCustomer.industry,
           lastOrderDays: draftCustomer.lastOrderDays,
           loadingPosition: draftCustomer.loadingPosition,
+          naverPlaceUrl: draftCustomer.naverPlaceUrl,
+          kakaoPlaceUrl: draftCustomer.kakaoPlaceUrl,
+          googleMapUrl: draftCustomer.googleMapUrl,
           monthlyRevenue: draftCustomer.monthlyRevenue,
           phone: draftCustomer.phone,
           region: draftCustomer.region,
@@ -899,6 +908,9 @@ export default function CrmTimelinePage() {
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" helper="네이버 리뷰, 영업시간, 업체 상태 추적에 활용합니다." label="네이버 플레이스 링크" value={draftCustomer.naverPlaceUrl || ""} onChange={(value) => updateDraft("naverPlaceUrl", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" helper="카카오맵 장소 상세와 로드뷰 확인에 활용합니다." label="카카오맵 링크" value={draftCustomer.kakaoPlaceUrl || ""} onChange={(value) => updateDraft("kakaoPlaceUrl", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" helper="구글 리뷰와 지도 정보를 함께 확인할 때 활용합니다." label="구글맵 링크" value={draftCustomer.googleMapUrl || ""} onChange={(value) => updateDraft("googleMapUrl", value)} />
                     </div>
                   </div>
                 ) : (
@@ -918,6 +930,14 @@ export default function CrmTimelinePage() {
                       <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
                       <DetailRow label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
                       <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
+                    </div>
+                    <div className="p-4 md:col-span-2">
+                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">외부 매장 링크</p>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <PlaceLinkButton label="네이버" url={selectedCustomer.naverPlaceUrl} />
+                        <PlaceLinkButton label="카카오맵" url={selectedCustomer.kakaoPlaceUrl} />
+                        <PlaceLinkButton label="구글맵" url={selectedCustomer.googleMapUrl} />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1361,6 +1381,34 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <p className="h-full bg-slate-50 px-3 py-2.5 font-black text-slate-500">{label}</p>
       <p className="min-w-0 px-3 py-2.5 font-black text-slate-900 break-keep">{value}</p>
     </div>
+  );
+}
+
+function PlaceLinkButton({ label, url = "" }: { label: string; url?: string }) {
+  const available = Boolean(url.trim());
+
+  if (!available) {
+    return (
+      <div className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        <span className="font-black text-slate-500">{label}</span>
+        <span className="text-xs font-black text-slate-400">미등록</span>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      className="flex min-h-12 items-center justify-between rounded-md border border-teal-100 bg-teal-50 px-3 py-2 text-sm font-black text-teal-800 transition hover:border-teal-200 hover:bg-teal-100"
+      href={url}
+      rel="noreferrer"
+      target="_blank"
+    >
+      <span>{label}</span>
+      <span className="inline-flex items-center gap-1 text-xs">
+        열기
+        <LinkIcon className="h-3.5 w-3.5" />
+      </span>
+    </a>
   );
 }
 

@@ -8,6 +8,9 @@ export type CustomerRow = {
   lastOrderDays: number;
   visitCount: number;
   deliveryKm: number;
+  naverPlaceUrl?: string;
+  kakaoPlaceUrl?: string;
+  googleMapUrl?: string;
 };
 
 export const requiredFields = [
@@ -42,7 +45,10 @@ export const customerMasterFields = [
   { key: "email", label: "이메일", aliases: ["이메일", "email", "메일"], required: false },
   { key: "birthDate", label: "생년월일", aliases: ["생년월일", "생일", "birth"], required: false },
   { key: "region", label: "지역", aliases: ["지역", "구", "동", "시군구", "권역", "region"], required: false },
-  { key: "industry", label: "업종", aliases: ["업종", "업태", "종목", "카테고리", "분류", "industry", "category"], required: false }
+  { key: "industry", label: "업종", aliases: ["업종", "업태", "종목", "카테고리", "분류", "industry", "category"], required: false },
+  { key: "naverPlaceUrl", label: "네이버 플레이스 링크", aliases: ["네이버", "네이버플레이스", "naver", "naver place", "place url"], required: false, description: "매장 정보와 리뷰 추적을 위한 외부 링크입니다." },
+  { key: "kakaoPlaceUrl", label: "카카오맵 링크", aliases: ["카카오", "카카오맵", "kakao", "kakao map"], required: false, description: "장소 상세와 지도 확인을 위한 외부 링크입니다." },
+  { key: "googleMapUrl", label: "구글맵 링크", aliases: ["구글", "구글맵", "google", "google map"], required: false, description: "리뷰와 해외 지도 정보를 확인하기 위한 외부 링크입니다." }
 ] as const satisfies readonly UploadTemplateField[];
 
 export const salesAnalysisFields = [
@@ -77,7 +83,7 @@ export const uploadTemplates: Record<
 };
 
 export const sampleCustomers: CustomerRow[] = [
-  { companyName: "마주식자재", customerName: "성수 온반", region: "성수동", address: "서울 성동구 성수동", industry: "한식", monthlyRevenue: 420, lastOrderDays: 3, visitCount: 4, deliveryKm: 7.4 },
+  { companyName: "마주식자재", customerName: "성수 온반", region: "성수동", address: "서울 성동구 성수동", industry: "한식", monthlyRevenue: 420, lastOrderDays: 3, visitCount: 4, deliveryKm: 7.4, naverPlaceUrl: "https://naver.me/x0UEyxqb", kakaoPlaceUrl: "https://place.map.kakao.com/1386668708", googleMapUrl: "https://maps.app.goo.gl/Yi95hRHRViVUYoqm6" },
   { companyName: "마주식자재", customerName: "성수 국밥집", region: "성수동", address: "서울 성동구 성수동", industry: "한식", monthlyRevenue: 380, lastOrderDays: 6, visitCount: 4, deliveryKm: 8.1 },
   { companyName: "마주식자재", customerName: "강남 정식", region: "강남구", address: "서울 강남구 역삼동", industry: "한식", monthlyRevenue: 610, lastOrderDays: 2, visitCount: 5, deliveryKm: 18.3 },
   { companyName: "마주식자재", customerName: "송파 우동", region: "송파구", address: "서울 송파구 문정동", industry: "일식", monthlyRevenue: 260, lastOrderDays: 13, visitCount: 2, deliveryKm: 22.6 },
