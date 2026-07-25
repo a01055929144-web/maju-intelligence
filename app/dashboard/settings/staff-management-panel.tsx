@@ -13,6 +13,10 @@ const roleOptions: Array<{ label: string; value: StaffInvitation["role"] }> = [
   { label: "일반직원", value: "member" }
 ];
 
+function isErrorMessage(message: string) {
+  return ["실패", "오류", "않", "필요", "맞지", "준비"].some((keyword) => message.includes(keyword));
+}
+
 export function StaffManagementPanel({ initialInvitations }: { initialInvitations: StaffInvitation[] }) {
   const [invitations, setInvitations] = useState(initialInvitations);
   const [form, setForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
@@ -40,7 +44,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
     setInvitations((current) => [payload.invitation as StaffInvitation, ...current]);
     setForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setMessage(payload.persisted ? "직원 초대 링크가 생성되었습니다." : "직원 초대가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 초대 링크가 생성되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요." : "직원 초대가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function updateStaff(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -65,7 +69,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    setMessage(payload.persisted ? "직원 권한/상태가 저장되었습니다." : "직원 권한/상태가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 정보가 저장되었습니다." : "직원 정보가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function copyInviteUrl(url: string) {
@@ -81,9 +85,9 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
             <Users className="mr-1 h-3.5 w-3.5" />
             직원 관리
           </Badge>
-          <h2 className="text-2xl font-black text-slate-950">직원을 추가하고 권한을 관리합니다</h2>
+          <h2 className="text-2xl font-black text-slate-950">직원 초대와 모바일 가입을 관리합니다</h2>
           <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-            배송기사, 영업직원, 현장관리자, 일반직원을 추가하고 역할을 변경할 수 있습니다.
+            이름과 연락처를 입력하면 카카오 가입용 초대 링크가 생성됩니다. 역할은 업무 구분용이며 기능 제한은 적용하지 않습니다.
           </p>
         </div>
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
@@ -134,7 +138,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
           ))}
           {!invitations.length ? (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-bold leading-6 text-slate-500">
-              아직 등록된 직원 초대가 없습니다. 오른쪽에서 직원을 추가하세요.
+              아직 등록된 직원 초대가 없습니다. 오른쪽에서 직원명을 입력해 카카오 가입 링크를 먼저 생성하세요.
             </div>
           ) : null}
         </div>
@@ -145,8 +149,8 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
               <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
-              <p className="font-black text-slate-950">직원 추가</p>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">추가하면 카카오 가입 링크가 생성됩니다.</p>
+              <p className="font-black text-slate-950">직원 초대 만들기</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">생성된 링크를 직원에게 보내면 모바일 가입 흐름으로 이어집니다.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3">
@@ -173,13 +177,14 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
                 </option>
               ))}
             </select>
+            <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용입니다. 접근 제한은 추후 정책이 정해지면 별도로 적용합니다.</p>
             <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!form.employeeName.trim() || creating} onClick={createStaff} type="button">
               {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
               {creating ? "추가 중" : "직원 추가"}
             </Button>
           </div>
           {message ? (
-            <p className={`mt-3 rounded-md px-3 py-2 text-xs font-bold leading-5 ${message.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+            <p className={`mt-3 rounded-md px-3 py-2 text-xs font-bold leading-5 ${isErrorMessage(message) ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
               {message}
             </p>
           ) : null}
