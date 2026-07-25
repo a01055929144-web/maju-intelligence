@@ -1437,17 +1437,14 @@ function Onboarding({
                 <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <Badge className={canAnalyze ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>3-3 검증 후 저장</Badge>
+                      <Badge className={canAnalyze ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>저장 실행 안내</Badge>
                       <p className="mt-2 flex items-center gap-2 text-base font-black text-slate-950">
                         <Check className={canAnalyze ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
-                        {canAnalyze ? "저장 준비 완료" : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
+                        {canAnalyze ? "상단 관제판에서 바로 저장할 수 있습니다." : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
                       </p>
-                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">필수 매핑과 품질 검증을 확인한 뒤 서버 저장과 리포트 갱신을 함께 실행합니다.</p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">저장 버튼은 화면 상단 데이터 등록 관제판의 다음 실행 영역으로 통일했습니다.</p>
                     </div>
-                    <Button className="h-11 shrink-0" onClick={onAnalyze} disabled={!canAnalyze}>
-                      검증·저장 실행
-                      <ArrowRight size={18} />
-                    </Button>
+                    <Badge className="w-fit bg-white text-slate-600 ring-1 ring-inset ring-slate-200">{canAnalyze ? "실행 가능" : "대기 중"}</Badge>
                   </div>
                 </div>
               </>
