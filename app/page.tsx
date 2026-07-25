@@ -1158,50 +1158,6 @@ function Onboarding({
           rowsWaiting={rawRows.length}
         />
 
-        <div className="rounded-xl border border-l-4 border-slate-200 border-l-emerald-600 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
-            <div>
-              <Badge className="mb-3 bg-emerald-50 text-emerald-800">1. 무엇을 등록하나요?</Badge>
-              <h2 className="text-xl font-black text-slate-950">데이터 종류를 먼저 선택하세요</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">기초정보는 거래처 원장에 저장되고, 매출 거래내역은 분석과 등급 갱신에 누적됩니다.</p>
-            </div>
-            <Badge className="w-fit bg-slate-100 text-slate-700">{rawRows.length}개 저장 대기</Badge>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {Object.entries(uploadTemplates).map(([key, item]) => {
-              const selected = uploadType === key;
-              const Icon = key === "customer-master" ? Building2 : Banknote;
-              return (
-                <button
-                  key={key}
-                  className={`rounded-xl border p-4 text-left transition ${
-                    selected
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-[0_10px_22px_rgba(5,150,105,0.12)] ring-1 ring-emerald-200"
-                      : "border-slate-200 bg-white hover:border-emerald-100 hover:bg-emerald-50/40"
-                  }`}
-                  onClick={() => onUploadType(key as UploadTemplateType)}
-                  type="button"
-                >
-                  <span className="flex items-start justify-between gap-3">
-                    <span className="flex min-w-0 gap-3">
-                      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${selected ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"}`}>
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span>
-                        <span className="block font-black">{item.label}</span>
-                        <span className="mt-1 block text-sm font-medium leading-6 text-slate-500">{item.description}</span>
-                      </span>
-                    </span>
-                    <span className={`inline-flex h-7 shrink-0 items-center rounded-full px-2 text-xs font-black ${selected ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"}`}>
-                      {selected ? "선택됨" : "선택"}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <div className="rounded-xl border border-l-4 border-slate-200 border-l-blue-600 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1860,8 +1816,8 @@ function OperationalDataSplit({
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <Badge className="mb-3 bg-slate-900 text-white">운영 데이터 구분</Badge>
-          <h2 className="text-xl font-black text-slate-950">먼저 등록할 데이터의 목적을 선택하세요</h2>
+          <Badge className="mb-3 bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200">1. 데이터 기준 선택</Badge>
+          <h2 className="text-xl font-black text-slate-950">거래처 기준값과 매출 업데이트를 구분하세요</h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
             거래처 마스터는 기준값이고, 매출 거래내역은 반복 업데이트 데이터입니다. 선택에 따라 필수 컬럼과 검증 기준이 달라집니다.
           </p>
