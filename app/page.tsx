@@ -947,6 +947,22 @@ function Onboarding({
     }
   ];
 
+  useEffect(() => {
+    if (!hasDataRows) {
+      setReviewTab("mapping");
+      return;
+    }
+
+    if (pipelineMeta.persisted) {
+      setReviewTab("save");
+      return;
+    }
+
+    if (complete && hasBlockingQualityIssues) {
+      setReviewTab("quality");
+    }
+  }, [complete, hasBlockingQualityIssues, hasDataRows, pipelineMeta.persisted, uploadType]);
+
   async function searchAddress() {
     const query = addressQuery.trim();
     if (query.length < 2) {
