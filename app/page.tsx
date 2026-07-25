@@ -1275,6 +1275,15 @@ function Onboarding({
                 </div>
 
                 {isMaster ? (
+                  <ManualEntryProgress
+                    addressSelected={manualAddressSelected}
+                    businessNumberValid={manualBusinessNumberValid}
+                    missingFields={manualMissingRequiredFields}
+                    ready={manualComplete}
+                  />
+                ) : null}
+
+                {isMaster ? (
                   <div className="mt-4 rounded-md border border-blue-100 bg-white p-3">
                     <div className="flex items-center gap-2 text-sm font-black text-slate-950">
                       <MapPin className="h-4 w-4 text-blue-700" />
@@ -2013,6 +2022,62 @@ function DocumentOcrRegistrationPanel({
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ManualEntryProgress({
+  addressSelected,
+  businessNumberValid,
+  missingFields,
+  ready
+}: {
+  addressSelected: boolean;
+  businessNumberValid: boolean;
+  missingFields: UploadTemplateField[];
+  ready: boolean;
+}) {
+  const items = [
+    {
+      detail: missingFields.length ? `${missingFields.map((field) => field.label).join(", ")} 입력 필요` : "필수값 완료",
+      label: "필수값",
+      ok: missingFields.length === 0
+    },
+    {
+      detail: addressSelected ? "배송주소 선택 완료" : "주소 검색 후 선택",
+      label: "주소",
+      ok: addressSelected
+    },
+    {
+      detail: businessNumberValid ? "사업자번호 검증 완료" : "10자리 번호 확인",
+      label: "사업자번호",
+      ok: businessNumberValid
+    }
+  ];
+  const doneCount = items.filter((item) => item.ok).length;
+
+  return (
+    <div className={`mt-4 rounded-md border p-3 ${ready ? "border-emerald-200 bg-emerald-50" : "border-blue-100 bg-blue-50/60"}`}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-950">수기 등록 준비 상태</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">필수값, 배송주소, 사업자번호가 모두 맞으면 바로 저장할 수 있습니다.</p>
+        </div>
+        <Badge className={ready ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}>
+          {doneCount}/3 완료
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-white text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-black">{item.label}</span>
+              {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
+            </div>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.detail}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
