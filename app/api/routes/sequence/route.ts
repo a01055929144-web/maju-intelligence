@@ -12,7 +12,7 @@ type RouteLegResult = Awaited<ReturnType<typeof calculateRouteDistance>>;
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
-  const scope = getRequestAuthScope(request, body?.companyId);
+  const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

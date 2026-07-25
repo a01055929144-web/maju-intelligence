@@ -5,7 +5,7 @@ import { addCustomerAttachment, addCustomerNote, getCustomerOperations } from "@
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const scope = getRequestAuthScope(request);
+  const scope = await getRequestAuthScope(request);
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
         companyId?: string;
       }
     | null;
-  const scope = getRequestAuthScope(request, body?.companyId);
+  const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

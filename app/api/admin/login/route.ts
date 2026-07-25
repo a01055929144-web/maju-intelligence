@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "관리자 계정 정보를 확인해주세요." }, { status: 401 });
   }
 
-  clearCustomerSession();
-  setAdminSession(session);
+  await clearCustomerSession();
+  await setAdminSession(session);
   return NextResponse.json({ ok: true, session });
 }

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   const customerId = String(formData?.get("customerId") || "");
   const attachmentType = String(formData?.get("attachmentType") || "etc");
   const title = String(formData?.get("title") || "");
-  const scope = getRequestAuthScope(request, String(formData?.get("companyId") || "") || undefined);
+  const scope = await getRequestAuthScope(request, String(formData?.get("companyId") || "") || undefined);
 
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

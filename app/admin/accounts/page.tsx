@@ -8,7 +8,7 @@ import { AdminPageHeader } from "../admin-page-header";
 import { AdminAccountsForm } from "./accounts-form";
 
 export default async function AdminAccountsPage() {
-  const session = getAdminSession();
+  const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
   const credentials = await getAuthCredentials();

@@ -18,7 +18,7 @@ const sampleTimeline = [
 ];
 
 export async function GET(request: NextRequest) {
-  const scope = getRequestAuthScope(request);
+  const scope = await getRequestAuthScope(request);
 
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

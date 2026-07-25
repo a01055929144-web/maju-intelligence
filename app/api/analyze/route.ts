@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     rows?: CustomerRow[];
     uploadType?: "customer-master" | "sales-analysis";
   } | null;
-  const scope = getRequestAuthScope(request, body?.companyId);
+  const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }

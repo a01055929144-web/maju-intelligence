@@ -12,14 +12,15 @@ const typeLabels = {
   summary: "방문 요약"
 };
 
-export default async function SalesAssistantPage({ searchParams }: { searchParams?: { companyId?: string } }) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export default async function SalesAssistantPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
-  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
+  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
-  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const drafts = await getSalesAssistantDrafts(companyId);
   const followUps = drafts.filter((draft) => draft.type === "follow-up").length;
   const quotes = drafts.filter((draft) => draft.type === "quote").length;

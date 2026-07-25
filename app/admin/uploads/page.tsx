@@ -8,7 +8,7 @@ import { AdminPageHeader } from "../admin-page-header";
 import { AdminUploadsWorkspace } from "./workspace";
 
 export default async function AdminUploadsPage() {
-  const session = getAdminSession();
+  const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
   const uploads = await getUploadHistory();

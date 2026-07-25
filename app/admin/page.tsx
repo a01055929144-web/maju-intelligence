@@ -10,7 +10,7 @@ import { getAdminDashboardPayload } from "@/lib/store";
 import { AdminPageHeader } from "./admin-page-header";
 
 export default async function AdminPage() {
-  const session = getAdminSession();
+  const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
   const dashboard = await getAdminDashboardPayload();

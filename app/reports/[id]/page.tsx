@@ -8,17 +8,24 @@ import { Progress } from "@/components/ui/progress";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getLatestReport, getReportById } from "@/lib/store";
 
-export default async function ReportDetailPage({ params, searchParams }: { params: { id: string }; searchParams?: { companyId?: string } }) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export default async function ReportDetailPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ companyId?: string }>;
+}) {
+  const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
 
   if (!customerSession && !adminSession) {
     redirect("/dashboard/login");
   }
-  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
+  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
-  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
-  const report = params.id === "latest" ? await getLatestReport(companyId) : await getReportById(params.id, companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
+  const report = id === "latest" ? await getLatestReport(companyId) : await getReportById(id, companyId);
   if (!report) notFound();
 
   const scoreRows = [

@@ -7,7 +7,7 @@ import { AdminPageHeader } from "../admin-page-header";
 import { AdminCompaniesWorkspace } from "./workspace";
 
 export default async function AdminCompaniesPage() {
-  const session = getAdminSession();
+  const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
   const payload = await getManagedCompanyAccounts();

@@ -15,7 +15,7 @@ const statusLabels = {
 };
 
 export default async function AdminSystemPage() {
-  const session = getAdminSession();
+  const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
   const system = await getSystemDiagnostics();

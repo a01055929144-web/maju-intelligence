@@ -8,7 +8,7 @@ import { CompanySettingsForm } from "./settings-form";
 import { StaffManagementPanel } from "./staff-management-panel";
 
 export default async function CompanySettingsPage() {
-  const session = getCustomerSession();
+  const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
 
   const company = await getCompanySettings(session.companyId, session.companyName);

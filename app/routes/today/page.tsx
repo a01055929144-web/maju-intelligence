@@ -6,14 +6,15 @@ import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib
 import { createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
 
-export default async function TodayRoutePage({ searchParams }: { searchParams?: { companyId?: string } }) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export default async function TodayRoutePage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
-  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
+  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
-  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const routePlan = await getTodayRoutePlan(companyId);
   const originAddress = await getCompanyOriginAddress(companyId);
   const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));

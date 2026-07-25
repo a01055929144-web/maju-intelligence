@@ -3,7 +3,7 @@ import { getCustomerSession } from "@/lib/auth";
 import { getWorkspaceCapabilities, workspaceRoleLabels, workspaceTypeLabels } from "@/lib/workspace";
 
 export async function GET() {
-  const session = getCustomerSession();
+  const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }

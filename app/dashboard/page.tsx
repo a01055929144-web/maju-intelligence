@@ -35,14 +35,15 @@ import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib
 import { createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getCompanyDashboardPayload, getCompanyOriginAddress, getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 
-export default async function DashboardPage({ searchParams }: { searchParams?: { companyId?: string } }) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
-  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
+  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
-  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const company = await getCompanySettings(companyId, customerSession?.companyName || "선택 고객사");
   const withCompanyQuery = (href: string) => {

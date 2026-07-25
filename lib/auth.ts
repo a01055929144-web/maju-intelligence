@@ -72,16 +72,18 @@ function decodeSession<TSession>(value?: string): TSession | null {
   }
 }
 
-export function getAdminSession() {
-  return decodeSession<AdminSession>(cookies().get(ADMIN_COOKIE_NAME)?.value);
+export async function getAdminSession() {
+  const cookieStore = await cookies();
+  return decodeSession<AdminSession>(cookieStore.get(ADMIN_COOKIE_NAME)?.value);
 }
 
-export function getCustomerSession() {
-  return decodeSession<CustomerSession>(cookies().get(CUSTOMER_COOKIE_NAME)?.value);
+export async function getCustomerSession() {
+  const cookieStore = await cookies();
+  return decodeSession<CustomerSession>(cookieStore.get(CUSTOMER_COOKIE_NAME)?.value);
 }
 
-export function requireAdminSession() {
-  const session = getAdminSession();
+export async function requireAdminSession() {
+  const session = await getAdminSession();
   if (!session) return null;
   return session;
 }
@@ -92,9 +94,9 @@ export function resolvePageCompanyId(customerSession: CustomerSession | null, ad
   return undefined;
 }
 
-export function getRequestAuthScope(request: NextRequest, bodyCompanyId?: string) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: string) {
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
 
   if (!customerSession && !adminSession) {
     return {
@@ -185,8 +187,9 @@ export async function validateCustomerCredentials(email: string, password: strin
   };
 }
 
-export function setAdminSession(session: AdminSession) {
-  cookies().set(ADMIN_COOKIE_NAME, encodeSession(session), {
+export async function setAdminSession(session: AdminSession) {
+  const cookieStore = await cookies();
+  cookieStore.set(ADMIN_COOKIE_NAME, encodeSession(session), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -195,8 +198,9 @@ export function setAdminSession(session: AdminSession) {
   });
 }
 
-export function setCustomerSession(session: CustomerSession) {
-  cookies().set(CUSTOMER_COOKIE_NAME, encodeSession(session), {
+export async function setCustomerSession(session: CustomerSession) {
+  const cookieStore = await cookies();
+  cookieStore.set(CUSTOMER_COOKIE_NAME, encodeSession(session), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -205,10 +209,12 @@ export function setCustomerSession(session: CustomerSession) {
   });
 }
 
-export function clearAdminSession() {
-  cookies().delete(ADMIN_COOKIE_NAME);
+export async function clearAdminSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete(ADMIN_COOKIE_NAME);
 }
 
-export function clearCustomerSession() {
-  cookies().delete(CUSTOMER_COOKIE_NAME);
+export async function clearCustomerSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete(CUSTOMER_COOKIE_NAME);
 }

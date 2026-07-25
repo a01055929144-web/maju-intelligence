@@ -14,14 +14,15 @@ const resultLabels: Record<string, string> = {
   failed: "실패"
 };
 
-export default async function RevenuePipelinePage({ searchParams }: { searchParams?: { companyId?: string } }) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+export default async function RevenuePipelinePage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
 
   if (!customerSession && !adminSession) redirect("/dashboard/login");
-  if (!customerSession && adminSession && !searchParams?.companyId) redirect("/admin/companies");
+  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
-  const companyId = resolvePageCompanyId(customerSession, adminSession, searchParams?.companyId);
+  const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const pipeline = await getRevenuePipeline(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const pipelineActions = [

@@ -3,7 +3,7 @@ import { getCustomerSession } from "@/lib/auth";
 import { updateCompanySettings } from "@/lib/store";
 
 export async function PATCH(request: Request) {
-  const session = getCustomerSession();
+  const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

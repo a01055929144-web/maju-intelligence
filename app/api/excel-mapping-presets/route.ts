@@ -11,9 +11,9 @@ function isUploadType(value: unknown): value is UploadType {
   return uploadTypes.includes(value as UploadType);
 }
 
-function resolveCompanyId(request: NextRequest, bodyCompanyId?: string) {
-  const customerSession = getCustomerSession();
-  const adminSession = getAdminSession();
+async function resolveCompanyId(request: NextRequest, bodyCompanyId?: string) {
+  const customerSession = await getCustomerSession();
+  const adminSession = await getAdminSession();
   const queryCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
 
   return customerSession?.companyId || (adminSession ? bodyCompanyId || queryCompanyId : undefined);
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "uploadType은 customer-master 또는 sales-analysis 여야 합니다." }, { status: 400 });
   }
 
-  const companyId = resolveCompanyId(request);
+  const companyId = await resolveCompanyId(request);
   const result = await getExcelMappingPreset(uploadType, companyId);
   return NextResponse.json(result);
 }
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "저장할 컬럼 매핑이 필요합니다." }, { status: 400 });
   }
 
-  const companyId = resolveCompanyId(request, body.companyId);
+  const companyId = await resolveCompanyId(request, body.companyId);
   const result = await upsertExcelMappingPreset({
     companyId,
     erpName: body.erpName,
@@ -67,7 +67,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: "uploadType은 customer-master 또는 sales-analysis 여야 합니다." }, { status: 400 });
   }
 
-  const companyId = resolveCompanyId(request);
+  const companyId = await resolveCompanyId(request);
   const result = await deleteExcelMappingPreset(uploadType, companyId);
   return NextResponse.json(result);
 }

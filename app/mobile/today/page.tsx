@@ -10,8 +10,9 @@ import { getCustomerSession } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
-export default async function MobileTodayPage({ searchParams }: { searchParams?: { customer?: string } }) {
-  const session = getCustomerSession();
+export default async function MobileTodayPage({ searchParams }: { searchParams?: Promise<{ customer?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const session = await getCustomerSession();
   if (!session) redirect("/mobile/join");
 
   const routePlan = await getTodayRoutePlan(session.companyId);
@@ -19,7 +20,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const todayStops = firstGroup?.stops.slice(0, 6) || [];
   const driverName = session.name || "모바일 담당자";
   const routeArea = firstGroup?.region || "전체 권역";
-  const selectedStop = todayStops.find((stop) => stop.id === searchParams?.customer) || todayStops[0];
+  const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops[0];
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const heroCopy = getMobileHeroCopy(workspaceRole);

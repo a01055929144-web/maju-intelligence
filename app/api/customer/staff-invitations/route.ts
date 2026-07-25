@@ -10,21 +10,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function requireMemberManager() {
-  const session = getCustomerSession();
+async function requireMemberManager() {
+  const session = await getCustomerSession();
   if (!session) return { response: NextResponse.json({ message: "Unauthorized" }, { status: 401 }), session: null };
   return { response: null, session };
 }
 
 export async function GET() {
-  const { response, session } = requireMemberManager();
+  const { response, session } = await requireMemberManager();
   if (response || !session) return response;
 
   return NextResponse.json(await getCompanyStaffInvitations(session.companyId));
 }
 
 export async function POST(request: NextRequest) {
-  const { response, session } = requireMemberManager();
+  const { response, session } = await requireMemberManager();
   if (response || !session) return response;
 
   const body = (await request.json().catch(() => null)) as Omit<StaffInvitationInput, "companyId"> | null;
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const { response, session } = requireMemberManager();
+  const { response, session } = await requireMemberManager();
   if (response || !session) return response;
 
   const body = (await request.json().catch(() => null)) as Omit<StaffInvitationUpdateInput, "companyId"> | null;

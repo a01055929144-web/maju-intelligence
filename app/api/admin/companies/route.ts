@@ -5,7 +5,7 @@ import { getManagedCompanyAccounts, ManagedCompanyAccountInput, upsertManagedCom
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = requireAdminSession();
+  const session = await requireAdminSession();
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = requireAdminSession();
+  const session = await requireAdminSession();
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }

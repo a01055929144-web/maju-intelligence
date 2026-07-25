@@ -2,8 +2,9 @@ import Link from "next/link";
 import { ChevronRight, ClipboardCheck, KeyRound, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export default function MobileStaffJoinPage({ searchParams }: { searchParams?: { invite?: string } }) {
-  const inviteCode = searchParams?.invite || "";
+export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const inviteCode = resolvedSearchParams?.invite || "";
   const kakaoLoginUrl = createKakaoLoginUrl(inviteCode);
   const kakaoReady = Boolean(kakaoLoginUrl);
   const joinMode = inviteCode ? "company" : "personal";

@@ -3,7 +3,7 @@ import { getAdminSession } from "@/lib/auth";
 import { getAdminDashboardPayload } from "@/lib/store";
 
 export async function GET() {
-  if (!getAdminSession()) {
+  if (!(await getAdminSession())) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 

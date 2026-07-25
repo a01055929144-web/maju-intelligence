@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     result?: VisitResult;
     companyId?: string;
   } | null;
-  const scope = getRequestAuthScope(request, body?.companyId);
+  const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
