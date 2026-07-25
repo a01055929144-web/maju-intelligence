@@ -906,7 +906,7 @@ function Onboarding({
               tone: "warning" as const
             }
           : {
-              helper: entryMode === "excel" ? "엑셀을 올리면 전체 행 미리보기와 필수 컬럼 매핑이 열립니다." : entryMode === "document" ? "사업자등록증 이미지/PDF를 올리면 OCR 추출값 확인 화면이 열립니다." : "주소와 사업자번호를 확인한 뒤 1건씩 저장합니다.",
+              helper: entryMode === "excel" ? "여러 거래처나 매출 거래내역은 엑셀로 한 번에 등록하세요." : entryMode === "document" ? "OCR은 사업자등록증을 보고 기본값을 빠르게 채우는 보조 방법입니다." : "신규 매장 1곳은 주소 검색과 사업자번호 확인 후 바로 저장하세요.",
               label: "등록 대기",
               tone: "idle" as const
             };
@@ -918,10 +918,10 @@ function Onboarding({
       value: template.label
     },
     {
-      description: entryMode === "excel" ? "파일을 올려 ERP 헤더를 읽고 매핑합니다." : entryMode === "document" ? "사업자등록증 추출값과 신분증 보관 여부를 확인합니다." : "주소/사업자번호 검증 후 1건씩 저장합니다.",
+      description: entryMode === "excel" ? "대량 데이터는 ERP 헤더를 읽고 필수 컬럼을 매핑합니다." : entryMode === "document" ? "사업자등록증 OCR은 수기 입력을 보조하는 선택 방법입니다." : "신규 매장은 주소/사업자번호 검증 후 1건씩 저장합니다.",
       done: entryMode === "manual" || entryMode === "document" ? manualComplete : hasDataRows,
       label: "등록 방식",
-      value: entryMode === "excel" ? "엑셀 업로드" : entryMode === "document" ? "증빙 OCR" : "수기 입력"
+      value: entryMode === "excel" ? "대량 등록" : entryMode === "document" ? "OCR 보조 입력" : "수기 등록"
     },
     {
       description: hasBlockingQualityIssues ? "필수값과 사업자번호 오류를 먼저 보완하세요." : "필수 컬럼과 행 품질을 저장 전에 확인합니다.",
@@ -1201,7 +1201,7 @@ function Onboarding({
             <div>
               <Badge className="mb-3 bg-blue-50 text-blue-700">2. 어떻게 등록하나요?</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{uploadHint}</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">대량 등록은 엑셀, 신규 1건은 수기 등록이 기본입니다. OCR은 사업자등록증이 있을 때 값을 빠르게 채우는 보조 방법입니다.</p>
             </div>
             <div className="grid w-full grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto">
               <button
@@ -1213,8 +1213,8 @@ function Onboarding({
                 onClick={() => setEntryMode("excel")}
                 type="button"
               >
-                <span className="block text-sm font-black">엑셀 업로드</span>
-                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "excel" ? "text-white/75" : "text-slate-400"}`}>대량 등록</span>
+                <span className="block text-sm font-black">대량 등록</span>
+                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "excel" ? "text-white/75" : "text-slate-400"}`}>엑셀 업로드</span>
               </button>
               <button
                 className={`rounded-lg border px-4 py-2.5 text-left transition ${
@@ -1225,8 +1225,8 @@ function Onboarding({
                 onClick={() => setEntryMode("manual")}
                 type="button"
               >
-                <span className="block text-sm font-black">수기 입력</span>
-                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "manual" ? "text-white/75" : "text-slate-400"}`}>1건 등록</span>
+                <span className="block text-sm font-black">수기 등록</span>
+                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "manual" ? "text-white/75" : "text-slate-400"}`}>신규 1곳</span>
               </button>
               <button
                 className={`rounded-lg border px-4 py-2.5 text-left transition ${
@@ -1240,8 +1240,8 @@ function Onboarding({
                 }}
                 type="button"
               >
-                <span className="block text-sm font-black">증빙 OCR</span>
-                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "document" ? "text-white/75" : "text-slate-400"}`}>사업자등록증</span>
+                <span className="block text-sm font-black">OCR 보조</span>
+                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "document" ? "text-white/75" : "text-slate-400"}`}>선택 기능</span>
               </button>
             </div>
           </div>
@@ -1598,7 +1598,7 @@ function RegistrationControlStrip({
           </div>
         </div>
         <div className="grid gap-2 rounded-md border border-white/70 bg-white/75 p-3 sm:grid-cols-3 xl:grid-cols-1">
-          <MiniStatus label="등록 방식" value={entryMode === "excel" ? "엑셀 업로드" : entryMode === "document" ? "증빙 OCR" : "수기 입력"} />
+          <MiniStatus label="등록 방식" value={entryMode === "excel" ? "대량 등록" : entryMode === "document" ? "OCR 보조" : "수기 등록"} />
           <MiniStatus label="대기 데이터" value={rows ? `${rows.toLocaleString()}행` : "없음"} />
           <MiniStatus label="현재 파일" value={rows ? filename : "업로드 전"} />
           <div className="sm:col-span-3 xl:col-span-1">
@@ -1865,9 +1865,9 @@ function DocumentOcrRegistrationPanel({
       <div className="space-y-3">
         <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-5 text-center transition hover:bg-blue-50">
           <FileSpreadsheet className="mb-4 h-10 w-10 text-blue-700" />
-          <span className="text-base font-black text-slate-950">사업자등록증 업로드</span>
-          <span className="mt-2 text-sm font-semibold leading-6 text-slate-500">이미지 또는 PDF를 올리면 상호명, 사업자번호, 대표자명, 개업일, 주소를 추출합니다.</span>
-          <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">이미지 · PDF · 저장 전 검수</span>
+          <span className="text-base font-black text-slate-950">OCR 보조 입력</span>
+          <span className="mt-2 text-sm font-semibold leading-6 text-slate-500">사업자등록증 이미지/PDF가 있으면 상호명, 사업자번호, 대표자명, 개업일, 주소 후보를 먼저 채웁니다.</span>
+          <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">선택 기능 · 저장 전 검수</span>
           <input className="sr-only" type="file" accept="image/*,.pdf" onChange={onDocumentFile} />
         </label>
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -1880,9 +1880,9 @@ function DocumentOcrRegistrationPanel({
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <Badge className="mb-2 bg-blue-100 text-blue-800">OCR 추출값 확인</Badge>
+              <Badge className="mb-2 bg-blue-100 text-blue-800">보조 입력값 확인</Badge>
               <h3 className="text-lg font-black text-slate-950">{filename || "사업자등록증을 먼저 업로드하세요"}</h3>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{ocrStatus || "업로드 후 추출값을 확인하고 잘못 읽힌 값을 직접 수정합니다."}</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{ocrStatus || "파일이 없으면 수기 등록으로 바로 진행해도 됩니다. 업로드 후 후보값을 확인하고 수정하세요."}</p>
             </div>
             <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete || isManualSaving}>
               <Save size={18} />
