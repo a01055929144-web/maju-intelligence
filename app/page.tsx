@@ -1203,47 +1203,13 @@ function Onboarding({
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
               <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">대량 등록은 엑셀, 신규 1건은 수기 등록이 기본입니다. OCR은 사업자등록증이 있을 때 값을 빠르게 채우는 보조 방법입니다.</p>
             </div>
-            <div className="grid w-full grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto">
-              <button
-                className={`rounded-lg border px-4 py-2.5 text-left transition ${
-                  entryMode === "excel"
-                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
-                    : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
-                }`}
-                onClick={() => setEntryMode("excel")}
-                type="button"
-              >
-                <span className="block text-sm font-black">대량 등록</span>
-                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "excel" ? "text-white/75" : "text-slate-400"}`}>엑셀 업로드</span>
-              </button>
-              <button
-                className={`rounded-lg border px-4 py-2.5 text-left transition ${
-                  entryMode === "manual"
-                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
-                    : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
-                }`}
-                onClick={() => setEntryMode("manual")}
-                type="button"
-              >
-                <span className="block text-sm font-black">수기 등록</span>
-                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "manual" ? "text-white/75" : "text-slate-400"}`}>신규 1곳</span>
-              </button>
-              <button
-                className={`rounded-lg border px-4 py-2.5 text-left transition ${
-                  entryMode === "document"
-                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
-                    : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
-                }`}
-                onClick={() => {
-                  onUploadType("customer-master");
-                  setEntryMode("document");
-                }}
-                type="button"
-              >
-                <span className="block text-sm font-black">OCR 보조</span>
-                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "document" ? "text-white/75" : "text-slate-400"}`}>선택 기능</span>
-              </button>
-            </div>
+            <RegistrationMethodCards
+              activeMode={entryMode}
+              onSelect={(mode) => {
+                if (mode === "document") onUploadType("customer-master");
+                setEntryMode(mode);
+              }}
+            />
           </div>
 
           {entryMode === "excel" ? (
@@ -1575,6 +1541,13 @@ function RegistrationControlStrip({
     warning: "border-amber-200 bg-amber-50/80 text-amber-800"
   }[state.tone];
   const progress = Math.round((readyCount / totalCount) * 100);
+  const waitingActionLabel = entryMode === "excel" ? "엑셀 업로드 필요" : entryMode === "manual" ? "수기 입력 필요" : "OCR 또는 수기 입력 필요";
+  const waitingActionHelper =
+    entryMode === "excel"
+      ? "파일 업로드 후 필수 컬럼을 모두 연결하면 버튼이 활성화됩니다."
+      : entryMode === "manual"
+        ? "수기 등록 폼에서 필수값과 사업자번호를 확인하면 저장할 수 있습니다."
+        : "OCR은 보조 기능입니다. 파일이 없으면 수기 등록으로 바로 진행하세요.";
 
   return (
     <div className={`rounded-md border p-4 shadow-sm ${toneClassName}`}>
@@ -1612,17 +1585,82 @@ function RegistrationControlStrip({
         <div className="rounded-md border border-white/80 bg-white/80 p-3">
           <p className="text-xs font-black text-slate-500">다음 실행</p>
           <p className="mt-1 text-sm font-black text-slate-950">
-            {canAnalyze ? "검증 후 서버 저장" : rows ? "필수 매핑 확인" : "데이터 등록 시작"}
+            {canAnalyze ? "검증 후 서버 저장" : rows ? "필수 매핑 확인" : waitingActionLabel}
           </p>
           <Button className="mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
             {isAnalyzing ? "저장 중" : "검증·저장 실행"}
             <ArrowRight className="h-4 w-4" />
           </Button>
           <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-            {canAnalyze ? "아래로 내려가지 않아도 바로 서버 저장을 실행할 수 있습니다." : "파일 업로드 후 필수 컬럼을 모두 연결하면 버튼이 활성화됩니다."}
+            {canAnalyze ? "아래로 내려가지 않아도 바로 서버 저장을 실행할 수 있습니다." : waitingActionHelper}
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMode; onSelect: (mode: EntryMode) => void }) {
+  const methods = [
+    {
+      badge: "기본",
+      description: "거래처 마스터나 매출 거래내역을 한 번에 많이 등록할 때 사용합니다.",
+      icon: Upload,
+      id: "excel" as EntryMode,
+      label: "대량 등록",
+      meta: "엑셀 업로드",
+      next: "파일 업로드 → 전체 미리보기 → 컬럼 매핑"
+    },
+    {
+      badge: "자주 사용",
+      description: "신규 매장 1곳을 바로 추가하거나 현장에서 정보를 보완할 때 사용합니다.",
+      icon: Building2,
+      id: "manual" as EntryMode,
+      label: "수기 등록",
+      meta: "신규 1곳",
+      next: "주소 검색 → 사업자번호 확인 → 저장"
+    },
+    {
+      badge: "선택",
+      description: "사업자등록증 파일이 있을 때 수기 입력값을 빠르게 채우는 보조 기능입니다.",
+      icon: FileSpreadsheet,
+      id: "document" as EntryMode,
+      label: "OCR 보조",
+      meta: "필수 아님",
+      next: "파일 업로드 → 후보값 확인 → 수기 보정"
+    }
+  ];
+
+  return (
+    <div className="grid w-full gap-2 lg:grid-cols-3 xl:w-[760px]">
+      {methods.map((method) => {
+        const selected = activeMode === method.id;
+        const Icon = method.icon;
+
+        return (
+          <button
+            key={method.id}
+            className={`group rounded-xl border p-3 text-left transition ${
+              selected
+                ? "border-blue-700 bg-blue-700 text-white shadow-[0_12px_26px_rgba(29,78,216,0.2)]"
+                : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
+            }`}
+            onClick={() => onSelect(method.id)}
+            type="button"
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-blue-700 group-hover:bg-white"}`}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className={`rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{method.badge}</span>
+            </span>
+            <span className="mt-3 block text-sm font-black">{method.label}</span>
+            <span className={`mt-1 block text-[11px] font-black ${selected ? "text-white/75" : "text-slate-400"}`}>{method.meta}</span>
+            <span className={`mt-2 block text-xs font-semibold leading-5 ${selected ? "text-white/80" : "text-slate-500"}`}>{method.description}</span>
+            <span className={`mt-3 block rounded-md px-2.5 py-2 text-xs font-black ${selected ? "bg-white/15 text-white" : "bg-slate-50 text-slate-600"}`}>{method.next}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
