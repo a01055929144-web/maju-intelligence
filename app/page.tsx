@@ -38,6 +38,7 @@ import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, 
 
 type RawRow = Record<string, string | number | boolean | null | undefined>;
 type FieldMap = Record<string, string>;
+type EntryMode = "document" | "excel" | "manual";
 type PipelineStatus = "pending" | "running" | "done" | "error";
 type PipelineStep = {
   key: string;
@@ -822,12 +823,14 @@ function Onboarding({
   onDownloadCustomerExport: () => void;
   onDownloadSalesExport: () => void;
 }) {
-  const [entryMode, setEntryMode] = useState<"excel" | "manual">("excel");
+  const [entryMode, setEntryMode] = useState<EntryMode>("excel");
   const [reviewTab, setReviewTab] = useState<"mapping" | "quality" | "save">("mapping");
   const [addressQuery, setAddressQuery] = useState("");
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [documentOcrFilename, setDocumentOcrFilename] = useState("");
+  const [documentOcrStatus, setDocumentOcrStatus] = useState("");
   const [savedPreset, setSavedPreset] = useState<FieldMap | null>(null);
   const [presetMessage, setPresetMessage] = useState("");
   const requiredFields = template.fields.filter((field) => field.required);
@@ -896,7 +899,7 @@ function Onboarding({
               tone: "warning" as const
             }
           : {
-              helper: entryMode === "excel" ? "엑셀을 올리면 전체 행 미리보기와 필수 컬럼 매핑이 열립니다." : "주소와 사업자번호를 확인한 뒤 1건씩 저장합니다.",
+              helper: entryMode === "excel" ? "엑셀을 올리면 전체 행 미리보기와 필수 컬럼 매핑이 열립니다." : entryMode === "document" ? "사업자등록증 이미지/PDF를 올리면 OCR 추출값 확인 화면이 열립니다." : "주소와 사업자번호를 확인한 뒤 1건씩 저장합니다.",
               label: "등록 대기",
               tone: "idle" as const
             };
@@ -908,10 +911,10 @@ function Onboarding({
       value: template.label
     },
     {
-      description: entryMode === "excel" ? "파일을 올려 ERP 헤더를 읽고 매핑합니다." : "주소/사업자번호 검증 후 1건씩 저장합니다.",
-      done: entryMode === "manual" ? manualComplete : hasDataRows,
+      description: entryMode === "excel" ? "파일을 올려 ERP 헤더를 읽고 매핑합니다." : entryMode === "document" ? "사업자등록증 추출값과 신분증 보관 여부를 확인합니다." : "주소/사업자번호 검증 후 1건씩 저장합니다.",
+      done: entryMode === "manual" || entryMode === "document" ? manualComplete : hasDataRows,
       label: "등록 방식",
-      value: entryMode === "excel" ? "엑셀 업로드" : "수기 입력"
+      value: entryMode === "excel" ? "엑셀 업로드" : entryMode === "document" ? "증빙 OCR" : "수기 입력"
     },
     {
       description: hasBlockingQualityIssues ? "필수값과 사업자번호 오류를 먼저 보완하세요." : "필수 컬럼과 행 품질을 저장 전에 확인합니다.",
@@ -995,6 +998,33 @@ function Onboarding({
     setAddressQuery(result.address);
     setAddressResults([]);
     setAddressSearchMessage("선택한 주소를 배송주소에 반영했습니다.");
+  }
+
+  function applyDocumentOcr(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    onUploadType("customer-master");
+    setDocumentOcrFilename(file.name);
+    setDocumentOcrStatus("OCR 샘플 추출 완료 · 실제 OCR API 연결 전 확인 화면입니다.");
+    onManualChange({
+      ...manualDraft,
+      address: "서울 성동구 성수이로 88 1층",
+      bankAccount: "신한 110-000-000000",
+      bankbookCopyStatus: "추가 업로드 필요",
+      businessCertificateStatus: "OCR 확인 완료",
+      businessRegistrationNumber: "123-10-10004",
+      businessStatus: "정상",
+      customerName: "성수 마주식당",
+      deliveryLoadingMemo: "후문 냉장창고 앞 적재",
+      email: "sungsu-maju@example.com",
+      identityDocumentStatus: "마스킹 후 보관 예정",
+      industry: "한식",
+      openingDate: "2018-04-12",
+      phone: "010-3100-1000",
+      representativeName: "김민준",
+      region: "성수동"
+    });
   }
 
   useEffect(() => {
@@ -1157,7 +1187,7 @@ function Onboarding({
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
               <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{uploadHint}</p>
             </div>
-            <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto">
+            <div className="grid w-full grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto">
               <button
                 className={`rounded-lg border px-4 py-2.5 text-left transition ${
                   entryMode === "excel"
@@ -1181,6 +1211,21 @@ function Onboarding({
               >
                 <span className="block text-sm font-black">수기 입력</span>
                 <span className={`mt-1 block text-[11px] font-bold ${entryMode === "manual" ? "text-white/75" : "text-slate-400"}`}>1건 등록</span>
+              </button>
+              <button
+                className={`rounded-lg border px-4 py-2.5 text-left transition ${
+                  entryMode === "document"
+                    ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
+                    : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+                }`}
+                onClick={() => {
+                  onUploadType("customer-master");
+                  setEntryMode("document");
+                }}
+                type="button"
+              >
+                <span className="block text-sm font-black">증빙 OCR</span>
+                <span className={`mt-1 block text-[11px] font-bold ${entryMode === "document" ? "text-white/75" : "text-slate-400"}`}>사업자등록증</span>
               </button>
             </div>
           </div>
@@ -1211,6 +1256,17 @@ function Onboarding({
                 <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">{saveHint}</p>
               </div>
             </div>
+          ) : entryMode === "document" ? (
+            <DocumentOcrRegistrationPanel
+              filename={documentOcrFilename}
+              isManualSaving={isManualSaving}
+              manualComplete={manualComplete}
+              manualDraft={manualDraft}
+              ocrStatus={documentOcrStatus}
+              onDocumentFile={applyDocumentOcr}
+              onManualChange={onManualChange}
+              onManualSave={onManualSave}
+            />
           ) : (
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
@@ -1483,7 +1539,7 @@ function RegistrationControlStrip({
   typeLabel
 }: {
   canAnalyze: boolean;
-  entryMode: "excel" | "manual";
+  entryMode: EntryMode;
   filename: string;
   isAnalyzing: boolean;
   latestUploadAt?: string;
@@ -1525,7 +1581,7 @@ function RegistrationControlStrip({
           </div>
         </div>
         <div className="grid gap-2 rounded-md border border-white/70 bg-white/75 p-3 sm:grid-cols-3 xl:grid-cols-1">
-          <MiniStatus label="등록 방식" value={entryMode === "excel" ? "엑셀 업로드" : "수기 입력"} />
+          <MiniStatus label="등록 방식" value={entryMode === "excel" ? "엑셀 업로드" : entryMode === "document" ? "증빙 OCR" : "수기 입력"} />
           <MiniStatus label="대기 데이터" value={rows ? `${rows.toLocaleString()}행` : "없음"} />
           <MiniStatus label="현재 파일" value={rows ? filename : "업로드 전"} />
           <div className="sm:col-span-3 xl:col-span-1">
@@ -1718,6 +1774,108 @@ function OperationalDataSplit({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function DocumentOcrRegistrationPanel({
+  filename,
+  isManualSaving,
+  manualComplete,
+  manualDraft,
+  ocrStatus,
+  onDocumentFile,
+  onManualChange,
+  onManualSave
+}: {
+  filename: string;
+  isManualSaving: boolean;
+  manualComplete: boolean;
+  manualDraft: RawRow;
+  ocrStatus: string;
+  onDocumentFile: (event: ChangeEvent<HTMLInputElement>) => void;
+  onManualChange: (draft: RawRow) => void;
+  onManualSave: () => void | Promise<void>;
+}) {
+  const extractedFields = [
+    ["상호명", "customerName"],
+    ["사업자등록번호", "businessRegistrationNumber"],
+    ["대표자명", "representativeName"],
+    ["개업일", "openingDate"],
+    ["배송주소", "address"],
+    ["업종", "industry"],
+    ["연락처", "phone"],
+    ["이메일", "email"]
+  ] as const;
+  const attachmentSlots = [
+    { description: "사업자등록증 원본 이미지/PDF", label: "사업자등록증", required: true },
+    { description: "대표자 또는 담당자 확인자료 · 주민번호/주소 일부 마스킹 후 보관", label: "신분증", required: false },
+    { description: "정산 계좌 확인용 통장 사본", label: "통장사본", required: false },
+    { description: "배송기사가 확인할 냉장고, 후문, 적재 위치 사진/영상", label: "배송 적재위치", required: false }
+  ];
+
+  return (
+    <div className="mt-4 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="space-y-3">
+        <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-5 text-center transition hover:bg-blue-50">
+          <FileSpreadsheet className="mb-4 h-10 w-10 text-blue-700" />
+          <span className="text-base font-black text-slate-950">사업자등록증 업로드</span>
+          <span className="mt-2 text-sm font-semibold leading-6 text-slate-500">이미지 또는 PDF를 올리면 상호명, 사업자번호, 대표자명, 개업일, 주소를 추출합니다.</span>
+          <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">이미지 · PDF</span>
+          <input className="sr-only" type="file" accept="image/*,.pdf" onChange={onDocumentFile} />
+        </label>
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+          <p className="text-sm font-black text-amber-900">개인정보 보관 기준</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-amber-800">신분증은 실명 확인용 첨부로만 다루고, 주민등록번호 뒷자리와 불필요한 주소 정보는 마스킹 후 저장하는 흐름으로 설계합니다.</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <Badge className="mb-2 bg-blue-100 text-blue-800">OCR 추출값 확인</Badge>
+              <h3 className="text-lg font-black text-slate-950">{filename || "사업자등록증을 먼저 업로드하세요"}</h3>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{ocrStatus || "업로드 후 추출값을 확인하고 잘못 읽힌 값을 직접 수정합니다."}</p>
+            </div>
+            <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete || isManualSaving}>
+              <Save size={18} />
+              {isManualSaving ? "저장 중" : "확인 후 매장 생성"}
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {extractedFields.map(([label, key]) => (
+              <label key={key} className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <span className="text-xs font-black text-slate-500">{label}</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                  onChange={(event) => onManualChange({ ...manualDraft, [key]: event.target.value })}
+                  value={String(manualDraft[key] ?? "")}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-white p-4">
+          <p className="text-sm font-black text-slate-950">첨부자료 보관</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">1차 버전은 보관 항목과 상태를 잡고, 다음 단계에서 실제 파일 저장소와 연결합니다.</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {attachmentSlots.map((slot) => (
+              <div key={slot.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-black text-slate-950">{slot.label}</p>
+                  <Badge className={slot.required ? "bg-blue-100 text-blue-800" : "bg-white text-slate-500"}>{slot.required ? "필수" : "선택"}</Badge>
+                </div>
+                <p className="mt-2 min-h-10 text-xs font-semibold leading-5 text-slate-500">{slot.description}</p>
+                <button className="mt-3 h-9 w-full rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700" type="button">
+                  + 파일 추가
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
