@@ -1352,8 +1352,12 @@ function Onboarding({
                 addressSelected={manualAddressSelected}
                 businessNumber={manualBusinessNumber}
                 businessNumberValid={manualBusinessNumberValid}
+                isManualSaving={isManualSaving}
                 isMaster={isMaster}
+                lastManualCustomerHref={lastManualCustomerHref}
+                manualSaveMessage={manualSaveMessage}
                 missingFields={manualMissingRequiredFields}
+                onManualSave={onManualSave}
                 ready={manualComplete}
               />
             </div>
@@ -2265,15 +2269,23 @@ function ManualValidationPanel({
   addressSelected,
   businessNumber,
   businessNumberValid,
+  isManualSaving,
   isMaster,
+  lastManualCustomerHref,
+  manualSaveMessage,
   missingFields,
+  onManualSave,
   ready
 }: {
   addressSelected: boolean;
   businessNumber: string;
   businessNumberValid: boolean;
+  isManualSaving: boolean;
   isMaster: boolean;
+  lastManualCustomerHref: string;
+  manualSaveMessage: string;
   missingFields: UploadTemplateField[];
+  onManualSave: () => void | Promise<void>;
   ready: boolean;
 }) {
   const checks = [
@@ -2300,8 +2312,10 @@ function ManualValidationPanel({
     }
   ];
 
+  const doneCount = checks.filter((check) => check.ok).length;
+
   return (
-    <aside className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+    <aside className="space-y-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -2312,7 +2326,14 @@ function ManualValidationPanel({
         </div>
         <Badge className={ready ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{ready ? "저장 가능" : "확인 필요"}</Badge>
       </div>
-      <div className="mt-4 space-y-2">
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-1 flex items-center justify-between text-xs font-black text-slate-500">
+          <span>검증 진행률</span>
+          <span>{doneCount}/{checks.length}</span>
+        </div>
+        <Progress value={Math.round((doneCount / checks.length) * 100)} />
+      </div>
+      <div className="space-y-2">
         {checks.map((check) => (
           <div key={check.label} className={`rounded-md border p-3 ${check.ok ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
             <div className="flex items-center justify-between gap-3">
@@ -2323,9 +2344,32 @@ function ManualValidationPanel({
           </div>
         ))}
       </div>
-      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
         <p className="text-xs font-black text-slate-500">저장 후 흐름</p>
-        <p className="mt-1 text-sm font-bold leading-6 text-slate-800">저장 대기 목록에 추가되고, 우측 저장 상태에서 서버 반영과 리포트 갱신을 진행합니다.</p>
+        <p className="mt-1 text-sm font-bold leading-6 text-slate-800">
+          저장되면 거래처 히스토리에서 기본정보, 메모, 첨부자료, 배송 적재위치를 이어서 관리합니다.
+        </p>
+      </div>
+      {manualSaveMessage ? (
+        <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+          <p className="text-xs font-black text-blue-700">최근 저장 결과</p>
+          <p className="mt-1 text-sm font-bold leading-6 text-slate-800">{manualSaveMessage}</p>
+        </div>
+      ) : null}
+      <div className="grid gap-2">
+        <Button className="h-11 w-full" onClick={onManualSave} disabled={!ready || isManualSaving}>
+          <Save size={18} />
+          {isManualSaving ? "저장 중" : ready ? "거래처 저장" : "검증 완료 후 저장"}
+        </Button>
+        {lastManualCustomerHref ? (
+          <Link
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-input bg-white px-4 py-2 text-sm font-bold text-slate-900 shadow-sm transition hover:bg-accent hover:text-accent-foreground"
+            href={lastManualCustomerHref}
+          >
+            히스토리에서 확인
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        ) : null}
       </div>
     </aside>
   );
