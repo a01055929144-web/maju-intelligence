@@ -1404,6 +1404,7 @@ export function getSystemStatus(): SystemStatus {
   const appUrlConfigured = Boolean(process.env.NEXT_PUBLIC_APP_URL);
   const adminConfigured = Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET);
   const customerConfigured = Boolean(process.env.CUSTOMER_EMAIL && process.env.CUSTOMER_PASSWORD);
+  const ocrConfigured = Boolean(process.env.CLOVA_OCR_INVOKE_URL && process.env.CLOVA_OCR_SECRET) || Boolean(process.env.UPSTAGE_API_KEY) || Boolean(process.env.OPENAI_API_KEY);
   const routeConfigured = Boolean(process.env.COMPANY_ORIGIN_ADDRESS && process.env.TMAP_API_KEY);
   const blockingIssues = [
     !supabaseConfigured && "Supabase URL과 Service Role Key가 없어 거래처/매출/첨부자료 서버 저장을 확인할 수 없습니다.",
@@ -1412,6 +1413,7 @@ export function getSystemStatus(): SystemStatus {
   ].filter((issue): issue is string => Boolean(issue));
   const warningIssues = [
     !routeConfigured && "회사 출발지 또는 TMAP API 키가 없어 실도로 경로 계산이 제한됩니다.",
+    !ocrConfigured && "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 샘플 응답으로 동작합니다.",
     !appUrlConfigured && "NEXT_PUBLIC_APP_URL이 없어 배포 URL 기반 링크와 리다이렉트 확인이 제한될 수 있습니다."
   ].filter((issue): issue is string => Boolean(issue));
   const readinessScore = Math.max(0, Math.min(100, 100 - blockingIssues.length * 25 - warningIssues.length * 10));
@@ -1437,7 +1439,8 @@ export function getSystemStatus(): SystemStatus {
       { key: "CUSTOMER_PASSWORD", present: Boolean(process.env.CUSTOMER_PASSWORD), scope: "server" },
       { key: "CUSTOMER_COMPANY_ID", present: Boolean(process.env.CUSTOMER_COMPANY_ID), scope: "server" },
       { key: "COMPANY_ORIGIN_ADDRESS", present: Boolean(process.env.COMPANY_ORIGIN_ADDRESS), scope: "server" },
-      { key: "TMAP_API_KEY", present: Boolean(process.env.TMAP_API_KEY), scope: "server" }
+      { key: "TMAP_API_KEY", present: Boolean(process.env.TMAP_API_KEY), scope: "server" },
+      { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, scope: "server" }
     ],
     services: [
       {
@@ -1471,6 +1474,13 @@ export function getSystemStatus(): SystemStatus {
         description: routeConfigured
           ? "회사 출발지와 Tmap API 키가 설정되어 거리/시간/경로 계산을 붙일 수 있습니다."
           : "회사 출발지 또는 Tmap API 키가 없어 주소 텍스트/기존 캐시 기준으로 동작합니다."
+      },
+      {
+        name: "Document OCR",
+        status: ocrConfigured ? "ready" : "fallback",
+        description: ocrConfigured
+          ? "사업자등록증 OCR 공급자 환경변수가 감지되었습니다."
+          : "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 샘플 응답으로 동작합니다."
       },
       {
         name: "Customer Attachment Storage",
