@@ -1503,19 +1503,15 @@ function Onboarding({
                     <p className="mt-2 text-sm font-medium leading-6 text-slate-500">중앙에서 엑셀을 업로드하거나 수기로 입력하면 매핑 상태가 표시됩니다.</p>
                   </div>
                 ) : null}
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <Badge className={canAnalyze ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>저장 실행 안내</Badge>
-                      <p className="mt-2 flex items-center gap-2 text-base font-black text-slate-950">
-                        <Check className={canAnalyze ? "h-4 w-4 text-emerald-700" : "h-4 w-4 text-slate-400"} />
-                        {canAnalyze ? "상단 관제판에서 바로 저장할 수 있습니다." : rawRows.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 연결이 필요합니다.` : "먼저 엑셀 업로드 또는 수기 입력을 진행하세요."}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">저장 버튼은 화면 상단 데이터 등록 관제판의 다음 실행 영역으로 통일했습니다.</p>
-                    </div>
-                    <Badge className="w-fit bg-white text-slate-600 ring-1 ring-inset ring-slate-200">{canAnalyze ? "실행 가능" : "대기 중"}</Badge>
-                  </div>
-                </div>
+                <SaveResultSummary
+                  canAnalyze={canAnalyze}
+                  ledgerHref={currentLedgerHref}
+                  ledgerLabel={currentLedgerLabel}
+                  missingRequiredFields={missingRequiredFields}
+                  persisted={pipelineMeta.persisted}
+                  registrationStatus={registrationStatus}
+                  rows={rawRows.length}
+                />
               </>
             )}
           </div>
@@ -2428,6 +2424,80 @@ function SaveReadinessPanel({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SaveResultSummary({
+  canAnalyze,
+  ledgerHref,
+  ledgerLabel,
+  missingRequiredFields,
+  persisted,
+  registrationStatus,
+  rows
+}: {
+  canAnalyze: boolean;
+  ledgerHref: string;
+  ledgerLabel: string;
+  missingRequiredFields: readonly UploadTemplateField[];
+  persisted: boolean;
+  registrationStatus: RegistrationStatus;
+  rows: number;
+}) {
+  const mode = persisted ? "persisted" : canAnalyze ? "ready" : rows ? "blocked" : "empty";
+  const copy = {
+    blocked: {
+      badge: "확인 필요",
+      body: missingRequiredFields.length ? `${missingRequiredFields.map((field) => field.label).join(", ")} 필수 컬럼을 연결해야 저장할 수 있습니다.` : "품질 검증 탭에서 보완 필요 행을 확인하세요.",
+      className: "border-amber-200 bg-amber-50",
+      icon: <AlertTriangle className="h-4 w-4 text-amber-700" />,
+      title: "아직 저장 실행 조건이 부족합니다."
+    },
+    empty: {
+      badge: "등록 대기",
+      body: "대량 등록은 엑셀을 올리고, 신규 1건은 수기 등록을 완료하면 저장 실행이 가능합니다.",
+      className: "border-slate-200 bg-slate-50",
+      icon: <Clock className="h-4 w-4 text-slate-500" />,
+      title: "등록할 데이터가 아직 없습니다."
+    },
+    persisted: {
+      badge: "서버 반영 완료",
+      body: "서버 저장이 확인됐습니다. 운영 화면에서 같은 데이터 기준으로 확인할 수 있습니다.",
+      className: "border-emerald-200 bg-emerald-50",
+      icon: <Check className="h-4 w-4 text-emerald-700" />,
+      title: "데이터 등록이 운영 화면에 반영됐습니다."
+    },
+    ready: {
+      badge: "저장 가능",
+      body: "상단 데이터 등록 관제판에서 검증·저장 실행을 누르면 서버 저장과 리포트 갱신을 함께 시도합니다.",
+      className: "border-blue-200 bg-blue-50",
+      icon: <Check className="h-4 w-4 text-blue-700" />,
+      title: "저장 실행 준비가 끝났습니다."
+    }
+  }[mode];
+
+  return (
+    <div className={`rounded-md border p-4 ${copy.className}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{copy.badge}</Badge>
+          <p className="mt-2 flex items-center gap-2 text-base font-black text-slate-950">
+            {copy.icon}
+            {copy.title}
+          </p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{copy.body}</p>
+          <p className="mt-2 rounded-md bg-white/75 px-3 py-2 text-xs font-black leading-5 text-slate-700">최근 상태: {registrationStatus.title}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Badge className="bg-white text-slate-600 ring-1 ring-inset ring-slate-200">{rows.toLocaleString()}행 대기</Badge>
+          {persisted ? (
+            <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" href={ledgerHref}>
+              {ledgerLabel}
+            </Link>
+          ) : null}
+        </div>
       </div>
     </div>
   );
