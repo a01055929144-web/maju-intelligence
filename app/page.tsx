@@ -2617,50 +2617,78 @@ function MappingPresetCard({
 
 function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
   const latestUploads = uploads.slice(0, 4);
+  const completedCount = uploads.filter((upload) => upload.status === "completed").length;
+  const failedCount = uploads.filter((upload) => upload.status === "failed").length;
+  const averageQuality = uploads.length ? Math.round(uploads.reduce((sum, upload) => sum + upload.qualityScore, 0) / uploads.length) : 0;
 
   return (
-    <div className="mb-4 rounded-md border border-slate-200 bg-white p-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="mb-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             <History className="h-4 w-4 text-slate-500" />
             최근 등록 이력
           </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장된 파일과 분석 품질을 바로 확인합니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">서버에 남은 업로드 결과와 품질, 중복 후보를 확인합니다.</p>
         </div>
-        <Badge className="shrink-0 bg-slate-100 text-slate-600">{uploads.length}건</Badge>
+        <div className="grid grid-cols-3 gap-2 text-xs lg:min-w-[320px]">
+          <MiniStatus label="완료" value={`${completedCount.toLocaleString()}건`} />
+          <MiniStatus label="실패" value={`${failedCount.toLocaleString()}건`} />
+          <MiniStatus label="평균 품질" value={uploads.length ? `${averageQuality}%` : "-"} />
+        </div>
       </div>
 
       {latestUploads.length ? (
-        <div className="mt-3 space-y-2">
+        <div className="divide-y divide-slate-100">
           {latestUploads.map((upload) => (
-            <div key={upload.id} className="rounded-md border border-slate-100 bg-slate-50/70 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+            <div key={upload.id} className="grid gap-3 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_220px_120px] xl:items-center">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-sm font-black text-slate-900">{upload.filename}</p>
-                  <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-                    <Clock className="h-3.5 w-3.5" />
-                    {upload.createdAt}
-                  </p>
+                  <Badge className={upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
+                    {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
+                  </Badge>
                 </div>
-                <Badge className={upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
-                  {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
-                </Badge>
+                <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+                  <Clock className="h-3.5 w-3.5" />
+                  {upload.createdAt}
+                </p>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <MiniStatus label="rows" value={`${upload.rows.toLocaleString()}개`} />
-                <MiniStatus label="품질" value={`${upload.qualityScore}%`} />
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <MiniStatus label="행" value={`${upload.rows.toLocaleString()}개`} />
                 <MiniStatus label="중복" value={`${upload.duplicateCount.toLocaleString()}개`} />
+                <MiniStatus label="건강도" value={`${upload.healthScore}점`} />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-black text-slate-500">
+                  <span>품질</span>
+                  <span>{upload.qualityScore}%</span>
+                </div>
+                <Progress value={upload.qualityScore} />
+                <Link className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50" href={`/reports/${upload.reportId}`}>
+                  리포트 확인
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="mt-3 rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
-          <p className="text-sm font-black text-slate-900">아직 서버 등록 이력이 없습니다.</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">엑셀 업로드 후 저장하면 이곳에 최근 이력이 표시됩니다.</p>
+        <div className="p-4">
+          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
+            <p className="text-sm font-black text-slate-900">아직 서버 등록 이력이 없습니다.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">엑셀 업로드 후 저장하면 파일명, 품질, 중복 후보, 리포트 링크가 이곳에 표시됩니다.</p>
+          </div>
         </div>
       )}
+      {uploads.length ? (
+        <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+          <Link className="inline-flex items-center gap-1 text-xs font-black text-slate-700 hover:text-slate-950" href="/admin/uploads">
+            관리자 업로드 이력 전체 보기
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
