@@ -608,7 +608,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               <div className="flex items-start gap-2">
                 <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
                 <p className="text-xs font-bold leading-5 text-muted-foreground">
-                  현재 버전은 어드민이 고객사 계정을 생성/수정합니다. 추후 운영 안정화 단계에서 비밀번호 해시 저장, 임시 비밀번호 발급, 비밀번호 변경 이력으로 강화합니다.
+                  어드민이 고객사 로그인 계정을 생성하고 수정합니다. 운영 안정화 단계에서는 비밀번호 해시 저장, 초기 비밀번호 발급, 변경 이력 관리로 보안을 강화합니다.
                 </p>
               </div>
             </div>

@@ -1108,7 +1108,7 @@ export default function CrmTimelinePage() {
                     <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
                       <p className="text-sm font-black text-slate-700">아직 서버 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 샘플 기준 메모는 {selectedCustomer.memoCount}건입니다.
+                        상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
                       </p>
                     </div>
                   )}

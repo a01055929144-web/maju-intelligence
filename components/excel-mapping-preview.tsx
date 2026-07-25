@@ -70,7 +70,7 @@ export function ExcelHeaderMappingPreview({
               ERP 컬럼 매핑 작업표
             </p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-              실제 엑셀 컬럼과 샘플값을 확인한 뒤 MAJU 표준 필드를 지정합니다.
+              실제 엑셀 컬럼과 행 미리보기 값을 확인한 뒤 MAJU 표준 필드를 지정합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
