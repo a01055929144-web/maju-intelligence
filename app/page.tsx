@@ -2443,33 +2443,56 @@ function SaveReadinessPanel({
 }) {
   const readyCount = items.filter((item) => item.ok).length;
   const blockingItems = items.filter((item) => !item.ok && item.label !== "서버 반영");
+  const progress = items.length ? Math.round((readyCount / items.length) * 100) : 0;
+  const nextStep =
+    blockingItems[0]?.label ||
+    (canAnalyze ? "검증·저장 실행" : items.find((item) => !item.ok)?.label || "운영 화면 확인");
 
   return (
     <div className={`overflow-hidden rounded-md border bg-white ${canAnalyze ? "border-emerald-200" : "border-amber-200"}`}>
-      <div className={`flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-start lg:justify-between ${canAnalyze ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-        <div>
-          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
-            {canAnalyze ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
-            저장 준비 상태
-          </p>
+      <div className={`grid gap-4 border-b px-4 py-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center ${canAnalyze ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+              {canAnalyze ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+              저장 실행 점검
+            </p>
+            <Badge className={canAnalyze ? "bg-emerald-700 text-white" : "bg-amber-500 text-white"}>
+              {canAnalyze ? "실행 가능" : "확인 필요"}
+            </Badge>
+          </div>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-            {canAnalyze ? "이제 업데이트 후 리포트 갱신을 실행할 수 있습니다." : `${blockingItems.map((item) => item.label).join(", ") || "서버 반영"} 확인이 필요합니다.`}
+            {canAnalyze ? "검증·저장 실행 후 거래처 히스토리, 매출 원장, AI 리포트에 같은 기준으로 반영됩니다." : `${blockingItems.map((item) => item.label).join(", ") || "서버 반영"} 조건을 먼저 확인하세요.`}
           </p>
         </div>
-        <Badge className={canAnalyze ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
-          {readyCount}/{items.length} 조건 충족
-        </Badge>
+        <div className="rounded-md border border-white/70 bg-white/85 p-3 shadow-sm">
+          <div className="flex items-center justify-between text-xs font-black text-slate-500">
+            <span>저장 준비율</span>
+            <span>{progress}%</span>
+          </div>
+          <Progress className="mt-2" value={progress} />
+          <p className="mt-2 text-xs font-black text-slate-800">{readyCount}/{items.length} 조건 충족 · 다음: {nextStep}</p>
+        </div>
       </div>
-      <div className="divide-y divide-slate-100">
+      <div className="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
         {items.map((item) => (
-          <div key={item.label} className="grid gap-2 px-4 py-3 md:grid-cols-[160px_minmax(0,1fr)_32px] md:items-center">
-            <p className="text-xs font-black text-slate-500">{item.label}</p>
-            <p className="text-xs font-bold leading-5 text-slate-800">{item.detail}</p>
-            <div className="flex justify-end">
-              {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+          <div key={item.label} className="flex items-start gap-3 px-4 py-4">
+            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${item.ok ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+              {item.ok ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-black text-slate-950">{item.label}</p>
+                <Badge className={item.ok ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{item.ok ? "완료" : "대기"}</Badge>
+              </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{item.detail}</p>
             </div>
           </div>
         ))}
+      </div>
+      <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+        <p className="text-xs font-black text-slate-500">반영 확인 위치</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-700">거래처 마스터는 거래처 히스토리와 영업·배송 코스에, 매출 거래내역은 매출 원장과 AI 리포트에 반영됩니다.</p>
       </div>
     </div>
   );
