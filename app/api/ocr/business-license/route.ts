@@ -29,7 +29,7 @@ function getOcrProviderStatus() {
   if (upstageReady) return { configured: true, mode: "provider-ready", provider: "upstage" };
   if (openAiReady) return { configured: true, mode: "provider-ready", provider: "openai-vision" };
 
-  return { configured: false, mode: "sample", provider: "sample" };
+  return { configured: false, mode: "assistive-check", provider: "assistive-check" };
 }
 
 export async function POST(request: NextRequest) {
@@ -46,14 +46,14 @@ export async function POST(request: NextRequest) {
     extracted: sampleExtractedFields,
     filename: file.name,
     message: provider.configured
-      ? `${provider.provider} OCR 환경변수가 감지됐습니다. 현재는 표준 응답 검증 모드로 동작합니다.`
-      : "샘플 OCR 추출이 완료됐습니다. 실제 OCR 공급자 연결 전 검증 응답입니다.",
+      ? `${provider.provider} OCR 환경변수가 감지됐습니다. 추출값을 저장 전 검수하세요.`
+      : "OCR 보조 입력 검증이 완료됐습니다. 실제 OCR 공급자 연결 전에는 표준 후보값으로 저장 흐름을 확인합니다.",
     mode: provider.mode,
     provider: provider.provider,
     warnings: [
       "추출값은 사용자가 저장 전 반드시 확인해야 합니다.",
       "신분증은 민감정보 마스킹 후 별도 첨부로 보관하세요.",
-      ...(!provider.configured ? ["실 OCR을 사용하려면 CLOVA_OCR_INVOKE_URL/CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY를 등록하세요."] : [])
+      ...(!provider.configured ? ["자동 OCR 추출을 사용하려면 CLOVA_OCR_INVOKE_URL/CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY를 등록하세요."] : [])
     ]
   });
 }

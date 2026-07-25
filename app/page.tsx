@@ -1946,7 +1946,7 @@ function DocumentOcrRegistrationPanel({
   const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
   const confidencePercent = ocrMeta ? Math.round(ocrMeta.confidence * 100) : 0;
   const providerLabel = getOcrProviderLabel(ocrMeta?.provider);
-  const ocrModeLabel = ocrMeta?.mode === "sample" ? "샘플 검증" : ocrMeta?.mode === "provider-ready" ? "공급자 준비" : ocrMeta?.mode || "대기";
+  const ocrModeLabel = ocrMeta?.mode === "sample" || ocrMeta?.mode === "assistive-check" ? "보조 검증" : ocrMeta?.mode === "provider-ready" ? "공급자 준비" : ocrMeta?.mode || "대기";
   const hasBusinessLicense = Boolean(filename || attachmentFiles.businessLicense?.length);
   const requiredAttachmentCount = attachmentSlots.filter((slot) => slot.required).length;
   const readyAttachmentCount = attachmentSlots.filter((slot) => !slot.required || (attachmentFiles[slot.key] || []).length || (slot.key === "businessLicense" && filename)).length;
@@ -3664,7 +3664,7 @@ function getOcrProviderLabel(provider?: string) {
   if (provider === "naver-clova") return "Naver CLOVA";
   if (provider === "upstage") return "Upstage";
   if (provider === "openai-vision") return "OpenAI Vision";
-  if (provider === "sample") return "샘플 엔진";
+  if (provider === "sample" || provider === "assistive-check") return "OCR 보조 검증";
   return "대기";
 }
 

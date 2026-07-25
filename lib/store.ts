@@ -1428,7 +1428,7 @@ export function getSystemStatus(): SystemStatus {
   ].filter((issue): issue is string => Boolean(issue));
   const warningIssues = [
     !routeConfigured && "회사 출발지 또는 TMAP API 키가 없어 실도로 경로 계산이 제한됩니다.",
-    !ocrConfigured && "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 샘플 응답으로 동작합니다.",
+    !ocrConfigured && "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 보조 검증 모드로 동작합니다.",
     !appUrlConfigured && "NEXT_PUBLIC_APP_URL이 없어 배포 URL 기반 링크와 리다이렉트 확인이 제한될 수 있습니다."
   ].filter((issue): issue is string => Boolean(issue));
   const readinessScore = Math.max(0, Math.min(100, 100 - blockingIssues.length * 25 - warningIssues.length * 10));
@@ -1495,7 +1495,7 @@ export function getSystemStatus(): SystemStatus {
         status: ocrConfigured ? "ready" : "fallback",
         description: ocrConfigured
           ? "사업자등록증 OCR 공급자 환경변수가 감지되었습니다."
-          : "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 샘플 응답으로 동작합니다."
+          : "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 보조 검증 모드로 동작합니다."
       },
       {
         name: "Customer Attachment Storage",
