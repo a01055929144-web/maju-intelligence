@@ -356,6 +356,9 @@ export default function CrmTimelinePage() {
   const operationalActionItems = urgentOperationalChecks.length
     ? urgentOperationalChecks
     : operationalChecks.slice(0, 3);
+  const historyCount = customerNotes.length || selectedCustomer.memoCount;
+  const nextActionCount = customerNotes.filter((note) => note.nextAction).length;
+  const latestNote = customerNotes[0];
   const draftBusinessNumberChanged = Boolean(
     draftCustomer && normalizeBusinessRegistrationNumber(draftCustomer.businessNumber) !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber)
   );
@@ -1042,30 +1045,52 @@ export default function CrmTimelinePage() {
                   <Badge className="bg-slate-100 text-slate-700">{customerNotes.length || selectedCustomer.memoCount}건</Badge>
                 </div>
                 <div className="border-b border-slate-200/80 bg-slate-50/50 p-4">
-                <div className="rounded-md border border-slate-200/80 bg-white p-3">
-                  <textarea
-                    className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                    onChange={(event) => setNewMemo(event.target.value)}
-                    placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
-                    value={newMemo}
+                  <HistoryInputSummary
+                    historyCount={historyCount}
+                    latestNote={latestNote}
+                    nextActionCount={nextActionCount}
                   />
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                      onChange={(event) => setNewNextAction(event.target.value)}
-                      placeholder="다음 액션 예: 견적서 발송"
-                      value={newNextAction}
+                  <div className="mt-3 rounded-md border border-slate-200/80 bg-white p-3">
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {[
+                        "대표 요청사항 확인 필요",
+                        "배송 특이사항 있음",
+                        "견적서 발송 예정",
+                        "다음 방문 일정 조율"
+                      ].map((template) => (
+                        <button
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                          key={template}
+                          onClick={() => setNewMemo((current) => (current ? `${current}\n${template}` : template))}
+                          type="button"
+                        >
+                          {template}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                      onChange={(event) => setNewMemo(event.target.value)}
+                      placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
+                      value={newMemo}
                     />
-                    <button
-                      className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
-                      disabled={!newMemo.trim() || isNoteSaving}
-                      onClick={saveNote}
-                      type="button"
-                    >
-                      {isNoteSaving ? "저장 중" : "메모 저장"}
-                    </button>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                        onChange={(event) => setNewNextAction(event.target.value)}
+                        placeholder="다음 액션 예: 견적서 발송"
+                        value={newNextAction}
+                      />
+                      <button
+                        className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
+                        disabled={!newMemo.trim() || isNoteSaving}
+                        onClick={saveNote}
+                        type="button"
+                      >
+                        {isNoteSaving ? "저장 중" : "메모 저장"}
+                      </button>
+                    </div>
                   </div>
-                </div>
                 </div>
                 <div className="grid gap-0 divide-y divide-slate-100">
                   {customerNotes.length ? (
@@ -1346,6 +1371,40 @@ function PriorityTile({
         {value}
       </p>
       <p className="mt-1 text-xs font-bold opacity-60">{helper}</p>
+    </div>
+  );
+}
+
+function HistoryInputSummary({
+  historyCount,
+  latestNote,
+  nextActionCount
+}: {
+  historyCount: number;
+  latestNote?: CustomerNoteView;
+  nextActionCount: number;
+}) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="rounded-md border border-violet-100 bg-violet-50/80 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="bg-white text-violet-700 ring-1 ring-inset ring-violet-200">기록 요약</Badge>
+          <Badge className="bg-violet-700 text-white">{historyCount}건</Badge>
+        </div>
+        <p className="mt-2 text-sm font-black text-slate-950">
+          {latestNote ? "최근 메모가 서버 이력으로 관리 중입니다." : "아직 서버 메모가 없습니다."}
+        </p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
+          {latestNote ? latestNote.memo : "상담, 배송 특이사항, 대표 요청사항을 남기면 거래처별 히스토리로 누적됩니다."}
+        </p>
+      </div>
+      <div className="rounded-md border border-slate-200 bg-white p-3">
+        <p className="text-xs font-black text-slate-500">다음 액션</p>
+        <p className="mt-1 text-2xl font-black text-slate-950">{nextActionCount}건</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+          견적 발송, 재방문, 배송 확인처럼 후속 업무를 별도로 남겨두세요.
+        </p>
+      </div>
     </div>
   );
 }
