@@ -943,6 +943,14 @@ function Onboarding({
       value: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "실행 가능" : "대기"
     }
   ];
+  const adminCompanyId = getAdminCompanyIdFromUrl();
+  const pairedTemplateType: UploadTemplateType = uploadType === "customer-master" ? "sales-analysis" : "customer-master";
+  const currentExportAction = uploadType === "customer-master" ? onDownloadCustomerExport : onDownloadSalesExport;
+  const currentExportLabel = uploadType === "customer-master" ? "현재 거래처 데이터" : "현재 매출 거래내역";
+  const pairedTemplateLabel = uploadType === "customer-master" ? "매출 양식도 받기" : "거래처 양식도 받기";
+  const currentLedgerPath = uploadType === "customer-master" ? "/crm/timeline" : "/revenue/transactions";
+  const currentLedgerHref = adminCompanyId ? `${currentLedgerPath}?companyId=${encodeURIComponent(adminCompanyId)}` : currentLedgerPath;
+  const currentLedgerLabel = uploadType === "customer-master" ? "거래처 히스토리 보기" : "매출 원장 보기";
 
   useEffect(() => {
     if (!hasDataRows) {
@@ -1327,30 +1335,30 @@ function Onboarding({
           <div className="flex flex-col gap-2 border-b border-slate-100 pb-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-black text-slate-950">자료 다운로드</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">양식과 현재 데이터를 한 곳에서 내려받습니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{template.label} 작업에 필요한 양식과 현재 데이터를 내려받습니다.</p>
             </div>
-            <Badge className="w-fit bg-slate-100 text-slate-600">운영 자료</Badge>
+            <Badge className="w-fit bg-slate-100 text-slate-600">{template.label}</Badge>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("customer-master")}>
-            <Download size={16} />
-            거래처 양식
-          </Button>
-          <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("sales-analysis")}>
-            <Download size={16} />
-            매출 양식
-          </Button>
-          <Button variant="outline" className="justify-start gap-2" onClick={onDownloadCustomerExport}>
-            <FileSpreadsheet size={16} />
-            거래처 내보내기
-          </Button>
-          <Link
-            className="inline-flex h-10 items-center justify-start gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-            href={getAdminCompanyIdFromUrl() ? `/revenue/transactions?companyId=${encodeURIComponent(getAdminCompanyIdFromUrl())}` : "/revenue/transactions"}
-          >
-            <Banknote size={16} />
-            매출 원장 보기
-          </Link>
+            <Button className="justify-start gap-2 bg-blue-700 text-white hover:bg-blue-800" onClick={() => onDownloadTemplate(uploadType)}>
+              <Download size={16} />
+              선택 양식 받기
+            </Button>
+            <Button variant="outline" className="justify-start gap-2" onClick={currentExportAction}>
+              <FileSpreadsheet size={16} />
+              {currentExportLabel} 받기
+            </Button>
+            <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate(pairedTemplateType)}>
+              <Download size={16} />
+              {pairedTemplateLabel}
+            </Button>
+            <Link
+              className="inline-flex h-10 items-center justify-start gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              href={currentLedgerHref}
+            >
+              <Banknote size={16} />
+              {currentLedgerLabel}
+            </Link>
           </div>
         </div>
       </div>
