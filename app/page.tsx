@@ -1591,6 +1591,12 @@ function RegistrationControlStrip({
       : entryMode === "manual"
         ? "수기 등록 폼에서 필수값과 사업자번호를 확인하면 저장할 수 있습니다."
         : "OCR은 보조 기능입니다. 파일이 없으면 수기 등록으로 바로 진행하세요.";
+  const actionTitle = canAnalyze ? "운영 데이터로 반영" : rows ? "필수 조건 확인" : waitingActionLabel;
+  const actionDescription = canAnalyze
+    ? "원본 저장, 정제, 리포트 갱신을 한 번에 실행합니다."
+    : rows
+      ? "필수 컬럼과 품질 오류를 먼저 해결해야 저장할 수 있습니다."
+      : waitingActionHelper;
 
   return (
     <div className={`rounded-md border p-4 shadow-sm ${toneClassName}`}>
@@ -1625,18 +1631,28 @@ function RegistrationControlStrip({
             <Progress value={progress} />
           </div>
         </div>
-        <div className="rounded-md border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-black text-slate-500">다음 실행</p>
-          <p className="mt-1 text-sm font-black text-slate-950">
-            {canAnalyze ? "검증 후 서버 저장" : rows ? "필수 매핑 확인" : waitingActionLabel}
-          </p>
+        <div className="rounded-md border border-white/80 bg-white/90 p-3 shadow-sm">
+          <div className="flex items-start gap-2">
+            <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md ${canAnalyze ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+              {canAnalyze ? <Database className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-slate-500">다음 실행</p>
+              <p className="mt-1 text-sm font-black text-slate-950">{actionTitle}</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{actionDescription}</p>
+            </div>
+          </div>
           <Button className="mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
-            {isAnalyzing ? "저장 중" : "검증·저장 실행"}
+            {isAnalyzing ? "저장 중" : canAnalyze ? "저장하고 리포트 갱신" : "저장 조건 확인 중"}
             <ArrowRight className="h-4 w-4" />
           </Button>
-          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-            {canAnalyze ? "아래로 내려가지 않아도 바로 서버 저장을 실행할 수 있습니다." : waitingActionHelper}
-          </p>
+          {canAnalyze ? (
+            <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] font-black text-blue-700">
+              <span className="rounded-md bg-blue-50 px-2 py-1 text-center">DB 저장</span>
+              <span className="rounded-md bg-blue-50 px-2 py-1 text-center">원장 반영</span>
+              <span className="rounded-md bg-blue-50 px-2 py-1 text-center">AI 갱신</span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
