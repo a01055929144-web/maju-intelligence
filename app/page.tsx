@@ -826,6 +826,7 @@ function Onboarding({
   onDownloadSalesExport: () => void;
 }) {
   const [entryMode, setEntryMode] = useState<"excel" | "manual">("excel");
+  const [reviewTab, setReviewTab] = useState<"mapping" | "quality" | "save">("mapping");
   const [addressQuery, setAddressQuery] = useState("");
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
@@ -926,6 +927,23 @@ function Onboarding({
       done: pipelineMeta.persisted,
       label: "반영",
       value: pipelineMeta.persisted ? "서버 저장" : "저장 확인 전"
+    }
+  ];
+  const reviewTabs = [
+    {
+      key: "mapping" as const,
+      label: "컬럼 매핑",
+      value: rawRows.length ? `${mappedRequiredCount}/${requiredFields.length}` : "대기"
+    },
+    {
+      key: "quality" as const,
+      label: "품질 검증",
+      value: hasBlockingQualityIssues ? "보완 필요" : hasDataRows ? "정상" : "대기"
+    },
+    {
+      key: "save" as const,
+      label: "저장·이력",
+      value: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "실행 가능" : "대기"
     }
   ];
 
@@ -1343,25 +1361,57 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <ExcelHeaderMappingPreview
-                  fields={template.fields}
-                  fieldMap={fieldMap}
-                  headers={headers}
-                  onMap={onMap}
-                  rows={rawRows}
-                />
-                <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} />
-                <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} />
-                <MappingPresetCard
-                  canLoad={Boolean(savedPreset)}
-                  canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
-                  message={presetMessage}
-                  templateLabel={template.label}
-                  onLoad={applySavedPreset}
-                  onRemove={removeSavedPreset}
-                  onSave={saveCurrentPreset}
-                />
-                <RecentUploadHistoryCard uploads={uploadHistory} />
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-1.5">
+                  <div className="grid gap-1.5 md:grid-cols-3">
+                    {reviewTabs.map((tab) => {
+                      const selected = reviewTab === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          className={`flex items-center justify-between rounded-md border px-4 py-3 text-left transition ${
+                            selected
+                              ? "border-violet-200 bg-white text-violet-800 shadow-sm ring-1 ring-violet-100"
+                              : "border-transparent bg-transparent text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                          }`}
+                          onClick={() => setReviewTab(tab.key)}
+                          type="button"
+                        >
+                          <span className="text-sm font-black">{tab.label}</span>
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-100 text-violet-800" : "bg-white text-slate-500"}`}>
+                            {tab.value}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {reviewTab === "mapping" ? (
+                  <>
+                    <ExcelHeaderMappingPreview
+                      fields={template.fields}
+                      fieldMap={fieldMap}
+                      headers={headers}
+                      onMap={onMap}
+                      rows={rawRows}
+                    />
+                    <MappingPresetCard
+                      canLoad={Boolean(savedPreset)}
+                      canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
+                      message={presetMessage}
+                      templateLabel={template.label}
+                      onLoad={applySavedPreset}
+                      onRemove={removeSavedPreset}
+                      onSave={saveCurrentPreset}
+                    />
+                  </>
+                ) : null}
+                {reviewTab === "quality" ? <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} /> : null}
+                {reviewTab === "save" ? (
+                  <>
+                    <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} />
+                    <RecentUploadHistoryCard uploads={uploadHistory} />
+                  </>
+                ) : null}
                 {!headers.length ? (
                   <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
                     <p className="font-black text-slate-950">아직 저장 대기 데이터가 없습니다.</p>
