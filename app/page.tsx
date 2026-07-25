@@ -451,7 +451,6 @@ export default function Home() {
             onManualChange={setManualDraft}
             onManualSave={saveManualEntry}
             onAnalyze={analyzeUploadedRows}
-            onGenerateReport={generateCurrentReport}
             onDownloadTemplate={downloadTemplate}
             onDownloadCustomerExport={downloadCustomerExport}
             onDownloadSalesExport={downloadSalesExport}
@@ -793,7 +792,6 @@ function Onboarding({
   onManualChange,
   onManualSave,
   onAnalyze,
-  onGenerateReport,
   onDownloadTemplate,
   onDownloadCustomerExport,
   onDownloadSalesExport
@@ -820,7 +818,6 @@ function Onboarding({
   onManualChange: (draft: RawRow) => void;
   onManualSave: () => void | Promise<void>;
   onAnalyze: () => void;
-  onGenerateReport: () => void;
   onDownloadTemplate: (type: UploadTemplateType) => void;
   onDownloadCustomerExport: () => void;
   onDownloadSalesExport: () => void;
@@ -1190,20 +1187,18 @@ function Onboarding({
                 <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={onFile} />
               </label>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-black text-slate-950">빠른 시작</p>
-                <div className="mt-3 grid gap-2">
-                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={() => onDownloadTemplate(uploadType)}>
-                    <Download size={16} />
-                    현재 양식 받기
-                  </Button>
-                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={uploadType === "customer-master" ? onDownloadCustomerExport : onDownloadSalesExport}>
-                    <FileSpreadsheet size={16} />
-                    현재 데이터 받기
-                  </Button>
-                  <Button variant="outline" className="justify-start gap-2 bg-white" onClick={onGenerateReport}>
-                    <Sparkles size={16} />
-                    현재 데이터로 리포트 생성
-                  </Button>
+                <p className="text-sm font-black text-slate-950">업로드 순서</p>
+                <div className="mt-3 space-y-2">
+                  {[
+                    ["1", "자료 다운로드 영역에서 현재 양식을 받습니다."],
+                    ["2", "ERP 엑셀의 헤더와 값을 확인한 뒤 파일을 올립니다."],
+                    ["3", "컬럼 매핑 탭에서 필수 필드를 연결하고 상단에서 저장합니다."]
+                  ].map(([step, text]) => (
+                    <div key={step} className="flex gap-2 rounded-md border border-slate-100 bg-white px-3 py-2">
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-blue-700 text-[11px] font-black text-white">{step}</span>
+                      <p className="text-xs font-bold leading-5 text-slate-600">{text}</p>
+                    </div>
+                  ))}
                 </div>
                 <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">{saveHint}</p>
               </div>
@@ -1328,7 +1323,15 @@ function Onboarding({
           )}
         </div>
 
-        <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-100 pb-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-950">자료 다운로드</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">양식과 현재 데이터를 한 곳에서 내려받습니다.</p>
+            </div>
+            <Badge className="w-fit bg-slate-100 text-slate-600">운영 자료</Badge>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-4">
           <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate("customer-master")}>
             <Download size={16} />
             거래처 양식
@@ -1348,6 +1351,7 @@ function Onboarding({
             <Banknote size={16} />
             매출 원장 보기
           </Link>
+          </div>
         </div>
       </div>
 
