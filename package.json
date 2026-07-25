@@ -23,10 +23,11 @@
     "postcss": "^8.5.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "read-excel-file": "^9.3.4",
     "tailwind-merge": "^2.4.0",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.3",
-    "xlsx": "^0.18.5"
+    "write-excel-file": "^4.1.1"
   },
   "overrides": {
     "postcss": "$postcss",

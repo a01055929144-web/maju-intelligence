@@ -2,7 +2,8 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import * as XLSX from "xlsx";
+import { readSheet } from "read-excel-file/browser";
+import writeXlsxFile from "write-excel-file/browser";
 import {
   Activity,
   AlertTriangle,
@@ -185,10 +186,7 @@ export default function Home() {
     });
 
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<RawRow>(firstSheet, { defval: "" });
+      const json = await parseUploadRows(file);
       const nextHeaders = Object.keys(json[0] || {});
 
       if (!json.length || !nextHeaders.length) {
@@ -222,7 +220,7 @@ export default function Home() {
       setRegistrationStatus({
         actionLabel: "파일 읽기 실패",
         description: error instanceof Error ? error.message : "엑셀 파일을 읽는 중 오류가 발생했습니다.",
-        nextAction: "파일 형식이 .xlsx/.xls/.csv인지 확인하고 다시 시도하세요.",
+        nextAction: "파일 형식이 .xlsx 또는 .csv인지 확인하고 다시 시도하세요.",
         status: "error",
         title: "업로드를 완료하지 못했습니다."
       });
@@ -1149,8 +1147,8 @@ function Onboarding({
                 <Upload className="mb-4 h-11 w-11 text-blue-700" />
                 <span className="text-lg font-black text-slate-950">엑셀 파일을 여기에 올리세요</span>
                 <span className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">ERP 양식이 달라도 괜찮습니다. 파일을 올리면 헤더를 읽고 오른쪽에서 필수 컬럼을 자동 매핑합니다.</span>
-                <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">.xlsx · .xls · .csv 지원</span>
-                <input className="sr-only" type="file" accept=".xlsx,.xls,.csv" onChange={onFile} />
+                <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">.xlsx · .csv 지원</span>
+                <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={onFile} />
               </label>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
                 <p className="text-sm font-black text-slate-950">빠른 시작</p>
@@ -2389,15 +2387,104 @@ function createIdentityFieldMap(fields: readonly UploadTemplateField[]): FieldMa
   }, {});
 }
 
-function downloadWorkbook(filename: string, sheets: { name: string; rows: RawRow[] }[]) {
-  const workbook = XLSX.utils.book_new();
+async function parseUploadRows(file: File): Promise<RawRow[]> {
+  if (file.name.toLowerCase().endsWith(".csv")) {
+    return rowsToRawRows(parseCsvRows(await file.text()));
+  }
 
-  sheets.forEach((sheet) => {
-    const worksheet = XLSX.utils.json_to_sheet(sheet.rows);
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
-  });
+  const rows = await readSheet(file, 1);
+  return rowsToRawRows(rows);
+}
 
-  XLSX.writeFile(workbook, filename);
+function parseCsvRows(text: string): unknown[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let value = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"' && quoted && nextChar === '"') {
+      value += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (char === "," && !quoted) {
+      row.push(value);
+      value = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && nextChar === "\n") index += 1;
+      row.push(value);
+      rows.push(row);
+      row = [];
+      value = "";
+      continue;
+    }
+
+    value += char;
+  }
+
+  row.push(value);
+  rows.push(row);
+
+  return rows;
+}
+
+function rowsToRawRows(rows: unknown[][]): RawRow[] {
+  const headerIndex = rows.findIndex((row) => row.some((cell) => String(cell ?? "").trim()));
+  if (headerIndex < 0) return [];
+
+  const headers = rows[headerIndex].map((cell) => String(cell ?? "").trim());
+  return rows
+    .slice(headerIndex + 1)
+    .map((row) =>
+      headers.reduce<RawRow>((rawRow, header, index) => {
+        if (!header) return rawRow;
+        rawRow[header] = normalizeUploadCell(row[index]);
+        return rawRow;
+      }, {})
+    )
+    .filter((row) => Object.values(row).some((value) => String(value ?? "").trim()));
+}
+
+function normalizeUploadCell(value: unknown): RawRow[string] {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (value == null) return "";
+  return String(value);
+}
+
+async function downloadWorkbook(filename: string, sheets: { name: string; rows: RawRow[] }[]) {
+  const workbookSheets = sheets.map((sheet) => ({
+    data: rawRowsToSheetData(sheet.rows),
+    sheet: sheet.name.slice(0, 31)
+  }));
+
+  await writeXlsxFile(workbookSheets).toFile(filename);
+}
+
+function rawRowsToSheetData(rows: RawRow[]) {
+  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  return [
+    headers.map((header) => ({ fontWeight: "bold", value: header })),
+    ...rows.map((row) => headers.map((header) => ({ value: normalizeWorkbookCell(row[header]) })))
+  ];
+}
+
+function normalizeWorkbookCell(value: RawRow[string]) {
+  if (value == null) return "";
+  return value;
 }
 
 function buildTemplateWorkbookRows(type: UploadTemplateType) {
