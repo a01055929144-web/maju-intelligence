@@ -932,12 +932,7 @@ export default function CrmTimelinePage() {
                       <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
                     </div>
                     <div className="p-4 md:col-span-2">
-                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">외부 매장 링크</p>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <PlaceLinkButton label="네이버" url={selectedCustomer.naverPlaceUrl} />
-                        <PlaceLinkButton label="카카오맵" url={selectedCustomer.kakaoPlaceUrl} />
-                        <PlaceLinkButton label="구글맵" url={selectedCustomer.googleMapUrl} />
-                      </div>
+                      <PlaceLinksPanel customer={selectedCustomer} onEdit={() => setIsEditing(true)} />
                     </div>
                   </div>
                 )}
@@ -1384,6 +1379,65 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit: () => void }) {
+  const links = [
+    { label: "네이버", url: customer.naverPlaceUrl },
+    { label: "카카오맵", url: customer.kakaoPlaceUrl },
+    { label: "구글맵", url: customer.googleMapUrl }
+  ];
+  const filledCount = links.filter((link) => Boolean(link.url?.trim())).length;
+  const searchLinks = buildPlaceSearchLinks([customer.customerName, customer.address].filter(Boolean).join(" "));
+
+  return (
+    <div className="overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide text-teal-700">외부 매장 정보</p>
+          <h4 className="mt-1 text-base font-black text-slate-950">네이버·카카오·구글 링크</h4>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">리뷰, 영업시간, 휴폐업 확인, 로드뷰 확인에 사용할 기준 링크입니다.</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Badge className={filledCount === links.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+            {filledCount}/{links.length} 등록
+          </Badge>
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 text-xs font-black text-teal-800 transition hover:bg-teal-100"
+            onClick={onEdit}
+            type="button"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            링크 편집
+          </button>
+        </div>
+      </div>
+      <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="grid gap-2 md:grid-cols-3">
+          {links.map((link) => (
+            <PlaceLinkButton key={link.label} label={link.label} url={link.url} />
+          ))}
+        </div>
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-black text-slate-500">링크 찾기</p>
+          <div className="mt-2 grid gap-2">
+            {searchLinks.map((link) => (
+              <a
+                className="inline-flex h-8 items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 transition hover:border-teal-200 hover:bg-teal-50"
+                href={link.href}
+                key={link.label}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {link.label} 검색
+                <LinkIcon className="h-3.5 w-3.5" />
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlaceLinkButton({ label, url = "" }: { label: string; url?: string }) {
   const available = Boolean(url.trim());
 
@@ -1410,6 +1464,15 @@ function PlaceLinkButton({ label, url = "" }: { label: string; url?: string }) {
       </span>
     </a>
   );
+}
+
+function buildPlaceSearchLinks(query: string) {
+  const encodedQuery = encodeURIComponent(query || "매장");
+  return [
+    { href: `https://search.naver.com/search.naver?query=${encodedQuery}`, label: "네이버" },
+    { href: `https://map.kakao.com/?q=${encodedQuery}`, label: "카카오맵" },
+    { href: `https://www.google.com/maps/search/${encodedQuery}`, label: "구글맵" }
+  ];
 }
 
 function EditableField({
