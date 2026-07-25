@@ -944,109 +944,89 @@ export default function CrmTimelinePage() {
                   <h3 className="mt-1 text-base font-black text-slate-950">첨부자료 / 적재위치</h3>
                 </div>
                 <div className="p-4">
-                <p className="rounded-md border border-blue-100 bg-blue-50 p-4 text-sm font-black leading-6 text-blue-800 break-keep">
-                  {selectedCustomer.loadingPosition || "배송 적재위치 미등록"}
-                </p>
-                <div className="mt-4 grid gap-2">
-                  {attachmentChecklist.map((item) => (
-                    <button
-                      key={item.type}
-                      className={`rounded-md border p-3 text-left transition hover:bg-slate-50 ${
-                        item.type === "loading_position"
-                          ? "border-blue-200 bg-blue-50/70"
-                          : item.count > 0
-                            ? "border-emerald-100 bg-emerald-50/60"
-                            : "border-amber-100 bg-amber-50/60"
-                      }`}
-                      type="button"
-                      onClick={() => {
-                        setNewAttachmentType(item.type);
-                        setNewAttachmentTitle(attachmentTitleFromType(item.type));
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-black text-slate-950">
-                            {item.label}
-                            {item.type === "loading_position" ? <span className="ml-2 text-xs text-blue-700">최우선</span> : null}
-                          </p>
-                          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
-                        </div>
-                        <Badge className={item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-                          {item.count > 0 ? `${item.count}건` : "필요"}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
-                  <p className="mb-3 text-xs font-black text-slate-500">자료 추가</p>
-                  <div className="grid gap-2">
-                    <select
-                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                      onChange={(event) => {
-                        setNewAttachmentType(event.target.value);
-                        setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
-                      }}
-                      value={newAttachmentType}
-                    >
-                      <option value="loading_position">배송 적재위치 사진/영상</option>
-                      <option value="business_license">사업자등록증</option>
-                      <option value="bank_account">통장사본</option>
-                      <option value="etc">기타 첨부자료</option>
-                    </select>
-                    <input
-                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                      onChange={(event) => setNewAttachmentTitle(event.target.value)}
-                      placeholder="자료명"
-                      value={newAttachmentTitle}
-                    />
-                    <input
-                      className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                      onChange={(event) => setNewAttachmentUrl(event.target.value)}
-                      placeholder="파일 링크 또는 외부 URL"
-                      value={newAttachmentUrl}
-                    />
-                    <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-white p-3 text-center text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">
-                      <span>{newAttachmentFile ? newAttachmentFile.name : "파일 직접 선택"}</span>
-                      <span className="mt-1 text-xs font-bold text-slate-400">이미지/PDF/영상, 최대 50MB</span>
+                  <LoadingPositionFieldCard
+                    attachmentCount={loadingPositionAttachments}
+                    loadingPosition={selectedCustomer.loadingPosition}
+                    onSelectUpload={() => {
+                      setNewAttachmentType("loading_position");
+                      setNewAttachmentTitle(attachmentTitleFromType("loading_position"));
+                    }}
+                  />
+                  <AttachmentChecklistPanel checklist={attachmentChecklist} />
+                  <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
+                    <p className="mb-3 text-xs font-black text-slate-500">자료 추가</p>
+                    <div className="grid gap-2">
+                      <select
+                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                        onChange={(event) => {
+                          setNewAttachmentType(event.target.value);
+                          setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
+                        }}
+                        value={newAttachmentType}
+                      >
+                        <option value="loading_position">배송 적재위치 사진/영상</option>
+                        <option value="business_license">사업자등록증</option>
+                        <option value="bank_account">통장사본</option>
+                        <option value="etc">기타 첨부자료</option>
+                      </select>
                       <input
-                        accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
-                        className="hidden"
-                        onChange={(event) => setNewAttachmentFile(event.target.files?.[0] || null)}
-                        type="file"
+                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                        onChange={(event) => setNewAttachmentTitle(event.target.value)}
+                        placeholder="자료명"
+                        value={newAttachmentTitle}
                       />
-                    </label>
-                    <button
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                      disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFile) || isAttachmentSaving}
-                      onClick={saveAttachment}
-                      type="button"
-                    >
-                      <Plus className="h-4 w-4" />
-                      {isAttachmentSaving ? "등록 중" : "첨부자료 등록"}
-                    </button>
+                      <input
+                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                        onChange={(event) => setNewAttachmentUrl(event.target.value)}
+                        placeholder="파일 링크 또는 외부 URL"
+                        value={newAttachmentUrl}
+                      />
+                      <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-white p-3 text-center text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">
+                        <span>{newAttachmentFile ? newAttachmentFile.name : "파일 직접 선택"}</span>
+                        <span className="mt-1 text-xs font-bold text-slate-400">이미지/PDF/영상, 최대 50MB</span>
+                        <input
+                          accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
+                          className="hidden"
+                          onChange={(event) => setNewAttachmentFile(event.target.files?.[0] || null)}
+                          type="file"
+                        />
+                      </label>
+                      <button
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                        disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFile) || isAttachmentSaving}
+                        onClick={saveAttachment}
+                        type="button"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {isAttachmentSaving ? "등록 중" : "첨부자료 등록"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4 grid gap-2">
-                  {customerAttachments.length ? (
-                    customerAttachments.map((attachment) => (
-                      <AttachmentRow
-                        key={attachment.id}
-                        icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
-                        label={attachmentLabel(attachment.attachmentType, attachment.title)}
-                        url={attachment.fileUrl}
-                        value={attachment.fileUrl ? `등록 완료 · ${attachment.createdAt}` : `파일 연결 대기 · ${attachment.createdAt}`}
-                      />
-                    ))
-                  ) : (
-                    <>
-                      <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="등록 대기" />
-                      <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
-                      <AttachmentRow icon={FileText} label="통장사본" value="등록 대기" />
-                    </>
-                  )}
-                </div>
+                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200/80 bg-white">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2">
+                      <p className="text-xs font-black text-slate-500">등록된 첨부자료</p>
+                      <Badge className="bg-slate-100 text-slate-700">{customerAttachments.length}건</Badge>
+                    </div>
+                    <div className="grid gap-0">
+                      {customerAttachments.length ? (
+                        customerAttachments.map((attachment) => (
+                          <AttachmentRow
+                            key={attachment.id}
+                            icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
+                            label={attachmentLabel(attachment.attachmentType, attachment.title)}
+                            url={attachment.fileUrl}
+                            value={attachment.fileUrl ? `등록 완료 · ${attachment.createdAt}` : `파일 연결 대기 · ${attachment.createdAt}`}
+                          />
+                        ))
+                      ) : (
+                        <>
+                          <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="등록 대기" />
+                          <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
+                          <AttachmentRow icon={FileText} label="통장사본" value="등록 대기" />
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div> : null}
@@ -1366,6 +1346,99 @@ function PriorityTile({
         {value}
       </p>
       <p className="mt-1 text-xs font-bold opacity-60">{helper}</p>
+    </div>
+  );
+}
+
+function LoadingPositionFieldCard({
+  attachmentCount,
+  loadingPosition,
+  onSelectUpload
+}: {
+  attachmentCount: number;
+  loadingPosition: string;
+  onSelectUpload: () => void;
+}) {
+  const ready = Boolean(loadingPosition && attachmentCount > 0);
+
+  return (
+    <div className={`rounded-md border p-4 ${ready ? "border-blue-100 bg-blue-50/80" : "border-amber-200 bg-amber-50/80"}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={ready ? "bg-blue-700 text-white" : "bg-amber-500 text-white"}>배송 핵심</Badge>
+            <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{attachmentCount}개 자료</Badge>
+          </div>
+          <h4 className="mt-3 text-base font-black text-slate-950">배송 적재위치</h4>
+          <p className="mt-2 rounded-md border border-white/80 bg-white px-3 py-2 text-sm font-black leading-6 text-blue-900">
+            {loadingPosition || "배송 적재위치가 아직 등록되지 않았습니다."}
+          </p>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-600">
+            배송기사 앱에서는 이 값과 사진/영상이 가장 먼저 보여야 합니다. 후문, 냉장창고, 상차 가능 시간처럼 현장 기준으로 남겨두세요.
+          </p>
+        </div>
+        <button
+          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-black text-white transition hover:bg-blue-800"
+          onClick={onSelectUpload}
+          type="button"
+        >
+          <Plus className="h-4 w-4" />
+          적재위치 자료 추가
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentChecklistPanel({
+  checklist
+}: {
+  checklist: Array<{ count: number; description: string; label: string; required: boolean; type: string }>;
+}) {
+  const readyCount = checklist.filter((item) => item.count > 0 || !item.required).length;
+  const progress = checklist.length ? Math.round((readyCount / checklist.length) * 100) : 0;
+
+  return (
+    <div className="mt-4 rounded-md border border-slate-200 bg-white p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-950">첨부자료 준비 상태</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">필수 자료가 채워질수록 거래처 원장과 현장 운영 신뢰도가 올라갑니다.</p>
+        </div>
+        <Badge className={progress === 100 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+          {readyCount}/{checklist.length} 완료
+        </Badge>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-emerald-600" style={{ width: `${progress}%` }} />
+      </div>
+      <div className="mt-3 grid gap-2">
+        {checklist.map((item) => (
+          <div
+            key={item.type}
+            className={`rounded-md border p-3 ${
+              item.type === "loading_position"
+                ? "border-blue-200 bg-blue-50/70"
+                : item.count > 0
+                  ? "border-emerald-100 bg-emerald-50/60"
+                  : "border-amber-100 bg-amber-50/60"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-slate-950">
+                  {item.label}
+                  {item.type === "loading_position" ? <span className="ml-2 text-xs text-blue-700">최우선</span> : null}
+                </p>
+                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
+              </div>
+              <Badge className={item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                {item.count > 0 ? `${item.count}건` : item.required ? "필요" : "선택"}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
