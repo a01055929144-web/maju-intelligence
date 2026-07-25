@@ -844,6 +844,9 @@ function Onboarding({
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const complete = missingRequiredFields.length === 0;
   const isMaster = uploadType === "customer-master";
+  const externalPlaceLinkKeys = ["naverPlaceUrl", "kakaoPlaceUrl", "googleMapUrl"];
+  const manualCoreFields = template.fields.filter((field) => !externalPlaceLinkKeys.includes(field.key));
+  const manualPlaceLinkFields = template.fields.filter((field) => externalPlaceLinkKeys.includes(field.key));
   const manualBusinessNumber = String(manualDraft.businessRegistrationNumber ?? "");
   const manualBusinessNumberValid = !isMaster || isValidBusinessRegistrationNumber(manualBusinessNumber);
   const manualMissingRequiredFields = template.fields.filter((field) => field.required && !String(manualDraft[field.key] ?? "").trim());
@@ -1309,10 +1312,9 @@ function Onboarding({
                 ) : null}
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                  {template.fields.map((field) => {
+                  {manualCoreFields.map((field) => {
                     const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
                     const isAddressField = field.key === "address" && isMaster;
-                    const isExternalPlaceLink = ["naverPlaceUrl", "kakaoPlaceUrl", "googleMapUrl"].includes(field.key);
                     return (
                       <label key={field.key} className={`space-y-1.5 rounded-md border bg-white p-3 ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
                         <span className="text-xs font-black text-slate-500">
@@ -1333,11 +1335,17 @@ function Onboarding({
                           </span>
                         ) : null}
                         {isAddressField ? <span className="block text-xs font-bold text-blue-700">검색 결과 선택 시 지역이 자동 반영됩니다.</span> : null}
-                        {isExternalPlaceLink ? <span className="block text-xs font-bold text-teal-700">리뷰, 영업시간, 폐업 여부 추적에 활용할 외부 장소 링크입니다.</span> : null}
                       </label>
                     );
                   })}
                 </div>
+                {isMaster ? (
+                  <PlaceLinkCapturePanel
+                    fields={manualPlaceLinkFields}
+                    manualDraft={manualDraft}
+                    onManualChange={onManualChange}
+                  />
+                ) : null}
               </div>
 
               <ManualValidationPanel
@@ -2055,6 +2063,76 @@ function DocumentOcrRegistrationPanel({
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlaceLinkCapturePanel({
+  fields,
+  manualDraft,
+  onManualChange
+}: {
+  fields: UploadTemplateField[];
+  manualDraft: RawRow;
+  onManualChange: (draft: RawRow) => void;
+}) {
+  const customerName = String(manualDraft.customerName || "").trim();
+  const address = String(manualDraft.address || "").trim();
+  const searchQuery = [customerName, address].filter(Boolean).join(" ");
+  const searchLinks = buildPlaceSearchLinks(searchQuery);
+  const filledCount = fields.filter((field) => String(manualDraft[field.key] ?? "").trim()).length;
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Badge className="mb-2 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">운영 링크</Badge>
+          <h3 className="text-base font-black text-slate-950">매장 외부 정보 링크</h3>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
+            네이버, 카카오맵, 구글맵 링크를 저장하면 리뷰·영업시간·폐업 여부 확인의 기준값으로 활용할 수 있습니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {searchLinks.map((link) => (
+            <a
+              className={`inline-flex h-9 items-center justify-center rounded-md border px-3 text-xs font-black transition ${
+                searchQuery ? "border-teal-200 bg-white text-teal-800 hover:bg-teal-100" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"
+              }`}
+              href={link.href}
+              key={link.label}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {link.label} 검색
+            </a>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="grid gap-3 md:grid-cols-3">
+          {fields.map((field) => (
+            <label key={field.key} className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <span className="text-xs font-black text-slate-500">{field.label}</span>
+              <input
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-teal-200"
+                inputMode="url"
+                onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
+                placeholder="https://..."
+                type="url"
+                value={String(manualDraft[field.key] ?? "")}
+              />
+              <span className="block text-xs font-bold leading-5 text-slate-500">{field.description}</span>
+            </label>
+          ))}
+        </div>
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-black text-slate-500">등록 상태</p>
+          <p className="mt-1 text-2xl font-black text-slate-950">{filledCount}/{fields.length}</p>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
+            링크는 선택값입니다. 우선 매장을 저장하고, 거래처 히스토리에서 나중에 보완해도 됩니다.
+          </p>
         </div>
       </div>
     </div>
@@ -3471,6 +3549,15 @@ function customerHistoryHref(customerId: string) {
   if (customerId) params.set("customerId", customerId);
   const query = params.toString();
   return query ? `/crm/timeline?${query}` : "/crm/timeline";
+}
+
+function buildPlaceSearchLinks(query: string) {
+  const encodedQuery = encodeURIComponent(query || "매장");
+  return [
+    { href: `https://search.naver.com/search.naver?query=${encodedQuery}`, label: "네이버" },
+    { href: `https://map.kakao.com/?q=${encodedQuery}`, label: "카카오맵" },
+    { href: `https://www.google.com/maps/search/${encodedQuery}`, label: "구글맵" }
+  ];
 }
 
 function buildManualCustomerPayload(row: RawRow) {
