@@ -39,6 +39,11 @@ import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, 
 type RawRow = Record<string, string | number | boolean | null | undefined>;
 type FieldMap = Record<string, string>;
 type EntryMode = "document" | "excel" | "manual";
+type OcrMeta = {
+  confidence: number;
+  mode: string;
+  warnings: string[];
+};
 type PipelineStatus = "pending" | "running" | "done" | "error";
 type PipelineStep = {
   key: string;
@@ -830,6 +835,7 @@ function Onboarding({
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
   const [documentOcrFilename, setDocumentOcrFilename] = useState("");
+  const [documentOcrMeta, setDocumentOcrMeta] = useState<OcrMeta | null>(null);
   const [documentOcrStatus, setDocumentOcrStatus] = useState("");
   const [savedPreset, setSavedPreset] = useState<FieldMap | null>(null);
   const [presetMessage, setPresetMessage] = useState("");
@@ -1019,9 +1025,15 @@ function Onboarding({
 
     if (!payload) {
       setDocumentOcrStatus("OCR 요청에 실패했습니다. 파일을 다시 선택하거나 수기로 입력하세요.");
+      setDocumentOcrMeta(null);
       return;
     }
 
+    setDocumentOcrMeta({
+      confidence: typeof payload.confidence === "number" ? payload.confidence : 0,
+      mode: String(payload.mode || "unknown"),
+      warnings: Array.isArray(payload.warnings) ? payload.warnings.map(String) : []
+    });
     setDocumentOcrStatus(payload.message || "OCR 추출값을 확인하세요.");
     onManualChange({
       ...manualDraft,
@@ -1264,6 +1276,7 @@ function Onboarding({
               isManualSaving={isManualSaving}
               manualComplete={manualComplete}
               manualDraft={manualDraft}
+              ocrMeta={documentOcrMeta}
               ocrStatus={documentOcrStatus}
               onDocumentFile={applyDocumentOcr}
               onManualChange={onManualChange}
@@ -1786,6 +1799,7 @@ function DocumentOcrRegistrationPanel({
   isManualSaving,
   manualComplete,
   manualDraft,
+  ocrMeta,
   ocrStatus,
   onDocumentFile,
   onManualChange,
@@ -1795,6 +1809,7 @@ function DocumentOcrRegistrationPanel({
   isManualSaving: boolean;
   manualComplete: boolean;
   manualDraft: RawRow;
+  ocrMeta: OcrMeta | null;
   ocrStatus: string;
   onDocumentFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onManualChange: (draft: RawRow) => void;
@@ -1818,6 +1833,7 @@ function DocumentOcrRegistrationPanel({
   ];
   const [attachmentFiles, setAttachmentFiles] = useState<Record<string, string[]>>({});
   const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
+  const confidencePercent = ocrMeta ? Math.round(ocrMeta.confidence * 100) : 0;
   const hasBusinessLicense = Boolean(filename || attachmentFiles.businessLicense?.length);
   const requiredAttachmentCount = attachmentSlots.filter((slot) => slot.required).length;
   const readyAttachmentCount = attachmentSlots.filter((slot) => !slot.required || (attachmentFiles[slot.key] || []).length || (slot.key === "businessLicense" && filename)).length;
@@ -1869,6 +1885,23 @@ function DocumentOcrRegistrationPanel({
               {isManualSaving ? "저장 중" : "확인 후 매장 생성"}
             </Button>
           </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            <MiniStatus label="OCR 모드" value={ocrMeta?.mode === "sample" ? "샘플 응답" : ocrMeta?.mode || "대기"} />
+            <MiniStatus label="추출 신뢰도" value={ocrMeta ? `${confidencePercent}%` : "대기"} />
+            <MiniStatus label="확인 필요" value={ocrMeta?.warnings.length ? `${ocrMeta.warnings.length}건` : "없음"} />
+          </div>
+          {ocrMeta?.warnings.length ? (
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-black text-amber-900">저장 전 확인사항</p>
+              <div className="mt-2 space-y-1">
+                {ocrMeta.warnings.map((warning) => (
+                  <p key={warning} className="text-xs font-semibold leading-5 text-amber-800">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {extractedFields.map(([label, key]) => (
               <label key={key} className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
