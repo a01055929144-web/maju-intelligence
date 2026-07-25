@@ -970,6 +970,8 @@ function Onboarding({
   const currentLedgerPath = uploadType === "customer-master" ? "/crm/timeline" : "/revenue/transactions";
   const currentLedgerHref = adminCompanyId ? `${currentLedgerPath}?companyId=${encodeURIComponent(adminCompanyId)}` : currentLedgerPath;
   const currentLedgerLabel = uploadType === "customer-master" ? "거래처 히스토리 보기" : "매출 원장 보기";
+  const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
+  const routeHref = adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today";
 
   useEffect(() => {
     if (!hasDataRows) {
@@ -1500,6 +1502,13 @@ function Onboarding({
                 {reviewTab === "save" ? (
                   <>
                     <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} />
+                    <OperationalHandoffPanel
+                      dashboardHref={dashboardHref}
+                      ledgerHref={currentLedgerHref}
+                      ledgerLabel={currentLedgerLabel}
+                      routeHref={routeHref}
+                      typeLabel={template.label}
+                    />
                     <RecentUploadHistoryCard uploads={uploadHistory} />
                   </>
                 ) : null}
@@ -2810,6 +2819,79 @@ function SaveResultSummary({
             </Link>
           ) : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function OperationalHandoffPanel({
+  dashboardHref,
+  ledgerHref,
+  ledgerLabel,
+  routeHref,
+  typeLabel
+}: {
+  dashboardHref: string;
+  ledgerHref: string;
+  ledgerLabel: string;
+  routeHref: string;
+  typeLabel: string;
+}) {
+  const items = [
+    {
+      description: "등록된 거래처와 매출 기준으로 회사 현황 KPI를 먼저 확인합니다.",
+      href: dashboardHref,
+      icon: BarChart3,
+      label: "대시보드",
+      step: "1"
+    },
+    {
+      description: typeLabel.includes("매출") ? "거래원장 업로드 내역과 품목·기간별 매출을 확인합니다." : "매장 기본정보, 메모, 첨부자료, 배송 적재위치를 확인합니다.",
+      href: ledgerHref,
+      icon: ClipboardList,
+      label: ledgerLabel,
+      step: "2"
+    },
+    {
+      description: "거래처 주소와 배송 담당자 기준으로 지도, 거리, 코스 반영 상태를 확인합니다.",
+      href: routeHref,
+      icon: Route,
+      label: "영업·배송 코스",
+      step: "3"
+    }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-teal-100 bg-teal-50/80 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-950">저장 후 운영 확인 순서</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{typeLabel} 등록 후 같은 데이터 기준으로 확인해야 하는 화면입니다.</p>
+        </div>
+        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-inset ring-teal-200">운영 연결</Badge>
+      </div>
+      <div className="grid gap-0 md:grid-cols-3">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              className="group border-b border-slate-100 p-4 transition hover:bg-teal-50/50 md:border-b-0 md:border-r last:md:border-r-0"
+              href={item.href}
+              key={item.label}
+            >
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700 transition group-hover:bg-teal-700 group-hover:text-white">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">STEP {item.step}</span>
+                  <p className="mt-2 text-sm font-black text-slate-950">{item.label}</p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
