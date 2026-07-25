@@ -33,6 +33,7 @@ export function ExcelHeaderMappingPreview({
   }, {});
   const requiredFields = fields.filter((field) => field.required);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
+  const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
 
   function updateHeaderMapping(header: string, nextFieldKey: string) {
     const nextMap = { ...fieldMap };
@@ -82,11 +83,28 @@ export function ExcelHeaderMappingPreview({
             </Button>
           </div>
         </div>
-        {missingRequiredFields.length ? (
-          <p className="mt-2 rounded-md bg-white px-3 py-2 text-xs font-black leading-5 text-amber-800">
-            남은 필수값: {missingRequiredFields.map((field) => field.label).join(", ")}
-          </p>
-        ) : null}
+        <div className={`mt-3 rounded-md border p-3 ${missingRequiredFields.length ? "border-amber-200 bg-white" : "border-emerald-200 bg-emerald-50"}`}>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-950">필수 컬럼 연결 상태</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                {missingRequiredFields.length ? "아래 필수 필드를 먼저 연결하면 저장 가능 상태로 바뀝니다." : "필수 표준 필드가 모두 연결됐습니다. 품질 검증 탭에서 이상값을 확인하세요."}
+              </p>
+            </div>
+            <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
+              {requiredMappedCount}/{requiredFields.length} 연결
+            </Badge>
+          </div>
+          {missingRequiredFields.length ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {missingRequiredFields.map((field) => (
+                <span key={field.key} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-800">
+                  {field.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
           <MappingStep label="1" title="엑셀 원본 확인" description={`${rows.length.toLocaleString()}개 행 전체를 기준으로 누락값과 컬럼 의미를 봅니다.`} />
           <MappingStep label="2" title="표준 필드 지정" description="거래처명, 주소, 사업자번호, 매출 필드처럼 저장 기준이 되는 값을 연결합니다." />
@@ -346,6 +364,28 @@ function MappingWorkspaceModal({
                 </div>
                 <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">우측 결정</Badge>
               </div>
+            </div>
+            <div className={`border-b px-4 py-3 ${missingRequiredFields.length ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-slate-950">{missingRequiredFields.length ? "먼저 연결할 필수 필드" : "필수 필드 연결 완료"}</p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
+                    {missingRequiredFields.length ? "필수 필드를 모두 연결해야 서버 저장 버튼이 활성화됩니다." : "선택 필드는 운영 품질을 높이기 위해 가능한 만큼 연결하세요."}
+                  </p>
+                </div>
+                <Badge className={missingRequiredFields.length ? "bg-white text-amber-800" : "bg-white text-emerald-800"}>
+                  {requiredMappedCount}/{requiredFields.length}
+                </Badge>
+              </div>
+              {missingRequiredFields.length ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {missingRequiredFields.map((field) => (
+                    <span key={field.key} className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-amber-800 ring-1 ring-inset ring-amber-100">
+                      {field.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <input
