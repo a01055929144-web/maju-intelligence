@@ -1816,6 +1816,10 @@ function DocumentOcrRegistrationPanel({
   ];
   const [attachmentFiles, setAttachmentFiles] = useState<Record<string, string[]>>({});
   const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
+  const hasBusinessLicense = Boolean(filename || attachmentFiles.businessLicense?.length);
+  const requiredAttachmentCount = attachmentSlots.filter((slot) => slot.required).length;
+  const readyAttachmentCount = attachmentSlots.filter((slot) => !slot.required || (attachmentFiles[slot.key] || []).length || (slot.key === "businessLicense" && filename)).length;
+  const attachmentReady = hasBusinessLicense;
 
   function onAttachmentFiles(slotKey: string, files: FileList | null) {
     const names = Array.from(files || []).map((file) => file.name);
@@ -1824,6 +1828,13 @@ function DocumentOcrRegistrationPanel({
     setAttachmentFiles((current) => ({
       ...current,
       [slotKey]: [...(current[slotKey] || []), ...names]
+    }));
+  }
+
+  function removeAttachmentFile(slotKey: string, filenameToRemove: string) {
+    setAttachmentFiles((current) => ({
+      ...current,
+      [slotKey]: (current[slotKey] || []).filter((name) => name !== filenameToRemove)
     }));
   }
 
@@ -1876,27 +1887,47 @@ function DocumentOcrRegistrationPanel({
               <p className="text-sm font-black text-slate-950">첨부자료 보관</p>
               <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">1차 버전은 파일 선택 상태를 표시하고, 다음 단계에서 실제 저장소와 OCR API를 연결합니다.</p>
             </div>
-            <Badge className="w-fit bg-slate-100 text-slate-700">{attachedCount}개 선택됨</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={attachmentReady ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>
+                필수 {hasBusinessLicense ? requiredAttachmentCount : 0}/{requiredAttachmentCount}
+              </Badge>
+              <Badge className="w-fit bg-slate-100 text-slate-700">{attachedCount + (filename ? 1 : 0)}개 선택됨</Badge>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <MiniStatus label="필수 첨부" value={attachmentReady ? "충족" : "사업자등록증 필요"} />
+            <MiniStatus label="보관 상태" value={`${readyAttachmentCount}/${attachmentSlots.length} 항목 확인`} />
+            <MiniStatus label="신분증 정책" value="마스킹 후 보관" />
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {attachmentSlots.map((slot) => (
-              <div key={slot.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div key={slot.label} className={`rounded-md border p-3 ${slot.required && !hasBusinessLicense ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-black text-slate-950">{slot.label}</p>
-                  <Badge className={slot.required ? "bg-blue-100 text-blue-800" : "bg-white text-slate-500"}>{slot.required ? "필수" : "선택"}</Badge>
+                  <Badge className={slot.required ? (hasBusinessLicense ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800") : "bg-white text-slate-500"}>
+                    {slot.required ? (hasBusinessLicense ? "충족" : "필수") : "선택"}
+                  </Badge>
                 </div>
                 <p className="mt-2 min-h-10 text-xs font-semibold leading-5 text-slate-500">{slot.description}</p>
+                {slot.key === "businessLicense" && filename ? (
+                  <p className="mt-3 truncate rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                    OCR 원본: {filename}
+                  </p>
+                ) : null}
                 {(attachmentFiles[slot.key] || []).length ? (
                   <div className="mt-3 space-y-1">
                     {(attachmentFiles[slot.key] || []).map((name) => (
-                      <p key={name} className="truncate rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
-                        {name}
-                      </p>
+                      <div key={name} className="flex items-center gap-2 rounded-md bg-white px-2 py-1 ring-1 ring-inset ring-blue-100">
+                        <p className="min-w-0 flex-1 truncate text-xs font-black text-blue-700">{name}</p>
+                        <button className="shrink-0 text-[11px] font-black text-slate-400 hover:text-rose-600" onClick={() => removeAttachmentFile(slot.key, name)} type="button">
+                          삭제
+                        </button>
+                      </div>
                     ))}
                   </div>
-                ) : (
+                ) : !filename || slot.key !== "businessLicense" ? (
                   <p className="mt-3 rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">아직 선택된 파일 없음</p>
-                )}
+                ) : null}
                 <label className="mt-3 flex h-9 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
                   + 파일 추가
                   <input className="sr-only" type="file" accept={slot.accept} multiple onChange={(event) => onAttachmentFiles(slot.key, event.target.files)} />
