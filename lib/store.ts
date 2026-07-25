@@ -1547,6 +1547,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
+    checkCustomerPlaceLinkColumns(),
     checkDefaultCompany()
     ]),
     Promise.all([
@@ -2012,6 +2013,28 @@ async function checkDefaultCompany(): Promise<DatabaseCheck> {
       status: "missing",
       count: null,
       description: getErrorMessage(error)
+    };
+  }
+}
+
+async function checkCustomerPlaceLinkColumns(): Promise<DatabaseCheck> {
+  try {
+    await supabaseRequest<Array<Record<string, unknown>>>("normalized_customers?select=naver_place_url,kakao_place_url,google_map_url,place_links_checked_at&limit=1");
+
+    return {
+      name: "매장 외부 링크 컬럼",
+      status: "ready",
+      count: null,
+      description: "네이버 플레이스, 카카오맵, 구글맵 링크 저장 컬럼이 적용되어 있습니다."
+    };
+  } catch (error) {
+    return {
+      name: "매장 외부 링크 컬럼",
+      status: "missing",
+      count: null,
+      description: isMissingCustomerPlaceLinksColumnError(error)
+        ? "20260725_customer_place_links.sql 마이그레이션을 Supabase SQL Editor에서 실행해야 링크가 DB에 저장됩니다."
+        : getErrorMessage(error)
     };
   }
 }

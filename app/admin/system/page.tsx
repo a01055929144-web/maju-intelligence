@@ -274,6 +274,7 @@ export default async function AdminSystemPage() {
           <CardContent className="grid gap-3 md:grid-cols-2">
             {[
               ["DB", "Supabase 프로젝트 생성 및 schema.sql 실행"],
+              ["DB", "20260725_customer_place_links.sql 실행 후 매장 외부 링크 컬럼 확인"],
               ["DB", "companies, normalized_customers, customer_imports 테이블 카운트 확인"],
               ["Storage", "customer-attachments 버킷 생성 및 파일 업로드 테스트"],
               ["Auth", "관리자 비밀번호와 세션 시크릿 운영값으로 교체"],
