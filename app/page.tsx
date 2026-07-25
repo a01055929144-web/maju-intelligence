@@ -1213,6 +1213,7 @@ function Onboarding({
           </div>
 
           {entryMode === "excel" ? (
+            <>
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
               <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center transition hover:bg-blue-50">
                 <Upload className="mb-4 h-11 w-11 text-blue-700" />
@@ -1238,6 +1239,14 @@ function Onboarding({
                 <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">{saveHint}</p>
               </div>
             </div>
+            <BulkEntryProgress
+              complete={complete}
+              hasBlockingQualityIssues={hasBlockingQualityIssues}
+              mappedRequiredCount={mappedRequiredCount}
+              requiredCount={requiredFields.length}
+              rows={rawRows.length}
+            />
+            </>
           ) : entryMode === "document" ? (
             <DocumentOcrRegistrationPanel
               filename={documentOcrFilename}
@@ -2071,6 +2080,72 @@ function ManualEntryProgress({
       <div className="mt-3 grid gap-2 md:grid-cols-3">
         {items.map((item) => (
           <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-white text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-black">{item.label}</span>
+              {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
+            </div>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BulkEntryProgress({
+  complete,
+  hasBlockingQualityIssues,
+  mappedRequiredCount,
+  requiredCount,
+  rows
+}: {
+  complete: boolean;
+  hasBlockingQualityIssues: boolean;
+  mappedRequiredCount: number;
+  requiredCount: number;
+  rows: number;
+}) {
+  const hasRows = rows > 0;
+  const mappingReady = hasRows && mappedRequiredCount >= requiredCount;
+  const qualityReady = hasRows && mappingReady && !hasBlockingQualityIssues;
+  const items = [
+    {
+      detail: hasRows ? `${rows.toLocaleString()}행 업로드됨` : "엑셀 파일 필요",
+      label: "파일",
+      ok: hasRows
+    },
+    {
+      detail: `${mappedRequiredCount}/${requiredCount} 필수 연결`,
+      label: "매핑",
+      ok: mappingReady
+    },
+    {
+      detail: hasRows ? (hasBlockingQualityIssues ? "보완 필요 행 확인" : "차단 오류 없음") : "업로드 후 확인",
+      label: "품질",
+      ok: qualityReady
+    },
+    {
+      detail: complete ? "상단 저장 실행 가능" : "조건 충족 대기",
+      label: "저장",
+      ok: complete
+    }
+  ];
+  const doneCount = items.filter((item) => item.ok).length;
+
+  return (
+    <div className={`mt-3 rounded-md border p-3 ${complete ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-950">대량 등록 준비 상태</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">파일 업로드, 필수 컬럼 매핑, 품질 검증이 끝나면 상단에서 바로 서버 저장을 실행합니다.</p>
+        </div>
+        <Badge className={complete ? "bg-emerald-700 text-white" : "bg-slate-900 text-white"}>
+          {doneCount}/4 완료
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-white text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-black">{item.label}</span>
               {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
