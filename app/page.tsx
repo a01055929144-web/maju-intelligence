@@ -1809,11 +1809,23 @@ function DocumentOcrRegistrationPanel({
     ["이메일", "email"]
   ] as const;
   const attachmentSlots = [
-    { description: "사업자등록증 원본 이미지/PDF", label: "사업자등록증", required: true },
-    { description: "대표자 또는 담당자 확인자료 · 주민번호/주소 일부 마스킹 후 보관", label: "신분증", required: false },
-    { description: "정산 계좌 확인용 통장 사본", label: "통장사본", required: false },
-    { description: "배송기사가 확인할 냉장고, 후문, 적재 위치 사진/영상", label: "배송 적재위치", required: false }
+    { accept: "image/*,.pdf", description: "사업자등록증 원본 이미지/PDF", key: "businessLicense", label: "사업자등록증", required: true },
+    { accept: "image/*,.pdf", description: "대표자 또는 담당자 확인자료 · 주민번호/주소 일부 마스킹 후 보관", key: "identity", label: "신분증", required: false },
+    { accept: "image/*,.pdf", description: "정산 계좌 확인용 통장 사본", key: "bankbook", label: "통장사본", required: false },
+    { accept: "image/*,video/*", description: "배송기사가 확인할 냉장고, 후문, 적재 위치 사진/영상", key: "loadingSpot", label: "배송 적재위치", required: false }
   ];
+  const [attachmentFiles, setAttachmentFiles] = useState<Record<string, string[]>>({});
+  const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
+
+  function onAttachmentFiles(slotKey: string, files: FileList | null) {
+    const names = Array.from(files || []).map((file) => file.name);
+    if (!names.length) return;
+
+    setAttachmentFiles((current) => ({
+      ...current,
+      [slotKey]: [...(current[slotKey] || []), ...names]
+    }));
+  }
 
   return (
     <div className="mt-4 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -1859,8 +1871,13 @@ function DocumentOcrRegistrationPanel({
         </div>
 
         <div className="rounded-md border border-slate-200 bg-white p-4">
-          <p className="text-sm font-black text-slate-950">첨부자료 보관</p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">1차 버전은 보관 항목과 상태를 잡고, 다음 단계에서 실제 파일 저장소와 연결합니다.</p>
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-950">첨부자료 보관</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">1차 버전은 파일 선택 상태를 표시하고, 다음 단계에서 실제 저장소와 OCR API를 연결합니다.</p>
+            </div>
+            <Badge className="w-fit bg-slate-100 text-slate-700">{attachedCount}개 선택됨</Badge>
+          </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {attachmentSlots.map((slot) => (
               <div key={slot.label} className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1869,9 +1886,21 @@ function DocumentOcrRegistrationPanel({
                   <Badge className={slot.required ? "bg-blue-100 text-blue-800" : "bg-white text-slate-500"}>{slot.required ? "필수" : "선택"}</Badge>
                 </div>
                 <p className="mt-2 min-h-10 text-xs font-semibold leading-5 text-slate-500">{slot.description}</p>
-                <button className="mt-3 h-9 w-full rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700" type="button">
+                {(attachmentFiles[slot.key] || []).length ? (
+                  <div className="mt-3 space-y-1">
+                    {(attachmentFiles[slot.key] || []).map((name) => (
+                      <p key={name} className="truncate rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                        {name}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">아직 선택된 파일 없음</p>
+                )}
+                <label className="mt-3 flex h-9 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
                   + 파일 추가
-                </button>
+                  <input className="sr-only" type="file" accept={slot.accept} multiple onChange={(event) => onAttachmentFiles(slot.key, event.target.files)} />
+                </label>
               </div>
             ))}
           </div>
