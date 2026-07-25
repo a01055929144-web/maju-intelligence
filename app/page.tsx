@@ -1388,33 +1388,48 @@ function Onboarding({
           )}
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-2 border-b border-slate-100 pb-3 md:flex-row md:items-center md:justify-between">
+        <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-black text-slate-950">자료 다운로드</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">{template.label} 작업에 필요한 양식과 현재 데이터를 내려받습니다.</p>
+              <p className="text-sm font-black text-slate-950">양식 · 내보내기</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">처음 등록할 양식과 현재 운영 데이터를 구분해서 내려받습니다.</p>
             </div>
             <Badge className="w-fit bg-slate-100 text-slate-600">{template.label}</Badge>
           </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-4">
-            <Button className="justify-start gap-2 bg-blue-700 text-white hover:bg-blue-800" onClick={() => onDownloadTemplate(uploadType)}>
-              <Download size={16} />
-              선택 양식 받기
-            </Button>
-            <Button variant="outline" className="justify-start gap-2" onClick={currentExportAction}>
-              <FileSpreadsheet size={16} />
-              {currentExportLabel} 받기
-            </Button>
-            <Button variant="outline" className="justify-start gap-2" onClick={() => onDownloadTemplate(pairedTemplateType)}>
-              <Download size={16} />
-              {pairedTemplateLabel}
-            </Button>
-            <Link
-              className="inline-flex h-10 items-center justify-start gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-              href={currentLedgerHref}
-            >
-              <Banknote size={16} />
-              {currentLedgerLabel}
+          <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+            <DownloadActionCard
+              description={`${template.label} 업로드에 맞는 표준 헤더와 작성 가이드를 받습니다.`}
+              icon={Download}
+              label="업로드 양식"
+              tone="primary"
+              value="빈 양식 다운로드"
+              onClick={() => onDownloadTemplate(uploadType)}
+            />
+            <DownloadActionCard
+              description="현재 저장된 운영 데이터를 백업하거나 ERP 보정 작업에 사용합니다."
+              icon={FileSpreadsheet}
+              label="현재 데이터"
+              value={`${currentExportLabel} 받기`}
+              onClick={currentExportAction}
+            />
+            <DownloadActionCard
+              description={uploadType === "customer-master" ? "기초 등록 후 매출 거래내역을 이어서 준비합니다." : "매출 분석 전 거래처 기준값을 보완합니다."}
+              icon={Download}
+              label="연계 양식"
+              value={pairedTemplateLabel}
+              onClick={() => onDownloadTemplate(pairedTemplateType)}
+            />
+            <Link className="rounded-md border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50/40" href={currentLedgerHref}>
+              <span className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700">
+                  <Banknote size={18} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-slate-500">반영 확인</span>
+                  <span className="mt-1 block text-sm font-black text-slate-950">{currentLedgerLabel}</span>
+                  <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">저장 후 운영 화면에서 같은 데이터 기준을 확인합니다.</span>
+                </span>
+              </span>
             </Link>
           </div>
         </div>
@@ -2612,6 +2627,45 @@ function MappingPresetCard({
         </Button>
       </div>
     </div>
+  );
+}
+
+function DownloadActionCard({
+  description,
+  icon: Icon,
+  label,
+  onClick,
+  tone = "default",
+  value
+}: {
+  description: string;
+  icon: typeof Download;
+  label: string;
+  onClick: () => void;
+  tone?: "default" | "primary";
+  value: string;
+}) {
+  return (
+    <button
+      className={`rounded-md border p-3 text-left transition ${
+        tone === "primary"
+          ? "border-blue-200 bg-blue-50 text-blue-950 hover:bg-blue-100"
+          : "border-slate-200 bg-white text-slate-950 hover:border-blue-100 hover:bg-blue-50/40"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="flex items-start gap-3">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${tone === "primary" ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <Icon size={18} />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-xs font-black text-slate-500">{label}</span>
+          <span className="mt-1 block text-sm font-black text-slate-950">{value}</span>
+          <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{description}</span>
+        </span>
+      </span>
+    </button>
   );
 }
 
