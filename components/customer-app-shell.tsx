@@ -181,13 +181,13 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   </div>
                   <div className="mt-3 space-y-1">
                     <SidebarQuickStep currentPath={pathname} href={scopedHref("/")} icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 정보 확인" step="2" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="배송차별 코스 확정" step="3" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 원장·첨부 확인" step="2" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="영업·배송 코스 확정" step="3" />
                   </div>
                   <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">
                     {mode === "admin-preview"
                       ? "관리자는 고객사 화면을 확인만 하고, 계정과 회사 권한 관리는 어드민에서 처리합니다."
-                      : "회사 설정과 출발지를 먼저 맞추면 지도, 히스토리, AI 리포트가 같은 기준으로 계산됩니다."}
+                      : "데이터, 거래처 원장, 코스가 같은 회사 기준으로 이어져야 현장 운영 화면이 정확해집니다."}
                   </p>
                 </div>
               </div>

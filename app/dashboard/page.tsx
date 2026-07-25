@@ -282,9 +282,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <NextAction description="사업자 상태와 배송 적재위치를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
-                  <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 코스를 계산합니다." href={withCompanyQuery("/routes/today")} label="2. 코스 관리" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-                  <NextAction description="ERP 거래원장 업로드 상태와 매출 변화를 봅니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 데이터 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
+                  <NextAction description="사업자 상태, 배송 적재위치, 첨부자료, 메모 히스토리를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장·첨부 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
+                  <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 순서를 확정합니다." href={withCompanyQuery("/routes/today")} label="2. 영업·배송 코스 확정" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                  <NextAction description="ERP 거래원장 업로드 상태와 기간별 매출 변화를 확인합니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 거래내역 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
                 </CardContent>
               </Card>
 
@@ -385,12 +385,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2">
-                    <SmallMetric label="경유 코스 거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-                    <SmallMetric label="경유 코스 시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-                    <SmallMetric label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                    <SmallMetric label="출발지 기준 거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
+                    <SmallMetric label="예상 이동시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
+                    <SmallMetric label="선택 배송매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
                     <SmallMetric label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-muted-foreground">주유비는 선택 코스 검토용 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">거리는 물류 출발지와 선택 매장 기준의 운영 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
                 </CardContent>
               </Card>
             </div>
