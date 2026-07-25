@@ -137,8 +137,8 @@ const workspaceViews: Array<{ icon: LucideIcon; label: string; shortLabel: strin
   { icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
-  course: "배송차별 매장을 선택하고 티맵 경유 순서를 계산합니다.",
-  customers: "전체 거래처를 검색, 등급, 배송차 기준으로 정리합니다.",
+  course: "배송차와 매장을 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
+  customers: "전체 거래처 원장을 검색, 등급, 배송차 기준으로 확인합니다.",
   map: "매장 등급 또는 배송차 기준으로 지도 마커를 확인합니다."
 };
 const originMarkerId = "origin-hub";
@@ -205,8 +205,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
-  const distanceKpiHelper = kpiSummary ? "티맵 도로 경유 계산 기준" : "출발지에서 각 매장까지 개별 이동거리 합산";
-  const durationKpiHelper = kpiSummary ? "티맵 도로 경유 계산 기준" : "출발지에서 각 매장까지 개별 이동시간 합산";
+  const distanceKpiHelper = kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
+  const durationKpiHelper = kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
   const activeFilterLabels = [
     query.trim() ? `검색: ${query.trim()}` : "",
     isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
@@ -277,7 +277,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <div className="min-w-0">
           <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">영업·배송 운영</p>
           <h2 className="mt-1 whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 작업공간</h2>
-          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">지도 확인, 거래처 관리, 경유 계산을 업무 탭으로 나눠 처리합니다.</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">거래처 위치 확인, 원장 관리, 배송차별 티맵 경유 계산을 같은 기준으로 처리합니다.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-[auto_auto_40px] xl:justify-end">
           <div className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
@@ -355,8 +355,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           value={selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`}
         />
         <Kpi label="매장 매출합" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
-        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 개별거리"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
-        <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 개별시간"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
+        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
+        <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
       <RouteWorkspaceGuide
@@ -1371,8 +1371,8 @@ function TodayCourseView({
                 </div>
                 <div className="mb-3 grid grid-cols-3 gap-2">
                   <RouteMetric label="계산 대상" value={`${selectedRouteStores.length}곳`} />
-                  <RouteMetric label={routeSequence ? "도로 경유 거리" : "출발지 개별거리"} value={`${routeDistanceKm.toLocaleString()}km`} />
-                  <RouteMetric label={routeSequence ? "도로 경유 시간" : "출발지 개별시간"} value={formatMinutes(routeDurationMinutes)} />
+                  <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지 기준 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
+                  <RouteMetric label={routeSequence ? "티맵 경유 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
                 <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
                   <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
@@ -2429,15 +2429,15 @@ function RouteBasisStrip({
   return (
     <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,auto)] xl:items-center">
       <div className="min-w-0">
-        <p className="text-xs font-black text-slate-500">운영 기준값</p>
+        <p className="text-xs font-black text-slate-500">코스 기준값</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          대시보드와 이 화면은 동일한 거래처/코스 데이터 기준입니다. 위 KPI는 검색, 등급, 배송차 필터에 따라 바뀌고 아래 값은 전체 기준을 고정 표시합니다.
+          대시보드와 이 화면은 동일한 거래처 원장과 출발지 기준을 사용합니다. 계산 전 값은 출발지와 매장 사이의 단건 합이고, 경유 코스는 티맵 계산 후 별도로 표시됩니다.
         </p>
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-4">
         <RouteBasisMetric label="대시보드 기준 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-        <RouteBasisMetric label="전체 출발지 개별거리" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} />
-        <RouteBasisMetric label="전체 출발지 개별시간" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} />
+        <RouteBasisMetric label="전체 출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} />
+        <RouteBasisMetric label="전체 출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} />
         <RouteBasisMetric label="현재 화면 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`${currentTotals.distanceKm.toLocaleString()}km · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
