@@ -1571,14 +1571,48 @@ function DataRegistrationFlowCard({
   const currentStep = steps[currentIndex];
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <Badge className="mb-3 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">운영 등록 플로우</Badge>
-          <h2 className="text-xl font-black text-slate-950">데이터가 운영 화면에 반영되는 순서</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처 기본정보와 매출 거래내역은 같은 등록 흐름을 거치지만, 저장 후 쓰임이 다릅니다.</p>
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <Badge className="mb-3 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">운영 등록 플로우</Badge>
+              <h2 className="text-lg font-black text-slate-950">운영 반영까지 남은 단계</h2>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처 기본정보와 매출 거래내역은 같은 등록 흐름으로 관리합니다.</p>
+            </div>
+            <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm">
+              <p className="text-xs font-black text-blue-500">현재 단계</p>
+              <p className="mt-1 font-black text-blue-900">{currentStep.label}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-4">
+            {steps.map((step, index) => (
+              <div
+                key={step.label}
+                className={`rounded-md border px-3 py-2 ${
+                  step.done
+                    ? "border-emerald-100 bg-emerald-50"
+                    : index === currentIndex
+                      ? "border-blue-200 bg-blue-50 ring-1 ring-blue-100"
+                      : "border-slate-200 bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black ${
+                      step.done ? "bg-emerald-700 text-white" : index === currentIndex ? "bg-blue-700 text-white" : "bg-white text-slate-500"
+                    }`}
+                  >
+                    {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                  </span>
+                  <span className="truncate text-xs font-black text-slate-950">{step.label}</span>
+                </div>
+                <p className="mt-1 truncate text-xs font-black text-blue-700">{step.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="w-full rounded-md border border-slate-200 bg-slate-50 p-3 lg:w-72">
+        <div className="bg-slate-50 p-4">
           <div className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
             <span>등록 진행률</span>
             <span>{progress}%</span>
@@ -1586,39 +1620,9 @@ function DataRegistrationFlowCard({
           <div className="mt-2">
             <Progress value={progress} />
           </div>
-          <p className="mt-2 text-sm font-black text-slate-950">{completeCount}/{steps.length} 완료</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">현재 단계: {currentStep.label}</p>
+          <p className="mt-3 text-sm font-black text-slate-950">{completeCount}/{steps.length} 완료</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{currentStep.description}</p>
         </div>
-      </div>
-      <div className="mt-5 grid gap-3 lg:grid-cols-4">
-        {steps.map((step, index) => (
-          <div
-            key={step.label}
-            className={`rounded-md border p-3 transition ${
-              step.done
-                ? "border-emerald-100 bg-emerald-50"
-                : index === currentIndex
-                  ? "border-blue-200 bg-blue-50 shadow-sm ring-1 ring-blue-100"
-                  : "border-slate-200 bg-slate-50"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <span
-                className={`grid h-8 w-8 shrink-0 place-items-center rounded-md text-sm font-black ${
-                  step.done ? "bg-emerald-700 text-white" : index === currentIndex ? "bg-blue-700 text-white" : "bg-white text-slate-500"
-                }`}
-              >
-                {step.done ? <Check className="h-4 w-4" /> : index + 1}
-              </span>
-              <Badge className={step.done ? "bg-white text-emerald-700" : index === currentIndex ? "bg-white text-blue-700" : "bg-white text-slate-500"}>
-                {step.done ? "완료" : index === currentIndex ? "진행" : "대기"}
-              </Badge>
-            </div>
-            <p className="mt-3 text-sm font-black text-slate-950">{step.label}</p>
-            <p className="mt-1 text-sm font-black text-blue-700">{step.value}</p>
-            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{step.description}</p>
-          </div>
-        ))}
       </div>
     </div>
   );
