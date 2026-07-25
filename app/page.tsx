@@ -42,6 +42,7 @@ type EntryMode = "document" | "excel" | "manual";
 type OcrMeta = {
   confidence: number;
   mode: string;
+  provider: string;
   warnings: string[];
 };
 type PipelineStatus = "pending" | "running" | "done" | "error";
@@ -1032,6 +1033,7 @@ function Onboarding({
     setDocumentOcrMeta({
       confidence: typeof payload.confidence === "number" ? payload.confidence : 0,
       mode: String(payload.mode || "unknown"),
+      provider: String(payload.provider || "sample"),
       warnings: Array.isArray(payload.warnings) ? payload.warnings.map(String) : []
     });
     setDocumentOcrStatus(payload.message || "OCR 추출값을 확인하세요.");
@@ -1834,6 +1836,8 @@ function DocumentOcrRegistrationPanel({
   const [attachmentFiles, setAttachmentFiles] = useState<Record<string, string[]>>({});
   const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
   const confidencePercent = ocrMeta ? Math.round(ocrMeta.confidence * 100) : 0;
+  const providerLabel = getOcrProviderLabel(ocrMeta?.provider);
+  const ocrModeLabel = ocrMeta?.mode === "sample" ? "샘플 검증" : ocrMeta?.mode === "provider-ready" ? "공급자 준비" : ocrMeta?.mode || "대기";
   const hasBusinessLicense = Boolean(filename || attachmentFiles.businessLicense?.length);
   const requiredAttachmentCount = attachmentSlots.filter((slot) => slot.required).length;
   const readyAttachmentCount = attachmentSlots.filter((slot) => !slot.required || (attachmentFiles[slot.key] || []).length || (slot.key === "businessLicense" && filename)).length;
@@ -1863,7 +1867,7 @@ function DocumentOcrRegistrationPanel({
           <FileSpreadsheet className="mb-4 h-10 w-10 text-blue-700" />
           <span className="text-base font-black text-slate-950">사업자등록증 업로드</span>
           <span className="mt-2 text-sm font-semibold leading-6 text-slate-500">이미지 또는 PDF를 올리면 상호명, 사업자번호, 대표자명, 개업일, 주소를 추출합니다.</span>
-          <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">이미지 · PDF</span>
+          <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">이미지 · PDF · 저장 전 검수</span>
           <input className="sr-only" type="file" accept="image/*,.pdf" onChange={onDocumentFile} />
         </label>
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -1886,9 +1890,9 @@ function DocumentOcrRegistrationPanel({
             </Button>
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-3">
-            <MiniStatus label="OCR 모드" value={ocrMeta?.mode === "sample" ? "샘플 응답" : ocrMeta?.mode || "대기"} />
+            <MiniStatus label="OCR 상태" value={ocrModeLabel} />
+            <MiniStatus label="공급자" value={providerLabel} />
             <MiniStatus label="추출 신뢰도" value={ocrMeta ? `${confidencePercent}%` : "대기"} />
-            <MiniStatus label="확인 필요" value={ocrMeta?.warnings.length ? `${ocrMeta.warnings.length}건` : "없음"} />
           </div>
           {ocrMeta?.warnings.length ? (
             <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -1920,7 +1924,7 @@ function DocumentOcrRegistrationPanel({
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-sm font-black text-slate-950">첨부자료 보관</p>
-              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">1차 버전은 파일 선택 상태를 표시하고, 다음 단계에서 실제 저장소와 OCR API를 연결합니다.</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">사업자등록증, 신분증, 통장사본, 배송 적재위치 자료를 매장 생성 전 한 번에 검수합니다.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge className={attachmentReady ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>
@@ -1932,7 +1936,7 @@ function DocumentOcrRegistrationPanel({
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <MiniStatus label="필수 첨부" value={attachmentReady ? "충족" : "사업자등록증 필요"} />
             <MiniStatus label="보관 상태" value={`${readyAttachmentCount}/${attachmentSlots.length} 항목 확인`} />
-            <MiniStatus label="신분증 정책" value="마스킹 후 보관" />
+            <MiniStatus label="확인 필요" value={ocrMeta?.warnings.length ? `${ocrMeta.warnings.length}건` : "없음"} />
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {attachmentSlots.map((slot) => (
@@ -2939,6 +2943,14 @@ function revenueGrade(monthlyRevenue: number) {
 
 function dateStamp() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+function getOcrProviderLabel(provider?: string) {
+  if (provider === "naver-clova") return "Naver CLOVA";
+  if (provider === "upstage") return "Upstage";
+  if (provider === "openai-vision") return "OpenAI Vision";
+  if (provider === "sample") return "샘플 엔진";
+  return "대기";
 }
 
 function fieldLabelForHeader(header: string, fields: readonly UploadTemplateField[]) {
