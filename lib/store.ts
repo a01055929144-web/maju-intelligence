@@ -61,6 +61,10 @@ export type CustomerMasterItem = {
   industry: string;
   lastOrderDays: number;
   loadingPosition: string;
+  naverPlaceUrl?: string;
+  kakaoPlaceUrl?: string;
+  googleMapUrl?: string;
+  placeLinksCheckedAt?: string;
   memoCount: number;
   monthlyRevenue: number;
   openingDate?: string;
@@ -85,6 +89,9 @@ export type CustomerMasterInput = {
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
+  naverPlaceUrl?: string;
+  kakaoPlaceUrl?: string;
+  googleMapUrl?: string;
   monthlyRevenue?: number;
   openingDate?: string;
   phone?: string;
@@ -325,6 +332,9 @@ type SupabaseRow = Record<string, unknown>;
 const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 const AUTH_CREDENTIALS_ID = "maju-default";
+const CUSTOMER_MASTER_SELECT =
+  "id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url";
+const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS = `${CUSTOMER_MASTER_SELECT},naver_place_url,kakao_place_url,google_map_url,place_links_checked_at`;
 const STAFF_INVITATIONS_MIGRATION_MESSAGE =
   "직원 초대 저장소가 아직 준비되지 않았습니다. Supabase SQL Editor에서 직원 초대 스키마를 적용한 뒤 다시 시도해주세요.";
 const SUPABASE_CONNECTION_KEY_MESSAGE =
@@ -371,6 +381,11 @@ function isMissingStaffInvitationTableError(error: unknown) {
 function isInvalidSupabaseApiKeyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("Invalid API key") || message.includes("Forbidden use of secret API key");
+}
+
+function isMissingCustomerPlaceLinksColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return ["naver_place_url", "kakao_place_url", "google_map_url", "place_links_checked_at"].some((column) => message.includes(column));
 }
 
 function normalizeStaffStoreError(error: unknown): never {
@@ -1556,37 +1571,47 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
     };
   }
 
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      address: string | null;
-      bank_account_file_url: string | null;
-      birth_date: string | null;
-      business_license_file_url: string | null;
-      business_registration_number: string | null;
-      business_status: string | null;
-      business_status_checked_at: string | null;
-      customer_name: string;
-      delivery_km: number | string | null;
-      delivery_manager: string | null;
-      delivery_minutes: number | null;
-      delivery_zone: string | null;
-      email: string | null;
-      industry: string | null;
-      last_order_days: number | null;
-      monthly_revenue: number | string | null;
-      opening_date: string | null;
-      phone: string | null;
-      region: string | null;
-      representative_name: string | null;
-      visit_count: number | null;
-      loading_position: string | null;
-    }>
-  >(
-    `normalized_customers?select=id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url&company_id=eq.${encodeURIComponent(
-      id
-    )}&order=created_at.desc&limit=1000`
-  );
+  type CustomerMasterRow = {
+    id: string;
+    address: string | null;
+    bank_account_file_url: string | null;
+    birth_date: string | null;
+    business_license_file_url: string | null;
+    business_registration_number: string | null;
+    business_status: string | null;
+    business_status_checked_at: string | null;
+    customer_name: string;
+    delivery_km: number | string | null;
+    delivery_manager: string | null;
+    delivery_minutes: number | null;
+    delivery_zone: string | null;
+    email: string | null;
+    google_map_url?: string | null;
+    industry: string | null;
+    kakao_place_url?: string | null;
+    last_order_days: number | null;
+    monthly_revenue: number | string | null;
+    naver_place_url?: string | null;
+    opening_date: string | null;
+    phone: string | null;
+    place_links_checked_at?: string | null;
+    region: string | null;
+    representative_name: string | null;
+    visit_count: number | null;
+    loading_position: string | null;
+  };
+  let rows: CustomerMasterRow[];
+
+  try {
+    rows = await supabaseRequest<Array<CustomerMasterRow>>(
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=1000`
+    );
+  } catch (error) {
+    if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
+    rows = await supabaseRequest<Array<CustomerMasterRow>>(
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=1000`
+    );
+  }
 
   return {
     customers: rows.map((row, index) => toCustomerMasterItem(row, index)),
@@ -1625,10 +1650,14 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
       industry: input.industry || "미분류",
+      kakao_place_url: input.kakaoPlaceUrl || null,
       last_order_days: input.lastOrderDays || 0,
+      google_map_url: input.googleMapUrl || null,
       monthly_revenue: input.monthlyRevenue || 0,
+      naver_place_url: input.naverPlaceUrl || null,
       opening_date: input.openingDate || null,
       phone: input.phone || null,
+      place_links_checked_at: input.naverPlaceUrl || input.kakaoPlaceUrl || input.googleMapUrl ? new Date().toISOString() : null,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
       visit_count: input.visitCount || 0,
@@ -1649,47 +1678,58 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
   const importId = await createManualCustomerImport(id);
   const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
   const normalizedKey = businessNumber || makeCustomerKey(customerName, input.address || "");
-
-  const rows = await supabaseRequest<Array<Record<string, unknown>>>("normalized_customers?on_conflict=company_id,normalized_key", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify([
-      {
-        address: input.address || null,
-        bank_account_file_url: input.bankAccountFileUrl || null,
-        birth_date: toPostgresDate(input.birthDate),
-        business_license_file_url: input.businessLicenseFileUrl || null,
-        business_registration_number: businessNumber || null,
-        business_status: input.businessStatus || "확인 예정",
-        business_status_checked_at: null,
-        company_id: id,
-        customer_name: customerName,
-        delivery_km: input.deliveryKm || 0,
-        delivery_manager: input.deliveryManager || null,
-        delivery_minutes: input.deliveryMinutes || null,
-        delivery_zone: input.deliveryZone || null,
-        email: input.email || null,
-        import_id: importId,
-        industry: input.industry || "미분류",
-        last_order_days: input.lastOrderDays || 0,
-        monthly_revenue: input.monthlyRevenue || 0,
-        normalized_key: normalizedKey,
-        opening_date: toPostgresDate(input.openingDate),
-        phone: input.phone || null,
-        region: input.region || "미분류",
-        representative_name: input.representativeName || null,
-        visit_count: input.visitCount || 0,
-        loading_position: input.loadingPosition || null
-      }
-    ])
+  const placeLinks = {
+    google_map_url: input.googleMapUrl || null,
+    kakao_place_url: input.kakaoPlaceUrl || null,
+    naver_place_url: input.naverPlaceUrl || null,
+    place_links_checked_at: input.naverPlaceUrl || input.kakaoPlaceUrl || input.googleMapUrl ? new Date().toISOString() : null
+  };
+  const customerPayload = {
+    address: input.address || null,
+    bank_account_file_url: input.bankAccountFileUrl || null,
+    birth_date: toPostgresDate(input.birthDate),
+    business_license_file_url: input.businessLicenseFileUrl || null,
+    business_registration_number: businessNumber || null,
+    business_status: input.businessStatus || "확인 예정",
+    business_status_checked_at: null,
+    company_id: id,
+    customer_name: customerName,
+    delivery_km: input.deliveryKm || 0,
+    delivery_manager: input.deliveryManager || null,
+    delivery_minutes: input.deliveryMinutes || null,
+    delivery_zone: input.deliveryZone || null,
+    email: input.email || null,
+    import_id: importId,
+    industry: input.industry || "미분류",
+    last_order_days: input.lastOrderDays || 0,
+    monthly_revenue: input.monthlyRevenue || 0,
+    normalized_key: normalizedKey,
+    opening_date: toPostgresDate(input.openingDate),
+    phone: input.phone || null,
+    region: input.region || "미분류",
+    representative_name: input.representativeName || null,
+    visit_count: input.visitCount || 0,
+    loading_position: input.loadingPosition || null
+  };
+  const rows = await upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...placeLinks }).catch((error) => {
+    if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
+    return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
   });
 
   return {
     customer: toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0),
     persisted: true
   };
+}
+
+async function upsertNormalizedCustomerWithOptionalPlaceLinks(payload: Record<string, unknown>) {
+  return supabaseRequest<Array<Record<string, unknown>>>("normalized_customers?on_conflict=company_id,normalized_key", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([payload])
+  });
 }
 
 export async function getCustomerOperations(customerId: string, companyId?: string) {
@@ -3216,11 +3256,15 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
     delivery_zone: asNullableString(row.delivery_zone),
     email: asNullableString(row.email),
+    google_map_url: asNullableString(row.google_map_url),
     industry: asNullableString(row.industry),
+    kakao_place_url: asNullableString(row.kakao_place_url),
     last_order_days: typeof row.last_order_days === "number" ? row.last_order_days : 0,
     monthly_revenue: row.monthly_revenue as number | string | null,
+    naver_place_url: asNullableString(row.naver_place_url),
     opening_date: asNullableString(row.opening_date),
     phone: asNullableString(row.phone),
+    place_links_checked_at: asNullableString(row.place_links_checked_at),
     region: asNullableString(row.region),
     representative_name: asNullableString(row.representative_name),
     visit_count: typeof row.visit_count === "number" ? row.visit_count : 0,
@@ -3244,11 +3288,15 @@ function toCustomerMasterItem(
     delivery_minutes: number | null;
     delivery_zone: string | null;
     email: string | null;
+    google_map_url?: string | null;
     industry: string | null;
+    kakao_place_url?: string | null;
     last_order_days: number | null;
     monthly_revenue: number | string | null;
+    naver_place_url?: string | null;
     opening_date: string | null;
     phone: string | null;
+    place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
     visit_count: number | null;
@@ -3277,10 +3325,14 @@ function toCustomerMasterItem(
     industry: row.industry || "미분류",
     lastOrderDays: Number(row.last_order_days || 0),
     loadingPosition: row.loading_position || (index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역"),
+    googleMapUrl: row.google_map_url || undefined,
+    kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),
     monthlyRevenue,
+    naverPlaceUrl: row.naver_place_url || undefined,
     openingDate: row.opening_date || undefined,
     phone: row.phone || `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
+    placeLinksCheckedAt: row.place_links_checked_at || undefined,
     region: row.region || "미분류",
     representativeName: row.representative_name || (index % 2 === 0 ? "김민준" : "이서연"),
     visitCount: Number(row.visit_count || 0)
@@ -3305,11 +3357,15 @@ function getSampleCustomerMaster(): CustomerMasterItem[] {
         delivery_minutes: null,
         delivery_zone: null,
         email: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
+        google_map_url: customer.googleMapUrl || null,
         industry: customer.industry,
+        kakao_place_url: customer.kakaoPlaceUrl || null,
         last_order_days: customer.lastOrderDays,
         monthly_revenue: customer.monthlyRevenue,
+        naver_place_url: customer.naverPlaceUrl || null,
         opening_date: null,
         phone: null,
+        place_links_checked_at: customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl ? "샘플 기준" : null,
         region: customer.region,
         representative_name: null,
         visit_count: customer.visitCount,
