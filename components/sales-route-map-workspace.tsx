@@ -199,6 +199,9 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
+  const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
+  const visibleMapReadyStoreCount = useMemo(() => visibleStores.filter((store) => Boolean(store.address?.trim())).length, [visibleStores]);
+  const missingAddressCount = allStores.length - mapReadyStoreCount;
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
   const isVehicleFiltered = vehicleFilterId !== "all";
   const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 매장";
@@ -364,7 +367,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         allStoreTotals={allStoreTotals}
         currentStoreCount={visibleStores.length}
         currentTotals={routeTotals}
+        mapReadyStoreCount={mapReadyStoreCount}
+        missingAddressCount={missingAddressCount}
         routePlan={routePlan}
+        visibleMapReadyStoreCount={visibleMapReadyStoreCount}
       />
 
       <RouteWorkspaceGuide
@@ -2426,37 +2432,48 @@ function RouteBasisStrip({
   allStoreTotals,
   currentStoreCount,
   currentTotals,
-  routePlan
+  mapReadyStoreCount,
+  missingAddressCount,
+  routePlan,
+  visibleMapReadyStoreCount
 }: {
   readonly allStoreCount: number;
   readonly allStoreTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
   readonly currentStoreCount: number;
   readonly currentTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
+  readonly mapReadyStoreCount: number;
+  readonly missingAddressCount: number;
   readonly routePlan: RoutePlan;
+  readonly visibleMapReadyStoreCount: number;
 }) {
+  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "주소 기준 정상";
+
   return (
     <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
       <div className="min-w-0">
         <p className="text-xs font-black text-slate-500">운영 기준 데이터</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          대시보드, 거래처 히스토리, 이 화면은 동일한 거래처 원장과 물류 출발지 기준을 사용합니다. 기본값은 출발지와 각 매장 사이의 단건 합이고, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
+          대시보드, 거래처 히스토리, 이 화면은 동일한 거래처 원장과 물류 출발지 기준을 사용합니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
         </p>
       </div>
-      <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
         <RouteBasisMetric label="거래처 원장" value={`${routePlan.totalStops.toLocaleString()}곳`} helper="대시보드 기준" />
+        <RouteBasisMetric label="지도 표시 가능" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
         <RouteBasisMetric label="출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} helper="단건 거리 합" />
         <RouteBasisMetric label="출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} helper="단건 시간 합" />
-        <RouteBasisMetric label="현재 필터 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`${currentTotals.distanceKm.toLocaleString()}km · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
+        <RouteBasisMetric label="현재 필터 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
   );
 }
 
-function RouteBasisMetric({ helper, label, value }: { readonly helper?: string; readonly label: string; readonly value: string }) {
+function RouteBasisMetric({ helper, label, tone = "default", value }: { readonly helper?: string; readonly label: string; readonly tone?: "default" | "ready" | "warning"; readonly value: string }) {
+  const valueClass = tone === "ready" ? "text-emerald-700" : tone === "warning" ? "text-amber-700" : "text-slate-950";
+
   return (
     <div className="min-w-0 border-b border-r border-slate-100 px-3 py-2 last:border-r-0 2xl:border-b-0">
       <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+      <p className={`mt-1 truncate text-sm font-black ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{helper}</p> : null}
     </div>
   );
