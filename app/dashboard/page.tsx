@@ -57,15 +57,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const customerMaster = await getCustomerMaster(companyId);
   const originAddress = await getCompanyOriginAddress(companyId);
   const referenceFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
+  const customerDataCount = customerMaster.source === "supabase" ? customerMaster.customers.length : Math.max(customerMaster.customers.length, briefing.currentCustomers);
+  const routeStops = routePlan.groups.flatMap((group) => group.stops);
+  const mapMarkers = createRouteMapMarkers(originAddress, routeStops);
+  const routeMapStoreCount = Math.max(mapMarkers.length - 1, 0);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
   const latestUpload = uploadHistory[0];
   const placeLinkedCustomers = customerMaster.customers.filter((customer) => customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl).length;
   const placeLinkRate = customerMaster.customers.length ? Math.round((placeLinkedCustomers / customerMaster.customers.length) * 100) : 0;
   const dataReadiness = [
-    { label: "거래처 마스터", ready: briefing.currentCustomers > 0, detail: `${briefing.currentCustomers.toLocaleString()}개 거래처` },
+    { label: "거래처 마스터", ready: customerDataCount > 0, detail: `${customerDataCount.toLocaleString()}개 거래처` },
     { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
-    { label: "코스 데이터", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 등록` },
+    { label: "지도 표시", ready: routeMapStoreCount === routePlan.totalStops, detail: `주소 ${routeMapStoreCount.toLocaleString()}곳 / 전체 ${routePlan.totalStops.toLocaleString()}곳` },
     { label: "외부 매장 정보", ready: placeLinkedCustomers > 0, detail: `${placeLinkedCustomers.toLocaleString()}/${customerMaster.customers.length.toLocaleString()}곳 연결` }
   ];
   const operationChecklist = [
@@ -81,9 +85,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       actionHref: withCompanyQuery("/"),
       actionLabel: "거래처 등록",
       description: "거래처 마스터를 저장하면 히스토리, 지도, 배송차 배정의 기준 데이터가 됩니다.",
-      done: briefing.currentCustomers > 0,
+      done: customerDataCount > 0,
       label: "거래처 기본정보",
-      value: `${briefing.currentCustomers.toLocaleString()}개`
+      value: `${customerDataCount.toLocaleString()}개`
     },
     {
       actionHref: withCompanyQuery("/revenue/transactions"),
@@ -129,8 +133,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       description: "사업자번호, 주소, 배송 적재위치, 메모 히스토리를 관리합니다.",
       icon: Building2,
       label: "거래처 관리",
-      ready: briefing.currentCustomers > 0,
-      value: `${briefing.currentCustomers.toLocaleString()}개`
+      ready: customerDataCount > 0,
+      value: `${customerDataCount.toLocaleString()}개`
     },
     {
       actionHref: withCompanyQuery("/routes/today"),
@@ -166,10 +170,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     { href: withCompanyQuery("/assistant"), label: "AI 영업 도우미", icon: Sparkles, description: "방문 요약, 후속 메시지, 견적 메모 초안을 만듭니다." },
     { href: withCompanyQuery("/dashboard/settings"), label: "회사 설정", icon: Settings, description: "회사명과 물류 출발지 주소를 수정합니다." }
   ];
-  const routeStops = routePlan.groups.flatMap((group) => group.stops);
-  const mapMarkers = createRouteMapMarkers(originAddress, routeStops);
-  const routeMapStoreCount = Math.max(mapMarkers.length - 1, 0);
-
   return (
     <CustomerAppShell
       active="dashboard"
@@ -189,7 +189,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 <Badge className="mb-3 bg-slate-100 text-slate-700">오늘 운영 요약</Badge>
                 <h1 className="text-[26px] font-black leading-tight text-slate-950">오늘의 거래처, 매출 데이터, 배송 코스를 한 번에 확인합니다.</h1>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                  거래처 {briefing.currentCustomers.toLocaleString()}개 중 오늘 추천 {briefing.todayRecommendations}곳, 동선 내 신규 리드 {briefing.routeLeads}곳을 먼저 확인하세요.
+                  거래처 {customerDataCount.toLocaleString()}개 중 오늘 추천 {briefing.todayRecommendations}곳, 동선 내 신규 리드 {briefing.routeLeads}곳을 먼저 확인하세요.
                 </p>
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -220,7 +220,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric icon={Building2} label="전체 거래처" value={`${briefing.currentCustomers}개`} />
+              <Metric icon={Building2} label="전체 거래처" value={`${customerDataCount}개`} />
               <Metric icon={Route} label="배송 코스 매장" value={`${routePlan.totalStops}곳`} />
               <Metric icon={Fuel} label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
               <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
@@ -249,7 +249,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         </div>
 
         <DashboardDataBasisPanel
-          customerCount={briefing.currentCustomers}
+          customerCount={customerDataCount}
           latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}
@@ -306,7 +306,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <NextAction description="사업자 상태, 배송 적재위치, 첨부자료, 메모 히스토리를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장·첨부 확인" value={`${briefing.currentCustomers.toLocaleString()}개`} />
+                  <NextAction description="사업자 상태, 배송 적재위치, 첨부자료, 메모 히스토리를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장·첨부 확인" value={`${customerDataCount.toLocaleString()}개`} />
                   <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 순서를 확정합니다." href={withCompanyQuery("/routes/today")} label="2. 영업·배송 코스 확정" value={`${routePlan.totalStops.toLocaleString()}곳`} />
                   <NextAction description="ERP 거래원장 업로드 상태와 기간별 매출 변화를 확인합니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 거래내역 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
                 </CardContent>
