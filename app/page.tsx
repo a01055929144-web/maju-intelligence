@@ -972,8 +972,13 @@ function Onboarding({
     },
     {
       description: "다음 개선은 대시보드, 코스, 거래처 히스토리의 세부 UI 밀도를 더 정리하는 것입니다.",
-      done: false,
+      done: true,
       label: "주요 화면 밀도 정리"
+    },
+    {
+      description: "다음 개선은 모바일 직원 사용 흐름과 현장 완료 기록을 더 직접적으로 연결하는 것입니다.",
+      done: false,
+      label: "모바일 현장 흐름"
     }
   ];
   const reviewTabs = [

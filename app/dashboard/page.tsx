@@ -296,7 +296,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
             </>
           }
           route={
-            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_300px]">
+            <div className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
               <Card className="border-slate-200/80 shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -330,19 +331,27 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                     <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
                     <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
                   </div>
-                  <KakaoAddressMap mapClassName="h-[520px]" markers={mapMarkers} showList={false} />
+                  <KakaoAddressMap mapClassName="h-[640px]" markers={mapMarkers} showList={false} />
                 </CardContent>
               </Card>
+              </div>
 
-              <div className="space-y-4">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <Card className="border-slate-200/80 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <FileSpreadsheet className="h-5 w-5 text-primary" />
-                      데이터 상태
-                    </CardTitle>
+                  <CardHeader className="flex flex-col gap-2 pb-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <FileSpreadsheet className="h-5 w-5 text-primary" />
+                        데이터 상태
+                      </CardTitle>
+                      <p className="mt-1 text-sm font-semibold text-muted-foreground">지도·배송 탭에서 필요한 기준값만 압축해서 확인합니다.</p>
+                    </div>
+                    <Link className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/")}>
+                      <Upload className="h-4 w-4" />
+                      데이터 등록
+                    </Link>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     {dataReadiness.map((item) => (
                       <div key={item.label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
                         <div className="min-w-0">
@@ -352,10 +361,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                         <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>{item.ready ? "준비" : "필요"}</Badge>
                       </div>
                     ))}
-                    <Link className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/")}>
-                      <Upload className="h-4 w-4" />
-                      데이터 등록
-                    </Link>
                   </CardContent>
                 </Card>
 
