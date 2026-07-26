@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ClipboardEdit, FileText, MessageSquareText, Sparkles } from "lucide-react";
+import { ArrowRight, ClipboardEdit, FileText, MessageSquareText, Route, Sparkles, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
@@ -84,6 +84,13 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           ))}
         </div>
 
+        <AssistantBasisPanel
+          draftsCount={drafts.length}
+          followUps={followUps}
+          quotes={quotes}
+          companyId={isAdminPreview ? companyId || "" : ""}
+        />
+
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div>
@@ -127,6 +134,66 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
         </section>
       </section>
     </CustomerAppShell>
+  );
+}
+
+function AssistantBasisPanel({
+  companyId,
+  draftsCount,
+  followUps,
+  quotes
+}: {
+  companyId: string;
+  draftsCount: number;
+  followUps: number;
+  quotes: number;
+}) {
+  const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);
+  const items = [
+    { label: "방문 기록", value: `${draftsCount.toLocaleString()}개 초안`, helper: "메모·방문 결과 기준" },
+    { label: "후속 메시지", value: `${followUps.toLocaleString()}개`, helper: "고객 응대 초안" },
+    { label: "견적 메모", value: `${quotes.toLocaleString()}개`, helper: "파이프라인 연결" },
+    { label: "코스 연결", value: "방문 순서 확인", helper: "현장 실행 기준" }
+  ];
+  const actionLinks = [
+    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "방문 기록 보완" },
+    { href: withCompanyQuery("/revenue/pipeline"), icon: TrendingUp, label: "매출 후보 확인" },
+    { href: withCompanyQuery("/routes/today"), icon: Route, label: "오늘 코스 확인" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+        <div>
+          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 초안은 방문 결과와 영업 메모를 실행 문장으로 바꾸는 보조 기능입니다.</p>
+        </div>
+        <p className="text-xs font-bold leading-5 text-slate-600">
+          초안 품질은 거래처 히스토리의 메모, 견적 요청 상태, 방문 코스 데이터에 좌우됩니다. 자동 발송 전 담당자가 반드시 내용을 검토해야 합니다.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {actionLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={item.href} key={item.label}>
+                <Icon className="h-3.5 w-3.5" />
+                {item.label}
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+      <div className="grid divide-y divide-slate-100 md:grid-cols-4 md:divide-x md:divide-y-0">
+        {items.map((item) => (
+          <div className="min-w-0 px-4 py-3" key={item.label}>
+            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
+            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
