@@ -25,11 +25,11 @@ export const workspaceTypeLabels: Record<WorkspaceType, string> = {
 };
 
 const roleCapabilities: Record<WorkspaceRole, WorkspaceCapability[]> = {
-  owner: ["manage_company", "manage_members", "manage_customers", "manage_routes", "manage_sales", "view_reports", "capture_field_updates"],
-  manager: ["manage_members", "manage_customers", "manage_routes", "manage_sales", "view_reports", "capture_field_updates"],
-  sales: ["manage_customers", "manage_sales", "view_reports", "capture_field_updates"],
-  driver: ["manage_routes", "capture_field_updates"],
-  member: ["manage_customers", "view_reports", "capture_field_updates"]
+  owner: allWorkspaceCapabilities(),
+  manager: allWorkspaceCapabilities(),
+  sales: allWorkspaceCapabilities(),
+  driver: allWorkspaceCapabilities(),
+  member: allWorkspaceCapabilities()
 };
 
 export function normalizeWorkspaceRole(role?: string | null): WorkspaceRole {
@@ -43,4 +43,8 @@ export function getWorkspaceCapabilities(role?: string | null): WorkspaceCapabil
 
 export function canUseWorkspaceFeature(role: string | null | undefined, capability: WorkspaceCapability) {
   return getWorkspaceCapabilities(role).includes(capability);
+}
+
+function allWorkspaceCapabilities(): WorkspaceCapability[] {
+  return ["manage_company", "manage_members", "manage_customers", "manage_routes", "manage_sales", "view_reports", "capture_field_updates"];
 }
