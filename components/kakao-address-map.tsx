@@ -78,6 +78,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
           level: 8
         });
         mapInstanceRef.current = map;
+        window.setTimeout(() => map.relayout?.(), 0);
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
@@ -146,6 +147,14 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
           map.setBounds(bounds);
         }
 
+        window.setTimeout(() => {
+          map.relayout?.();
+          if (hasRoadPath || found > 1) map.setBounds(bounds);
+          if (!hasRoadPath && focusedPosition) {
+            map.setCenter(focusedPosition);
+            map.setLevel(5);
+          }
+        }, 120);
         setStatus("ready");
       } catch (error) {
         if (!ignore) {
@@ -348,6 +357,7 @@ function loadKakaoMapSdk(appKey: string) {
     if (existingScript) {
       if (window.kakao?.maps && !window.kakao.maps.services) {
         existingScript.remove();
+        delete window.kakao;
       } else if (window.kakao?.maps) {
         waitForKakaoServices(resolve, reject);
         return;
@@ -361,7 +371,8 @@ function loadKakaoMapSdk(appKey: string) {
     const script = document.createElement("script");
     script.id = "kakao-map-sdk";
     script.async = true;
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
+    script.defer = true;
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services`;
     script.onload = () => waitForKakaoServices(resolve, reject);
     script.onerror = () => reject(new Error("Kakao map SDK load failed"));
     document.head.appendChild(script);
