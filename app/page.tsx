@@ -1150,6 +1150,7 @@ function Onboarding({
           onAnalyze={onAnalyze}
           persisted={pipelineMeta.persisted}
           readyCount={readyCheckCount}
+          registrationStatus={registrationStatus}
           rows={rawRows.length}
           state={registrationControlState}
           totalCount={saveReadinessItems.length}
@@ -1545,6 +1546,7 @@ function RegistrationControlStrip({
   onAnalyze,
   persisted,
   readyCount,
+  registrationStatus,
   rows,
   state,
   totalCount,
@@ -1558,6 +1560,7 @@ function RegistrationControlStrip({
   onAnalyze: () => void;
   persisted: boolean;
   readyCount: number;
+  registrationStatus: RegistrationStatus;
   rows: number;
   state: { helper: string; label: string; tone: "action" | "idle" | "ready" | "warning" };
   totalCount: number;
@@ -1583,6 +1586,41 @@ function RegistrationControlStrip({
     : rows
       ? "필수 컬럼과 품질 오류를 먼저 해결해야 저장할 수 있습니다."
       : waitingActionHelper;
+  const serverState = persisted
+    ? {
+        badge: "서버 저장 완료",
+        description: "거래처 원장, 매출 원장, 리포트 화면에서 같은 데이터 기준으로 확인할 수 있습니다.",
+        tone: "ready" as const
+      }
+    : registrationStatus.status === "running"
+      ? {
+          badge: "저장 확인 중",
+          description: "서버 저장 응답을 기다리고 있습니다. 완료 후 운영 화면 반영 여부가 갱신됩니다.",
+          tone: "action" as const
+        }
+      : canAnalyze
+        ? {
+            badge: "저장 실행 가능",
+            description: "아직 서버 저장 전입니다. 저장하고 리포트 갱신 버튼을 눌러 반영을 확인하세요.",
+            tone: "action" as const
+          }
+        : rows
+          ? {
+              badge: "저장 조건 미충족",
+              description: "필수 매핑이나 품질 검증을 먼저 해결해야 서버 저장을 시도할 수 있습니다.",
+              tone: "warning" as const
+            }
+          : {
+              badge: "등록 전",
+              description: "엑셀 업로드, 수기 등록, OCR 보조 입력 중 하나로 데이터를 먼저 준비하세요.",
+              tone: "idle" as const
+            };
+  const serverStateClassName = {
+    action: "border-blue-200 bg-blue-50 text-blue-800",
+    idle: "border-slate-200 bg-slate-50 text-slate-700",
+    ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warning: "border-amber-200 bg-amber-50 text-amber-800"
+  }[serverState.tone];
 
   return (
     <div className={`rounded-md border p-4 shadow-sm ${toneClassName}`}>
@@ -1598,7 +1636,7 @@ function RegistrationControlStrip({
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{state.helper}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-md border border-white/80 bg-white/70 px-2.5 py-1 text-slate-600">
-              서버 반영: {persisted ? "완료" : "확인 전"}
+              서버 반영: {serverState.badge}
             </span>
             <span className="rounded-md border border-white/80 bg-white/70 px-2.5 py-1 text-slate-600">
               최근 이력: {latestUploadAt || "없음"}
@@ -1639,6 +1677,19 @@ function RegistrationControlStrip({
               <span className="rounded-md bg-blue-50 px-2 py-1 text-center">AI 갱신</span>
             </div>
           ) : null}
+        </div>
+      </div>
+      <div className={`mt-3 rounded-md border px-3 py-3 ${serverStateClassName}`}>
+        <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_260px] lg:items-center">
+          <div>
+            <p className="text-xs font-black opacity-70">DB 저장상태</p>
+            <p className="mt-1 text-base font-black">{serverState.badge}</p>
+          </div>
+          <p className="text-xs font-bold leading-5 opacity-90">{serverState.description}</p>
+          <div className="grid grid-cols-2 gap-2 text-[11px] font-black">
+            <span className="rounded-md bg-white/70 px-2 py-1 text-center">최근 상태: {registrationStatus.actionLabel}</span>
+            <span className="rounded-md bg-white/70 px-2 py-1 text-center">확인 위치: {persisted ? "운영 화면" : "저장·이력 탭"}</span>
+          </div>
         </div>
       </div>
     </div>
