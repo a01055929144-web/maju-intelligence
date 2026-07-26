@@ -1001,9 +1001,14 @@ function Onboarding({
       label: "배포 전 체크리스트"
     },
     {
-      description: "다음 개선은 실제 운영자가 자주 보는 카드의 숫자와 링크 우선순위를 더 압축하는 것입니다.",
-      done: false,
+      description: "등록 유형, 방식, 반영 화면, 서버 상태를 하나의 운영 기준 요약 카드로 압축했습니다.",
+      done: true,
       label: "운영 카드 압축"
+    },
+    {
+      description: "다음 개선은 배포 전 사용자가 실제로 눌러볼 핵심 플로우를 화면별로 점검하는 것입니다.",
+      done: false,
+      label: "핵심 플로우 점검"
     }
   ];
   const reviewTabs = [
@@ -1244,16 +1249,13 @@ function Onboarding({
           routeHref={routeHref}
         />
         <DataRegistrationFlowCard steps={flowSteps} />
-        <OperationalDataSplit
+        <OperationalCommandStrip
           activeType={uploadType}
-          latestUploadAt={latestUpload?.createdAt}
-          onSelect={onUploadType}
-          rowsWaiting={rawRows.length}
-        />
-        <DataRegistrationDecisionPanel
-          activeType={uploadType}
+          canAnalyze={canAnalyze}
           entryMode={entryMode}
           latestUploadAt={latestUpload?.createdAt}
+          onSelect={onUploadType}
+          persisted={pipelineMeta.persisted}
           rowsWaiting={rawRows.length}
         />
 
@@ -1958,6 +1960,103 @@ function DeploymentReadinessChecklist({
               </Link>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OperationalCommandStrip({
+  activeType,
+  canAnalyze,
+  entryMode,
+  latestUploadAt,
+  onSelect,
+  persisted,
+  rowsWaiting
+}: {
+  activeType: UploadTemplateType;
+  canAnalyze: boolean;
+  entryMode: EntryMode;
+  latestUploadAt?: string;
+  onSelect: (type: UploadTemplateType) => void;
+  persisted: boolean;
+  rowsWaiting: number;
+}) {
+  const activeLabel = activeType === "customer-master" ? "거래처 마스터" : "매출 거래내역";
+  const modeLabel = entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력";
+  const targetLabel = activeType === "customer-master" ? "히스토리 · 지도 · 배송 코스" : "매출 원장 · AI 리포트";
+  const status = persisted ? "서버 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
+  const cards = [
+    {
+      description: "사업자번호, 주소, 담당자, 첨부자료를 기준값으로 저장합니다.",
+      icon: Building2,
+      key: "customer-master" as UploadTemplateType,
+      label: "거래처 마스터",
+      meta: "최초 등록 후 수정"
+    },
+    {
+      description: "ERP 거래원장으로 매출 등급, 이탈, 리포트 수치를 갱신합니다.",
+      icon: Banknote,
+      key: "sales-analysis" as UploadTemplateType,
+      label: "매출 거래내역",
+      meta: "일/월/분기 반복 업데이트"
+    }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 p-4 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-center">
+        <div>
+          <Badge className="bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-100">운영 기준 요약</Badge>
+          <h2 className="mt-3 text-lg font-black text-slate-950">지금 등록 중인 데이터와 반영 위치</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+            거래처 기본정보는 고정 기준값, 매출 거래내역은 반복 업데이트 값입니다. 여기서 선택한 기준이 아래 업로드·매핑 화면에 바로 적용됩니다.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MiniStatus label="현재 유형" value={activeLabel} />
+          <MiniStatus label="등록 방식" value={modeLabel} />
+          <MiniStatus label="반영 화면" value={targetLabel} />
+          <MiniStatus label="서버 상태" value={status} />
+        </div>
+      </div>
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-3 p-4 md:grid-cols-2">
+          {cards.map((card) => {
+            const Icon = card.icon;
+            const active = activeType === card.key;
+            return (
+              <button
+                className={`rounded-lg border p-4 text-left transition ${
+                  active ? "border-blue-300 bg-blue-50 ring-1 ring-blue-100" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                }`}
+                key={card.key}
+                onClick={() => onSelect(card.key)}
+                type="button"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${active ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <Badge className={active ? "bg-white text-blue-800 ring-1 ring-inset ring-blue-100" : "bg-slate-100 text-slate-600"}>{active ? "선택됨" : "선택"}</Badge>
+                </div>
+                <p className="mt-3 text-base font-black text-slate-950">{card.label}</p>
+                <p className="mt-1 text-xs font-black text-slate-400">{card.meta}</p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{card.description}</p>
+              </button>
+            );
+          })}
+        </div>
+        <div className="border-t border-slate-200 bg-slate-50/60 p-4 lg:border-l lg:border-t-0">
+          <p className="text-sm font-black text-slate-950">운영 상태</p>
+          <div className="mt-3 grid gap-2">
+            <MiniStatus label="검수 데이터" value={`${rowsWaiting.toLocaleString()}행`} />
+            <MiniStatus label="최근 반영" value={latestUploadAt || "확인 필요"} />
+          </div>
+          <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black leading-5 text-blue-800">
+            숫자가 대시보드, 거래처 히스토리, 영업·배송 코스에서 다르면 먼저 DB 반영과 필터 기준을 확인하세요.
+          </p>
         </div>
       </div>
     </div>
