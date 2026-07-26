@@ -39,6 +39,8 @@ declare global {
 let kakaoScriptPromise: Promise<void> | null = null;
 const emptyRoutePath: ReadonlyArray<KakaoRoutePoint> = [];
 const defaultMapClassName = "h-[360px]";
+const kakaoSdkTimeoutMs = 8000;
+const kakaoGeocodeTimeoutMs = 4500;
 
 export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, onMarkerClick, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -53,14 +55,17 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
     let ignore = false;
 
     async function bootMap() {
+      setStatus("loading");
+
       if (!canUseKakao || !mapRef.current) {
         setStatus("fallback");
         return;
       }
 
       try {
-        await loadKakaoMapSdk(appKey!);
+        await withTimeout(loadKakaoMapSdk(appKey!), kakaoSdkTimeoutMs, "Kakao map SDK load timed out");
         if (ignore || !mapRef.current || !window.kakao?.maps) return;
+        mapRef.current.innerHTML = "";
 
         const kakao = window.kakao;
         const initialCenter = new kakao.maps.LatLng(37.5388, 127.2124);
@@ -80,7 +85,8 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         await Promise.all(
           markers.map(
             (marker) =>
-              new Promise<void>((resolve) => {
+              withTimeout(
+                new Promise<void>((resolve) => {
                 geocoder.addressSearch(marker.address, (result: any[], geocodeStatus: string) => {
                   if (ignore) {
                     resolve();
@@ -107,7 +113,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
                   resolve();
                 });
-              })
+                }),
+                kakaoGeocodeTimeoutMs,
+                "Kakao address search timed out"
+              ).catch(() => undefined)
           )
         );
 
@@ -302,6 +311,22 @@ function splitRoutePath(routePath: ReadonlyArray<KakaoRoutePoint>) {
   return segments;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      }
+    );
+  });
+}
+
 function loadKakaoMapSdk(appKey: string) {
   if (window.kakao?.maps?.services) {
     return new Promise<void>((resolve) => window.kakao.maps.load(resolve));
@@ -325,6 +350,9 @@ function loadKakaoMapSdk(appKey: string) {
     script.onload = () => window.kakao?.maps?.load(resolve);
     script.onerror = () => reject(new Error("Kakao map SDK load failed"));
     document.head.appendChild(script);
+  }).catch((error) => {
+    kakaoScriptPromise = null;
+    throw error;
   });
 
   return kakaoScriptPromise;
