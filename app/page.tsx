@@ -967,8 +967,13 @@ function Onboarding({
     },
     {
       description: "다음 개선은 저장 직후 DB 응답과 화면 반영 결과를 더 직접적으로 비교하는 것입니다.",
-      done: false,
+      done: true,
       label: "저장 결과 대조"
+    },
+    {
+      description: "다음 개선은 대시보드, 코스, 거래처 히스토리의 세부 UI 밀도를 더 정리하는 것입니다.",
+      done: false,
+      label: "주요 화면 밀도 정리"
     }
   ];
   const reviewTabs = [
@@ -1604,11 +1609,13 @@ function Onboarding({
                 ) : null}
                 <SaveResultSummary
                   canAnalyze={canAnalyze}
+                  dashboardHref={dashboardHref}
                   ledgerHref={currentLedgerHref}
                   ledgerLabel={currentLedgerLabel}
                   missingRequiredFields={missingRequiredFields}
                   persisted={pipelineMeta.persisted}
                   registrationStatus={registrationStatus}
+                  routeHref={routeHref}
                   rows={rawRows.length}
                 />
               </>
@@ -3165,19 +3172,23 @@ function SaveReadinessPanel({
 
 function SaveResultSummary({
   canAnalyze,
+  dashboardHref,
   ledgerHref,
   ledgerLabel,
   missingRequiredFields,
   persisted,
   registrationStatus,
+  routeHref,
   rows
 }: {
   canAnalyze: boolean;
+  dashboardHref: string;
   ledgerHref: string;
   ledgerLabel: string;
   missingRequiredFields: readonly UploadTemplateField[];
   persisted: boolean;
   registrationStatus: RegistrationStatus;
+  routeHref: string;
   rows: number;
 }) {
   const mode = persisted ? "persisted" : canAnalyze ? "ready" : rows ? "blocked" : "empty";
@@ -3216,6 +3227,28 @@ function SaveResultSummary({
     : canAnalyze
       ? { href: "#save-check", label: "저장 실행 후 확인", tone: "muted" as const }
       : { href: "#mapping", label: "조건 보완하기", tone: "muted" as const };
+  const reconciliationChecks = [
+    {
+      label: "DB 저장 응답",
+      value: persisted ? "저장 완료" : canAnalyze ? "실행 전" : "대기",
+      ok: persisted
+    },
+    {
+      label: "원장 반영",
+      value: persisted ? ledgerLabel : "저장 후 확인",
+      ok: persisted
+    },
+    {
+      label: "대시보드 기준값",
+      value: persisted ? "운영 기준 데이터 확인" : "반영 전",
+      ok: persisted
+    },
+    {
+      label: "코스·지도 기준값",
+      value: persisted ? "지도·코스 점검" : "반영 전",
+      ok: persisted
+    }
+  ];
 
   return (
     <div className={`rounded-md border p-4 ${copy.className}`} id="save-check">
@@ -3243,19 +3276,41 @@ function SaveResultSummary({
           </Link>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 border-t border-white/70 pt-3 md:grid-cols-3">
-        <SaveResultCheck label="1. 저장 응답" value={persisted ? "서버 저장 완료" : canAnalyze ? "실행 전" : "대기"} />
-        <SaveResultCheck label="2. 원장 반영" value={persisted ? ledgerLabel : "저장 후 확인"} />
-        <SaveResultCheck label="3. 운영 화면" value={persisted ? "대시보드·코스 확인" : "반영 전"} />
+      <div className="mt-3 border-t border-white/70 pt-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-black text-slate-500">저장 결과 대조</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-700">저장 응답과 운영 화면 반영 결과를 같은 순서로 확인합니다.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link className="inline-flex h-8 items-center justify-center rounded-md bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50" href={dashboardHref}>
+              대시보드
+            </Link>
+            <Link className="inline-flex h-8 items-center justify-center rounded-md bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50" href={ledgerHref}>
+              원장
+            </Link>
+            <Link className="inline-flex h-8 items-center justify-center rounded-md bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50" href={routeHref}>
+              코스
+            </Link>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-4">
+          {reconciliationChecks.map((item, index) => (
+            <SaveResultCheck key={item.label} label={`${index + 1}. ${item.label}`} ok={item.ok} value={item.value} />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function SaveResultCheck({ label, value }: { label: string; value: string }) {
+function SaveResultCheck({ label, ok, value }: { label: string; ok: boolean; value: string }) {
   return (
-    <div className="rounded-md border border-white/80 bg-white/75 px-3 py-2">
-      <p className="text-[11px] font-black text-slate-500">{label}</p>
+    <div className={`rounded-md border px-3 py-2 ${ok ? "border-emerald-100 bg-white/85" : "border-white/80 bg-white/65"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-black text-slate-500">{label}</p>
+        {ok ? <Check className="h-3.5 w-3.5 text-emerald-700" /> : <Clock className="h-3.5 w-3.5 text-slate-400" />}
+      </div>
       <p className="mt-1 truncate text-xs font-black text-slate-900">{value}</p>
     </div>
   );
