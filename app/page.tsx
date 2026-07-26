@@ -3433,6 +3433,12 @@ function Report({
             <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "확인 필요"} />
             <ResultMetric label="잠재매출" value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} />
           </div>
+          <ReportDataBasisCard
+            isSalesReport={isSalesReport}
+            persisted={meta.persisted}
+            qualityScore={meta.qualityScore}
+            rows={meta.rows}
+          />
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -3550,6 +3556,60 @@ function Report({
         </CardContent>
       </Card>
     </section>
+  );
+}
+
+function ReportDataBasisCard({
+  isSalesReport,
+  persisted,
+  qualityScore,
+  rows
+}: {
+  isSalesReport: boolean;
+  persisted: boolean;
+  qualityScore: number;
+  rows: number;
+}) {
+  const sourceLabel = isSalesReport ? "매출 거래내역" : "거래처 마스터";
+  const basisRows = [
+    {
+      label: "리포트 기준 데이터",
+      value: sourceLabel,
+      description: isSalesReport ? "ERP 거래원장 매출 행을 거래처별로 묶어 등급과 이탈 징후를 계산합니다." : "사업자번호, 배송주소, 업종, 거래처 정보를 기준으로 회사 상태를 계산합니다."
+    },
+    {
+      label: "반영 화면",
+      value: isSalesReport ? "매출 원장 · AI 리포트" : "거래처 히스토리 · 배송 코스",
+      description: isSalesReport ? "저장 후 매출 원장과 대시보드 수치가 같은 기준으로 갱신됩니다." : "저장 후 거래처 상세, 지도 마커, 배송차별 코스에서 같은 기준값을 사용합니다."
+    },
+    {
+      label: "운영 신뢰도",
+      value: persisted ? "서버 저장 확인" : "저장 확인 필요",
+      description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 DB 저장 상태를 먼저 확인해야 운영 데이터로 볼 수 있습니다."
+    }
+  ];
+
+  return (
+    <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-blue-950">리포트 데이터 기준</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">대표가 보는 점수는 등록된 데이터 종류와 서버 저장 상태를 기준으로 해석해야 합니다.</p>
+        </div>
+        <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+          {persisted ? "운영 반영 가능" : "저장 확인 필요"}
+        </Badge>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {basisRows.map((row) => (
+          <div className="rounded-md border border-white/80 bg-white p-3" key={row.label}>
+            <p className="text-[11px] font-black text-slate-400">{row.label}</p>
+            <p className="mt-1 text-sm font-black text-slate-950">{row.value}</p>
+            <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{row.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
