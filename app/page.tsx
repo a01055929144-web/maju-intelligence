@@ -1447,7 +1447,7 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-2" id="mapping">
                   <div className="grid gap-2 md:grid-cols-3">
                     {reviewTabs.map((tab) => {
                       const selected = reviewTab === tab.key;
@@ -2849,9 +2849,14 @@ function SaveResultSummary({
       title: "저장 실행 준비가 끝났습니다."
     }
   }[mode];
+  const primaryAction = persisted
+    ? { href: ledgerHref, label: `${ledgerLabel}에서 확인`, tone: "solid" as const }
+    : canAnalyze
+      ? { href: "#save-check", label: "저장 실행 후 확인", tone: "muted" as const }
+      : { href: "#mapping", label: "조건 보완하기", tone: "muted" as const };
 
   return (
-    <div className={`rounded-md border p-4 ${copy.className}`}>
+    <div className={`rounded-md border p-4 ${copy.className}`} id="save-check">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{copy.badge}</Badge>
@@ -2864,13 +2869,32 @@ function SaveResultSummary({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Badge className="bg-white text-slate-600 ring-1 ring-inset ring-slate-200">{rows.toLocaleString()}행 대기</Badge>
-          {persisted ? (
-            <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" href={ledgerHref}>
-              {ledgerLabel}
-            </Link>
-          ) : null}
+          <Link
+            className={`inline-flex h-9 items-center justify-center rounded-md px-3 text-xs font-black shadow-sm ${
+              primaryAction.tone === "solid"
+                ? "bg-teal-700 text-white hover:bg-teal-800"
+                : "bg-white text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+            }`}
+            href={primaryAction.href}
+          >
+            {primaryAction.label}
+          </Link>
         </div>
       </div>
+      <div className="mt-3 grid gap-2 border-t border-white/70 pt-3 md:grid-cols-3">
+        <SaveResultCheck label="1. 저장 응답" value={persisted ? "서버 저장 완료" : canAnalyze ? "실행 전" : "대기"} />
+        <SaveResultCheck label="2. 원장 반영" value={persisted ? ledgerLabel : "저장 후 확인"} />
+        <SaveResultCheck label="3. 운영 화면" value={persisted ? "대시보드·코스 확인" : "반영 전"} />
+      </div>
+    </div>
+  );
+}
+
+function SaveResultCheck({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-white/80 bg-white/75 px-3 py-2">
+      <p className="text-[11px] font-black text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-xs font-black text-slate-900">{value}</p>
     </div>
   );
 }
