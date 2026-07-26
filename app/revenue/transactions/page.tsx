@@ -93,6 +93,14 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           ))}
         </div>
 
+        <RevenueDataBasisPanel
+          customerCount={sales.customerCount}
+          latestSalesDate={sales.latestSalesDate || "업로드 후 확인"}
+          productCount={sales.topProducts.length}
+          transactionCount={sales.transactionCount}
+          totalAmount={sales.totalAmount}
+        />
+
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
@@ -210,6 +218,53 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
         </section>
       </section>
     </CustomerAppShell>
+  );
+}
+
+function RevenueDataBasisPanel({
+  customerCount,
+  latestSalesDate,
+  productCount,
+  transactionCount,
+  totalAmount
+}: {
+  customerCount: number;
+  latestSalesDate: string;
+  productCount: number;
+  transactionCount: number;
+  totalAmount: number;
+}) {
+  const items = [
+    { label: "매출 원장", value: `${transactionCount.toLocaleString()}건`, helper: "ERP 거래내역 기준" },
+    { label: "거래처 연결", value: `${customerCount.toLocaleString()}곳`, helper: "거래처 원장 매칭 기준" },
+    { label: "품목 기준", value: `${productCount.toLocaleString()}개`, helper: "품목 이탈 분석 기준" },
+    { label: "최근 매출일", value: latestSalesDate, helper: "기간 분석 기준" },
+    { label: "누적 매출", value: `${Math.round(totalAmount).toLocaleString()}원`, helper: "등급·리포트 기준" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+        <div>
+          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">매출 원장이 대시보드와 AI 리포트에 반영되는 기준값입니다.</p>
+        </div>
+        <p className="text-xs font-bold leading-5 text-slate-600">
+          거래처 마스터와 매출 거래내역의 사업자번호 또는 상호명·주소가 맞아야 거래처별 매출, 등급, 품목 이탈 분석이 정확해집니다.
+        </p>
+      </div>
+      <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+        {items.map((item) => (
+          <div className="min-w-0 px-4 py-3" key={item.label}>
+            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950" title={item.value}>
+              {item.value}
+            </p>
+            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
