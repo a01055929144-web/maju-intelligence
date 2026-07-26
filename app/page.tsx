@@ -1999,6 +1999,69 @@ function RegistrationPathGuide({
           </div>
         ))}
       </div>
+      <RegistrationInputChecklist activeType={activeType} entryMode={entryMode} />
+    </div>
+  );
+}
+
+function RegistrationInputChecklist({
+  activeType,
+  entryMode
+}: {
+  activeType: UploadTemplateType;
+  entryMode: EntryMode;
+}) {
+  const isMaster = activeType === "customer-master";
+  const checklist =
+    entryMode === "excel"
+      ? isMaster
+        ? [
+            ["사업자번호", "10자리 번호가 있어야 기존 거래처 업데이트와 중복 판단이 정확합니다."],
+            ["배송주소", "지도 마커와 출발지 기준 거리 계산의 기준값입니다."],
+            ["대표자·연락처", "거래처 히스토리와 현장 연락에 필요한 기본값입니다."]
+          ]
+        : [
+            ["거래처 key", "사업자번호가 가장 좋고, 없으면 상호명과 주소를 함께 매칭합니다."],
+            ["매출일자", "일/월/분기/반기/연 분석을 나누는 기준입니다."],
+            ["매출금액·품목", "등급, 품목 이탈, 예상 매출 리포트의 기준값입니다."]
+          ]
+      : entryMode === "manual"
+        ? [
+            ["주소 검색", "주소 API 결과를 선택해야 지도와 배송 코스에서 같은 위치를 사용합니다."],
+            ["사업자번호 검증", "체크값이 맞는 10자리 번호만 저장 가능하도록 관리합니다."],
+            ["외부 지도 링크", "네이버·카카오·구글 링크는 선택값이지만 리뷰와 영업시간 확인에 유용합니다."]
+          ]
+        : [
+            ["OCR은 보조", "사업자등록증을 읽어 후보값을 채우지만 최종 저장 전에는 사람이 확인합니다."],
+            ["첨부자료", "사업자등록증, 통장사본, 신분증, 배송 적재위치 사진/영상을 구분합니다."],
+            ["개인정보", "신분증은 필요한 경우만 보관하고 민감정보 마스킹 기준을 지켜야 합니다."]
+          ];
+  const title = entryMode === "excel" ? "업로드 전 확인할 컬럼" : entryMode === "manual" ? "수기 등록 전 확인할 값" : "OCR 보조 입력 전 확인할 것";
+  const description = isMaster
+    ? "거래처 마스터는 한 번 저장하면 히스토리, 지도, 배송 코스의 기준값으로 계속 사용됩니다."
+    : "매출 거래내역은 반복 업로드되므로 거래처 연결 기준과 기간 기준이 가장 중요합니다.";
+
+  return (
+    <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-xs font-black text-slate-400">실무 체크리스트</p>
+          <p className="mt-1 text-sm font-black text-slate-950">{title}</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
+        </div>
+        <Badge className="w-fit bg-blue-50 text-blue-700">{isMaster ? "기준정보" : "반복 업데이트"}</Badge>
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        {checklist.map(([label, detail]) => (
+          <div key={label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 text-emerald-700" />
+              <p className="text-xs font-black text-slate-950">{label}</p>
+            </div>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{detail}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
