@@ -2,6 +2,7 @@ import type { KakaoMapMarker } from "@/components/kakao-address-map";
 
 type RouteMapStop = {
   readonly address?: string;
+  readonly id?: string;
   readonly name: string;
   readonly order: number;
 };
@@ -11,6 +12,7 @@ export function createRouteMapMarkers(originAddress: string, stops: ReadonlyArra
     .filter((stop) => stop.address)
     .map((stop, index) => ({
       address: stop.address || "",
+      id: stop.id,
       label: String(stop.order || index + 1),
       name: stop.name,
       tone: "customer" as const,

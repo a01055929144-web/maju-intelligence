@@ -2514,7 +2514,7 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
   return routePlan.groups
     .flatMap((group) => group.stops)
     .map((store, index) => {
-      const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
+      const marker = findMarkerForStore(existingMarkers, store);
       const details = store as RoutePlanStoreDetails;
       return {
         ...store,
@@ -2542,7 +2542,7 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
 function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: KakaoMapMarker[]): StoreRow[] {
   return vehicles.flatMap((vehicle, vehicleIndex) =>
     vehicle.stops.map((store, storeIndex) => {
-      const marker = existingMarkers.find((item) => item.address === store.address || item.name === store.name);
+      const marker = findMarkerForStore(existingMarkers, store);
       const globalIndex = vehicleIndex * 15 + storeIndex;
       const details = store as StoreRow & RoutePlanStoreDetails;
       return {
@@ -2569,6 +2569,10 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
       };
     })
   );
+}
+
+function findMarkerForStore(existingMarkers: KakaoMapMarker[], store: Pick<RoutePlanStop, "address" | "id" | "name">) {
+  return existingMarkers.find((item) => (store.id && item.id === store.id) || item.address === store.address || item.name === store.name);
 }
 
 function normalizeStoreBusinessStatus(status: string | undefined, index: number): StoreRow["businessStatus"] {

@@ -2428,7 +2428,7 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
 
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
   const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
-  const customerMaster = await getCustomerMaster(companyId).catch(() => ({ customers: getSampleCustomerMaster(), source: "sample" as const }));
+  const customerMaster = await getCustomerMaster(companyId);
   const planned = customerMaster.customers
     .map((customer, index) => {
       const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
