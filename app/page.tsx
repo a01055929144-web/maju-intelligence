@@ -981,9 +981,14 @@ function Onboarding({
       label: "모바일 현장 흐름"
     },
     {
-      description: "다음 개선은 현장 완료 기록을 관리자/거래처 히스토리에서 더 쉽게 추적하는 것입니다.",
-      done: false,
+      description: "모바일 현장 기록이 거래처 원장, 메모·방문, 첨부자료로 연결되는 추적 화면을 추가했습니다.",
+      done: true,
       label: "현장 기록 추적"
+    },
+    {
+      description: "다음 개선은 배포 전 운영 QA 체크와 화면별 잔여 깨짐을 한 번 더 정리하는 것입니다.",
+      done: false,
+      label: "운영 QA 정리"
     }
   ];
   const reviewTabs = [

@@ -361,6 +361,15 @@ export default function CrmTimelinePage() {
   const historyCount = customerNotes.length || selectedCustomer.memoCount;
   const nextActionCount = customerNotes.filter((note) => note.nextAction).length;
   const latestNote = customerNotes[0];
+  const deliveryProofAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "delivery_proof").length;
+  const fieldRecordSummary = {
+    attachmentCount: customerAttachments.length,
+    deliveryProofCount: deliveryProofAttachments,
+    loadingPositionCount: loadingPositionAttachments,
+    memoCount: historyCount,
+    recentMemoAt: latestNote?.createdAt || "서버 이력 대기",
+    visitCount: selectedCustomer.visitCount
+  };
   const draftBusinessNumberChanged = Boolean(
     draftCustomer && normalizeBusinessRegistrationNumber(draftCustomer.businessNumber) !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber)
   );
@@ -779,6 +788,11 @@ export default function CrmTimelinePage() {
                 totalCount={operationalChecks.length}
               />
               <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
+              <FieldRecordTracePanel
+                summary={fieldRecordSummary}
+                onOpenHistory={() => setDetailTab("history")}
+                onOpenLedger={() => setDetailTab("ledger")}
+              />
             </div>
 
             <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -1281,6 +1295,91 @@ function OperationalReadinessCard({
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{check.description}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function FieldRecordTracePanel({
+  onOpenHistory,
+  onOpenLedger,
+  summary
+}: {
+  onOpenHistory: () => void;
+  onOpenLedger: () => void;
+  summary: {
+    attachmentCount: number;
+    deliveryProofCount: number;
+    loadingPositionCount: number;
+    memoCount: number;
+    recentMemoAt: string;
+    visitCount: number;
+  };
+}) {
+  const items = [
+    {
+      action: onOpenHistory,
+      helper: `최근 기록 ${summary.recentMemoAt}`,
+      icon: FileText,
+      label: "메모·방문",
+      value: `${summary.memoCount.toLocaleString()}건`
+    },
+    {
+      action: onOpenLedger,
+      helper: "사진·영상·PDF 전체",
+      icon: PackageCheck,
+      label: "첨부자료",
+      value: `${summary.attachmentCount.toLocaleString()}건`
+    },
+    {
+      action: onOpenLedger,
+      helper: "기사 확인용 핵심 자료",
+      icon: MapPin,
+      label: "적재위치",
+      value: `${summary.loadingPositionCount.toLocaleString()}건`
+    },
+    {
+      action: onOpenHistory,
+      helper: "모바일 완료 증빙",
+      icon: CheckCircle2,
+      label: "배송완료",
+      value: `${summary.deliveryProofCount.toLocaleString()}건`
+    }
+  ];
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-blue-50">
+      <div className="flex flex-col gap-3 border-b border-teal-100/80 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Field Record Trace</p>
+          <h3 className="mt-1 text-base font-black text-slate-950">모바일 현장 기록 추적</h3>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
+            직원이 모바일에서 남긴 배송완료, 적재위치, 방문 메모를 거래처 원장과 히스토리에서 확인합니다.
+          </p>
+        </div>
+        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-teal-100">방문 {summary.visitCount.toLocaleString()}회 기준</Badge>
+      </div>
+      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              className="rounded-md border border-white bg-white/90 p-3 text-left shadow-sm transition hover:border-teal-200 hover:bg-white hover:shadow-md"
+              key={item.label}
+              onClick={item.action}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="text-lg font-black text-slate-950">{item.value}</span>
+              </div>
+              <p className="mt-3 text-sm font-black text-slate-900">{item.label}</p>
+              <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.helper}</p>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
