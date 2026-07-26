@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { FormEvent, useState } from "react";
-import { Building2, Check, ClipboardCheck, Database, MapPin, Route, Save, Truck, Upload } from "lucide-react";
+import { Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapPin, Route, Save, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanySettings } from "@/lib/store";
@@ -71,6 +71,24 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           </div>
         </section>
 
+        <section className="grid gap-3 md:grid-cols-3">
+          <BasisCard
+            icon={<FileSpreadsheet className="h-4 w-4" />}
+            title="1. 기준정보 저장"
+            description="회사명과 물류 출발지가 저장되어야 거래처 거리와 코스 계산 기준이 맞습니다."
+          />
+          <BasisCard
+            icon={<Upload className="h-4 w-4" />}
+            title="2. 거래처 데이터 연결"
+            description="수기 등록 또는 엑셀 업로드 데이터가 같은 회사 기준으로 누적됩니다."
+          />
+          <BasisCard
+            icon={<Truck className="h-4 w-4" />}
+            title="3. 현장 화면 반영"
+            description="대시보드, 거래처 히스토리, 영업·배송 코스에서 동일한 기준값을 사용합니다."
+          />
+        </section>
+
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
             <Badge className="mb-3 w-fit bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
@@ -93,22 +111,22 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               />
             </label>
             <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground">대표자/담당자</span>
-              <input
-                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                value={form.ownerName}
-                onChange={(event) => setForm({ ...form, ownerName: event.target.value })}
-              />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground">업태/업종</span>
-              <input
-                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                value={form.businessType}
-                onChange={(event) => setForm({ ...form, businessType: event.target.value })}
-              />
-            </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground">대표자/담당자</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  value={form.ownerName}
+                  onChange={(event) => setForm({ ...form, ownerName: event.target.value })}
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground">업태/업종</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  value={form.businessType}
+                  onChange={(event) => setForm({ ...form, businessType: event.target.value })}
+                />
+              </label>
             </div>
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">물류 출발지 주소</span>
@@ -165,10 +183,30 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" />
             <QuickLink href="/" label="데이터 등록으로 이동" />
           </div>
+          <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-4">
+            <p className="font-black text-blue-950">저장 후 확인 순서</p>
+            <ol className="mt-2 space-y-2 text-xs font-bold leading-5 text-blue-900">
+              <li>1. 출발지 주소 저장 상태 확인</li>
+              <li>2. 거래처 등록 화면에서 배송주소 데이터 확인</li>
+              <li>3. 영업·배송 코스에서 출발지 기준 거리 확인</li>
+            </ol>
+          </div>
           <p className="text-xs">마지막 수정: {initial.updatedAt}</p>
         </div>
       </aside>
     </form>
+  );
+}
+
+function BasisCard({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
+        <span className="text-teal-700">{icon}</span>
+        {title}
+      </div>
+      <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{description}</p>
+    </div>
   );
 }
 
