@@ -3158,6 +3158,17 @@ function OperationalHandoffPanel({
       step: "3"
     }
   ];
+  const consistencyChecks = typeLabel.includes("매출")
+    ? [
+        ["대시보드", "전체 매출합, 최근 업로드 시간, 리포트 점수"],
+        ["매출 원장", "거래처 key, 일자, 품목, 금액 원본"],
+        ["AI 리포트", "등급, 이탈 징후, 품목 분석 결과"]
+      ]
+    : [
+        ["대시보드", "전체 거래처 수, 등급별 매장 수, 최근 등록 시간"],
+        ["거래처 히스토리", "사업자번호, 주소, 담당자, 첨부자료"],
+        ["영업·배송 코스", "지도 마커, 배송차 배정, 출발지 기준 거리"]
+      ];
 
   return (
     <div className="overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
@@ -3174,6 +3185,26 @@ function OperationalHandoffPanel({
       <div className="grid border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-xs font-bold leading-5 text-slate-600 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
         <span className="font-black text-slate-950">확인 원칙</span>
         <span>등록된 데이터는 대시보드, 원장, 영업·배송 코스에서 같은 고객사 기준으로 보여야 합니다. 숫자가 다르면 최근 등록 이력과 DB 연결 상태를 먼저 확인합니다.</span>
+      </div>
+      <div className="border-b border-slate-100 bg-white px-4 py-3">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-black text-slate-400">화면 간 데이터 일치 기준</p>
+            <p className="mt-1 text-sm font-black text-slate-950">저장 후 아래 3곳의 기준값이 같아야 운영 데이터로 봅니다.</p>
+          </div>
+          <Badge className="w-fit bg-slate-100 text-slate-700">불일치 시 DB 저장상태 먼저 확인</Badge>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-3">
+          {consistencyChecks.map(([screen, rule]) => (
+            <div key={screen} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-teal-700" />
+                <p className="text-xs font-black text-slate-950">{screen}</p>
+              </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{rule}</p>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="grid gap-0 md:grid-cols-3">
         {items.map((item) => {
