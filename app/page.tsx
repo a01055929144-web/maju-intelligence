@@ -1011,9 +1011,14 @@ function Onboarding({
       label: "핵심 플로우 점검"
     },
     {
-      description: "다음 개선은 실배포 직전 환경변수와 Supabase 연결 상태를 코드 기준으로 재점검하는 것입니다.",
-      done: false,
+      description: "실배포 전 환경변수 점검 스크립트와 관리자 시스템 안내를 같은 기준으로 맞췄습니다.",
+      done: true,
       label: "실배포 환경 점검"
+    },
+    {
+      description: "다음 개선은 배포 전 최종 빌드, DB, 주요 화면 검증 결과를 한 번에 남기는 것입니다.",
+      done: false,
+      label: "최종 검수 기록"
     }
   ];
   const reviewTabs = [

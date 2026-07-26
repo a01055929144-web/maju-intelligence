@@ -1,22 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const envPath = path.join(process.cwd(), ".env.production.local");
+const envFiles = [".env.production.local", ".env.local", ".env"].map((file) => path.join(process.cwd(), file));
 const required = [
+  "NEXT_PUBLIC_APP_URL",
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_SECRET_KEY",
   "POSTGRES_URL_NON_POOLING",
   "POSTGRES_URL",
+  "ADMIN_EMAIL",
+  "ADMIN_PASSWORD",
+  "ADMIN_SESSION_SECRET",
+  "CUSTOMER_EMAIL",
+  "CUSTOMER_PASSWORD",
+  "CUSTOMER_COMPANY_ID",
+  "COMPANY_ORIGIN_ADDRESS",
   "TMAP_API_KEY",
   "KAKAO_REST_KEY",
   "NEXT_PUBLIC_KAKAO_MAP_APP_KEY"
 ];
 
-const env = readEnvFile(envPath);
+const env = {
+  ...envFiles.reduce((values, filePath) => ({ ...values, ...readEnvFile(filePath) }), {}),
+  ...process.env
+};
 const rows = required.map((key) => {
-  const value = env[key] || "";
+  const value = envValue(key);
   return {
     key,
     present: Boolean(value),
@@ -36,11 +47,44 @@ if (!env.SUPABASE_SERVICE_ROLE_KEY && !env.SUPABASE_SECRET_KEY) {
   console.error("SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY가 필요합니다.");
 }
 
+if (!envValue("NEXT_PUBLIC_APP_URL")) {
+  process.exitCode = 1;
+  console.error("NEXT_PUBLIC_APP_URL이 필요합니다. Vercel Production URL을 등록하세요.");
+}
+
+if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.ADMIN_SESSION_SECRET) {
+  process.exitCode = 1;
+  console.error("ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_SESSION_SECRET이 모두 필요합니다.");
+}
+
+if (!env.CUSTOMER_EMAIL || !env.CUSTOMER_PASSWORD || !env.CUSTOMER_COMPANY_ID) {
+  process.exitCode = 1;
+  console.error("CUSTOMER_EMAIL, CUSTOMER_PASSWORD, CUSTOMER_COMPANY_ID가 모두 필요합니다.");
+}
+
+if (!env.COMPANY_ORIGIN_ADDRESS || !env.TMAP_API_KEY) {
+  process.exitCode = 1;
+  console.error("COMPANY_ORIGIN_ADDRESS와 TMAP_API_KEY가 필요합니다.");
+}
+
+if (!env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY) {
+  process.exitCode = 1;
+  console.error("NEXT_PUBLIC_KAKAO_MAP_APP_KEY가 필요합니다.");
+}
+
+function envValue(key) {
+  if (key === "NEXT_PUBLIC_APP_URL") {
+    const vercelUrl = env.VERCEL_URL ? `https://${String(env.VERCEL_URL).replace(/^https?:\/\//, "")}` : "";
+    return env.NEXT_PUBLIC_APP_URL || vercelUrl;
+  }
+  return env[key] || "";
+}
+
 function readEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return {};
+  const content = fs.readFileSync(filePath, "utf8").replace(/\u0000/g, "").replace(/^\uFEFF/, "");
   return Object.fromEntries(
-    fs
-      .readFileSync(filePath, "utf8")
+    content
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#") && line.includes("="))

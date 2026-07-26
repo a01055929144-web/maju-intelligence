@@ -187,6 +187,35 @@ export default async function AdminSystemPage() {
           <Metric icon={ShieldAlert} label="고객사 인증" value={system.customerConfigured ? "운영값" : "기본값"} />
         </div>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ServerCog className="h-5 w-5 text-primary" />
+              배포 전 환경 점검 명령
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="rounded-md border border-border bg-muted/35 p-4">
+              <p className="text-sm font-bold text-muted-foreground">로컬 또는 배포 직전 터미널에서 실행</p>
+              <code className="mt-3 block overflow-x-auto rounded-md bg-slate-950 px-3 py-3 text-sm font-black text-white">
+                npm run check:production-env
+              </code>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Supabase, 관리자/고객사 인증, 회사 출발지, TMAP, Kakao Map, Production URL 환경변수 누락 여부를 한 번에 확인합니다.
+              </p>
+            </div>
+            <div className="rounded-md border border-border bg-white p-4">
+              <p className="font-black">통과 후 확인 순서</p>
+              <div className="mt-3 grid gap-2 text-sm font-bold text-muted-foreground">
+                <span>1. Vercel Production 환경변수 재확인</span>
+                <span>2. Supabase SQL 마이그레이션 적용</span>
+                <span>3. 관리자 시스템 점검에서 누락 0건 확인</span>
+                <span>4. 고객사 대시보드와 코스 화면 접속 확인</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <Card>
             <CardHeader>
