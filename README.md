@@ -77,6 +77,8 @@ The project includes `.github/workflows/ci.yml` for install and build checks on 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+배포 전 최종 확인은 `FINAL_QA.ko.md`, 운영 전환 릴리즈 범위는 `RELEASE_NOTES.ko.md`에서 관리합니다.
+
 ## Product Flow
 
 제품 운영 흐름과 검증 기준은 `FLOW_VALIDATION.ko.md`에서 관리합니다.

@@ -1026,9 +1026,14 @@ function Onboarding({
       label: "운영 로그 추적"
     },
     {
-      description: "다음 개선은 배포 전 마무리로 남은 운영 위험과 후속 작업을 1장으로 정리하는 것입니다.",
-      done: false,
+      description: "운영 전환 릴리즈 범위, 배포 전 확인 항목, 알려진 제약, 다음 릴리즈 후보를 정리했습니다.",
+      done: true,
       label: "릴리즈 노트 정리"
+    },
+    {
+      description: "다음 개선은 실배포 직전 Production URL에서 핵심 경로를 최종 확인하는 것입니다.",
+      done: false,
+      label: "Production 최종 확인"
     }
   ];
   const reviewTabs = [
