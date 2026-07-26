@@ -268,6 +268,46 @@ export default async function AdminSystemPage() {
 
         <Card>
           <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <LayoutDashboard className="h-5 w-5 text-primary" />
+                  고객사 데이터 기준 진단
+                </CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  대시보드, 거래처 원장, 영업·배송 코스, 지도 표시 가능 매장 수가 같은 companyId 기준으로 맞는지 확인합니다.
+                </p>
+              </div>
+              <Link className="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted" href="/admin/companies">
+                고객사 선택
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="rounded-md border border-border bg-muted/35 p-4">
+              <p className="text-sm font-black text-slate-900">진단 API</p>
+              <code className="mt-3 block overflow-x-auto rounded-md bg-slate-950 px-3 py-3 text-sm font-black text-white">
+                /api/customer/data-consistency?companyId=고객사_ID
+              </code>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                고객사 로그인 상태에서는 쿼리 없이 본인 회사 기준으로 동작합니다. 관리자는 고객사 목록에서 companyId를 선택한 뒤 같은 기준으로 확인합니다.
+              </p>
+            </div>
+            <div className="rounded-md border border-border bg-white p-4">
+              <p className="font-black">확인 항목</p>
+              <div className="mt-3 grid gap-2 text-sm font-bold text-muted-foreground">
+                <span>1. 대시보드 거래처 수 ↔ 거래처 원장 수</span>
+                <span>2. 거래처 원장 수 ↔ 코스 매장 수</span>
+                <span>3. 코스 매장 수 ↔ 지도 표시 가능 매장 수</span>
+                <span>4. 거래처 히스토리 방문/메모 데이터</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-700" />
               운영 로그 추적 순서

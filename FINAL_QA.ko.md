@@ -47,6 +47,19 @@
 
 응답에서 우선 확인할 필드는 `ok`, `mode`, `readinessScore`, `blockingCount`, `warningCount`, `databaseChecks`, `storageChecks`입니다.
 
+## 고객사 데이터 기준 진단
+
+`/api/customer/data-consistency?companyId=고객사_ID`는 대시보드, 거래처 원장, 영업·배송 코스, 지도 표시 가능 매장 수가 같은 회사 기준으로 맞는지 확인합니다.
+
+| 확인 항목 | 기대 기준 |
+| --- | --- |
+| 대시보드 ↔ 거래처 원장 | 거래처 수가 같은 기준으로 표시 |
+| 거래처 원장 ↔ 코스 | 코스 매장 수가 거래처 원장 기준으로 생성 |
+| 코스 ↔ 지도 표시 가능 | 주소가 있는 매장만 지도에 표시되며 누락 수가 드러남 |
+| 히스토리 데이터 | 방문, 메모, 배송완료 기록이 조회 가능 |
+
+응답이 `207`이면 일부 기준이 맞지 않는 상태입니다. `recommendations`에 나온 순서대로 주소 누락, 샘플/캐시 혼입, 업로드 저장 상태를 확인합니다.
+
 ## Production 최종 확인표
 
 배포 URL이 확정되면 아래 표에 실제 결과를 기록합니다.
@@ -54,6 +67,7 @@
 | 경로 | 확인할 내용 | 기대 결과 | 결과 |
 | --- | --- | --- | --- |
 | `/api/health` | 운영 헬스체크 | `ok:true`, `mode:"production-db"` | 배포 후 확인 |
+| `/api/customer/data-consistency?companyId=...` | 고객사 데이터 기준 | 대시보드, 원장, 코스, 지도 수치 일치 | 배포 후 확인 |
 | `/admin/login` | 관리자 로그인 | 관리자 콘솔 진입 | 배포 후 확인 |
 | `/admin/system` | 환경변수, DB, Storage | 필수 조치 0건 | 배포 후 확인 |
 | `/admin/companies` | 고객사 생성/수정 | companyId 기준 미리보기 가능 | 배포 후 확인 |
