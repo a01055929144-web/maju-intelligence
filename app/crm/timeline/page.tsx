@@ -1515,16 +1515,24 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit: () => void }) {
   const links = [
-    { label: "네이버", url: customer.naverPlaceUrl },
-    { label: "카카오맵", url: customer.kakaoPlaceUrl },
-    { label: "구글맵", url: customer.googleMapUrl }
+    { label: "네이버", purpose: "리뷰·영업시간", url: customer.naverPlaceUrl },
+    { label: "카카오맵", purpose: "장소 상세·로드뷰", url: customer.kakaoPlaceUrl },
+    { label: "구글맵", purpose: "리뷰·지도 보조", url: customer.googleMapUrl }
   ];
   const filledCount = links.filter((link) => Boolean(link.url?.trim())).length;
   const readinessLabel = filledCount === links.length ? "갱신 준비 완료" : filledCount > 0 ? "부분 연결" : "링크 필요";
+  const readinessPercent = Math.round((filledCount / links.length) * 100);
   const nextAction =
     filledCount === links.length
       ? "외부 정보 변경 여부를 주기적으로 확인하세요."
       : "검색 링크에서 매장을 확인한 뒤 원장 편집으로 공식 링크를 저장하세요.";
+  const updateTargets = [
+    "상호명·주소 일치 여부",
+    "영업시간·휴무일 변경",
+    "휴폐업 또는 이전 신호",
+    "리뷰 변화와 컴플레인 단서",
+    "배송 적재위치와 로드뷰 확인"
+  ];
   const searchLinks = buildPlaceSearchLinks([customer.customerName, customer.address].filter(Boolean).join(" "));
 
   return (
@@ -1556,13 +1564,28 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
         <div className="space-y-3">
           <div className="grid gap-2 md:grid-cols-3">
             {links.map((link) => (
-              <PlaceLinkButton key={link.label} label={link.label} url={link.url} />
+              <PlaceLinkButton key={link.label} label={link.label} purpose={link.purpose} url={link.url} />
             ))}
           </div>
-          <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
-            <PlaceInfoMetric label="정보 갱신 상태" value={readinessLabel} />
+          <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-4">
+            <PlaceInfoMetric helper={`${readinessPercent}%`} label="정보 갱신 상태" value={readinessLabel} />
             <PlaceInfoMetric label="마지막 확인" value={customer.placeLinksCheckedAt || "확인 전"} />
             <PlaceInfoMetric label="연결 플랫폼" value={`${filledCount}개`} />
+            <PlaceInfoMetric label="우선 확인" value={filledCount < links.length ? "미등록 링크" : "리뷰·영업시간"} />
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-black text-slate-500">갱신 대상 정보</p>
+              <Badge className="bg-slate-100 text-slate-700">원장 보완 기준</Badge>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {updateTargets.map((target, index) => (
+                <div key={target} className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-100 text-[11px] font-black text-teal-800">{index + 1}</span>
+                  <span className="text-xs font-black text-slate-700">{target}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1582,45 +1605,58 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
               </a>
             ))}
           </div>
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-black text-amber-900">자동 수집 연결 전 기준</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
+              플랫폼별 상세정보 자동 갱신은 공식 API와 이용 정책 확인 후 연결하고, 현재는 원장 링크를 기준값으로 관리합니다.
+            </p>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function PlaceInfoMetric({ label, value }: { label: string; value: string }) {
+function PlaceInfoMetric({ helper, label, value }: { helper?: string; label: string; value: string }) {
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
       <p className="text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
+      {helper ? <p className="mt-1 text-[11px] font-bold text-teal-700">{helper}</p> : null}
     </div>
   );
 }
 
-function PlaceLinkButton({ label, url = "" }: { label: string; url?: string }) {
+function PlaceLinkButton({ label, purpose, url = "" }: { label: string; purpose: string; url?: string }) {
   const available = Boolean(url.trim());
 
   if (!available) {
     return (
-      <div className="flex min-h-12 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-        <span className="font-black text-slate-500">{label}</span>
-        <span className="text-xs font-black text-slate-400">미등록</span>
+      <div className="min-h-16 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-black text-slate-600">{label}</span>
+          <span className="text-xs font-black text-slate-400">미등록</span>
+        </div>
+        <p className="mt-1 text-xs font-bold text-slate-400">{purpose}</p>
       </div>
     );
   }
 
   return (
     <a
-      className="flex min-h-12 items-center justify-between rounded-md border border-teal-100 bg-teal-50 px-3 py-2 text-sm font-black text-teal-800 transition hover:border-teal-200 hover:bg-teal-100"
+      className="block min-h-16 rounded-md border border-teal-100 bg-teal-50 px-3 py-2 text-sm font-black text-teal-800 transition hover:border-teal-200 hover:bg-teal-100"
       href={url}
       rel="noreferrer"
       target="_blank"
     >
-      <span>{label}</span>
-      <span className="inline-flex items-center gap-1 text-xs">
-        열기
-        <LinkIcon className="h-3.5 w-3.5" />
+      <span className="flex items-center justify-between gap-2">
+        <span>{label}</span>
+        <span className="inline-flex items-center gap-1 text-xs">
+          열기
+          <LinkIcon className="h-3.5 w-3.5" />
+        </span>
       </span>
+      <span className="mt-1 block text-xs font-bold text-teal-700/80">{purpose}</span>
     </a>
   );
 }
