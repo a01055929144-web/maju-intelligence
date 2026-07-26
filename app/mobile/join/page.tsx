@@ -36,7 +36,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             </h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
               {joinMode === "company"
-                ? "배송기사와 영업직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다."
+                ? "직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다. 역할은 업무 구분과 필터 기준으로 사용합니다."
                 : "초대 코드가 없어도 개인 워크스페이스를 만들고 거래처, 방문 기록, 매출 데이터를 혼자 관리할 수 있습니다."}
             </p>
           </section>
@@ -82,10 +82,10 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
               <div>
-                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 권한은 초대 코드로 제한됩니다" : "나중에 회사 워크스페이스로 전환할 수 있습니다"}</p>
+                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대 코드로 확인합니다" : "나중에 회사 워크스페이스로 전환할 수 있습니다"}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                   {joinMode === "company"
-                    ? "카카오 계정만으로는 접근할 수 없고, 고객사 관리자가 발급한 초대 링크가 있어야 회사 데이터에 연결됩니다."
+                    ? "카카오 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
                     : "개인으로 먼저 시작한 뒤 고객사 관리자 초대를 받으면 회사 직원 또는 관리자로 연결할 수 있습니다."}
                 </p>
               </div>

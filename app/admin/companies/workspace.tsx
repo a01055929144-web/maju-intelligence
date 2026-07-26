@@ -173,7 +173,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
     setUpdatingStaffId("");
 
     if (!response.ok) {
-      setInviteMessage(payload?.message || "직원 권한 변경에 실패했습니다.");
+      setInviteMessage(payload?.message || "직원 업무 구분 변경에 실패했습니다.");
       return;
     }
 
@@ -188,7 +188,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           : company
       )
     );
-    setInviteMessage(payload.persisted ? "직원 권한/상태가 저장되었습니다." : "직원 권한/상태가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 업무 구분/상태가 저장되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -469,7 +469,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                       </div>
                       <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                         <label className="block space-y-1.5">
-                          <span className="text-[11px] font-black text-muted-foreground">직원 권한</span>
+                          <span className="text-[11px] font-black text-muted-foreground">직원 업무 구분</span>
                           <select
                             className="h-9 w-full rounded-md border border-input bg-white px-2 text-xs font-bold outline-none focus:ring-2 focus:ring-ring"
                             disabled={updatingStaffId === invitation.id}

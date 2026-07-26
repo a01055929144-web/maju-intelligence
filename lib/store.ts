@@ -1115,7 +1115,7 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput): 
   const patch: Record<string, string> = {};
   if (input.role) patch.role = input.role;
   if (input.status) patch.status = input.status;
-  if (!Object.keys(patch).length) throw new Error("변경할 직원 권한 또는 상태가 필요합니다.");
+  if (!Object.keys(patch).length) throw new Error("변경할 직원 업무 구분 또는 상태가 필요합니다.");
 
   if (!isProductionStoreConfigured()) {
     return {

@@ -206,7 +206,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
                 </option>
               ))}
             </select>
-            <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용입니다. 접근 제한은 추후 정책이 정해지면 별도로 적용합니다.</p>
+            <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용입니다. 기능 접근 제한값으로 사용하지 않습니다.</p>
             <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!form.employeeName.trim() || creating} onClick={createStaff} type="button">
               {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
               {creating ? "추가 중" : "직원 추가"}

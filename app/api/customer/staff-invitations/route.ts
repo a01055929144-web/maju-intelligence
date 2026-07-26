@@ -65,6 +65,6 @@ export async function PATCH(request: NextRequest) {
       })
     );
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "직원 권한 변경에 실패했습니다." }, { status: 400 });
+    return NextResponse.json({ message: error instanceof Error ? error.message : "직원 업무 구분 변경에 실패했습니다." }, { status: 400 });
   }
 }
