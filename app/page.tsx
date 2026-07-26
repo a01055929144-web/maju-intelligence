@@ -2951,6 +2951,7 @@ function OperationalHandoffPanel({
 }) {
   const items = [
     {
+      checks: ["회사 KPI", "최근 업로드", "지도 데이터"],
       description: "등록된 거래처와 매출 기준으로 회사 현황 KPI를 먼저 확인합니다.",
       href: dashboardHref,
       icon: BarChart3,
@@ -2958,6 +2959,7 @@ function OperationalHandoffPanel({
       step: "1"
     },
     {
+      checks: typeLabel.includes("매출") ? ["거래원장", "품목 이탈", "기간별 매출"] : ["기본정보", "메모·첨부", "적재위치"],
       description: typeLabel.includes("매출") ? "거래원장 업로드 내역과 품목·기간별 매출을 확인합니다." : "매장 기본정보, 메모, 첨부자료, 배송 적재위치를 확인합니다.",
       href: ledgerHref,
       icon: ClipboardList,
@@ -2965,6 +2967,7 @@ function OperationalHandoffPanel({
       step: "2"
     },
     {
+      checks: ["주소 반영", "담당자 배정", "거리·코스"],
       description: "거래처 주소와 배송 담당자 기준으로 지도, 거리, 코스 반영 상태를 확인합니다.",
       href: routeHref,
       icon: Route,
@@ -2975,12 +2978,19 @@ function OperationalHandoffPanel({
 
   return (
     <div className="overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
-      <div className="flex flex-col gap-2 border-b border-teal-100 bg-teal-50/80 px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">저장 후 운영 확인 순서</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{typeLabel} 등록 후 같은 데이터 기준으로 확인해야 하는 화면입니다.</p>
         </div>
-        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-inset ring-teal-200">운영 연결</Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge className="w-fit bg-white text-teal-800 ring-1 ring-inset ring-teal-200">운영 연결</Badge>
+          <Badge className="w-fit bg-white text-slate-600 ring-1 ring-inset ring-slate-200">기준 데이터 동기화</Badge>
+        </div>
+      </div>
+      <div className="grid border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-xs font-bold leading-5 text-slate-600 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
+        <span className="font-black text-slate-950">확인 원칙</span>
+        <span>등록된 데이터는 대시보드, 원장, 영업·배송 코스에서 같은 고객사 기준으로 보여야 합니다. 숫자가 다르면 최근 등록 이력과 DB 연결 상태를 먼저 확인합니다.</span>
       </div>
       <div className="grid gap-0 md:grid-cols-3">
         {items.map((item) => {
@@ -2999,6 +3009,13 @@ function OperationalHandoffPanel({
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">STEP {item.step}</span>
                   <p className="mt-2 text-sm font-black text-slate-950">{item.label}</p>
                   <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {item.checks.map((check) => (
+                      <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200" key={check}>
+                        {check}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </Link>
