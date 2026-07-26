@@ -253,10 +253,10 @@ export default function Home() {
     setFieldMap(createIdentityFieldMap(currentTemplate.fields));
     setUploadedFilename(`${currentTemplate.label}-manual`);
     setUsingSample(false);
-    setManualSaveMessage("저장 대기 목록에 추가했습니다.");
+    setManualSaveMessage("검수 목록에 추가했습니다. 서버 반영 상태를 확인 중입니다.");
     setRegistrationStatus({
       actionLabel: "수기 등록 저장 중",
-      description: `${String(nextRow.customerName || nextRow.name || "신규 거래처")} 정보를 저장 대기 목록에 추가하고 서버 반영을 확인하고 있습니다.`,
+      description: `${String(nextRow.customerName || nextRow.name || "신규 거래처")} 정보를 검수 목록에 추가하고 서버 반영 결과를 확인하고 있습니다.`,
       nextAction: "저장 결과를 확인 중입니다.",
       status: "running",
       title: "수기 입력값을 처리하고 있습니다."
@@ -274,9 +274,9 @@ export default function Home() {
         if (response?.ok) {
           const customerId = String(payload?.customer?.id || "");
           setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
-          setManualSaveMessage(payload?.persisted === false ? "저장 대기 목록에 추가했습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+          setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
           setRegistrationStatus({
-            actionLabel: payload?.persisted === false ? "로컬 대기" : "서버 저장 완료",
+            actionLabel: payload?.persisted === false ? "서버 확인 필요" : "서버 저장 완료",
             description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 서버 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
             nextAction: customerId ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "거래처 히스토리 화면에서 저장 결과를 확인하세요.",
             status: payload?.persisted === false ? "warning" : "success",
@@ -284,22 +284,22 @@ export default function Home() {
           });
           await refreshUploadHistory();
         } else if (response?.status === 401) {
-          setManualSaveMessage("저장 대기 목록에 추가했습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
+          setManualSaveMessage("검수 목록에는 반영됐습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
           setRegistrationStatus({
             actionLabel: "로그인 필요",
-            description: "화면의 저장 대기 목록에는 추가됐지만, 서버 저장 API가 로그인을 요구했습니다.",
+            description: "화면의 검수 목록에는 추가됐지만, 서버 저장 API가 로그인을 요구했습니다.",
             nextAction: "고객사 또는 관리자 계정으로 로그인한 뒤 다시 저장하세요.",
             status: "warning",
             title: "서버 저장은 아직 완료되지 않았습니다."
           });
         } else {
-          setManualSaveMessage(payload?.message ? `저장 대기 목록에 추가했습니다. 서버 저장 확인: ${payload.message}` : "저장 대기 목록에 추가했습니다. 서버 저장은 나중에 다시 시도하세요.");
+          setManualSaveMessage(payload?.message ? `검수 목록에는 반영됐습니다. 서버 저장 확인: ${payload.message}` : "검수 목록에는 반영됐습니다. 서버 저장은 나중에 다시 시도하세요.");
           setRegistrationStatus({
             actionLabel: "서버 저장 확인 필요",
             description: payload?.message || "서버가 저장 완료 응답을 주지 않았습니다.",
             nextAction: "입력값을 확인한 뒤 다시 저장하거나 관리자 시스템 상태를 확인하세요.",
             status: "warning",
-            title: "저장 대기 상태입니다."
+            title: "서버 반영 확인이 필요합니다."
           });
         }
       }
@@ -966,17 +966,17 @@ function Onboarding({
       label: "운영 검증 자동화"
     },
     {
-      description: "다음 개선은 저장 직후 DB 응답과 화면 반영 결과를 더 직접적으로 비교하는 것입니다.",
+      description: "저장 직후 DB 응답과 화면 반영 결과를 분리해서 확인할 수 있게 정리했습니다.",
       done: true,
       label: "저장 결과 대조"
     },
     {
-      description: "다음 개선은 대시보드, 코스, 거래처 히스토리의 세부 UI 밀도를 더 정리하는 것입니다.",
+      description: "대시보드, 코스, 거래처 히스토리의 정보 밀도와 탭 구분을 정리했습니다.",
       done: true,
       label: "주요 화면 밀도 정리"
     },
     {
-      description: "다음 개선은 모바일 직원 사용 흐름과 현장 완료 기록을 더 직접적으로 연결하는 것입니다.",
+      description: "모바일 직원 사용 흐름과 현장 완료 기록을 연결했습니다.",
       done: true,
       label: "모바일 현장 흐름"
     },
@@ -991,9 +991,14 @@ function Onboarding({
       label: "운영 QA 정리"
     },
     {
-      description: "다음 개선은 모바일·PC 공통 사용 흐름의 문구와 빈 상태 안내를 더 운영형으로 정리하는 것입니다.",
-      done: false,
+      description: "수기 등록, 서버 반영, 검수 목록, 빈 상태 안내 문구를 운영자가 이해하기 쉽게 정리했습니다.",
+      done: true,
       label: "운영 문구 정리"
+    },
+    {
+      description: "다음 개선은 실제 배포 전 관리자·고객사 주요 경로를 체크리스트로 고정하는 것입니다.",
+      done: false,
+      label: "배포 전 체크리스트"
     }
   ];
   const reviewTabs = [
@@ -1321,7 +1326,7 @@ function Onboarding({
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 저장 대기 목록에 추가됩니다.</p>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 검수 목록에 추가하고 서버 반영 상태를 확인합니다.</p>
                     {manualSaveMessage ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
@@ -1623,8 +1628,8 @@ function Onboarding({
                 ) : null}
                 {!headers.length ? (
                   <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-                    <p className="font-black text-slate-950">아직 저장 대기 데이터가 없습니다.</p>
-                    <p className="mt-2 text-sm font-medium leading-6 text-slate-500">중앙에서 엑셀을 업로드하거나 수기로 입력하면 매핑 상태가 표시됩니다.</p>
+                    <p className="font-black text-slate-950">아직 검수할 등록 데이터가 없습니다.</p>
+                    <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 컬럼 매핑, 품질 검증, 서버 반영 상태가 순서대로 표시됩니다.</p>
                   </div>
                 ) : null}
                 <SaveResultSummary
