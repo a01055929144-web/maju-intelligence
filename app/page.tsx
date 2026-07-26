@@ -941,27 +941,37 @@ function Onboarding({
   ];
   const reviewTabs = [
     {
+      actionHint: !hasDataRows ? "파일 업로드 또는 수기 등록을 먼저 진행하세요." : complete ? "품질 검증으로 넘어가세요." : "필수 컬럼을 모두 연결하세요.",
       description: "ERP 헤더와 MAJU 표준 필드를 연결합니다.",
       key: "mapping" as const,
       label: "컬럼 매핑",
+      statusLabel: !hasDataRows ? "대기" : complete ? "연결 완료" : "필수 연결 필요",
       step: "3-1",
+      tone: !hasDataRows ? "idle" as const : complete ? "ready" as const : "warning" as const,
       value: rawRows.length ? `${mappedRequiredCount}/${requiredFields.length}` : "대기"
     },
     {
+      actionHint: !hasDataRows ? "등록 데이터를 먼저 준비하세요." : !complete ? "컬럼 매핑을 완료하세요." : hasBlockingQualityIssues ? "문제 행을 보완하세요." : "저장·이력으로 넘어가세요.",
       description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.",
       key: "quality" as const,
       label: "품질 검증",
+      statusLabel: !hasDataRows ? "대기" : !complete ? "매핑 먼저" : hasBlockingQualityIssues ? "보완 필요" : "검증 완료",
       step: "3-2",
+      tone: !hasDataRows ? "idle" as const : !complete || hasBlockingQualityIssues ? "warning" as const : "ready" as const,
       value: hasBlockingQualityIssues ? "보완 필요" : hasDataRows ? "정상" : "대기"
     },
     {
+      actionHint: pipelineMeta.persisted ? "운영 화면에서 반영 결과를 확인하세요." : canAnalyze ? "저장하고 리포트를 갱신하세요." : "앞 단계를 먼저 완료하세요.",
       description: "서버 저장 조건과 최근 등록 이력을 확인합니다.",
       key: "save" as const,
       label: "저장·이력",
+      statusLabel: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "저장 가능" : "대기",
       step: "3-3",
+      tone: pipelineMeta.persisted ? "ready" as const : canAnalyze ? "action" as const : "idle" as const,
       value: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "실행 가능" : "대기"
     }
   ];
+  const activeReviewTab = reviewTabs.find((tab) => tab.key === reviewTab) || reviewTabs[0];
   const adminCompanyId = getAdminCompanyIdFromUrl();
   const pairedTemplateType: UploadTemplateType = uploadType === "customer-master" ? "sales-analysis" : "customer-master";
   const currentExportAction = uploadType === "customer-master" ? onDownloadCustomerExport : onDownloadSalesExport;
@@ -1451,6 +1461,22 @@ function Onboarding({
                   <div className="grid gap-2 md:grid-cols-3">
                     {reviewTabs.map((tab) => {
                       const selected = reviewTab === tab.key;
+                      const toneClass =
+                        tab.tone === "ready"
+                          ? selected
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-emerald-50 text-emerald-700"
+                          : tab.tone === "warning"
+                            ? selected
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-amber-50 text-amber-700"
+                            : tab.tone === "action"
+                              ? selected
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-blue-50 text-blue-700"
+                              : selected
+                                ? "bg-slate-100 text-slate-700"
+                                : "bg-white text-slate-500";
                       return (
                         <button
                           key={tab.key}
@@ -1469,6 +1495,12 @@ function Onboarding({
                               </span>
                               <span className="mt-2 block text-sm font-black">{tab.label}</span>
                               <span className={`mt-1 block text-xs font-bold leading-5 ${selected ? "text-violet-700" : "text-slate-500"}`}>{tab.description}</span>
+                              <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-black ${toneClass}`}>
+                                {tab.statusLabel}
+                              </span>
+                              <span className={`mt-2 block text-[11px] font-black leading-5 ${selected ? "text-slate-800" : "text-slate-400"}`}>
+                                다음: {tab.actionHint}
+                              </span>
                             </span>
                             <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-700 text-white" : "bg-white text-slate-500"}`}>
                               {tab.value}
@@ -1477,6 +1509,11 @@ function Onboarding({
                         </button>
                       );
                     })}
+                  </div>
+                  <div className="mt-2 rounded-md border border-white bg-white/90 px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                    현재 단계 <span className="font-black text-slate-950">{activeReviewTab.label}</span>
+                    <span className="mx-2 text-slate-300">|</span>
+                    {activeReviewTab.actionHint}
                   </div>
                 </div>
                 {reviewTab === "mapping" ? (
