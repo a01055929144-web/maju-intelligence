@@ -986,9 +986,14 @@ function Onboarding({
       label: "현장 기록 추적"
     },
     {
-      description: "다음 개선은 배포 전 운영 QA 체크와 화면별 잔여 깨짐을 한 번 더 정리하는 것입니다.",
-      done: false,
+      description: "영업·배송 코스 탭의 지도, 목록, 오늘코스 영역이 잘리지 않도록 스크롤 기준을 정리했습니다.",
+      done: true,
       label: "운영 QA 정리"
+    },
+    {
+      description: "다음 개선은 모바일·PC 공통 사용 흐름의 문구와 빈 상태 안내를 더 운영형으로 정리하는 것입니다.",
+      done: false,
+      label: "운영 문구 정리"
     }
   ];
   const reviewTabs = [

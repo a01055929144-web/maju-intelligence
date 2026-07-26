@@ -438,7 +438,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-[680px] grid-cols-1 overflow-hidden rounded-b-xl xl:h-[clamp(680px,calc(100vh-230px),940px)] ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid min-h-[680px] grid-cols-1 overflow-visible rounded-b-xl xl:h-[clamp(680px,calc(100vh-230px),940px)] xl:overflow-hidden ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -960,7 +960,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-[680px] overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:h-[clamp(680px,calc(100vh-230px),940px)]">
+    <section className="min-h-[680px] overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 xl:h-[clamp(680px,calc(100vh-230px),940px)] xl:overflow-hidden">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -968,7 +968,7 @@ function CustomerDirectoryView({
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="mt-4 h-[calc(100%-96px)] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
+      <div className="mt-4 min-h-[560px] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm xl:h-[calc(100%-96px)]">
         <div className="overflow-x-auto">
         <div className="grid min-w-[840px] grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs font-black text-slate-500">
           <span>거래처</span>
@@ -1236,7 +1236,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-[680px] grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:h-[clamp(680px,calc(100vh-230px),940px)] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
+    <section className={`grid min-h-[680px] grid-cols-1 overflow-visible rounded-b-xl bg-[#f6f8fb] xl:h-[clamp(680px,calc(100vh-230px),940px)] xl:overflow-hidden ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
