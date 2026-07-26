@@ -166,6 +166,16 @@ export default async function ReportDetailPage({
           <Metric icon={Route} label="평균 배송거리" value={`${report.avgDeliveryKm.toFixed(1)}km`} />
         </div>
 
+        <ReportBasisPanel
+          avgDeliveryKm={report.avgDeliveryKm}
+          companyId={isAdminPreview ? companyId || "" : ""}
+          customers={report.customers}
+          dataConfidence={dataConfidence}
+          healthScore={report.health.total}
+          potentialRevenue={report.potentialRevenue}
+          regions={report.regions}
+        />
+
         <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <Card>
             <CardHeader>
@@ -329,6 +339,69 @@ export default async function ReportDetailPage({
         </Card>
       </section>
     </CustomerAppShell>
+  );
+}
+
+function ReportBasisPanel({
+  avgDeliveryKm,
+  companyId,
+  customers,
+  dataConfidence,
+  healthScore,
+  potentialRevenue,
+  regions
+}: {
+  avgDeliveryKm: number;
+  companyId: string;
+  customers: number;
+  dataConfidence: number;
+  healthScore: number;
+  potentialRevenue: number;
+  regions: number;
+}) {
+  const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);
+  const items = [
+    { label: "거래처 원장", value: `${customers.toLocaleString()}개`, helper: "히스토리·지도 기준" },
+    { label: "거래지역", value: `${regions.toLocaleString()}개`, helper: "White Space 기준" },
+    { label: "평균 배송거리", value: `${avgDeliveryKm.toFixed(1)}km`, helper: "출발지·주소 기준" },
+    { label: "잠재 매출", value: `${potentialRevenue.toLocaleString()}만원`, helper: "리드 추천 기준" },
+    { label: "리포트 신뢰도", value: `${dataConfidence}%`, helper: `건강도 ${healthScore}점` }
+  ];
+  const actions = [
+    { href: withCompanyQuery("/crm/timeline"), label: "거래처 원장 보완" },
+    { href: withCompanyQuery("/routes/today"), label: "코스 계산" },
+    { href: withCompanyQuery("/revenue/transactions"), label: "매출 원장 확인" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+        <div>
+          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>
+        </div>
+        <p className="text-xs font-bold leading-5 text-slate-600">
+          리포트 점수는 확정 판단이 아니라 운영 우선순위입니다. 거래처 기본정보, 매출 원장, 배송 코스가 보완될수록 진단 품질이 올라갑니다.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {actions.map((action) => (
+            <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={action.href} key={action.label}>
+              {action.label}
+              <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+            </Link>
+          ))}
+        </div>
+      </div>
+      <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+        {items.map((item) => (
+          <div className="min-w-0 px-4 py-3" key={item.label}>
+            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
+            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
