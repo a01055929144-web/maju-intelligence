@@ -1195,6 +1195,13 @@ function Onboarding({
               }}
             />
           </div>
+          <RegistrationPathGuide
+            activeType={uploadType}
+            canAnalyze={canAnalyze}
+            entryMode={entryMode}
+            persisted={pipelineMeta.persisted}
+            rowsWaiting={rawRows.length}
+          />
 
           {entryMode === "excel" ? (
             <>
@@ -1899,6 +1906,98 @@ function DataRegistrationFlowCard({
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RegistrationPathGuide({
+  activeType,
+  canAnalyze,
+  entryMode,
+  persisted,
+  rowsWaiting
+}: {
+  activeType: UploadTemplateType;
+  canAnalyze: boolean;
+  entryMode: EntryMode;
+  persisted: boolean;
+  rowsWaiting: number;
+}) {
+  const isMaster = activeType === "customer-master";
+  const typeLabel = isMaster ? "거래처 마스터" : "매출 거래내역";
+  const targetLabel = isMaster ? "거래처 히스토리 · 영업/배송 코스" : "매출 원장 · AI 리포트";
+  const statusLabel = persisted ? "서버 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
+  const modeSteps =
+    entryMode === "excel"
+      ? [
+          "엑셀 업로드",
+          "전체 행 미리보기",
+          "ERP 헤더 매핑",
+          "검증·저장 실행"
+        ]
+      : entryMode === "manual"
+        ? [
+            "매장 기본정보 입력",
+            "주소 API 검색",
+            "사업자번호 검증",
+            "1건 저장"
+          ]
+        : [
+            "사업자등록증 업로드",
+            "OCR 후보값 확인",
+            "수기 보정",
+            "첨부자료와 함께 저장"
+          ];
+  const dataRules = isMaster
+    ? [
+        ["고정 기준값", "사업자번호, 배송주소, 대표자, 연락처는 1회 등록 후 수정·히스토리로 관리합니다."],
+        ["지도 기준값", "저장된 주소와 배송권역이 지도 마커, 배송차 필터, 거래처 상세에 반영됩니다."]
+      ]
+    : [
+        ["반복 업데이트", "ERP 거래원장은 일/월/분기/반기/연 단위로 계속 업로드해서 매출 현황을 갱신합니다."],
+        ["분석 기준값", "사업자번호 또는 상호명으로 거래처와 연결되어 등급, 이탈, 품목 분석에 반영됩니다."]
+      ];
+
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="rounded-md border border-white bg-white p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-black text-slate-400">현재 등록 경로</p>
+              <h3 className="mt-1 text-base font-black text-slate-950">{typeLabel} · {entryMode === "excel" ? "대량 등록" : entryMode === "manual" ? "수기 등록" : "OCR 보조"}</h3>
+            </div>
+            <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : canAnalyze ? "bg-blue-100 text-blue-800" : rowsWaiting ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}>
+              {statusLabel}
+            </Badge>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-4">
+            {modeSteps.map((step, index) => (
+              <div key={step} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-900 text-[11px] font-black text-white">{index + 1}</span>
+                  <p className="text-xs font-black text-slate-900">{step}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-white bg-white p-4">
+          <p className="text-xs font-black text-slate-400">저장 후 확인 위치</p>
+          <p className="mt-1 text-base font-black text-slate-950">{targetLabel}</p>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
+            저장이 완료되면 같은 기준값이 운영 화면 전체에 반영되어야 합니다. 화면별 숫자가 다르면 DB 저장 또는 필터 기준을 먼저 확인합니다.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        {dataRules.map(([label, description]) => (
+          <div key={label} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <p className="text-xs font-black text-slate-950">{label}</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
