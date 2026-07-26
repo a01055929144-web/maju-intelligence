@@ -571,6 +571,13 @@ export default function CrmTimelinePage() {
             <SummaryCard helper={`방문 결과 ${formatDbCount(dbSummary.visitResults)}`} label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} tone="violet" />
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+          <CustomerLedgerBasisPanel
+            customerCount={customers.length}
+            filteredCount={filteredCustomers.length}
+            loadingReadyCount={customers.filter((customer) => Boolean(customer.loadingPosition)).length}
+            managerCount={new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size}
+            memoCount={customers.reduce((sum, customer) => sum + customer.memoCount, 0)}
+          />
           </div>
         </div>
 
@@ -1200,6 +1207,46 @@ function CustomerFilterButton({
       <span className="truncate">{label}</span>
       <span className={`ml-2 rounded-full px-1.5 py-0.5 ${active ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{count}</span>
     </button>
+  );
+}
+
+function CustomerLedgerBasisPanel({
+  customerCount,
+  filteredCount,
+  loadingReadyCount,
+  managerCount,
+  memoCount
+}: {
+  customerCount: number;
+  filteredCount: number;
+  loadingReadyCount: number;
+  managerCount: number;
+  memoCount: number;
+}) {
+  const items = [
+    { label: "전체 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
+    { label: "현재 필터", value: `${filteredCount.toLocaleString()}곳`, helper: "목록·상세 표시 기준" },
+    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "코스 필터 기준" },
+    { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
+    { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
+  ];
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50/70">
+      <div className="grid gap-2 border-b border-slate-200 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
+        <p className="font-black text-slate-950">거래처 기준값</p>
+        <p>이 화면의 원장 수, 배송 담당자, 적재위치, 메모 수는 대시보드와 영업·배송 코스의 기준 데이터로 사용됩니다.</p>
+      </div>
+      <div className="grid divide-y divide-slate-200 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
+        {items.map((item) => (
+          <div className="min-w-0 px-3 py-3" key={item.label}>
+            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
+            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

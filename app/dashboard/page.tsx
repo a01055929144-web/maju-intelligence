@@ -248,6 +248,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           </div>
         </div>
 
+        <DashboardDataBasisPanel
+          customerCount={briefing.currentCustomers}
+          latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
+          originAddress={originAddress}
+          placeLinkLabel={`${placeLinkedCustomers.toLocaleString()}/${customerMaster.customers.length.toLocaleString()}곳`}
+          routeStops={routePlan.totalStops}
+        />
+
         <DashboardTabs
           overview={
             <>
@@ -432,6 +440,51 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         />
       </section>
     </CustomerAppShell>
+  );
+}
+
+function DashboardDataBasisPanel({
+  customerCount,
+  latestUploadLabel,
+  originAddress,
+  placeLinkLabel,
+  routeStops
+}: {
+  customerCount: number;
+  latestUploadLabel: string;
+  originAddress: string;
+  placeLinkLabel: string;
+  routeStops: number;
+}) {
+  const items = [
+    { label: "거래처 원장", value: `${customerCount.toLocaleString()}곳`, helper: "히스토리·지도 기준" },
+    { label: "물류 출발지", value: originAddress, helper: "거리·코스 계산 기준" },
+    { label: "매출 원장", value: latestUploadLabel, helper: "등급·리포트 갱신 기준" },
+    { label: "코스 매장", value: `${routeStops.toLocaleString()}곳`, helper: "배송차별 경유 후보" },
+    { label: "외부 링크", value: placeLinkLabel, helper: "리뷰·영업시간 확인" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+        <div>
+          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드, 거래처 히스토리, 영업·배송 코스가 공유하는 기준값입니다.</p>
+        </div>
+        <p className="text-xs font-bold leading-5 text-slate-600">
+          숫자가 화면마다 다르게 보이면 최근 등록 이력, 고객사 선택, DB 연결 상태를 먼저 확인하세요.
+        </p>
+      </div>
+      <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+        {items.map((item) => (
+          <div className="min-w-0 px-4 py-3" key={item.label}>
+            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950" title={item.value}>{item.value}</p>
+            <p className="mt-1 text-[11px] font-bold text-slate-500">{item.helper}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
