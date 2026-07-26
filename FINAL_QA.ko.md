@@ -41,6 +41,7 @@
 
 | 경로 | 확인할 내용 | 기대 결과 | 결과 |
 | --- | --- | --- | --- |
+| `/api/health` | 운영 헬스체크 | `ok:true`, `mode:"production-db"` | 배포 후 확인 |
 | `/admin/login` | 관리자 로그인 | 관리자 콘솔 진입 | 배포 후 확인 |
 | `/admin/system` | 환경변수, DB, Storage | 필수 조치 0건 | 배포 후 확인 |
 | `/admin/companies` | 고객사 생성/수정 | companyId 기준 미리보기 가능 | 배포 후 확인 |
