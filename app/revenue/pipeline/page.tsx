@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Banknote, CircleDollarSign, Percent, TrendingUp } from "lucide-react";
+import { ArrowRight, Banknote, CircleDollarSign, FileText, Percent, ReceiptText, Route, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
@@ -85,6 +85,15 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           ))}
         </div>
 
+        <PipelineBasisPanel
+          companyId={isAdminPreview ? companyId || "" : ""}
+          conversionRate={pipeline.conversionRate}
+          expectedRevenue={pipeline.expectedRevenue}
+          itemCount={pipeline.items.length}
+          quoteRequests={pipeline.quoteRequests}
+          weightedRevenue={pipeline.weightedRevenue}
+        />
+
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
@@ -150,6 +159,71 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
         </div>
       </section>
     </CustomerAppShell>
+  );
+}
+
+function PipelineBasisPanel({
+  companyId,
+  conversionRate,
+  expectedRevenue,
+  itemCount,
+  quoteRequests,
+  weightedRevenue
+}: {
+  companyId: string;
+  conversionRate: number;
+  expectedRevenue: number;
+  itemCount: number;
+  quoteRequests: number;
+  weightedRevenue: number;
+}) {
+  const items = [
+    { label: "방문 결과", value: `${itemCount.toLocaleString()}건`, helper: "메모·방문 기록 기준" },
+    { label: "견적 요청", value: `${quoteRequests.toLocaleString()}건`, helper: "즉시 follow-up 대상" },
+    { label: "예상 매출", value: `${expectedRevenue.toLocaleString()}만원`, helper: "후보 매출 합계" },
+    { label: "가중 매출", value: `${weightedRevenue.toLocaleString()}만원`, helper: "확률 반영 금액" },
+    { label: "전환 기대율", value: `${conversionRate}%`, helper: "상태별 확률 기준" }
+  ];
+  const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);
+  const actionLinks = [
+    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "방문 메모 보완" },
+    { href: withCompanyQuery("/revenue/transactions"), icon: ReceiptText, label: "매출 원장 확인" },
+    { href: withCompanyQuery("/routes/today"), icon: Route, label: "방문 코스 조정" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+        <div>
+          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">방문 결과가 매출 후보로 바뀌는 기준값입니다.</p>
+        </div>
+        <p className="text-xs font-bold leading-5 text-slate-600">
+          파이프라인은 확정 매출이 아니라 방문·상담 결과에 확률을 적용한 실행 후보입니다. 견적 요청과 관심 거래처부터 후속 액션을 잡아야 합니다.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {actionLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={item.href} key={item.label}>
+                <Icon className="h-3.5 w-3.5" />
+                {item.label}
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+      <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+        {items.map((item) => (
+          <div className="min-w-0 px-4 py-3" key={item.label}>
+            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
+            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
