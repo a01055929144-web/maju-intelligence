@@ -114,7 +114,16 @@ KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
 - Supabase RLS 정책은 기본 운영 기준으로 켜져 있으며, 고객사별 사용자 초대와 세부 권한은 다음 운영 단계에서 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 
-## 8. 다음 개발 우선순위
+## 8. 운영 오류 확인 순서
+
+1. 사용자가 본 URL, 오류 발생 시간, 화면에 표시된 Digest 번호를 기록합니다.
+2. Vercel Project > Logs에서 같은 시간대의 Function 로그와 API route 오류를 확인합니다.
+3. Supabase Logs에서 PostgREST 오류, RLS 정책, 테이블 누락, Storage 권한 오류를 확인합니다.
+4. `/admin/system`에서 DB, Storage, 인증, 환경변수 상태를 다시 확인합니다.
+5. `/admin/companies`에서 해당 고객사의 companyId와 고객사 미리보기 화면을 확인합니다.
+6. 데이터가 저장됐는데 화면 숫자가 다르면 거래처 마스터, 매출 거래내역, 코스 화면이 같은 companyId 필터를 쓰는지 확인합니다.
+
+## 9. 다음 개발 우선순위
 
 1. 고객사 직원 초대와 카카오 가입
 2. 모바일 오늘 코스 화면

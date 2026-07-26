@@ -216,6 +216,28 @@ export default async function AdminSystemPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-700" />
+              운영 로그 추적 순서
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["1. 화면 오류", "사용자가 본 URL, 시간, Digest 번호를 먼저 기록합니다."],
+              ["2. Vercel Logs", "해당 시간대의 Function 로그에서 API route와 stack trace를 확인합니다."],
+              ["3. Supabase Logs", "PostgREST 404, RLS, 테이블 누락, Storage 권한 오류를 확인합니다."],
+              ["4. 데이터 재확인", "관리자 시스템 점검과 고객사 미리보기에서 같은 companyId 기준으로 재검증합니다."]
+            ].map(([label, description]) => (
+              <div key={label} className="rounded-md border border-border bg-white p-4">
+                <p className="font-black">{label}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <Card>
             <CardHeader>

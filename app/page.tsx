@@ -1021,9 +1021,14 @@ function Onboarding({
       label: "최종 검수 기록"
     },
     {
-      description: "다음 개선은 실배포 이후 오류 추적과 운영 로그 확인 흐름을 정리하는 것입니다.",
-      done: false,
+      description: "Vercel Logs, Supabase Logs, 화면 Digest, companyId 기준의 오류 추적 순서를 정리했습니다.",
+      done: true,
       label: "운영 로그 추적"
+    },
+    {
+      description: "다음 개선은 배포 전 마무리로 남은 운영 위험과 후속 작업을 1장으로 정리하는 것입니다.",
+      done: false,
+      label: "릴리즈 노트 정리"
     }
   ];
   const reviewTabs = [
