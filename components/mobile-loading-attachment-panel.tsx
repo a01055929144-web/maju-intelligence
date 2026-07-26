@@ -84,6 +84,7 @@ export function MobileLoadingAttachmentPanel({
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
+            <span className="mb-2 inline-flex rounded-full bg-blue-100 px-2 py-1 text-[11px] font-black text-blue-800">1. 적재위치 확인</span>
             <p className="font-black text-slate-950">배송 적재위치</p>
             <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{loadingPosition || "적재위치 사진/영상을 현장에서 확인하고 보완합니다."}</p>
           </div>
@@ -98,6 +99,7 @@ export function MobileLoadingAttachmentPanel({
         {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         {saveState === "saving" ? "업로드 중" : "사진/영상 업로드"}
       </label>
+      <p className="mt-2 text-xs font-bold leading-5 text-slate-500">배송 적재위치 자료는 거래처 상세의 첨부자료와 현장 히스토리에 같이 남습니다.</p>
 
       {saveState === "saved" ? (
         <p className="mt-2 flex items-center gap-1 text-xs font-bold text-teal-700">
