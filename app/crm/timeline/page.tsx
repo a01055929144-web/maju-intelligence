@@ -41,6 +41,7 @@ type CustomerView = {
   naverPlaceUrl?: string;
   kakaoPlaceUrl?: string;
   googleMapUrl?: string;
+  placeLinksCheckedAt?: string;
   memoCount: number;
   monthlyRevenue: number;
   phone: string;
@@ -169,6 +170,7 @@ export default function CrmTimelinePage() {
         naverPlaceUrl: customer.naverPlaceUrl || "",
         kakaoPlaceUrl: customer.kakaoPlaceUrl || "",
         googleMapUrl: customer.googleMapUrl || "",
+        placeLinksCheckedAt: customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl ? "운영 링크 등록" : "",
         representativeName: index % 2 === 0 ? "김민준" : "이서연"
       })),
     []
@@ -1518,6 +1520,11 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
     { label: "구글맵", url: customer.googleMapUrl }
   ];
   const filledCount = links.filter((link) => Boolean(link.url?.trim())).length;
+  const readinessLabel = filledCount === links.length ? "갱신 준비 완료" : filledCount > 0 ? "부분 연결" : "링크 필요";
+  const nextAction =
+    filledCount === links.length
+      ? "외부 정보 변경 여부를 주기적으로 확인하세요."
+      : "검색 링크에서 매장을 확인한 뒤 원장 편집으로 공식 링크를 저장하세요.";
   const searchLinks = buildPlaceSearchLinks([customer.customerName, customer.address].filter(Boolean).join(" "));
 
   return (
@@ -1532,6 +1539,9 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
           <Badge className={filledCount === links.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
             {filledCount}/{links.length} 등록
           </Badge>
+          <Badge className={filledCount === links.length ? "bg-teal-100 text-teal-800" : "bg-white text-slate-700"}>
+            {readinessLabel}
+          </Badge>
           <button
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 text-xs font-black text-teal-800 transition hover:bg-teal-100"
             onClick={onEdit}
@@ -1542,14 +1552,22 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
           </button>
         </div>
       </div>
-      <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-        <div className="grid gap-2 md:grid-cols-3">
-          {links.map((link) => (
-            <PlaceLinkButton key={link.label} label={link.label} url={link.url} />
-          ))}
+      <div className="grid gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-3">
+            {links.map((link) => (
+              <PlaceLinkButton key={link.label} label={link.label} url={link.url} />
+            ))}
+          </div>
+          <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
+            <PlaceInfoMetric label="정보 갱신 상태" value={readinessLabel} />
+            <PlaceInfoMetric label="마지막 확인" value={customer.placeLinksCheckedAt || "확인 전"} />
+            <PlaceInfoMetric label="연결 플랫폼" value={`${filledCount}개`} />
+          </div>
         </div>
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
           <p className="text-xs font-black text-slate-500">링크 찾기</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{nextAction}</p>
           <div className="mt-2 grid gap-2">
             {searchLinks.map((link) => (
               <a
@@ -1566,6 +1584,15 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PlaceInfoMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
     </div>
   );
 }

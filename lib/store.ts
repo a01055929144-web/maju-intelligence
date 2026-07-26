@@ -3388,7 +3388,7 @@ function getSampleCustomerMaster(): CustomerMasterItem[] {
         naver_place_url: customer.naverPlaceUrl || null,
         opening_date: null,
         phone: null,
-        place_links_checked_at: customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl ? "샘플 기준" : null,
+        place_links_checked_at: customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl ? "운영 링크 등록" : null,
         region: customer.region,
         representative_name: null,
         visit_count: customer.visitCount,
