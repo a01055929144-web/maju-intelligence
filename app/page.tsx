@@ -996,9 +996,14 @@ function Onboarding({
       label: "운영 문구 정리"
     },
     {
-      description: "다음 개선은 실제 배포 전 관리자·고객사 주요 경로를 체크리스트로 고정하는 것입니다.",
-      done: false,
+      description: "DB 반영, 업로드 이력, 대시보드, 원장, 영업·배송 코스 확인 경로를 등록 화면에 고정했습니다.",
+      done: true,
       label: "배포 전 체크리스트"
+    },
+    {
+      description: "다음 개선은 실제 운영자가 자주 보는 카드의 숫자와 링크 우선순위를 더 압축하는 것입니다.",
+      done: false,
+      label: "운영 카드 압축"
     }
   ];
   const reviewTabs = [
@@ -1229,6 +1234,15 @@ function Onboarding({
           typeLabel={template.label}
         />
         <ImplementationProgressCard items={implementationProgressItems} />
+        <DeploymentReadinessChecklist
+          canAnalyze={canAnalyze}
+          dashboardHref={dashboardHref}
+          hasRecentUpload={Boolean(latestUpload)}
+          hasRows={rawRows.length > 0}
+          ledgerHref={currentLedgerHref}
+          persisted={pipelineMeta.persisted}
+          routeHref={routeHref}
+        />
         <DataRegistrationFlowCard steps={flowSteps} />
         <OperationalDataSplit
           activeType={uploadType}
@@ -1851,6 +1865,99 @@ function ImplementationProgressCard({
           <p className="text-xs font-black text-blue-800">다음 작업</p>
           <p className="mt-1 text-sm font-black leading-5 text-slate-950">{nextItem.label}</p>
           <p className="mt-1 text-xs font-bold leading-5 text-blue-800">{nextItem.description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeploymentReadinessChecklist({
+  canAnalyze,
+  dashboardHref,
+  hasRecentUpload,
+  hasRows,
+  ledgerHref,
+  persisted,
+  routeHref
+}: {
+  canAnalyze: boolean;
+  dashboardHref: string;
+  hasRecentUpload: boolean;
+  hasRows: boolean;
+  ledgerHref: string;
+  persisted: boolean;
+  routeHref: string;
+}) {
+  const checks = [
+    {
+      done: persisted,
+      helper: persisted ? "서버 저장 응답 확인" : "Vercel env, Supabase schema, 로그인 상태 확인",
+      label: "DB 반영"
+    },
+    {
+      done: hasRecentUpload,
+      helper: hasRecentUpload ? "최근 업로드 이력 확인" : "거래처 마스터 또는 매출 거래내역 업로드 필요",
+      label: "업로드 이력"
+    },
+    {
+      done: hasRows && canAnalyze,
+      helper: canAnalyze ? "필수 매핑과 품질 검증 통과" : "필수 컬럼 매핑과 보완 행 확인 필요",
+      label: "등록 품질"
+    },
+    {
+      done: true,
+      helper: "대시보드, 원장, 코스 화면 이동 경로 고정",
+      label: "운영 화면 연결"
+    }
+  ];
+  const doneCount = checks.filter((check) => check.done).length;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div>
+          <Badge className="bg-slate-900 text-white">배포 전 체크리스트</Badge>
+          <h2 className="mt-3 text-lg font-black text-slate-950">실운영 전 반드시 확인할 경로</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+            DB 저장, 업로드 이력, 거래처 원장, 지도·코스가 같은 고객사 기준으로 이어지는지 확인합니다.
+          </p>
+        </div>
+        <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
+          <p className="text-xs font-black text-slate-400">확인 상태</p>
+          <p className="mt-1 text-2xl font-black text-slate-950">{doneCount}/{checks.length}</p>
+        </div>
+      </div>
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
+          {checks.map((check) => (
+            <div className="min-w-0 p-4" key={check.label}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-black text-slate-950">{check.label}</p>
+                <Badge className={check.done ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{check.done ? "확인" : "점검"}</Badge>
+              </div>
+              <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{check.helper}</p>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-slate-200 bg-white p-4 lg:border-l lg:border-t-0">
+          <p className="text-sm font-black text-slate-950">바로 확인</p>
+          <div className="mt-3 grid gap-2">
+            {[
+              { href: "/admin/system", label: "관리자 시스템 점검" },
+              { href: dashboardHref, label: "고객사 대시보드" },
+              { href: ledgerHref, label: "거래처 히스토리" },
+              { href: routeHref, label: "영업·배송 코스" }
+            ].map((link) => (
+              <Link
+                className="flex h-10 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                href={link.href}
+                key={link.label}
+              >
+                <span>{link.label}</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </div>
