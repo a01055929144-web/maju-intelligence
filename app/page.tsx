@@ -1006,9 +1006,14 @@ function Onboarding({
       label: "운영 카드 압축"
     },
     {
-      description: "다음 개선은 배포 전 사용자가 실제로 눌러볼 핵심 플로우를 화면별로 점검하는 것입니다.",
-      done: false,
+      description: "관리자, 고객사 대시보드, 데이터 등록, 히스토리, 코스, 모바일 현장 경로를 점검 패널로 고정했습니다.",
+      done: true,
       label: "핵심 플로우 점검"
+    },
+    {
+      description: "다음 개선은 실배포 직전 환경변수와 Supabase 연결 상태를 코드 기준으로 재점검하는 것입니다.",
+      done: false,
+      label: "실배포 환경 점검"
     }
   ];
   const reviewTabs = [
@@ -1054,6 +1059,7 @@ function Onboarding({
   const currentLedgerLabel = uploadType === "customer-master" ? "거래처 히스토리 보기" : "매출 원장 보기";
   const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
   const routeHref = adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today";
+  const mobileTodayHref = adminCompanyId ? `/mobile/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/mobile/today";
 
   useEffect(() => {
     if (!hasDataRows) {
@@ -1246,6 +1252,13 @@ function Onboarding({
           hasRows={rawRows.length > 0}
           ledgerHref={currentLedgerHref}
           persisted={pipelineMeta.persisted}
+          routeHref={routeHref}
+        />
+        <CoreFlowCheckPanel
+          dashboardHref={dashboardHref}
+          dataHref="/"
+          ledgerHref={currentLedgerHref}
+          mobileHref={mobileTodayHref}
           routeHref={routeHref}
         />
         <DataRegistrationFlowCard steps={flowSteps} />
@@ -1961,6 +1974,113 @@ function DeploymentReadinessChecklist({
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CoreFlowCheckPanel({
+  dashboardHref,
+  dataHref,
+  ledgerHref,
+  mobileHref,
+  routeHref
+}: {
+  dashboardHref: string;
+  dataHref: string;
+  ledgerHref: string;
+  mobileHref: string;
+  routeHref: string;
+}) {
+  const flows = [
+    {
+      href: "/admin/system",
+      icon: Database,
+      label: "관리자 점검",
+      steps: ["환경변수", "DB 테이블", "Storage"],
+      summary: "서버 연결과 필수 테이블 상태 확인"
+    },
+    {
+      href: dashboardHref,
+      icon: BarChart3,
+      label: "고객사 대시보드",
+      steps: ["거래처 수", "매출 기준", "코스 기준"],
+      summary: "대표가 보는 운영 숫자 확인"
+    },
+    {
+      href: dataHref,
+      icon: Upload,
+      label: "데이터 등록",
+      steps: ["업로드", "매핑", "서버 반영"],
+      summary: "거래처 마스터와 매출 거래내역 등록"
+    },
+    {
+      href: ledgerHref,
+      icon: History,
+      label: "거래처 히스토리",
+      steps: ["기본정보", "첨부자료", "메모·방문"],
+      summary: "매장별 원장과 현장 기록 확인"
+    },
+    {
+      href: routeHref,
+      icon: Route,
+      label: "영업·배송 코스",
+      steps: ["지도", "차량 필터", "티맵 경유"],
+      summary: "출발지 기준 거리와 경유 코스 확인"
+    },
+    {
+      href: mobileHref,
+      icon: ClipboardList,
+      label: "모바일 현장",
+      steps: ["오늘 코스", "적재위치", "완료 증빙"],
+      summary: "직원이 현장에서 남기는 기록 확인"
+    }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-white px-4 py-3">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">핵심 플로우 점검</Badge>
+            <h2 className="mt-3 text-lg font-black text-slate-950">실제 사용자가 누를 주요 경로</h2>
+          </div>
+          <p className="max-w-2xl text-sm font-semibold leading-6 text-slate-500">
+            배포 전에는 아래 6개 경로만 먼저 검증합니다. 이 흐름이 이어지면 운영 설명과 현장 테스트가 가능합니다.
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-3 bg-slate-50/60 p-4 md:grid-cols-2 xl:grid-cols-3">
+        {flows.map((flow, index) => {
+          const Icon = flow.icon;
+          return (
+            <Link
+              className="group rounded-lg border border-slate-200 bg-white p-4 transition hover:border-teal-200 hover:bg-teal-50/50 hover:shadow-sm"
+              href={flow.href}
+              key={flow.label}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 place-items-center rounded-md bg-slate-900 text-white">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">{index + 1}. {flow.label}</span>
+                    <span className="mt-1 block text-xs font-bold text-slate-500">{flow.summary}</span>
+                  </span>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-teal-700" />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {flow.steps.map((step) => (
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200" key={step}>
+                    {step}
+                  </span>
+                ))}
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
