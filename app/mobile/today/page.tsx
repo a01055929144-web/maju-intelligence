@@ -34,7 +34,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
               <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{session.name}님 모바일 업무</p>
             </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">업무 구분 · {roleLabel}</Badge>
           </div>
         </header>
 
@@ -56,6 +56,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileOperationBasisPanel
             area={routeArea}
             driverName={driverName}
+            roleLabel={roleLabel}
             selectedStopName={selectedStop?.name || "선택 거래처 없음"}
             totalStops={routePlan.totalStops}
             visibleStops={todayStops.length}
@@ -156,28 +157,30 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 function MobileOperationBasisPanel({
   area,
   driverName,
+  roleLabel,
   selectedStopName,
   totalStops,
   visibleStops
 }: {
   area: string;
   driverName: string;
+  roleLabel: string;
   selectedStopName: string;
   totalStops: number;
   visibleStops: number;
 }) {
   const items = [
     { label: "담당자", value: driverName },
+    { label: "업무 구분", value: roleLabel },
     { label: "권역", value: area },
-    { label: "표시 코스", value: `${visibleStops.toLocaleString()}/${totalStops.toLocaleString()}곳` },
-    { label: "선택 거래처", value: selectedStopName }
+    { label: "표시 코스", value: `${visibleStops.toLocaleString()}/${totalStops.toLocaleString()}곳` }
   ];
 
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
         <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">관리자가 확정한 거래처 원장과 배송차 코스를 모바일에서 실행합니다.</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">관리자가 확정한 거래처 원장과 배송차 코스를 모바일에서 실행합니다. 업무 구분은 표시와 필터 기준입니다.</p>
       </div>
       <div className="grid grid-cols-2 divide-x divide-y divide-slate-100">
         {items.map((item) => (
@@ -186,6 +189,10 @@ function MobileOperationBasisPanel({
             <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
           </div>
         ))}
+      </div>
+      <div className="border-t border-slate-100 px-4 py-3">
+        <p className="text-[11px] font-black text-slate-400">선택 거래처</p>
+        <p className="mt-1 truncate text-sm font-black text-slate-950">{selectedStopName}</p>
       </div>
     </section>
   );
@@ -250,24 +257,24 @@ function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; hre
 function getMobileHeroCopy(role: ReturnType<typeof normalizeWorkspaceRole>) {
   if (role === "driver") {
     return {
-      title: "오늘 배송 코스를 확인하세요.",
+      title: "오늘 현장 코스를 확인하세요.",
       description: "매장을 선택해 지도, 전화, 적재위치 사진/영상, 배송 특이사항을 바로 처리합니다."
     };
   }
   if (role === "sales") {
     return {
-      title: "오늘 방문할 거래처를 확인하세요.",
+      title: "오늘 현장 코스를 확인하세요.",
       description: "매장을 선택해 전화, 위치, 상담 메모, 다음 액션을 빠르게 남깁니다."
     };
   }
   if (role === "manager" || role === "owner") {
     return {
-      title: "현장 코스와 직원 기록을 확인하세요.",
+      title: "오늘 현장 코스를 확인하세요.",
       description: "배송·영업 담당자의 오늘 코스, 매장 정보, 현장 기록을 모바일에서 함께 관리합니다."
     };
   }
   return {
-    title: "오늘 배정된 업무를 확인하세요.",
+    title: "오늘 현장 코스를 확인하세요.",
     description: "매장을 선택하면 전화, 지도, 적재위치, 방문 메모 액션을 바로 실행할 수 있습니다."
   };
 }
