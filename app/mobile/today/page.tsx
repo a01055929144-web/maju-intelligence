@@ -63,7 +63,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           />
 
           {selectedStop ? (
-            <section className="overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]">
+            <section className="scroll-mt-24 overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]" id="selected-customer">
               <div className="border-b border-teal-100 bg-teal-50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -83,7 +83,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </section>
           ) : null}
 
-          <section className="rounded-xl border border-slate-200 bg-white">
+          <section className="scroll-mt-24 rounded-xl border border-slate-200 bg-white" id="route-list">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
               <div>
                 <p className="font-black text-slate-950">{driverName}</p>
@@ -123,7 +123,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </section>
 
           {selectedStop ? (
-            <>
+            <section className="scroll-mt-24 space-y-4" id="field-records">
               <MobileRouteActionPanel
                 address={selectedStop.address || selectedStop.region || selectedStop.name}
                 customerId={selectedStop.id}
@@ -135,19 +135,19 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
               <MobileDeliveryProofPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
               <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
-            </>
+            </section>
           ) : null}
 
-          <section className="grid gap-2">
+          <section className="grid scroll-mt-24 gap-2" id="mobile-actions">
             <MobileTask icon={Navigation} title="현장 업무 흐름" description="지도 열기, 주소 복사, 전화, 배송완료 기록을 선택 거래처 기준으로 처리합니다." />
             <MobileTask icon={Camera} title="배송 증빙 관리" description="도착 사진/영상과 점주 발송 문구가 거래처 히스토리에 함께 저장됩니다." />
           </section>
         </div>
 
         <footer className="grid grid-cols-3 border-t border-slate-200 bg-white px-3 py-2">
-          <FooterItem active href="/mobile/today" icon={Route} label="오늘" />
-          <FooterItem href="/crm/timeline" icon={Building2} label="거래처" />
-          <FooterItem href="/dashboard/settings" icon={CheckCircle2} label="관리" />
+          <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
+          <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="거래처" />
+          <FooterItem href="/mobile/today#field-records" icon={CheckCircle2} label="기록" />
         </footer>
       </section>
     </main>
