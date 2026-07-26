@@ -1031,8 +1031,8 @@ function Onboarding({
       label: "릴리즈 노트 정리"
     },
     {
-      description: "다음 개선은 실배포 직전 Production URL에서 핵심 경로를 최종 확인하는 것입니다.",
-      done: false,
+      description: "배포 직후 확인할 Production URL 8개 경로와 통과 기준을 최종 QA 문서에 고정했습니다.",
+      done: true,
       label: "Production 최종 확인"
     }
   ];
