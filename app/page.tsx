@@ -961,9 +961,14 @@ function Onboarding({
       label: "OCR·첨부"
     },
     {
-      description: "다음 개선은 실제 저장 후 대시보드·원장·코스 데이터 일치 검증 자동화입니다.",
-      done: false,
+      description: "대시보드에서 거래처, 매출, 지도·코스 기준값의 일치 여부를 자동 점검합니다.",
+      done: true,
       label: "운영 검증 자동화"
+    },
+    {
+      description: "다음 개선은 저장 직후 DB 응답과 화면 반영 결과를 더 직접적으로 비교하는 것입니다.",
+      done: false,
+      label: "저장 결과 대조"
     }
   ];
   const reviewTabs = [

@@ -250,9 +250,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
         <DashboardDataBasisPanel
           customerCount={briefing.currentCustomers}
+          latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}
           placeLinkLabel={`${placeLinkedCustomers.toLocaleString()}/${customerMaster.customers.length.toLocaleString()}곳`}
+          routeMapStoreCount={routeMapStoreCount}
           routeStops={routePlan.totalStops}
         />
 
@@ -445,15 +447,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
 function DashboardDataBasisPanel({
   customerCount,
+  latestUploadReady,
   latestUploadLabel,
   originAddress,
   placeLinkLabel,
+  routeMapStoreCount,
   routeStops
 }: {
   customerCount: number;
+  latestUploadReady: boolean;
   latestUploadLabel: string;
   originAddress: string;
   placeLinkLabel: string;
+  routeMapStoreCount: number;
   routeStops: number;
 }) {
   const items = [
@@ -463,6 +469,24 @@ function DashboardDataBasisPanel({
     { label: "코스 매장", value: `${routeStops.toLocaleString()}곳`, helper: "배송차별 경유 후보" },
     { label: "외부 링크", value: placeLinkLabel, helper: "리뷰·영업시간 확인" }
   ];
+  const consistencyChecks = [
+    {
+      detail: customerCount > 0 ? `${customerCount.toLocaleString()}곳 기준으로 화면을 계산합니다.` : "거래처 마스터 등록이 필요합니다.",
+      label: "거래처 기준",
+      ok: customerCount > 0
+    },
+    {
+      detail: latestUploadReady ? latestUploadLabel : "매출 등급과 리포트 갱신을 위해 거래원장 업로드가 필요합니다.",
+      label: "매출 기준",
+      ok: latestUploadReady
+    },
+    {
+      detail: routeMapStoreCount === routeStops ? `지도 ${routeMapStoreCount.toLocaleString()}곳 · 코스 ${routeStops.toLocaleString()}곳 일치` : `지도 ${routeMapStoreCount.toLocaleString()}곳 · 코스 ${routeStops.toLocaleString()}곳 불일치`,
+      label: "지도·코스 기준",
+      ok: routeMapStoreCount === routeStops
+    }
+  ];
+  const okCount = consistencyChecks.filter((item) => item.ok).length;
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -483,6 +507,28 @@ function DashboardDataBasisPanel({
             <p className="mt-1 text-[11px] font-bold text-slate-500">{item.helper}</p>
           </div>
         ))}
+      </div>
+      <div className="border-t border-slate-100 bg-white px-5 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-black text-slate-950">데이터 일치 자동 점검</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드, 거래처 히스토리, 영업·배송 코스가 같은 기준값을 쓰는지 확인합니다.</p>
+          </div>
+          <Badge className={okCount === consistencyChecks.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+            {okCount}/{consistencyChecks.length} 정상
+          </Badge>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-3">
+          {consistencyChecks.map((item) => (
+            <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black text-slate-950">{item.label}</p>
+                {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+              </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{item.detail}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
