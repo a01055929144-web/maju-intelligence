@@ -53,6 +53,14 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             <MobileMetric icon={Clock} label="시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
           </section>
 
+          <MobileOperationBasisPanel
+            area={routeArea}
+            driverName={driverName}
+            selectedStopName={selectedStop?.name || "선택 거래처 없음"}
+            totalStops={routePlan.totalStops}
+            visibleStops={todayStops.length}
+          />
+
           {selectedStop ? (
             <section className="overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]">
               <div className="border-b border-teal-100 bg-teal-50 p-4">
@@ -142,6 +150,44 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         </footer>
       </section>
     </main>
+  );
+}
+
+function MobileOperationBasisPanel({
+  area,
+  driverName,
+  selectedStopName,
+  totalStops,
+  visibleStops
+}: {
+  area: string;
+  driverName: string;
+  selectedStopName: string;
+  totalStops: number;
+  visibleStops: number;
+}) {
+  const items = [
+    { label: "담당자", value: driverName },
+    { label: "권역", value: area },
+    { label: "표시 코스", value: `${visibleStops.toLocaleString()}/${totalStops.toLocaleString()}곳` },
+    { label: "선택 거래처", value: selectedStopName }
+  ];
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">관리자가 확정한 거래처 원장과 배송차 코스를 모바일에서 실행합니다.</p>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-100">
+        {items.map((item) => (
+          <div className="min-w-0 px-4 py-3" key={item.label}>
+            <p className="text-[11px] font-black text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
