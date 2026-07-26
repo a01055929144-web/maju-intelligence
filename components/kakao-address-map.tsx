@@ -22,6 +22,7 @@ export type KakaoRoutePoint = {
 };
 
 type KakaoAddressMapProps = {
+  readonly fallbackReason?: string;
   readonly focusedMarkerId?: string;
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
@@ -47,6 +48,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   const mapInstanceRef = useRef<any>(null);
   const boundsRef = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
+  const [fallbackReason, setFallbackReason] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
   const focusedMarker = useMemo(() => markers.find((marker) => marker.id === focusedMarkerId), [focusedMarkerId, markers]);
@@ -56,8 +58,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 
     async function bootMap() {
       setStatus("loading");
+      setFallbackReason("");
 
       if (!canUseKakao || !mapRef.current) {
+        setFallbackReason("NEXT_PUBLIC_KAKAO_MAP_APP_KEY가 없거나 기본값입니다.");
         setStatus("fallback");
         return;
       }
@@ -123,6 +127,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         if (ignore) return;
 
         if (found === 0 && !hasRoadPath) {
+          setFallbackReason("카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.");
           setStatus("fallback");
           return;
         }
@@ -142,8 +147,11 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         }
 
         setStatus("ready");
-      } catch {
-        if (!ignore) setStatus("fallback");
+      } catch (error) {
+        if (!ignore) {
+          setFallbackReason(error instanceof Error ? error.message : "카카오맵 로딩에 실패했습니다.");
+          setStatus("fallback");
+        }
       }
     }
 
@@ -155,7 +163,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   }, [appKey, canUseKakao, focusedMarkerId, markers, onMarkerClick, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} onMarkerClick={onMarkerClick} routePath={routePath} showList={showList} />;
+    return <FallbackAddressMap fallbackReason={fallbackReason} focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} onMarkerClick={onMarkerClick} routePath={routePath} showList={showList} />;
   }
 
   const moveToCurrentLocation = () => {
@@ -338,16 +346,23 @@ function loadKakaoMapSdk(appKey: string) {
     const existingScript = document.getElementById("kakao-map-sdk") as HTMLScriptElement | null;
 
     if (existingScript) {
-      existingScript.addEventListener("load", () => window.kakao?.maps?.load(resolve), { once: true });
-      existingScript.addEventListener("error", () => reject(new Error("Kakao map SDK load failed")), { once: true });
-      return;
+      if (window.kakao?.maps && !window.kakao.maps.services) {
+        existingScript.remove();
+      } else if (window.kakao?.maps) {
+        waitForKakaoServices(resolve, reject);
+        return;
+      } else {
+        existingScript.addEventListener("load", () => waitForKakaoServices(resolve, reject), { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("Kakao map SDK load failed")), { once: true });
+        return;
+      }
     }
 
     const script = document.createElement("script");
     script.id = "kakao-map-sdk";
     script.async = true;
     script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&autoload=false&libraries=services`;
-    script.onload = () => window.kakao?.maps?.load(resolve);
+    script.onload = () => waitForKakaoServices(resolve, reject);
     script.onerror = () => reject(new Error("Kakao map SDK load failed"));
     document.head.appendChild(script);
   }).catch((error) => {
@@ -356,6 +371,22 @@ function loadKakaoMapSdk(appKey: string) {
   });
 
   return kakaoScriptPromise;
+}
+
+function waitForKakaoServices(resolve: () => void, reject: (error: Error) => void) {
+  if (!window.kakao?.maps) {
+    reject(new Error("Kakao map SDK object is unavailable"));
+    return;
+  }
+
+  window.kakao.maps.load(() => {
+    if (!window.kakao?.maps?.services) {
+      kakaoScriptPromise = null;
+      reject(new Error("Kakao map services library is unavailable"));
+      return;
+    }
+    resolve();
+  });
 }
 
 function createMarkerOverlay(marker: KakaoMapMarker) {
@@ -425,6 +456,7 @@ function escapeHtml(value: string) {
 }
 
 function FallbackAddressMap({
+  fallbackReason,
   focusedMarkerId,
   mapClassName = defaultMapClassName,
   markers,
@@ -450,8 +482,16 @@ function FallbackAddressMap({
           </button>
         </div>
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
-          {routePath?.length ? "카카오맵 로딩 후 티맵 도로 경로가 표시됩니다." : "지도 좌표를 불러오지 못해 마커 위치만 표시합니다."}
+          {fallbackReason || (routePath?.length ? "카카오맵 로딩 후 티맵 도로 경로가 표시됩니다." : "지도 좌표를 불러오지 못해 마커 위치만 표시합니다.")}
         </div>
+        {!displayMarkers.length ? (
+          <div className="absolute inset-0 grid place-items-center p-6 text-center">
+            <div className="rounded-md border border-slate-200 bg-white/95 p-5 shadow-sm">
+              <p className="font-black text-slate-900">표시할 지도 데이터가 없습니다.</p>
+              <p className="mt-2 text-sm font-bold leading-6 text-slate-500">거래처 주소를 먼저 등록하거나 고객사 데이터 기준 진단을 확인하세요.</p>
+            </div>
+          </div>
+        ) : null}
         {displayMarkers.map((marker) => {
           const focused = focusedMarkerId && marker.id === focusedMarkerId;
           return (
