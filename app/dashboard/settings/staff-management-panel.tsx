@@ -1,7 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState } from "react";
-import { Copy, Plus, Send, ShieldCheck, Users } from "lucide-react";
+import { CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { StaffInvitation } from "@/lib/store";
@@ -23,6 +24,9 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
   const [message, setMessage] = useState("");
   const [savingId, setSavingId] = useState("");
   const [creating, setCreating] = useState(false);
+  const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length;
+  const acceptedCount = invitations.filter((invitation) => invitation.status === "accepted").length;
+  const activeCount = invitations.filter((invitation) => invitation.status !== "revoked").length;
 
   async function createStaff() {
     if (!form.employeeName.trim() || creating) return;
@@ -93,8 +97,33 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
 
+      <div className="grid gap-4 border-b border-slate-200 bg-white p-5 md:grid-cols-4">
+        <StaffSignal icon={<Users className="h-4 w-4" />} label="등록 직원" value={`${invitations.length}명`} />
+        <StaffSignal icon={<Link2 className="h-4 w-4" />} label="초대 대기" value={`${pendingCount}명`} />
+        <StaffSignal icon={<Smartphone className="h-4 w-4" />} label="가입 완료" value={`${acceptedCount}명`} />
+        <StaffSignal icon={<CheckCircle2 className="h-4 w-4" />} label="활성 직원" value={`${activeCount}명`} />
+      </div>
+
       <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
+          <div className="grid gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4 md:grid-cols-3">
+            <OnboardingStep
+              icon={<Link2 className="h-4 w-4" />}
+              title="1. 초대 생성"
+              description="관리자가 직원명, 연락처, 업무 구분을 등록합니다."
+            />
+            <OnboardingStep
+              icon={<Smartphone className="h-4 w-4" />}
+              title="2. 카카오 가입"
+              description="직원은 초대 링크로 모바일 가입 흐름에 들어갑니다."
+            />
+            <OnboardingStep
+              icon={<Tags className="h-4 w-4" />}
+              title="3. 업무 구분"
+              description="역할은 표시와 필터 기준이며 기능 제한값이 아닙니다."
+            />
+          </div>
+
           {invitations.map((invitation) => (
             <div key={invitation.id} className="rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -191,6 +220,28 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
         </aside>
       </div>
     </section>
+  );
+}
+
+function StaffSignal({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="text-teal-700">{icon}</div>
+      <p className="mt-3 text-xs font-bold text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function OnboardingStep({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <div className="rounded-lg bg-white/80 p-3 ring-1 ring-inset ring-blue-100">
+      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
+        <span className="text-blue-700">{icon}</span>
+        {title}
+      </div>
+      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
+    </div>
   );
 }
 
