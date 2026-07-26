@@ -53,6 +53,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             <MobileMetric icon={Clock} label="시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
           </section>
 
+          <MobileFieldFlowPanel hasSelectedStop={Boolean(selectedStop)} selectedStopName={selectedStop?.name || "선택 거래처 없음"} />
+
           <MobileOperationBasisPanel
             area={routeArea}
             driverName={driverName}
@@ -193,6 +195,50 @@ function MobileOperationBasisPanel({
       <div className="border-t border-slate-100 px-4 py-3">
         <p className="text-[11px] font-black text-slate-400">선택 거래처</p>
         <p className="mt-1 truncate text-sm font-black text-slate-950">{selectedStopName}</p>
+      </div>
+    </section>
+  );
+}
+
+function MobileFieldFlowPanel({
+  hasSelectedStop,
+  selectedStopName
+}: {
+  hasSelectedStop: boolean;
+  selectedStopName: string;
+}) {
+  const steps = [
+    { label: "매장 선택", value: selectedStopName, done: hasSelectedStop },
+    { label: "지도·전화", value: hasSelectedStop ? "바로 실행" : "선택 필요", done: hasSelectedStop },
+    { label: "적재위치", value: hasSelectedStop ? "사진 확인" : "선택 필요", done: false },
+    { label: "배송완료", value: hasSelectedStop ? "사진·메모 저장" : "선택 필요", done: false }
+  ];
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50/70">
+      <div className="border-b border-blue-100 px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-slate-950">현장 실행 순서</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-blue-800">모바일에서는 선택한 거래처 기준으로 이동, 연락, 적재위치, 완료 기록을 처리합니다.</p>
+          </div>
+          <Badge className={hasSelectedStop ? "bg-white text-blue-800 ring-1 ring-inset ring-blue-100" : "bg-amber-100 text-amber-800"}>
+            {hasSelectedStop ? "실행 가능" : "매장 선택"}
+          </Badge>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 p-3">
+        {steps.map((step, index) => (
+          <div key={step.label} className="rounded-lg border border-white bg-white px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black ${step.done ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                {index + 1}
+              </span>
+              <p className="truncate text-xs font-black text-slate-950">{step.label}</p>
+            </div>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">{step.value}</p>
+          </div>
+        ))}
       </div>
     </section>
   );

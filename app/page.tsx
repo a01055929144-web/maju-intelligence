@@ -977,8 +977,13 @@ function Onboarding({
     },
     {
       description: "다음 개선은 모바일 직원 사용 흐름과 현장 완료 기록을 더 직접적으로 연결하는 것입니다.",
-      done: false,
+      done: true,
       label: "모바일 현장 흐름"
+    },
+    {
+      description: "다음 개선은 현장 완료 기록을 관리자/거래처 히스토리에서 더 쉽게 추적하는 것입니다.",
+      done: false,
+      label: "현장 기록 추적"
     }
   ];
   const reviewTabs = [
