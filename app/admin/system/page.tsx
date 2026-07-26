@@ -218,6 +218,56 @@ export default async function AdminSystemPage() {
 
         <Card>
           <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ServerCog className="h-5 w-5 text-primary" />
+                  운영 헬스체크 API
+                </CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  배포된 서비스가 실제 DB와 운영 환경값으로 동작하는지 서버 응답 기준으로 확인합니다.
+                </p>
+              </div>
+              <Link
+                className="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800"
+                href="/api/health"
+                rel="noreferrer"
+                target="_blank"
+              >
+                /api/health 열기
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 lg:grid-cols-3">
+            {[
+              ["200 OK", "운영 가능", "ok:true, mode:production-db, 필수 점검 항목이 준비된 상태입니다."],
+              ["503 Service Unavailable", "조치 필요", "앱은 열리지만 DB, Storage, 인증값, 환경변수 중 운영 준비가 부족한 상태입니다."],
+              ["500 Server Error", "로그 확인", "헬스체크 실행 중 예외가 발생한 상태입니다. Vercel Function 로그에서 stack trace를 확인하세요."]
+            ].map(([code, label, description]) => (
+              <div key={code} className="rounded-md border border-border bg-white p-4">
+                <Badge className={code.startsWith("200") ? "bg-primary/10 text-primary" : code.startsWith("503") ? "bg-amber-100 text-amber-800" : "bg-destructive/10 text-destructive"}>
+                  {code}
+                </Badge>
+                <p className="mt-3 text-base font-black">{label}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+              </div>
+            ))}
+            <div className="rounded-md border border-dashed border-border bg-muted/35 p-4 lg:col-span-3">
+              <p className="text-sm font-black text-slate-900">응답에서 확인할 핵심 필드</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["ok", "mode", "readinessScore", "blockingCount", "warningCount", "databaseChecks", "storageChecks"].map((field) => (
+                  <code key={field} className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-slate-700 ring-1 ring-border">
+                    {field}
+                  </code>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-700" />
               운영 로그 추적 순서

@@ -35,6 +35,18 @@
 6. `/mobile/today`
    - 직원 모바일 코스, 적재위치, 배송완료 증빙 흐름 확인
 
+## 운영 헬스체크 API 판정 기준
+
+`/api/health`는 Vercel 배포 후 서비스가 실제 운영 DB와 환경값으로 준비되었는지 확인하는 서버 점검 경로입니다.
+
+| HTTP 상태 | 의미 | 조치 |
+| --- | --- | --- |
+| `200` | 운영 가능 | `ok:true`, `mode:"production-db"`인지 확인 후 핵심 화면 검수 진행 |
+| `503` | 앱은 열리지만 운영 준비 미완료 | 응답의 `blockingCount`, `databaseChecks`, `storageChecks`를 보고 Supabase/env/Storage 설정 보완 |
+| `500` | 헬스체크 실행 실패 | Vercel Function Logs에서 stack trace 확인 후 API 또는 환경변수 오류 수정 |
+
+응답에서 우선 확인할 필드는 `ok`, `mode`, `readinessScore`, `blockingCount`, `warningCount`, `databaseChecks`, `storageChecks`입니다.
+
 ## Production 최종 확인표
 
 배포 URL이 확정되면 아래 표에 실제 결과를 기록합니다.
