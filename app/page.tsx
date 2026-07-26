@@ -939,6 +939,33 @@ function Onboarding({
       value: pipelineMeta.persisted ? "서버 저장" : "저장 확인 전"
     }
   ];
+  const implementationProgressItems = [
+    {
+      description: "거래처 마스터와 매출 거래내역 등록 흐름을 구분했습니다.",
+      done: true,
+      label: "등록 흐름"
+    },
+    {
+      description: "엑셀 전체 미리보기와 ERP 헤더 매핑 전용화면을 제공합니다.",
+      done: true,
+      label: "엑셀 매핑"
+    },
+    {
+      description: "수기 등록, 주소 검색, 사업자번호 검증, 외부 지도 링크를 연결했습니다.",
+      done: true,
+      label: "수기 등록"
+    },
+    {
+      description: "OCR은 필수가 아닌 보조 입력으로 분리하고 첨부자료 기준을 정리했습니다.",
+      done: true,
+      label: "OCR·첨부"
+    },
+    {
+      description: "다음 개선은 실제 저장 후 대시보드·원장·코스 데이터 일치 검증 자동화입니다.",
+      done: false,
+      label: "운영 검증 자동화"
+    }
+  ];
   const reviewTabs = [
     {
       actionHint: !hasDataRows ? "파일 업로드 또는 수기 등록을 먼저 진행하세요." : complete ? "품질 검증으로 넘어가세요." : "필수 컬럼을 모두 연결하세요.",
@@ -1166,6 +1193,7 @@ function Onboarding({
           totalCount={saveReadinessItems.length}
           typeLabel={template.label}
         />
+        <ImplementationProgressCard items={implementationProgressItems} />
         <DataRegistrationFlowCard steps={flowSteps} />
         <OperationalDataSplit
           activeType={uploadType}
@@ -1740,6 +1768,52 @@ function RegistrationControlStrip({
             <span className="rounded-md bg-white/70 px-2 py-1 text-center">최근 상태: {registrationStatus.actionLabel}</span>
             <span className="rounded-md bg-white/70 px-2 py-1 text-center">확인 위치: {persisted ? "운영 화면" : "저장·이력 탭"}</span>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImplementationProgressCard({
+  items
+}: {
+  items: Array<{ description: string; done: boolean; label: string }>;
+}) {
+  const doneCount = items.filter((item) => item.done).length;
+  const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+  const nextItem = items.find((item) => !item.done) || items[items.length - 1];
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_280px] lg:items-center">
+        <div>
+          <p className="text-xs font-black text-slate-400">현재 개선 진행률</p>
+          <p className="mt-1 text-3xl font-black text-slate-950">{progress}%</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{doneCount}/{items.length}개 항목 완료</p>
+        </div>
+        <div>
+          <div className="flex items-center justify-between text-xs font-black text-slate-500">
+            <span>데이터 등록 실운영화</span>
+            <span>다음: {nextItem.label}</span>
+          </div>
+          <Progress className="mt-2 h-2" value={progress} />
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {items.map((item) => (
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
+                  item.done ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                }`}
+                key={item.label}
+              >
+                {item.done ? "완료" : "대기"} · {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
+          <p className="text-xs font-black text-blue-800">다음 작업</p>
+          <p className="mt-1 text-sm font-black leading-5 text-slate-950">{nextItem.label}</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">{nextItem.description}</p>
         </div>
       </div>
     </div>
