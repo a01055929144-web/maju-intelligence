@@ -1016,9 +1016,14 @@ function Onboarding({
       label: "실배포 환경 점검"
     },
     {
-      description: "다음 개선은 배포 전 최종 빌드, DB, 주요 화면 검증 결과를 한 번에 남기는 것입니다.",
-      done: false,
+      description: "최종 검수 기록 문서와 배포 가이드의 환경변수/운영 테스트 기준을 정리했습니다.",
+      done: true,
       label: "최종 검수 기록"
+    },
+    {
+      description: "다음 개선은 실배포 이후 오류 추적과 운영 로그 확인 흐름을 정리하는 것입니다.",
+      done: false,
+      label: "운영 로그 추적"
     }
   ];
   const reviewTabs = [

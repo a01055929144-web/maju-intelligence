@@ -59,6 +59,7 @@ COMPANY_ORIGIN_ADDRESS=경기도 하남시 초이로 133 1층
 TMAP_API_KEY=replace-with-tmap-api-key
 NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
 
+KAKAO_REST_KEY=your-kakao-rest-api-key
 KAKAO_CLIENT_ID=your-kakao-rest-api-key
 KAKAO_CLIENT_SECRET=optional-kakao-client-secret
 KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
@@ -90,12 +91,14 @@ KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
 
 ## 6. 첫 운영 테스트
 
-1. `/admin/system`에서 운영 준비 상태, Supabase 연결, Storage 상태를 확인합니다.
-2. `/`에서 거래처 마스터 또는 매출 거래내역 파일로 분석을 실행합니다.
-3. `/admin`에서 업로드 이력과 리드 추천 목록이 보이는지 확인합니다.
-4. `/dashboard/login`에서 고객 계정으로 로그인합니다.
-5. `/dashboard`에서 회사 진단 리포트가 고객 범위로 보이는지 확인합니다.
-6. `/routes/today`에서 리드 상태 변경과 방문 결과 저장 흐름을 확인합니다.
+1. `npm run check:production-env`로 로컬 또는 Vercel 환경변수 누락을 확인합니다.
+2. `npm run build`로 Next.js 프로덕션 빌드를 확인합니다.
+3. `/admin/system`에서 운영 준비 상태, Supabase 연결, Storage 상태를 확인합니다.
+4. `/`에서 거래처 마스터 또는 매출 거래내역 파일로 분석을 실행합니다.
+5. `/admin`에서 업로드 이력과 리드 추천 목록이 보이는지 확인합니다.
+6. `/dashboard/login`에서 고객 계정으로 로그인합니다.
+7. `/dashboard`에서 회사 진단 리포트가 고객 범위로 보이는지 확인합니다.
+8. `/routes/today`에서 리드 상태 변경과 방문 결과 저장 흐름을 확인합니다.
 
 ## 7. 운영 전 필수 변경
 
