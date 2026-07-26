@@ -12,7 +12,7 @@ import {
   FileSpreadsheet,
   Fuel,
   HeartPulse,
-  Lightbulb,
+  Link2,
   MapPin,
   MessageSquareText,
   ReceiptText,
@@ -33,7 +33,7 @@ import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getCompanyDashboardPayload, getCompanyOriginAddress, getCompanySettings, getTodayRoutePlan } from "@/lib/store";
+import { getCompanyDashboardPayload, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getTodayRoutePlan } from "@/lib/store";
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   const resolvedSearchParams = await searchParams;
@@ -54,15 +54,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(companyId);
   const routePlan = await getTodayRoutePlan(companyId);
+  const customerMaster = await getCustomerMaster(companyId);
   const originAddress = await getCompanyOriginAddress(companyId);
   const referenceFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
   const latestUpload = uploadHistory[0];
+  const placeLinkedCustomers = customerMaster.customers.filter((customer) => customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl).length;
+  const placeLinkRate = customerMaster.customers.length ? Math.round((placeLinkedCustomers / customerMaster.customers.length) * 100) : 0;
   const dataReadiness = [
     { label: "거래처 마스터", ready: briefing.currentCustomers > 0, detail: `${briefing.currentCustomers.toLocaleString()}개 거래처` },
     { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
-    { label: "코스 데이터", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 등록` }
+    { label: "코스 데이터", ready: routePlan.totalStops > 0, detail: `${routePlan.totalStops.toLocaleString()}곳 등록` },
+    { label: "외부 매장 정보", ready: placeLinkedCustomers > 0, detail: `${placeLinkedCustomers.toLocaleString()}/${customerMaster.customers.length.toLocaleString()}곳 연결` }
   ];
   const operationChecklist = [
     {
@@ -136,6 +140,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       label: "배송 운영",
       ready: routePlan.totalStops > 0,
       value: `${routePlan.totalStops.toLocaleString()}곳`
+    },
+    {
+      actionHref: withCompanyQuery("/crm/timeline"),
+      actionLabel: "링크 보완",
+      description: "네이버, 카카오맵, 구글맵 링크를 원장에 저장하면 리뷰, 영업시간, 휴폐업 확인 기준으로 활용할 수 있습니다.",
+      icon: Link2,
+      label: "외부 매장 정보",
+      ready: placeLinkedCustomers > 0,
+      value: `${placeLinkRate}% 연결`
     }
   ];
   const scoreRows = [
@@ -211,7 +224,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
               <Metric icon={Route} label="배송 코스 매장" value={`${routePlan.totalStops}곳`} />
               <Metric icon={Fuel} label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
               <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
-              <Metric icon={Lightbulb} label="고확률 리드" value={`${briefing.highProbability}곳`} />
+              <Metric icon={Link2} label="외부 링크 연결" value={`${placeLinkRate}%`} />
             </div>
           </div>
 
@@ -238,7 +251,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         <DashboardTabs
           overview={
             <>
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {operationalSignals.map((signal) => (
                   <OperationalSignalCard key={signal.label} {...signal} />
                 ))}
