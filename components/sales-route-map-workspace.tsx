@@ -359,6 +359,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
       </section>
 
+      <RouteBasisStrip
+        allStoreCount={allStores.length}
+        allStoreTotals={allStoreTotals}
+        currentStoreCount={visibleStores.length}
+        currentTotals={routeTotals}
+        routePlan={routePlan}
+      />
+
       <RouteWorkspaceGuide
         activeView={activeView}
         courseSummary={courseSummary}
@@ -2427,18 +2435,18 @@ function RouteBasisStrip({
   readonly routePlan: RoutePlan;
 }) {
   return (
-    <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(520px,auto)] xl:items-center">
+    <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
       <div className="min-w-0">
-        <p className="text-xs font-black text-slate-500">코스 기준값</p>
+        <p className="text-xs font-black text-slate-500">운영 기준 데이터</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          대시보드와 이 화면은 동일한 거래처 원장과 출발지 기준을 사용합니다. 계산 전 값은 출발지와 매장 사이의 단건 합이고, 경유 코스는 티맵 계산 후 별도로 표시됩니다.
+          대시보드, 거래처 히스토리, 이 화면은 동일한 거래처 원장과 물류 출발지 기준을 사용합니다. 기본값은 출발지와 각 매장 사이의 단건 합이고, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
         </p>
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-4">
-        <RouteBasisMetric label="대시보드 기준 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-        <RouteBasisMetric label="전체 출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} />
-        <RouteBasisMetric label="전체 출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} />
-        <RouteBasisMetric label="현재 화면 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`${currentTotals.distanceKm.toLocaleString()}km · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
+        <RouteBasisMetric label="거래처 원장" value={`${routePlan.totalStops.toLocaleString()}곳`} helper="대시보드 기준" />
+        <RouteBasisMetric label="출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} helper="단건 거리 합" />
+        <RouteBasisMetric label="출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} helper="단건 시간 합" />
+        <RouteBasisMetric label="현재 필터 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`${currentTotals.distanceKm.toLocaleString()}km · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
   );
