@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -69,6 +70,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const isHealthy = Boolean(payload?.ok && isSupabase);
   const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "샘플/대체 데이터" : "확인 중";
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -150,10 +152,23 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             <p className="mt-3 text-xs font-bold text-slate-500">
               {okCount}/{Math.max(checks.length, 1)}개 기준 통과
             </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+              <QuickFixLink href={`/${query}`} label="데이터 등록" />
+              <QuickFixLink href={`/crm/timeline${query}`} label="거래처 히스토리" />
+              <QuickFixLink href={`/routes/today${query}`} label="코스 관리" />
+            </div>
           </div>
         </div>
       )}
     </section>
+  );
+}
+
+function QuickFixLink({ href, label }: { readonly href: string; readonly label: string }) {
+  return (
+    <Link className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={href}>
+      {label}
+    </Link>
   );
 }
 

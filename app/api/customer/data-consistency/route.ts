@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
   ]);
 
   const masterCount = customerMaster.customers.length;
+  const isSupabaseSource = customerMaster.source === "supabase";
   const dashboardCount = dashboard.briefing.currentCustomers;
   const routeStops = routePlan.groups.flatMap((group) => group.stops);
   const routeCount = routePlan.totalStops;
@@ -42,6 +43,14 @@ export async function GET(request: NextRequest) {
   const visitCount = timeline.length;
 
   const checks: ConsistencyCheck[] = [
+    {
+      detail: isSupabaseSource
+        ? "Supabase 거래처 원장을 기준으로 대시보드, 히스토리, 코스를 계산합니다."
+        : "샘플 또는 대체 데이터 기준입니다. 운영 데이터 등록과 Supabase 연결 상태를 확인하세요.",
+      label: "데이터 저장소",
+      ok: isSupabaseSource,
+      value: isSupabaseSource ? "Supabase 실데이터" : "샘플/대체 데이터"
+    },
     {
       detail: "대시보드의 전체 거래처 수와 거래처 원장 수가 같은 기준인지 확인합니다.",
       label: "대시보드 ↔ 거래처 원장",
@@ -70,6 +79,7 @@ export async function GET(request: NextRequest) {
 
   const recommendations = buildRecommendations({
     dashboardCount,
+    isSupabaseSource,
     masterCount,
     masterWithoutRouteCount,
     missingAddressCount,
@@ -102,6 +112,7 @@ export async function GET(request: NextRequest) {
 
 function buildRecommendations({
   dashboardCount,
+  isSupabaseSource,
   masterCount,
   masterWithoutRouteCount,
   missingAddressCount,
@@ -109,6 +120,7 @@ function buildRecommendations({
   visitCount
 }: {
   dashboardCount: number;
+  isSupabaseSource: boolean;
   masterCount: number;
   masterWithoutRouteCount: number;
   missingAddressCount: number;
@@ -117,8 +129,14 @@ function buildRecommendations({
 }) {
   const items: string[] = [];
 
+  if (!isSupabaseSource) {
+    items.push("현재 샘플/대체 데이터가 섞여 있습니다. 데이터 등록에서 거래처 마스터를 저장하고 Supabase 환경변수 연결을 먼저 확인하세요.");
+  }
   if (dashboardCount !== masterCount) {
     items.push("대시보드 수치와 거래처 원장 수가 다릅니다. 최신 거래처 마스터 업로드 또는 DB 저장 상태를 확인하세요.");
+  }
+  if (dashboardCount > 0 && masterCount > 0 && dashboardCount === masterCount) {
+    items.push("거래처 수는 일치합니다. 다음은 주소, 사업자번호, 담당자, 배송권역 필수값 누락 여부를 점검하세요.");
   }
   if (masterWithoutRouteCount > 0) {
     items.push(`거래처 원장에는 있으나 코스에 반영되지 않은 매장이 ${masterWithoutRouteCount.toLocaleString()}곳 있습니다. 코스 생성 기준을 확인하세요.`);
