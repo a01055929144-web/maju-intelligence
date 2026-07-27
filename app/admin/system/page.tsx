@@ -523,7 +523,9 @@ function auditActionLabel(action: string) {
     customer_master_created: "거래처 원장 신규 등록",
     customer_master_updated: "거래처 원장 수정",
     customer_note_created: "거래처 메모 저장",
-    excel_upload_analyzed: "엑셀 업로드 분석 및 원장 반영"
+    excel_upload_analyzed: "엑셀 업로드 분석 및 원장 반영",
+    staff_invitation_created: "직원 초대 생성",
+    staff_invitation_updated: "직원 초대/상태 수정"
   };
 
   return labels[action] || action;
@@ -534,6 +536,9 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
   const attachmentType = String(metadata.attachmentType || "");
   const memoLength = Number(metadata.memoLength || 0);
   const noteType = String(metadata.noteType || "");
+  const employeeName = String(metadata.employeeName || "");
+  const role = String(metadata.role || "");
+  const status = String(metadata.status || "");
   const rows = Number(metadata.rows || 0);
   const rawRows = Number(metadata.rawRows || 0);
   const duplicateCount = Number(metadata.duplicateCount || 0);
@@ -545,6 +550,9 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
     noteType ? `메모 ${noteType}` : "",
     memoLength ? `메모 ${memoLength.toLocaleString()}자` : "",
     attachmentType ? `첨부 ${attachmentTypeLabel(attachmentType)}` : "",
+    employeeName ? `직원 ${employeeName}` : "",
+    role ? `업무 ${role}` : "",
+    status ? `상태 ${status}` : "",
     rows ? `정제 ${rows.toLocaleString()}행` : "",
     rawRows ? `원본 ${rawRows.toLocaleString()}행` : "",
     qualityScore ? `품질 ${qualityScore}%` : "",

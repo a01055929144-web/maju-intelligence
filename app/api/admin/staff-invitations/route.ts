@@ -16,7 +16,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await createStaffInvitation(body));
+    return NextResponse.json(
+      await createStaffInvitation(body, {
+        actorName: session.name,
+        actorRole: session.appRole
+      })
+    );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "직원 초대 생성에 실패했습니다." }, { status: 400 });
   }
@@ -34,7 +39,12 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await updateStaffInvitation(body));
+    return NextResponse.json(
+      await updateStaffInvitation(body, {
+        actorName: session.name,
+        actorRole: session.appRole
+      })
+    );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "직원 업무 구분 변경에 실패했습니다." }, { status: 400 });
   }

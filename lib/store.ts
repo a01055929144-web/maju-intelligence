@@ -115,6 +115,10 @@ export type CustomerMasterAuditContext = {
   actorRole?: string;
   requestMethod?: string;
 };
+export type AuditActorContext = {
+  actorName?: string;
+  actorRole?: string;
+};
 export type CustomerNoteItem = {
   id: string;
   createdAt: string;
@@ -1003,7 +1007,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   };
 }
 
-export async function createStaffInvitation(input: StaffInvitationInput): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
+export async function createStaffInvitation(input: StaffInvitationInput, auditContext: AuditActorContext = {}): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
   const companyId = input.companyId;
   const employeeName = input.employeeName?.trim() || "직원";
   const employeePhone = input.employeePhone?.trim() || "";
@@ -1062,9 +1066,26 @@ export async function createStaffInvitation(input: StaffInvitationInput): Promis
     ])
   }));
 
+  const invitation = toStaffInvitation(rows[0]);
+
+  await writeAdminAuditLog({
+    companyId,
+    action: "staff_invitation_created",
+    targetType: "staff_invitation",
+    targetId: invitation.id,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      employeeName: invitation.employeeName,
+      hasEmployeePhone: Boolean(invitation.employeePhone),
+      role: invitation.role,
+      status: invitation.status
+    }
+  }).catch(() => null);
+
   return {
     persisted: true,
-    invitation: toStaffInvitation(rows[0])
+    invitation
   };
 }
 
@@ -1125,7 +1146,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   };
 }
 
-export async function updateStaffInvitation(input: StaffInvitationUpdateInput): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
+export async function updateStaffInvitation(input: StaffInvitationUpdateInput, auditContext: AuditActorContext = {}): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
   if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
   if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
 
@@ -1191,8 +1212,24 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput): 
     ).catch(() => null);
   }
 
+  const updatedInvitation = toStaffInvitation(invitation);
+
+  await writeAdminAuditLog({
+    companyId: input.companyId,
+    action: "staff_invitation_updated",
+    targetType: "staff_invitation",
+    targetId: updatedInvitation.id,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      employeeName: updatedInvitation.employeeName,
+      role: updatedInvitation.role,
+      status: updatedInvitation.status
+    }
+  }).catch(() => null);
+
   return {
-    invitation: toStaffInvitation(invitation),
+    invitation: updatedInvitation,
     persisted: true
   };
 }

@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
         employeeName: body.employeeName,
         employeePhone: body.employeePhone,
         role: body.role
+      }, {
+        actorName: session.name,
+        actorRole: session.workspaceRole
       })
     );
   } catch (error) {
@@ -62,6 +65,9 @@ export async function PATCH(request: NextRequest) {
         invitationId: body.invitationId,
         role: body.role,
         status: body.status
+      }, {
+        actorName: session.name,
+        actorRole: session.workspaceRole
       })
     );
   } catch (error) {
