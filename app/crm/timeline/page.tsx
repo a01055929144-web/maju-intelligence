@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -241,10 +241,11 @@ export default function CrmTimelinePage() {
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
-    setIsEditing(false);
+    setIsEditing(hasCustomers && operationFilter !== "all" && customerMatchesOperationFilter(selectedCustomer, operationFilter));
     setSaveMessage("");
     setNewMemo("");
     setNewNextAction("");
@@ -256,7 +257,13 @@ export default function CrmTimelinePage() {
     setAddressResults([]);
     setAddressSearchMessage("");
     setDetailTab("ledger");
-  }, [selectedCustomer]);
+  }, [operationFilter, selectedCustomer]);
+
+  useEffect(() => {
+    if (isEditing && operationFilter === "address-missing") {
+      addressInputRef.current?.focus();
+    }
+  }, [isEditing, operationFilter, selectedCustomer?.id]);
 
   useEffect(() => {
     if (!selectedCustomer?.id) return;
@@ -940,6 +947,7 @@ export default function CrmTimelinePage() {
                               }
                             }}
                             placeholder="도로명 또는 지번 주소 검색"
+                            ref={addressInputRef}
                             value={addressQuery}
                           />
                         </label>
