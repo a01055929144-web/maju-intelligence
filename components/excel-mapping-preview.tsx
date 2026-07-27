@@ -79,7 +79,7 @@ export function ExcelHeaderMappingPreview({
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 완료"}
             </Badge>
             <Button className="h-10 bg-blue-700 px-4 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)] hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
-              매핑 전용화면 열기
+              {missingRequiredFields.length ? "필수 매핑 보완" : "매핑 전용화면 열기"}
             </Button>
           </div>
         </div>
@@ -272,6 +272,8 @@ function MappingWorkspaceModal({
   }, [fieldFilter, fieldMap, fieldQuery, fields]);
   const filteredRequiredFields = filteredFields.filter((field) => field.required);
   const filteredOptionalFields = filteredFields.filter((field) => !field.required);
+  const readyToReview = missingRequiredFields.length === 0;
+  const unmappedColumnCount = headers.filter((header) => !mappedByHeader[header]).length;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
@@ -434,6 +436,39 @@ function MappingWorkspaceModal({
               )}
             </div>
           </aside>
+        </div>
+        <div className="border-t border-slate-200 bg-white px-5 py-3">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px_220px] lg:items-center">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-slate-950">
+                {readyToReview ? "필수 컬럼 매핑이 완료됐습니다." : "필수 컬럼을 먼저 연결하세요."}
+              </p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                {readyToReview
+                  ? "닫은 뒤 품질 검증에서 사업자번호, 누락값, 중복 후보를 확인하면 저장 단계로 넘어갈 수 있습니다."
+                  : `${missingRequiredFields.map((field) => field.label).join(", ")} 필드가 아직 비어 있습니다.`}
+              </p>
+            </div>
+            <button
+              className="h-10 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={readyToReview}
+              type="button"
+              onClick={() => setFieldFilter("required")}
+            >
+              필수 필드만 보기
+            </button>
+            <button
+              className="h-10 rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={unmappedColumnCount === 0}
+              type="button"
+              onClick={() => setColumnFilter("unmapped")}
+            >
+              미연결 컬럼 {unmappedColumnCount}개
+            </button>
+            <Button className="h-10" type="button" variant={readyToReview ? "default" : "outline"} onClick={onClose}>
+              {readyToReview ? "닫고 품질 검증" : "닫기"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
