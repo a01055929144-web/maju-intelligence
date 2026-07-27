@@ -1680,6 +1680,7 @@ function Onboarding({
                         fieldMap={fieldMap}
                         headers={headers}
                         onMap={onMap}
+                        onRequestQualityReview={() => setReviewTab("quality")}
                         rows={rawRows}
                       />
                     </div>

@@ -14,12 +14,14 @@ export function ExcelHeaderMappingPreview({
   fields,
   headers,
   onMap,
+  onRequestQualityReview,
   rows
 }: {
   fields: readonly UploadTemplateField[];
   fieldMap: FieldMap;
   headers: string[];
   onMap: (map: FieldMap) => void;
+  onRequestQualityReview?: () => void;
   rows: RawRow[];
 }) {
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
@@ -193,6 +195,10 @@ export function ExcelHeaderMappingPreview({
           mappedByHeader={mappedByHeader}
           rows={rows}
           onClose={() => setIsWorkspaceOpen(false)}
+          onDone={() => {
+            setIsWorkspaceOpen(false);
+            onRequestQualityReview?.();
+          }}
           onAutoMap={applySuggestedMapping}
           onFieldMap={updateFieldMapping}
           onHeaderMap={updateHeaderMapping}
@@ -221,6 +227,7 @@ function MappingWorkspaceModal({
   mappedByHeader,
   missingRequiredFields,
   onClose,
+  onDone,
   onAutoMap,
   onFieldMap,
   onHeaderMap,
@@ -232,6 +239,7 @@ function MappingWorkspaceModal({
   mappedByHeader: Record<string, string>;
   missingRequiredFields: UploadTemplateField[];
   onClose: () => void;
+  onDone: () => void;
   onAutoMap: (headers: string[]) => number;
   onFieldMap: (fieldKey: string, header: string) => void;
   onHeaderMap: (header: string, fieldKey: string) => void;
@@ -465,7 +473,7 @@ function MappingWorkspaceModal({
             >
               미연결 컬럼 {unmappedColumnCount}개
             </button>
-            <Button className="h-10" type="button" variant={readyToReview ? "default" : "outline"} onClick={onClose}>
+            <Button className="h-10" type="button" variant={readyToReview ? "default" : "outline"} onClick={readyToReview ? onDone : onClose}>
               {readyToReview ? "닫고 품질 검증" : "닫기"}
             </Button>
           </div>
