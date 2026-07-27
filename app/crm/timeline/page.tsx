@@ -509,10 +509,24 @@ export default function CrmTimelinePage() {
       if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
 
       const saved = payload?.customer ? { ...draftCustomer, ...payload.customer } : draftCustomer;
-      setCustomers((current) => current.map((customer, index) => (index === selectedIndex ? saved : customer)));
-      setDraftCustomer(saved);
-      setIsEditing(false);
-      setSaveMessage(payload?.persisted === false ? "거래처 정보가 화면에 반영되었습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "거래처 정보가 서버에 저장되었습니다.");
+      const nextCustomers = customers.map((customer, index) => (index === selectedIndex ? saved : customer));
+      const shouldMoveToNext = operationFilter !== "all" && !customerMatchesOperationFilter(saved, operationFilter);
+      const nextIndex = shouldMoveToNext ? findNextMatchingCustomerIndex(nextCustomers, operationFilter, selectedIndex) : -1;
+      const movedToNext = nextIndex >= 0;
+
+      setCustomers(nextCustomers);
+      if (movedToNext) setSelectedIndex(nextIndex);
+      setDraftCustomer(movedToNext ? nextCustomers[nextIndex] : saved);
+      setIsEditing(!movedToNext && operationFilter !== "all");
+      setSaveMessage(
+        payload?.persisted === false
+          ? "거래처 정보가 화면에 반영되었습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요."
+          : movedToNext
+            ? "저장되었습니다. 같은 보완 조건의 다음 거래처로 이동했습니다."
+            : shouldMoveToNext
+              ? "저장되었습니다. 현재 보완 필터의 남은 거래처가 없습니다."
+            : "거래처 정보가 서버에 저장되었습니다."
+      );
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
     } finally {
@@ -2054,6 +2068,13 @@ function customerMatchesOperationFilter(customer: CustomerView, filter: Operatio
   if (filter === "loading-missing") return !customer.loadingPosition;
   if (filter === "manager-missing") return !customer.deliveryManager;
   return true;
+}
+
+function findNextMatchingCustomerIndex(customers: CustomerView[], filter: OperationFilter, currentIndex: number) {
+  if (filter === "all") return -1;
+  const afterCurrent = customers.findIndex((customer, index) => index > currentIndex && customerMatchesOperationFilter(customer, filter));
+  if (afterCurrent >= 0) return afterCurrent;
+  return customers.findIndex((customer, index) => index < currentIndex && customerMatchesOperationFilter(customer, filter));
 }
 
 function isOperationFilter(value: string | null): value is OperationFilter {
