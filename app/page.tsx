@@ -902,6 +902,7 @@ function Onboarding({
     }
   ];
   const readyCheckCount = saveReadinessItems.filter((item) => item.ok).length;
+  const readinessPercent = Math.round((readyCheckCount / saveReadinessItems.length) * 100);
   const registrationControlState =
     pipelineMeta.persisted
       ? {
@@ -1275,6 +1276,18 @@ function Onboarding({
           rows={rawRows.length}
           state={registrationControlState}
           totalCount={saveReadinessItems.length}
+          typeLabel={template.label}
+        />
+        <RegistrationLiveStatusBoard
+          canAnalyze={canAnalyze}
+          entryMode={entryMode}
+          filename={uploadedFilename}
+          latestUpload={latestUpload}
+          persisted={pipelineMeta.persisted}
+          readinessItems={saveReadinessItems}
+          readinessPercent={readinessPercent}
+          registrationStatus={registrationStatus}
+          rows={rawRows.length}
           typeLabel={template.label}
         />
         <ImplementationProgressCard items={implementationProgressItems} />
@@ -1869,6 +1882,101 @@ function RegistrationControlStrip({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RegistrationLiveStatusBoard({
+  canAnalyze,
+  entryMode,
+  filename,
+  latestUpload,
+  persisted,
+  readinessItems,
+  readinessPercent,
+  registrationStatus,
+  rows,
+  typeLabel
+}: {
+  canAnalyze: boolean;
+  entryMode: EntryMode;
+  filename: string;
+  latestUpload?: UploadHistoryRow;
+  persisted: boolean;
+  readinessItems: Array<{ detail: string; label: string; ok: boolean }>;
+  readinessPercent: number;
+  registrationStatus: RegistrationStatus;
+  rows: number;
+  typeLabel: string;
+}) {
+  const modeLabel = entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "document" ? "OCR 보조 입력" : "수기 1건 등록";
+  const statusClass = {
+    error: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+    idle: "bg-slate-100 text-slate-700",
+    ready: "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+    running: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+    success: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+    warning: "bg-amber-50 text-amber-700 ring-1 ring-amber-100"
+  }[registrationStatus.status];
+
+  const summary = [
+    { label: "등록 유형", value: typeLabel },
+    { label: "등록 방식", value: modeLabel },
+    { label: "대기 행", value: `${rows.toLocaleString()}행` },
+    { label: "최근 서버 이력", value: latestUpload?.createdAt || "아직 없음" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/80 p-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-center">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={statusClass}>{registrationStatus.actionLabel}</Badge>
+            <Badge className={persisted ? "bg-emerald-700 text-white" : canAnalyze ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-700"}>
+              {persisted ? "운영 반영 완료" : canAnalyze ? "저장 실행 가능" : "저장 전 확인"}
+            </Badge>
+          </div>
+          <h3 className="mt-3 text-lg font-black text-slate-950">{registrationStatus.title}</h3>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{registrationStatus.description}</p>
+          <p className="mt-2 text-xs font-black leading-5 text-blue-700">다음 액션: {registrationStatus.nextAction}</p>
+        </div>
+        <div className="rounded-md border border-slate-200 bg-white p-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-black text-slate-400">운영 반영 준비율</p>
+              <p className="mt-1 text-3xl font-black text-slate-950">{readinessPercent}%</p>
+            </div>
+            <p className="pb-1 text-xs font-black text-slate-500">{readinessItems.filter((item) => item.ok).length}/{readinessItems.length} 완료</p>
+          </div>
+          <Progress className="mt-3 h-2" value={readinessPercent} />
+        </div>
+      </div>
+      <div className="grid border-b border-slate-100 md:grid-cols-4">
+        {summary.map((item) => (
+          <div className="border-b border-slate-100 px-4 py-3 md:border-b-0 md:border-r last:md:border-r-0" key={item.label}>
+            <p className="text-xs font-black text-slate-400">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-black text-slate-950" title={item.value}>
+              {item.value}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2 p-3 md:grid-cols-4">
+        {readinessItems.map((item) => (
+          <div className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-emerald-50" : "border-slate-200 bg-slate-50"}`} key={item.label}>
+            <div className="flex items-center justify-between gap-2">
+              <p className={`text-xs font-black ${item.ok ? "text-emerald-800" : "text-slate-700"}`}>{item.label}</p>
+              {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
+            </div>
+            <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+      {rows ? (
+        <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
+          현재 파일: <span className="font-black text-slate-800">{filename}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
