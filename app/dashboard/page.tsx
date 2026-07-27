@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { DashboardTabs } from "@/components/dashboard-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KakaoAddressMap } from "@/components/kakao-address-map";
@@ -258,6 +259,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           routeMapStoreCount={routeMapStoreCount}
           routeStops={routePlan.totalStops}
         />
+
+        <DashboardConsistencyCheck companyId={isAdminPreview ? companyId : undefined} />
 
         <DashboardTabs
           overview={
