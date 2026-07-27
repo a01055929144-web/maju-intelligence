@@ -473,10 +473,10 @@ function DashboardDataBasisPanel({
   routeMapStoreCount: number;
   routeStops: number;
 }) {
-  const sourceLabel = customerSource === "supabase" ? "Supabase 실원장" : "샘플 기준";
+  const sourceLabel = customerSource === "supabase" ? "운영 원장 연결" : "운영 데이터 미연결";
   const sourceReady = customerSource === "supabase";
   const items = [
-    { label: "데이터 출처", value: sourceLabel, helper: sourceReady ? "DB 거래처 원장 기준" : "실제 거래처 등록 필요" },
+    { label: "데이터 출처", value: sourceLabel, helper: sourceReady ? "거래처 원장 기준" : "거래처 마스터 등록 필요" },
     { label: "거래처 원장", value: `${customerCount.toLocaleString()}곳`, helper: "히스토리·지도 기준" },
     { label: "물류 출발지", value: originAddress, helper: "거리·코스 계산 기준" },
     { label: "매출 원장", value: latestUploadLabel, helper: "등급·리포트 갱신 기준" },
@@ -485,7 +485,7 @@ function DashboardDataBasisPanel({
   ];
   const consistencyChecks = [
     {
-      detail: sourceReady ? "Supabase 거래처 원장을 기준으로 화면을 계산합니다." : "샘플 기준입니다. 데이터 등록 후 실제 원장으로 전환해야 합니다.",
+      detail: sourceReady ? "저장된 거래처 원장을 기준으로 화면을 계산합니다." : "아직 운영 원장이 연결되지 않았습니다. 데이터 등록에서 거래처 마스터를 먼저 저장하세요.",
       label: "데이터 출처",
       ok: sourceReady
     },

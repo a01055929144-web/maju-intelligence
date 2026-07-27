@@ -2447,15 +2447,15 @@ function RouteBasisStrip({
   readonly visibleMapReadyStoreCount: number;
 }) {
   const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "주소 기준 정상";
-  const sourceLabel = routePlan.source === "supabase" ? "Supabase 실원장" : "샘플 기준";
-  const sourceHelper = routePlan.source === "supabase" ? "DB 거래처 원장 기준" : "실제 거래처 등록 필요";
+  const sourceLabel = routePlan.source === "supabase" ? "운영 원장 연결" : "운영 데이터 미연결";
+  const sourceHelper = routePlan.source === "supabase" ? "거래처 원장 기준" : "거래처 마스터 등록 필요";
 
   return (
     <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
       <div className="min-w-0">
         <p className="text-xs font-black text-slate-500">운영 기준 데이터</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          현재 화면의 데이터 출처는 {sourceLabel}입니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
+          현재 화면은 {sourceLabel} 상태입니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
         </p>
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
