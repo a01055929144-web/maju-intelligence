@@ -250,6 +250,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
         <DashboardDataBasisPanel
           customerCount={customerDataCount}
+          customerSource={customerMaster.source}
           latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}
@@ -452,6 +453,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
 function DashboardDataBasisPanel({
   customerCount,
+  customerSource,
   latestUploadReady,
   latestUploadLabel,
   originAddress,
@@ -460,6 +462,7 @@ function DashboardDataBasisPanel({
   routeStops
 }: {
   customerCount: number;
+  customerSource: "sample" | "supabase";
   latestUploadReady: boolean;
   latestUploadLabel: string;
   originAddress: string;
@@ -467,7 +470,10 @@ function DashboardDataBasisPanel({
   routeMapStoreCount: number;
   routeStops: number;
 }) {
+  const sourceLabel = customerSource === "supabase" ? "Supabase 실원장" : "샘플 기준";
+  const sourceReady = customerSource === "supabase";
   const items = [
+    { label: "데이터 출처", value: sourceLabel, helper: sourceReady ? "DB 거래처 원장 기준" : "실제 거래처 등록 필요" },
     { label: "거래처 원장", value: `${customerCount.toLocaleString()}곳`, helper: "히스토리·지도 기준" },
     { label: "물류 출발지", value: originAddress, helper: "거리·코스 계산 기준" },
     { label: "매출 원장", value: latestUploadLabel, helper: "등급·리포트 갱신 기준" },
@@ -475,6 +481,11 @@ function DashboardDataBasisPanel({
     { label: "외부 링크", value: placeLinkLabel, helper: "리뷰·영업시간 확인" }
   ];
   const consistencyChecks = [
+    {
+      detail: sourceReady ? "Supabase 거래처 원장을 기준으로 화면을 계산합니다." : "샘플 기준입니다. 데이터 등록 후 실제 원장으로 전환해야 합니다.",
+      label: "데이터 출처",
+      ok: sourceReady
+    },
     {
       detail: customerCount > 0 ? `${customerCount.toLocaleString()}곳 기준으로 화면을 계산합니다.` : "거래처 마스터 등록이 필요합니다.",
       label: "거래처 기준",
@@ -504,7 +515,7 @@ function DashboardDataBasisPanel({
           숫자가 화면마다 다르게 보이면 최근 등록 이력, 고객사 선택, DB 연결 상태를 먼저 확인하세요.
         </p>
       </div>
-      <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+      <div className="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-6">
         {items.map((item) => (
           <div className="min-w-0 px-4 py-3" key={item.label}>
             <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
@@ -523,7 +534,7 @@ function DashboardDataBasisPanel({
             {okCount}/{consistencyChecks.length} 정상
           </Badge>
         </div>
-        <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        <div className="mt-3 grid gap-2 lg:grid-cols-4">
           {consistencyChecks.map((item) => (
             <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
               <div className="flex items-center justify-between gap-2">
