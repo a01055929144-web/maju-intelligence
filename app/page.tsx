@@ -1697,7 +1697,7 @@ function Onboarding({
                 ) : null}
                 {reviewTab === "quality" ? (
                   <div className="scroll-mt-4" id="quality-panel">
-                    <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} />
+                    <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} onOpenSaveReview={() => setReviewTab("save")} />
                   </div>
                 ) : null}
                 {reviewTab === "save" ? (
@@ -3649,7 +3649,15 @@ function MiniStatus({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () => void; summary: DataQualitySummary }) {
+function DataQualityCard({
+  onDownloadIssues,
+  onOpenSaveReview,
+  summary
+}: {
+  onDownloadIssues: () => void;
+  onOpenSaveReview: () => void;
+  summary: DataQualitySummary;
+}) {
   const hasRows = summary.rows > 0;
   const hasRowIssues = summary.issueRows.length > 0 || summary.invalidBusinessNumbers.length > 0;
   const hasIssues = hasRowIssues || summary.duplicateCandidates > 0;
@@ -3744,6 +3752,20 @@ function DataQualityCard({ onDownloadIssues, summary }: { onDownloadIssues: () =
           <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
             <p className="text-xs font-black text-blue-900">중복 후보 {summary.duplicateCandidates.toLocaleString()}개</p>
             <p className="mt-1 text-xs font-bold leading-5 text-blue-700">사업자번호 또는 거래처명+주소가 같은 행입니다. 기존 거래처 업데이트인지 신규 등록인지 확인하세요.</p>
+          </div>
+        ) : null}
+        {hasRows ? (
+          <div className="mt-3 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
+            <div>
+              <p className="text-sm font-black text-slate-950">{hasRowIssues ? "보완 후 저장 단계로 이동하세요." : "저장 단계로 이동할 수 있습니다."}</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                {hasRowIssues ? "문제 행을 내려받아 ERP 원본 또는 매핑 값을 수정한 뒤 다시 업로드하는 흐름이 안전합니다." : "저장 실행 점검에서 서버 반영, 운영 화면 연결, 리포트 갱신 조건을 최종 확인합니다."}
+              </p>
+            </div>
+            <Button className="h-11" disabled={hasRowIssues} onClick={onOpenSaveReview} type="button">
+              저장 단계로 이동
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
         ) : null}
       </div>
