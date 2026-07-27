@@ -1048,6 +1048,11 @@ function Onboarding({
       description: "배포 직후 확인할 Production URL 8개 경로와 통과 기준을 최종 QA 문서에 고정했습니다.",
       done: true,
       label: "Production 최종 확인"
+    },
+    {
+      description: "등록 진행률, 막힌 단계, 다음 확인 위치를 같은 상태판에서 확인하도록 정리했습니다.",
+      done: true,
+      label: "등록 상태 가시화"
     }
   ];
   const reviewTabs = [
@@ -1953,10 +1958,18 @@ function RegistrationLiveStatusBoard({
     { href: routeHref, label: "영업·배송 코스", value: "지도/코스 확인" }
   ];
   const diagnosticLinks = getRegistrationDiagnosticLinks(registrationStatus.status, canAnalyze, persisted, rows);
+  const blockingItem = readinessItems.find((item) => !item.ok);
+  const primaryAction = diagnosticLinks.find((link) => link.tab) || diagnosticLinks[0];
+  const currentStage = persisted ? "운영 반영 확인" : canAnalyze ? "저장 실행" : blockingItem?.label || (rows ? "입력 검토" : "데이터 준비");
+  const currentStageDetail = persisted
+    ? "저장된 값이 대시보드, 원장, 지도 화면에 같은 기준으로 보이는지 확인합니다."
+    : canAnalyze
+      ? "필수 조건이 충족됐습니다. 저장하고 리포트를 갱신하면 운영 화면에 반영됩니다."
+      : blockingItem?.detail || "엑셀 업로드, 수기 등록, OCR 보조 입력 중 하나로 데이터를 준비하세요.";
 
   return (
     <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/80 p-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-center">
+      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/80 p-4 xl:grid-cols-[minmax(0,1fr)_320px_300px] xl:items-center">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={statusClass}>{registrationStatus.actionLabel}</Badge>
@@ -1977,6 +1990,33 @@ function RegistrationLiveStatusBoard({
             <p className="pb-1 text-xs font-black text-slate-500">{readinessItems.filter((item) => item.ok).length}/{readinessItems.length} 완료</p>
           </div>
           <Progress className="mt-3 h-2" value={readinessPercent} />
+        </div>
+        <div className={`rounded-md border p-3 ${persisted ? "border-emerald-100 bg-emerald-50" : canAnalyze ? "border-blue-100 bg-blue-50" : "border-amber-100 bg-amber-50"}`}>
+          <p className={`text-xs font-black ${persisted ? "text-emerald-800" : canAnalyze ? "text-blue-800" : "text-amber-800"}`}>현재 단계</p>
+          <p className="mt-1 text-base font-black text-slate-950">{currentStage}</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{currentStageDetail}</p>
+          {primaryAction?.tab ? (
+            <Button
+              className="mt-3 h-9 w-full"
+              onClick={() => {
+                onOpenReviewTab(primaryAction.tab!);
+                window.setTimeout(() => document.getElementById(`${primaryAction.tab}-panel`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+              }}
+              type="button"
+              variant="outline"
+            >
+              {primaryAction.label} 바로 확인
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : primaryAction ? (
+            <Link
+              className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 transition hover:bg-slate-50"
+              href={primaryAction.href}
+            >
+              {primaryAction.label} 바로 확인
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          ) : null}
         </div>
       </div>
       <div className="grid border-b border-slate-100 md:grid-cols-4">
