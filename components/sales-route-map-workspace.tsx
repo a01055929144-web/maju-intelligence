@@ -216,6 +216,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
     excludeClosedStores ? "이탈 제외" : ""
   ].filter(Boolean);
+  const dataRegistrationHref = useMemo(() => {
+    if (typeof window === "undefined") return "/";
+    const companyId = new URLSearchParams(window.location.search).get("companyId");
+    return companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/";
+  }, []);
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -367,6 +372,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         allStoreTotals={allStoreTotals}
         currentStoreCount={visibleStores.length}
         currentTotals={routeTotals}
+        dataRegistrationHref={dataRegistrationHref}
         mapReadyStoreCount={mapReadyStoreCount}
         missingAddressCount={missingAddressCount}
         routePlan={routePlan}
@@ -2432,6 +2438,7 @@ function RouteBasisStrip({
   allStoreTotals,
   currentStoreCount,
   currentTotals,
+  dataRegistrationHref,
   mapReadyStoreCount,
   missingAddressCount,
   routePlan,
@@ -2441,6 +2448,7 @@ function RouteBasisStrip({
   readonly allStoreTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
   readonly currentStoreCount: number;
   readonly currentTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
+  readonly dataRegistrationHref: string;
   readonly mapReadyStoreCount: number;
   readonly missingAddressCount: number;
   readonly routePlan: RoutePlan;
@@ -2449,6 +2457,7 @@ function RouteBasisStrip({
   const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "주소 기준 정상";
   const sourceLabel = routePlan.source === "supabase" ? "운영 원장 연결" : "운영 데이터 미연결";
   const sourceHelper = routePlan.source === "supabase" ? "거래처 원장 기준" : "거래처 마스터 등록 필요";
+  const sourceReady = routePlan.source === "supabase";
 
   return (
     <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
@@ -2457,9 +2466,17 @@ function RouteBasisStrip({
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
           현재 화면은 {sourceLabel} 상태입니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
         </p>
+        {!sourceReady ? (
+          <Link
+            className="mt-2 inline-flex h-8 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
+            href={dataRegistrationHref}
+          >
+            거래처 마스터 등록
+          </Link>
+        ) : null}
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
-        <RouteBasisMetric label="데이터 출처" value={sourceLabel} helper={sourceHelper} tone={routePlan.source === "supabase" ? "ready" : "warning"} />
+        <RouteBasisMetric label="데이터 출처" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시 가능" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
         <RouteBasisMetric label="출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} helper="단건 거리 합" />
         <RouteBasisMetric label="출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} helper="단건 시간 합" />

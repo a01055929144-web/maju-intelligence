@@ -252,6 +252,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         <DashboardDataBasisPanel
           customerCount={customerDataCount}
           customerSource={customerMaster.source}
+          dataRegistrationHref={withCompanyQuery("/")}
           latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}
@@ -457,6 +458,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 function DashboardDataBasisPanel({
   customerCount,
   customerSource,
+  dataRegistrationHref,
   latestUploadReady,
   latestUploadLabel,
   originAddress,
@@ -466,6 +468,7 @@ function DashboardDataBasisPanel({
 }: {
   customerCount: number;
   customerSource: "sample" | "supabase";
+  dataRegistrationHref: string;
   latestUploadReady: boolean;
   latestUploadLabel: string;
   originAddress: string;
@@ -509,7 +512,7 @@ function DashboardDataBasisPanel({
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)_auto] lg:items-center">
         <div>
           <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드, 거래처 히스토리, 영업·배송 코스가 공유하는 기준값입니다.</p>
@@ -517,6 +520,14 @@ function DashboardDataBasisPanel({
         <p className="text-xs font-bold leading-5 text-slate-600">
           숫자가 화면마다 다르게 보이면 최근 등록 이력, 고객사 선택, DB 연결 상태를 먼저 확인하세요.
         </p>
+        {!sourceReady ? (
+          <Link
+            className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
+            href={dataRegistrationHref}
+          >
+            거래처 등록하기
+          </Link>
+        ) : null}
       </div>
       <div className="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-6">
         {items.map((item) => (
