@@ -33,6 +33,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "관리자/고객사 이메일과 비밀번호는 필수입니다." }, { status: 400 });
   }
 
-  const result = await upsertAuthCredentials(body);
+  const result = await upsertAuthCredentials(body, {
+    actorName: session.name,
+    actorRole: session.appRole
+  });
   return NextResponse.json(result);
 }

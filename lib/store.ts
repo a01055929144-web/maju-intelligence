@@ -617,7 +617,7 @@ export async function getAuthCredentials(): Promise<AuthCredentials> {
   }
 }
 
-export async function upsertAuthCredentials(input: Partial<AuthCredentials>): Promise<{ credentials: AuthCredentials; persisted: boolean }> {
+export async function upsertAuthCredentials(input: Partial<AuthCredentials>, auditContext: AuditActorContext = {}): Promise<{ credentials: AuthCredentials; persisted: boolean }> {
   const fallback = await getAuthCredentials();
   const credentials: AuthCredentials = {
     adminEmail: input.adminEmail?.trim() || fallback.adminEmail,
@@ -655,6 +655,21 @@ export async function upsertAuthCredentials(input: Partial<AuthCredentials>): Pr
       }
     ])
   });
+
+  await writeAdminAuditLog({
+    companyId: credentials.customerCompanyId,
+    action: "auth_credentials_updated",
+    targetType: "auth_credentials",
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      adminEmailChanged: credentials.adminEmail !== fallback.adminEmail,
+      adminPasswordChanged: Boolean(input.adminPassword && input.adminPassword !== fallback.adminPassword),
+      customerCompanyId: credentials.customerCompanyId,
+      customerEmailChanged: credentials.customerEmail !== fallback.customerEmail,
+      customerPasswordChanged: Boolean(input.customerPassword && input.customerPassword !== fallback.customerPassword)
+    }
+  }).catch(() => null);
 
   return {
     credentials: {
@@ -904,10 +919,11 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
   }
 }
 
-export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountInput): Promise<{ company: ManagedCompanyAccount; persisted: boolean }> {
+export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountInput, auditContext: AuditActorContext = {}): Promise<{ company: ManagedCompanyAccount; persisted: boolean }> {
   const companyId = input.id || globalThis.crypto.randomUUID();
   const companyName = input.name.trim();
   const customerEmail = input.customerEmail.trim().toLowerCase();
+  const isNewCompany = !input.id;
 
   if (!companyName) throw new Error("고객사명은 필수입니다.");
   if (!customerEmail || !input.customerPassword) throw new Error("고객사 이메일과 비밀번호는 필수입니다.");
@@ -985,6 +1001,24 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   });
 
   const company = companyRows[0];
+  await writeAdminAuditLog({
+    companyId: company.id,
+    action: isNewCompany ? "managed_company_created" : "managed_company_updated",
+    targetType: "company",
+    targetId: company.id,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      businessType: company.business_type || "",
+      companyName: company.name,
+      customerEmailChanged: true,
+      hasCustomerPassword: Boolean(input.customerPassword),
+      originAddress: company.origin_address || "",
+      ownerName: company.owner_name || "",
+      status: company.status
+    }
+  }).catch(() => null);
+
   return {
     persisted: true,
     company: {

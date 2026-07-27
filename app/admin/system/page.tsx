@@ -519,11 +519,14 @@ function ReadinessList({ empty, icon, items, title }: { empty: string; icon: "da
 
 function auditActionLabel(action: string) {
   const labels: Record<string, string> = {
+    auth_credentials_updated: "로그인 계정 설정 변경",
     customer_attachment_created: "거래처 첨부자료 등록",
     customer_master_created: "거래처 원장 신규 등록",
     customer_master_updated: "거래처 원장 수정",
     customer_note_created: "거래처 메모 저장",
     excel_upload_analyzed: "엑셀 업로드 분석 및 원장 반영",
+    managed_company_created: "고객사 계정 생성",
+    managed_company_updated: "고객사 계정 수정",
     staff_invitation_created: "직원 초대 생성",
     staff_invitation_updated: "직원 초대/상태 수정"
   };
@@ -537,6 +540,9 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
   const memoLength = Number(metadata.memoLength || 0);
   const noteType = String(metadata.noteType || "");
   const employeeName = String(metadata.employeeName || "");
+  const companyName = String(metadata.companyName || "");
+  const businessType = String(metadata.businessType || "");
+  const ownerName = String(metadata.ownerName || "");
   const role = String(metadata.role || "");
   const status = String(metadata.status || "");
   const rows = Number(metadata.rows || 0);
@@ -545,6 +551,9 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
   const qualityScore = Number(metadata.qualityScore || 0);
   const grade = String(metadata.grade || "");
   const parts = [
+    companyName ? `고객사 ${companyName}` : "",
+    businessType ? `업종 ${businessType}` : "",
+    ownerName ? `대표 ${ownerName}` : "",
     customerName ? `거래처 ${customerName}` : "",
     grade ? `${grade}등급` : "",
     noteType ? `메모 ${noteType}` : "",
@@ -553,6 +562,11 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
     employeeName ? `직원 ${employeeName}` : "",
     role ? `업무 ${role}` : "",
     status ? `상태 ${status}` : "",
+    metadata.adminEmailChanged ? "관리자 이메일 변경" : "",
+    metadata.adminPasswordChanged ? "관리자 비밀번호 변경" : "",
+    metadata.customerEmailChanged ? "고객사 이메일 변경" : "",
+    metadata.customerPasswordChanged ? "고객사 비밀번호 변경" : "",
+    metadata.hasCustomerPassword ? "고객사 로그인값 저장" : "",
     rows ? `정제 ${rows.toLocaleString()}행` : "",
     rawRows ? `원본 ${rawRows.toLocaleString()}행` : "",
     qualityScore ? `품질 ${qualityScore}%` : "",

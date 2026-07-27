@@ -25,7 +25,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await upsertManagedCompanyAccount(body));
+    return NextResponse.json(
+      await upsertManagedCompanyAccount(body, {
+        actorName: session.name,
+        actorRole: session.appRole
+      })
+    );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "고객사 저장에 실패했습니다." }, { status: 400 });
   }
