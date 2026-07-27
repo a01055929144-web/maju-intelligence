@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -242,6 +242,10 @@ export default function CrmTimelinePage() {
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
   const addressInputRef = useRef<HTMLInputElement | null>(null);
+  const businessNumberInputRef = useRef<HTMLInputElement | null>(null);
+  const deliveryManagerInputRef = useRef<HTMLInputElement | null>(null);
+  const loadingPositionInputRef = useRef<HTMLInputElement | null>(null);
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
@@ -260,9 +264,18 @@ export default function CrmTimelinePage() {
   }, [operationFilter, selectedCustomer]);
 
   useEffect(() => {
-    if (isEditing && operationFilter === "address-missing") {
-      addressInputRef.current?.focus();
-    }
+    if (!isEditing) return;
+    if (operationFilter === "all") return;
+    const focusTarget = {
+      "address-missing": addressInputRef,
+      "business-check": businessNumberInputRef,
+      "business-number-missing": businessNumberInputRef,
+      "contact-missing": phoneInputRef,
+      "loading-missing": loadingPositionInputRef,
+      "manager-missing": deliveryManagerInputRef
+    }[operationFilter];
+
+    focusTarget?.current?.focus();
   }, [isEditing, operationFilter, selectedCustomer?.id]);
 
   useEffect(() => {
@@ -994,20 +1007,21 @@ export default function CrmTimelinePage() {
                         helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
                         label="사업자번호"
                         value={draftCustomer.businessNumber}
+                        inputRef={businessNumberInputRef}
                         onChange={(value) => updateDraft("businessNumber", value)}
                       />
                       <EditableField label="대표자명" value={draftCustomer.representativeName} onChange={(value) => updateDraft("representativeName", value)} />
-                      <EditableField label="연락처" value={draftCustomer.phone} onChange={(value) => updateDraft("phone", value)} />
+                      <EditableField label="연락처" value={draftCustomer.phone} inputRef={phoneInputRef} onChange={(value) => updateDraft("phone", value)} />
                       <EditableField label="이메일" value={draftCustomer.email} onChange={(value) => updateDraft("email", value)} />
                       <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
                       <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
                       <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
-                      <EditableField label="배송담당자" value={draftCustomer.deliveryManager} onChange={(value) => updateDraft("deliveryManager", value)} />
+                      <EditableField label="배송담당자" value={draftCustomer.deliveryManager} inputRef={deliveryManagerInputRef} onChange={(value) => updateDraft("deliveryManager", value)} />
                       <EditableField label="배송거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition} onChange={(value) => updateDraft("loadingPosition", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition} inputRef={loadingPositionInputRef} onChange={(value) => updateDraft("loadingPosition", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" helper="네이버 리뷰, 영업시간, 업체 상태 추적에 활용합니다." label="네이버 플레이스 링크" value={draftCustomer.naverPlaceUrl || ""} onChange={(value) => updateDraft("naverPlaceUrl", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" helper="카카오맵 장소 상세와 로드뷰 확인에 활용합니다." label="카카오맵 링크" value={draftCustomer.kakaoPlaceUrl || ""} onChange={(value) => updateDraft("kakaoPlaceUrl", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" helper="구글 리뷰와 지도 정보를 함께 확인할 때 활용합니다." label="구글맵 링크" value={draftCustomer.googleMapUrl || ""} onChange={(value) => updateDraft("googleMapUrl", value)} />
@@ -1918,6 +1932,7 @@ function EditableField({
   className = "",
   helper = "",
   helperTone = "muted",
+  inputRef,
   label,
   onChange,
   value
@@ -1925,6 +1940,7 @@ function EditableField({
   className?: string;
   helper?: string;
   helperTone?: "danger" | "muted" | "success";
+  inputRef?: Ref<HTMLInputElement>;
   label: string;
   onChange: (value: string) => void;
   value: string;
@@ -1941,6 +1957,7 @@ function EditableField({
       <input
         className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         onChange={(event) => onChange(event.target.value)}
+        ref={inputRef}
         value={value}
       />
       {helper ? <span className={`mt-1.5 block text-xs font-black ${helperClassName}`}>{helper}</span> : null}
