@@ -30,7 +30,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "유효하지 않은 사업자등록번호입니다." }, { status: 400 });
   }
 
-  const result = await upsertCustomerMaster(body, scope.companyId);
+  const result = await upsertCustomerMaster(body, scope.companyId, {
+    actorName: scope.customerSession?.name || scope.adminSession?.name || "시스템",
+    actorRole: scope.role,
+    requestMethod: request.method
+  });
   return NextResponse.json(result);
 }
 

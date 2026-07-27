@@ -110,6 +110,11 @@ export type CustomerMasterInput = {
   representativeName?: string;
   visitCount?: number;
 };
+export type CustomerMasterAuditContext = {
+  actorName?: string;
+  actorRole?: string;
+  requestMethod?: string;
+};
 export type CustomerNoteItem = {
   id: string;
   createdAt: string;
@@ -1632,7 +1637,7 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
   };
 }
 
-export async function upsertCustomerMaster(input: CustomerMasterInput, companyId?: string) {
+export async function upsertCustomerMaster(input: CustomerMasterInput, companyId?: string, auditContext: CustomerMasterAuditContext = {}) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
 
@@ -1691,6 +1696,9 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
   const importId = await createManualCustomerImport(id);
   const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
   const normalizedKey = businessNumber || makeCustomerKey(customerName, input.address || "");
+  const existingRows = await supabaseRequest<Array<{ id: string }>>(
+    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+  ).catch(() => []);
   const placeLinks = {
     google_map_url: input.googleMapUrl || null,
     kakao_place_url: input.kakaoPlaceUrl || null,
@@ -1728,9 +1736,28 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
     return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
   });
+  const savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
+
+  await writeAdminAuditLog({
+    companyId: id,
+    action: existingRows.length ? "customer_master_updated" : "customer_master_created",
+    targetType: "normalized_customer",
+    targetId: savedCustomer.id,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      requestMethod: auditContext.requestMethod || "unknown",
+      customerName: savedCustomer.customerName,
+      hasAddress: Boolean(savedCustomer.address),
+      hasBusinessNumber: Boolean(savedCustomer.businessNumber),
+      hasLoadingPosition: Boolean(savedCustomer.loadingPosition),
+      monthlyRevenue: savedCustomer.monthlyRevenue,
+      grade: savedCustomer.grade
+    }
+  }).catch(() => null);
 
   return {
-    customer: toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0),
+    customer: savedCustomer,
     persisted: true
   };
 }
@@ -3132,6 +3159,35 @@ export async function getAdminAuditLogs(companyId?: string, limit = 12): Promise
       targetType: row.target_type || "대상 미확인",
       createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     };
+  });
+}
+
+async function writeAdminAuditLog({
+  action,
+  companyId,
+  metadata,
+  targetId,
+  targetType
+}: {
+  action: string;
+  companyId: string;
+  metadata: Record<string, unknown>;
+  targetId?: string;
+  targetType?: string;
+}) {
+  if (!isProductionStoreConfigured()) return;
+
+  await supabaseRequest("admin_audit_logs", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        action,
+        company_id: companyId,
+        metadata,
+        target_id: targetId || null,
+        target_type: targetType || null
+      }
+    ])
   });
 }
 

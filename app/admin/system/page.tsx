@@ -519,6 +519,8 @@ function ReadinessList({ empty, icon, items, title }: { empty: string; icon: "da
 
 function auditActionLabel(action: string) {
   const labels: Record<string, string> = {
+    customer_master_created: "거래처 원장 신규 등록",
+    customer_master_updated: "거래처 원장 수정",
     excel_upload_analyzed: "엑셀 업로드 분석 및 원장 반영"
   };
 
@@ -526,11 +528,15 @@ function auditActionLabel(action: string) {
 }
 
 function auditMetadataSummary(metadata: Record<string, unknown>) {
+  const customerName = String(metadata.customerName || "");
   const rows = Number(metadata.rows || 0);
   const rawRows = Number(metadata.rawRows || 0);
   const duplicateCount = Number(metadata.duplicateCount || 0);
   const qualityScore = Number(metadata.qualityScore || 0);
+  const grade = String(metadata.grade || "");
   const parts = [
+    customerName ? `거래처 ${customerName}` : "",
+    grade ? `${grade}등급` : "",
     rows ? `정제 ${rows.toLocaleString()}행` : "",
     rawRows ? `원본 ${rawRows.toLocaleString()}행` : "",
     qualityScore ? `품질 ${qualityScore}%` : "",
