@@ -4,19 +4,6 @@ import { getSystemDiagnostics, getVisitTimeline } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-const sampleTimeline = [
-  {
-    id: "history-001",
-    expectedRevenue: 320,
-    leadName: "성수 온반",
-    memo: "대표가 단가표 재요청. 다음 방문 때 냉동 품목 제안 예정.",
-    nextAction: "단가표 발송",
-    region: "성수동",
-    result: "quote-requested",
-    visitedAt: "2026-07-08"
-  }
-];
-
 export async function GET(request: NextRequest) {
   const scope = await getRequestAuthScope(request);
 
@@ -26,7 +13,8 @@ export async function GET(request: NextRequest) {
 
   const errors: string[] = [];
   let system = null;
-  let timeline = sampleTimeline;
+  let timeline: Awaited<ReturnType<typeof getVisitTimeline>> = [];
+  let timelineSource: "empty" | "supabase" = "empty";
 
   try {
     system = await getSystemDiagnostics();
@@ -36,7 +24,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const rows = await getVisitTimeline(scope.companyId);
-    if (rows.length) timeline = rows;
+    timeline = rows;
+    if (rows.length) timelineSource = "supabase";
   } catch (error) {
     errors.push(`방문 히스토리 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
   }
@@ -46,7 +35,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     dbSummary,
     errorMessage: errors.join(" / "),
-    timeline
+    timeline,
+    timelineSource
   });
 }
 

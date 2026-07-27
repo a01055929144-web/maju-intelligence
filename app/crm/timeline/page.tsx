@@ -82,6 +82,7 @@ const resultLabels: Record<string, string> = {
   visited: "방문 완료",
   interested: "관심 있음",
   "quote-requested": "견적 요청",
+  memo: "메모 저장",
   pending: "보류",
   failed: "실패"
 };
@@ -145,6 +146,7 @@ export default function CrmTimelinePage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [timelineSource, setTimelineSource] = useState<"empty" | "supabase">("empty");
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
   const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "sample" | "error">("loading");
@@ -160,7 +162,8 @@ export default function CrmTimelinePage() {
       .then((response) => response.json())
       .then((payload) => {
         if (!active) return;
-        if (payload?.timeline?.length) setTimeline(payload.timeline);
+        setTimeline(Array.isArray(payload?.timeline) ? payload.timeline : []);
+        setTimelineSource(payload?.timelineSource === "supabase" ? "supabase" : "empty");
         if (payload?.dbSummary) setDbSummary(payload.dbSummary);
         if (payload?.errorMessage) setDbError(payload.errorMessage);
       })
@@ -573,7 +576,23 @@ export default function CrmTimelinePage() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "메모 저장에 실패했습니다.");
-      if (payload?.note) setCustomerNotes((current) => [payload.note, ...current]);
+      if (payload?.note) {
+        setCustomerNotes((current) => [payload.note, ...current]);
+        setTimeline((current) => [
+          {
+            id: `note-${payload.note.id}`,
+            expectedRevenue: selectedCustomer.monthlyRevenue || 0,
+            leadName: selectedCustomer.customerName,
+            memo: payload.note.memo,
+            nextAction: payload.note.nextAction || "",
+            region: selectedCustomer.region,
+            result: "memo",
+            visitedAt: payload.note.createdAt
+          },
+          ...current
+        ]);
+        setTimelineSource("supabase");
+      }
       setNewMemo("");
       setNewNextAction("");
     } finally {
@@ -1271,23 +1290,35 @@ export default function CrmTimelinePage() {
 
               <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-200/80 bg-slate-50 px-4 py-3">
-                  <Badge className="mb-2 bg-violet-50 text-violet-700">영업 방문 기록</Badge>
+                  <Badge className={timelineSource === "supabase" ? "mb-2 bg-emerald-50 text-emerald-700" : "mb-2 bg-slate-100 text-slate-600"}>
+                    {timelineSource === "supabase" ? "실제 기록" : "기록 대기"}
+                  </Badge>
                   <h3 className="text-base font-black text-slate-950">최근 액션</h3>
+                  <p className="mt-1 text-sm font-medium leading-6 text-slate-500">메모 저장, 방문 결과, 견적 요청이 거래처 기준으로 누적됩니다.</p>
                 </div>
                 <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto">
-                  {timeline.map((item) => (
-                    <div key={item.id} className="p-4">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <p className="font-black text-slate-950">{item.leadName}</p>
-                        <Badge className="bg-blue-50 text-blue-700">{resultLabels[item.result] || item.result}</Badge>
+                  {timeline.length ? (
+                    timeline.map((item) => (
+                      <div key={item.id} className="p-4">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <p className="font-black text-slate-950">{item.leadName}</p>
+                          <Badge className="bg-blue-50 text-blue-700">{resultLabels[item.result] || item.result}</Badge>
+                        </div>
+                        <p className="text-sm font-medium leading-6 text-slate-600">{item.memo || "메모 없음"}</p>
+                        <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs font-bold text-slate-500">
+                          <span>다음 액션: {item.nextAction || "미정"}</span>
+                          <span>{item.visitedAt}</span>
+                        </div>
                       </div>
-                      <p className="text-sm font-medium leading-6 text-slate-600">{item.memo || "메모 없음"}</p>
-                      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs font-bold text-slate-500">
-                        <span>다음 액션: {item.nextAction || "미정"}</span>
-                        <span>{item.visitedAt}</span>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
+                      <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 샘플 기록은 실제 운영 데이터와 섞이지 않도록 숨겼습니다.
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div> : null}
@@ -2201,36 +2232,3 @@ function extractRegion(address: string) {
   const parts = address.split(/\s+/).filter(Boolean);
   return parts.find((part) => /(구|군|시|동|읍|면)$/.test(part)) || parts[1] || parts[0] || "";
 }
-
-const sampleVisitTimeline: TimelineItem[] = [
-  {
-    id: "history-001",
-    expectedRevenue: 320,
-    leadName: "성수 온반",
-    memo: "대표가 단가표 재요청. 다음 방문 때 냉동 품목 제안 예정.",
-    nextAction: "단가표 발송",
-    region: "성수동",
-    result: "quote-requested",
-    visitedAt: "2026-07-08"
-  },
-  {
-    id: "history-002",
-    expectedRevenue: 210,
-    leadName: "성수 국밥집",
-    memo: "오전 입고 선호. 배송 적재위치는 후문 냉장창고 앞.",
-    nextAction: "배송시간 조율",
-    region: "성수동",
-    result: "visited",
-    visitedAt: "2026-07-07"
-  },
-  {
-    id: "history-003",
-    expectedRevenue: 480,
-    leadName: "강남 정식",
-    memo: "한식 주력 품목 반응 좋음. 월 단위 견적 비교 요청.",
-    nextAction: "월 견적서 작성",
-    region: "강남구",
-    result: "interested",
-    visitedAt: "2026-07-06"
-  }
-];
