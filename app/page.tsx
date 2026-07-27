@@ -1707,7 +1707,16 @@ function Onboarding({
                 ) : null}
                 {reviewTab === "save" ? (
                   <div className="scroll-mt-4 space-y-5" id="save-panel">
-                    <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} persisted={pipelineMeta.persisted} />
+                    <SaveReadinessPanel
+                      canAnalyze={canAnalyze}
+                      dashboardHref={dashboardHref}
+                      items={saveReadinessItems}
+                      ledgerHref={currentLedgerHref}
+                      ledgerLabel={currentLedgerLabel}
+                      persisted={pipelineMeta.persisted}
+                      routeHref={routeHref}
+                      typeLabel={template.label}
+                    />
                     <OperationalHandoffPanel
                       dashboardHref={dashboardHref}
                       ledgerHref={currentLedgerHref}
@@ -3844,12 +3853,22 @@ function DataQualityCard({
 
 function SaveReadinessPanel({
   canAnalyze,
+  dashboardHref,
   items,
-  persisted
+  ledgerHref,
+  ledgerLabel,
+  persisted,
+  routeHref,
+  typeLabel
 }: {
   canAnalyze: boolean;
+  dashboardHref: string;
   items: Array<{ detail: string; label: string; ok: boolean }>;
+  ledgerHref: string;
+  ledgerLabel: string;
   persisted: boolean;
+  routeHref: string;
+  typeLabel: string;
 }) {
   const readyCount = items.filter((item) => item.ok).length;
   const blockingItems = items.filter((item) => !item.ok && item.label !== "서버 반영");
@@ -3899,6 +3918,37 @@ function SaveReadinessPanel({
             </div>
           </div>
         ))}
+      </div>
+      <div className="border-t border-slate-100 bg-white px-4 py-4">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black text-slate-500">이번 저장의 운영 반영 범위</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-700">{typeLabel} 저장 후 실제 운영 화면에서 아래 순서로 확인합니다.</p>
+          </div>
+          <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
+            {persisted ? "확인 가능" : "저장 후 활성"}
+          </Badge>
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          {[
+            { href: dashboardHref, label: "대시보드", value: "회사 현황 숫자 갱신" },
+            { href: ledgerHref, label: ledgerLabel.replace(" 보기", ""), value: "등록 원장·히스토리 확인" },
+            { href: routeHref, label: "영업·배송 코스", value: "거래처 위치·코스 기준 확인" }
+          ].map((item, index) => (
+            <Link
+              className={`rounded-md border px-3 py-3 transition ${persisted ? "border-emerald-100 bg-emerald-50 hover:bg-emerald-100/70" : "border-slate-200 bg-slate-50 hover:bg-white"}`}
+              href={item.href}
+              key={item.label}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black text-slate-400">{index + 1}차 확인</span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+              </span>
+              <span className="mt-1 block text-sm font-black text-slate-950">{item.label}</span>
+              <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{item.value}</span>
+            </Link>
+          ))}
+        </div>
       </div>
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
         <p className="text-xs font-black text-slate-500">반영 확인 위치</p>
@@ -3993,7 +4043,7 @@ function SaveResultSummary({
     ? { href: ledgerHref, label: `${ledgerLabel}에서 확인`, tone: "solid" as const }
     : canAnalyze
       ? { href: "#save-check", label: "저장 실행 후 확인", tone: "muted" as const }
-      : { href: "#mapping", label: "조건 보완하기", tone: "muted" as const };
+      : { href: "#mapping-panel", label: "조건 보완하기", tone: "muted" as const };
   const reconciliationChecks = [
     {
       label: "DB 저장 응답",
