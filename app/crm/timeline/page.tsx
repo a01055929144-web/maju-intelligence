@@ -421,10 +421,23 @@ export default function CrmTimelinePage() {
 
   function applyOperationFilter(nextFilter: OperationFilter) {
     const resolvedFilter = operationFilter === nextFilter ? "all" : nextFilter;
+    if (resolvedFilter === "all") {
+      clearOperationFilter();
+      return;
+    }
+
     setOperationFilter(resolvedFilter);
 
-    const nextIndex = resolvedFilter === "all" ? 0 : customers.findIndex((customer) => customerMatchesOperationFilter(customer, resolvedFilter));
+    const nextIndex = customers.findIndex((customer) => customerMatchesOperationFilter(customer, resolvedFilter));
     if (nextIndex >= 0) setSelectedIndex(nextIndex);
+  }
+
+  function clearOperationFilter() {
+    setOperationFilter("all");
+    setSelectedIndex(0);
+    setIsEditing(false);
+    setSaveMessage("");
+    setCustomerSearch("");
   }
 
   function updateDraft(field: keyof CustomerView, value: string) {
@@ -515,18 +528,23 @@ export default function CrmTimelinePage() {
       const shouldMoveToNext = operationFilter !== "all" && !customerMatchesOperationFilter(saved, operationFilter);
       const nextIndex = shouldMoveToNext ? findNextMatchingCustomerIndex(nextCustomers, operationFilter, selectedIndex) : -1;
       const movedToNext = nextIndex >= 0;
+      const completedCleanupFilter = shouldMoveToNext && !movedToNext;
 
       setCustomers(nextCustomers);
       if (movedToNext) setSelectedIndex(nextIndex);
+      if (completedCleanupFilter) {
+        setOperationFilter("all");
+        setSelectedIndex(0);
+      }
       setDraftCustomer(movedToNext ? nextCustomers[nextIndex] : saved);
-      setIsEditing(!movedToNext && operationFilter !== "all");
+      setIsEditing(!movedToNext && !completedCleanupFilter && operationFilter !== "all");
       setSaveMessage(
         payload?.persisted === false
           ? "거래처 정보가 화면에 반영되었습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요."
           : movedToNext
             ? "저장되었습니다. 같은 보완 조건의 다음 거래처로 이동했습니다."
-            : shouldMoveToNext
-              ? "저장되었습니다. 현재 보완 필터의 남은 거래처가 없습니다."
+            : completedCleanupFilter
+              ? "저장되었습니다. 현재 보완 필터의 남은 거래처가 없어 전체 목록으로 돌아갑니다."
             : "거래처 정보가 서버에 저장되었습니다."
       );
     } catch (error) {
@@ -784,7 +802,7 @@ export default function CrmTimelinePage() {
                   active={operationFilter === "all"}
                   count={customers.length}
                   label="운영 전체"
-                  onClick={() => setOperationFilter("all")}
+                  onClick={clearOperationFilter}
                 />
                 </div>
               </div>
@@ -792,7 +810,7 @@ export default function CrmTimelinePage() {
                 filterLabel={activeCleanupLabel}
                 filteredCount={filteredCustomers.length}
                 isActive={operationFilter !== "all"}
-                onClear={() => setOperationFilter("all")}
+                onClear={clearOperationFilter}
                 selectedPosition={selectedFilteredPosition}
               />
             </div>
