@@ -1280,13 +1280,17 @@ function Onboarding({
         />
         <RegistrationLiveStatusBoard
           canAnalyze={canAnalyze}
+          dashboardHref={dashboardHref}
           entryMode={entryMode}
           filename={uploadedFilename}
           latestUpload={latestUpload}
+          ledgerHref={currentLedgerHref}
+          ledgerLabel={currentLedgerLabel}
           persisted={pipelineMeta.persisted}
           readinessItems={saveReadinessItems}
           readinessPercent={readinessPercent}
           registrationStatus={registrationStatus}
+          routeHref={routeHref}
           rows={rawRows.length}
           typeLabel={template.label}
         />
@@ -1888,24 +1892,32 @@ function RegistrationControlStrip({
 
 function RegistrationLiveStatusBoard({
   canAnalyze,
+  dashboardHref,
   entryMode,
   filename,
   latestUpload,
+  ledgerHref,
+  ledgerLabel,
   persisted,
   readinessItems,
   readinessPercent,
   registrationStatus,
+  routeHref,
   rows,
   typeLabel
 }: {
   canAnalyze: boolean;
+  dashboardHref: string;
   entryMode: EntryMode;
   filename: string;
   latestUpload?: UploadHistoryRow;
+  ledgerHref: string;
+  ledgerLabel: string;
   persisted: boolean;
   readinessItems: Array<{ detail: string; label: string; ok: boolean }>;
   readinessPercent: number;
   registrationStatus: RegistrationStatus;
+  routeHref: string;
   rows: number;
   typeLabel: string;
 }) {
@@ -1924,6 +1936,11 @@ function RegistrationLiveStatusBoard({
     { label: "등록 방식", value: modeLabel },
     { label: "대기 행", value: `${rows.toLocaleString()}행` },
     { label: "최근 서버 이력", value: latestUpload?.createdAt || "아직 없음" }
+  ];
+  const verificationLinks = [
+    { href: dashboardHref, label: "대시보드", value: "회사 KPI 확인" },
+    { href: ledgerHref, label: ledgerLabel.replace(" 보기", ""), value: "원장 반영 확인" },
+    { href: routeHref, label: "영업·배송 코스", value: "지도/코스 확인" }
   ];
 
   return (
@@ -1977,6 +1994,30 @@ function RegistrationLiveStatusBoard({
           현재 파일: <span className="font-black text-slate-800">{filename}</span>
         </div>
       ) : null}
+      <div className="border-t border-slate-100 bg-white p-3">
+        <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-black text-slate-500">저장 후 확인 경로</p>
+          <p className="text-xs font-bold text-slate-400">{persisted ? "운영 화면에서 같은 기준값을 확인하세요." : "저장 전에도 화면 구조는 미리 확인할 수 있습니다."}</p>
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          {verificationLinks.map((link, index) => (
+            <Link
+              className={`rounded-md border px-3 py-2 transition ${
+                persisted ? "border-emerald-100 bg-emerald-50 hover:bg-emerald-100/70" : "border-slate-200 bg-slate-50 hover:bg-white"
+              }`}
+              href={link.href}
+              key={link.label}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-slate-400">{index + 1}단계</span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+              </span>
+              <span className="mt-1 block text-sm font-black text-slate-950">{link.label}</span>
+              <span className="mt-1 block text-xs font-bold text-slate-500">{link.value}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
