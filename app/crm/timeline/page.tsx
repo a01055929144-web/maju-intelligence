@@ -76,6 +76,7 @@ type AddressSearchResult = {
 };
 
 type CustomerDetailTab = "ledger" | "history";
+type OperationFilter = "all" | "address-missing" | "business-check" | "business-number-missing" | "contact-missing" | "loading-missing" | "manager-missing";
 
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
@@ -144,7 +145,7 @@ export default function CrmTimelinePage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [customerSearch, setCustomerSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
-  const [operationFilter, setOperationFilter] = useState<"all" | "business-check" | "loading-missing" | "contact-missing">("all");
+  const [operationFilter, setOperationFilter] = useState<OperationFilter>("all");
 
   useEffect(() => {
     let active = true;
@@ -278,11 +279,7 @@ export default function CrmTimelinePage() {
       .map((customer, index) => ({ customer, index }))
       .filter(({ customer }) => {
         const matchesGrade = gradeFilter === "all" || customer.grade === gradeFilter;
-        const matchesOperation =
-          operationFilter === "all" ||
-          (operationFilter === "business-check" && customer.businessStatus !== "정상") ||
-          (operationFilter === "loading-missing" && !customer.loadingPosition) ||
-          (operationFilter === "contact-missing" && (!customer.phone || !customer.representativeName));
+        const matchesOperation = customerMatchesOperationFilter(customer, operationFilter);
         const matchesKeyword =
           !keyword ||
           [
@@ -300,9 +297,12 @@ export default function CrmTimelinePage() {
         return matchesGrade && matchesOperation && matchesKeyword;
       });
   }, [customerSearch, customers, gradeFilter, operationFilter]);
+  const addressMissingCount = customers.filter((customer) => !customer.address).length;
   const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
+  const businessNumberMissingCount = customers.filter((customer) => !customer.businessNumber).length;
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
+  const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
   const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
   const readyCustomerCount = customers.length - needsAttentionCustomers.length;
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
@@ -386,6 +386,14 @@ export default function CrmTimelinePage() {
   );
   const draftBusinessNumberValid = !draftCustomer?.businessNumber || isValidBusinessRegistrationNumber(draftCustomer.businessNumber);
   const canSaveCustomer = !isSaving && (!draftBusinessNumberChanged || draftBusinessNumberValid);
+
+  function applyOperationFilter(nextFilter: OperationFilter) {
+    const resolvedFilter = operationFilter === nextFilter ? "all" : nextFilter;
+    setOperationFilter(resolvedFilter);
+
+    const nextIndex = resolvedFilter === "all" ? 0 : customers.findIndex((customer) => customerMatchesOperationFilter(customer, resolvedFilter));
+    if (nextIndex >= 0) setSelectedIndex(nextIndex);
+  }
 
   function updateDraft(field: keyof CustomerView, value: string) {
     setDraftCustomer((current) => {
@@ -602,9 +610,12 @@ export default function CrmTimelinePage() {
             </div>
           ) : null}
           <CustomerLedgerBasisPanel
+            addressMissingCount={addressMissingCount}
+            businessNumberMissingCount={businessNumberMissingCount}
             customerCount={customers.length}
             filteredCount={filteredCustomers.length}
             loadingReadyCount={customers.filter((customer) => Boolean(customer.loadingPosition)).length}
+            managerMissingCount={managerMissingCount}
             managerCount={new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size}
             memoCount={customers.reduce((sum, customer) => sum + customer.memoCount, 0)}
           />
@@ -684,24 +695,44 @@ export default function CrmTimelinePage() {
                 <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">운영 상태</p>
                 <div className="grid grid-cols-2 gap-1.5">
                 <CustomerFilterButton
+                  active={operationFilter === "address-missing"}
+                  count={addressMissingCount}
+                  label="주소 미등록"
+                  onClick={() => applyOperationFilter("address-missing")}
+                  tone="danger"
+                />
+                <CustomerFilterButton
+                  active={operationFilter === "business-number-missing"}
+                  count={businessNumberMissingCount}
+                  label="사업자번호 미등록"
+                  onClick={() => applyOperationFilter("business-number-missing")}
+                  tone="warning"
+                />
+                <CustomerFilterButton
                   active={operationFilter === "business-check"}
                   count={businessCheckCount}
                   label="사업자 확인"
-                  onClick={() => setOperationFilter(operationFilter === "business-check" ? "all" : "business-check")}
+                  onClick={() => applyOperationFilter("business-check")}
                   tone="danger"
                 />
                 <CustomerFilterButton
                   active={operationFilter === "loading-missing"}
                   count={loadingMissingCount}
                   label="적재위치 미등록"
-                  onClick={() => setOperationFilter(operationFilter === "loading-missing" ? "all" : "loading-missing")}
+                  onClick={() => applyOperationFilter("loading-missing")}
                   tone="warning"
                 />
                 <CustomerFilterButton
                   active={operationFilter === "contact-missing"}
                   count={contactMissingCount}
                   label="연락처 미등록"
-                  onClick={() => setOperationFilter(operationFilter === "contact-missing" ? "all" : "contact-missing")}
+                  onClick={() => applyOperationFilter("contact-missing")}
+                />
+                <CustomerFilterButton
+                  active={operationFilter === "manager-missing"}
+                  count={managerMissingCount}
+                  label="담당자 미지정"
+                  onClick={() => applyOperationFilter("manager-missing")}
                 />
                 <CustomerFilterButton
                   active={operationFilter === "all"}
@@ -1252,15 +1283,21 @@ function CustomerFilterButton({
 }
 
 function CustomerLedgerBasisPanel({
+  addressMissingCount,
+  businessNumberMissingCount,
   customerCount,
   filteredCount,
   loadingReadyCount,
+  managerMissingCount,
   managerCount,
   memoCount
 }: {
+  addressMissingCount: number;
+  businessNumberMissingCount: number;
   customerCount: number;
   filteredCount: number;
   loadingReadyCount: number;
+  managerMissingCount: number;
   managerCount: number;
   memoCount: number;
 }) {
@@ -1271,6 +1308,12 @@ function CustomerLedgerBasisPanel({
     { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
     { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
   ];
+  const attentionItems = [
+    { label: "주소 미등록", value: addressMissingCount },
+    { label: "사업자번호 미등록", value: businessNumberMissingCount },
+    { label: "담당자 미지정", value: managerMissingCount }
+  ];
+  const attentionTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
 
   return (
     <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50/70">
@@ -1286,6 +1329,16 @@ function CustomerLedgerBasisPanel({
             <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
           </div>
         ))}
+      </div>
+      <div className={`grid gap-2 border-t px-3 py-3 text-xs font-bold leading-5 md:grid-cols-[160px_minmax(0,1fr)] md:items-center ${attentionTotal ? "border-amber-200 bg-amber-50/80 text-amber-900" : "border-emerald-100 bg-emerald-50/70 text-emerald-900"}`}>
+        <p className="font-black">{attentionTotal ? `보완 필요 ${attentionTotal.toLocaleString()}건` : "필수값 정상"}</p>
+        <div className="flex flex-wrap gap-2">
+          {attentionItems.map((item) => (
+            <span className="rounded-full bg-white px-2.5 py-1 font-black" key={item.label}>
+              {item.label} {item.value.toLocaleString()}건
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1955,6 +2008,17 @@ function customerOperationalIssues(customer: CustomerView) {
   if (!customer.address) issues.push("배송주소");
   if (!customer.loadingPosition) issues.push("적재위치");
   return issues;
+}
+
+function customerMatchesOperationFilter(customer: CustomerView, filter: OperationFilter) {
+  if (filter === "all") return true;
+  if (filter === "address-missing") return !customer.address;
+  if (filter === "business-check") return customer.businessStatus !== "정상";
+  if (filter === "business-number-missing") return !customer.businessNumber;
+  if (filter === "contact-missing") return !customer.phone || !customer.representativeName;
+  if (filter === "loading-missing") return !customer.loadingPosition;
+  if (filter === "manager-missing") return !customer.deliveryManager;
+  return true;
 }
 
 function formatDbCount(value: number | null) {
