@@ -519,8 +519,10 @@ function ReadinessList({ empty, icon, items, title }: { empty: string; icon: "da
 
 function auditActionLabel(action: string) {
   const labels: Record<string, string> = {
+    customer_attachment_created: "거래처 첨부자료 등록",
     customer_master_created: "거래처 원장 신규 등록",
     customer_master_updated: "거래처 원장 수정",
+    customer_note_created: "거래처 메모 저장",
     excel_upload_analyzed: "엑셀 업로드 분석 및 원장 반영"
   };
 
@@ -529,6 +531,9 @@ function auditActionLabel(action: string) {
 
 function auditMetadataSummary(metadata: Record<string, unknown>) {
   const customerName = String(metadata.customerName || "");
+  const attachmentType = String(metadata.attachmentType || "");
+  const memoLength = Number(metadata.memoLength || 0);
+  const noteType = String(metadata.noteType || "");
   const rows = Number(metadata.rows || 0);
   const rawRows = Number(metadata.rawRows || 0);
   const duplicateCount = Number(metadata.duplicateCount || 0);
@@ -537,6 +542,9 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
   const parts = [
     customerName ? `거래처 ${customerName}` : "",
     grade ? `${grade}등급` : "",
+    noteType ? `메모 ${noteType}` : "",
+    memoLength ? `메모 ${memoLength.toLocaleString()}자` : "",
+    attachmentType ? `첨부 ${attachmentTypeLabel(attachmentType)}` : "",
     rows ? `정제 ${rows.toLocaleString()}행` : "",
     rawRows ? `원본 ${rawRows.toLocaleString()}행` : "",
     qualityScore ? `품질 ${qualityScore}%` : "",
@@ -544,6 +552,17 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
   ].filter(Boolean);
 
   return parts.length ? parts.join(" · ") : "상세값 없음";
+}
+
+function attachmentTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    bank_account: "통장사본",
+    business_license: "사업자등록증",
+    etc: "기타",
+    loading_position: "배송 적재위치"
+  };
+
+  return labels[type] || type;
 }
 
 function SystemActionCard({

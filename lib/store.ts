@@ -1865,9 +1865,24 @@ export async function addCustomerNote(
       }
     ])
   });
+  const note = toCustomerNoteItem(rows[0]);
+
+  await writeAdminAuditLog({
+    companyId: companyId || getDefaultCompanyId(),
+    action: "customer_note_created",
+    targetType: "customer_note",
+    targetId: note.id,
+    metadata: {
+      actorName: input.createdByName || "현장 사용자",
+      customerId: input.customerId,
+      hasNextAction: Boolean(note.nextAction),
+      memoLength: memo.length,
+      noteType: note.noteType
+    }
+  }).catch(() => null);
 
   return {
-    note: toCustomerNoteItem(rows[0]),
+    note,
     persisted: true
   };
 }
@@ -1927,9 +1942,25 @@ export async function addCustomerAttachment(
       }
     ])
   });
+  const attachment = toCustomerAttachmentItem(rows[0]);
+
+  await writeAdminAuditLog({
+    companyId: companyId || getDefaultCompanyId(),
+    action: "customer_attachment_created",
+    targetType: "customer_attachment",
+    targetId: attachment.id,
+    metadata: {
+      actorName: input.createdByName || "현장 사용자",
+      attachmentType: attachment.attachmentType,
+      customerId: input.customerId,
+      hasFileUrl: Boolean(attachment.fileUrl),
+      mimeType: attachment.mimeType,
+      title: attachment.title
+    }
+  }).catch(() => null);
 
   return {
-    attachment: toCustomerAttachmentItem(rows[0]),
+    attachment,
     persisted: true
   };
 }
