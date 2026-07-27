@@ -128,15 +128,14 @@ export default function Home() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [fieldMap, setFieldMap] = useState<FieldMap>(emptyMap);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [usingSample, setUsingSample] = useState(false);
-  const [customers, setCustomers] = useState<CustomerRow[]>(sampleCustomers);
-  const [uploadedFilename, setUploadedFilename] = useState<string>("registered-customers");
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [uploadedFilename, setUploadedFilename] = useState<string>("등록 전");
   const [uploadHistory, setUploadHistory] = useState<UploadHistoryRow[]>([]);
   const [lastManualCustomerHref, setLastManualCustomerHref] = useState("");
   const [manualSaveMessage, setManualSaveMessage] = useState("");
   const [isManualSaving, setIsManualSaving] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
-  const [pipelineMeta, setPipelineMeta] = useState({ rows: sampleCustomers.length, qualityScore: 100, persisted: false });
+  const [pipelineMeta, setPipelineMeta] = useState({ rows: 0, qualityScore: 0, persisted: false });
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>(initialRegistrationStatus);
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
@@ -180,7 +179,17 @@ export default function Home() {
   }
 
   function generateCurrentReport() {
-    setUsingSample(false);
+    if (!customers.length) {
+      setRegistrationStatus({
+        actionLabel: "등록 데이터 필요",
+        description: "운영 리포트는 샘플이 아니라 저장된 거래처 또는 매출 거래내역을 기준으로 생성합니다.",
+        nextAction: "거래처 마스터를 수기 등록하거나 엑셀로 업로드한 뒤 저장·이력을 확인하세요.",
+        status: "warning",
+        title: "아직 리포트로 만들 운영 데이터가 없습니다."
+      });
+      setScreen("onboarding");
+      return;
+    }
     runPipeline(customers, rawRows, fieldMap, uploadedFilename || "registered-customers");
   }
 
@@ -228,7 +237,6 @@ export default function Home() {
       setHeaders(nextHeaders);
       setFieldMap(nextFieldMap);
       setUploadedFilename(file.name);
-      setUsingSample(false);
       setRegistrationStatus({
         actionLabel: "파일 수신 완료",
         description: `${json.length.toLocaleString()}개 행과 ${nextHeaders.length.toLocaleString()}개 컬럼을 확인했습니다. 필수 매핑 ${mappedCount}/${requiredCount}개가 자동 연결됐습니다.`,
@@ -265,7 +273,6 @@ export default function Home() {
     setHeaders(nextHeaders);
     setFieldMap(createIdentityFieldMap(currentTemplate.fields));
     setUploadedFilename(`${currentTemplate.label}-manual`);
-    setUsingSample(false);
     setManualSaveMessage("검수 목록에 추가했습니다. 서버 반영 상태를 확인 중입니다.");
     setRegistrationStatus({
       actionLabel: "수기 등록 저장 중",
@@ -339,8 +346,18 @@ export default function Home() {
       title: "데이터 업데이트를 시작했습니다."
     });
     const mapped = uploadType === "sales-analysis" ? mapSalesRowsToCustomers(rawRows, fieldMap) : mapMasterRowsToCustomers(rawRows, fieldMap);
+    if (!mapped.length) {
+      setRegistrationStatus({
+        actionLabel: "정제 결과 없음",
+        description: "업로드 행은 있지만 거래처명, 주소, 매출 등 표준 필드로 변환된 운영 데이터가 없습니다.",
+        nextAction: "컬럼 매핑과 품질 검증을 다시 확인한 뒤 저장을 실행하세요.",
+        status: "warning",
+        title: "리포트를 생성할 거래처 데이터가 없습니다."
+      });
+      return;
+    }
 
-    const nextRows = mapped.length ? mapped : customers;
+    const nextRows = mapped;
     setCustomers(nextRows);
     await runPipeline(nextRows, rawRows, fieldMap, uploadedFilename);
   }
@@ -441,7 +458,7 @@ export default function Home() {
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <div className="mx-auto max-w-[1880px] space-y-4">
-        <WorkspaceModeTabs active={screen} onMove={setScreen} />
+        <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
         {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}
         {screen === "onboarding" && (
           <Onboarding
@@ -457,7 +474,6 @@ export default function Home() {
             pipelineSteps={pipelineSteps}
             registrationStatus={registrationStatus}
             uploadHistory={uploadHistory}
-            usingSample={usingSample}
             isManualSaving={isManualSaving}
             lastManualCustomerHref={lastManualCustomerHref}
             manualSaveMessage={manualSaveMessage}
@@ -492,7 +508,15 @@ function useAdminCompanyId() {
   return companyId;
 }
 
-function WorkspaceModeTabs({ active, onMove }: { active: string; onMove: (screen: "briefing" | "onboarding" | "report") => void }) {
+function WorkspaceModeTabs({
+  active,
+  hasReport,
+  onMove
+}: {
+  active: string;
+  hasReport: boolean;
+  onMove: (screen: "briefing" | "onboarding" | "report") => void;
+}) {
   const tabs = [
     ["briefing", "등록 가이드"],
     ["onboarding", "데이터 등록"],
@@ -511,23 +535,30 @@ function WorkspaceModeTabs({ active, onMove }: { active: string; onMove: (screen
         <p className="mt-1 text-xs font-bold text-slate-500">{copy[1]}</p>
       </div>
       <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto sm:grid-cols-3">
-        {tabs.map(([key, label]) => (
+        {tabs.map(([key, label]) => {
+          const disabled = key === "report" && !hasReport;
+          return (
           <button
             key={key}
             className={`min-w-[112px] rounded-lg border px-3 py-2.5 text-left transition ${
-              active === key
-                ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
-                : "border-transparent bg-white/50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
+              disabled
+                ? "cursor-not-allowed border-transparent bg-slate-100 text-slate-400"
+                : active === key
+                  ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
+                  : "border-transparent bg-white/50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
             }`}
+            disabled={disabled}
             onClick={() => onMove(key)}
             type="button"
+            title={disabled ? "거래처 또는 매출 데이터를 저장한 뒤 리포트를 확인할 수 있습니다." : undefined}
           >
             <span className="block text-sm font-black">{label}</span>
             <span className={`mt-1 block text-[11px] font-bold ${active === key ? "text-white/75" : "text-slate-400"}`}>
-              {key === "briefing" ? "준비" : key === "onboarding" ? "입력" : "결과"}
+              {key === "briefing" ? "준비" : key === "onboarding" ? "입력" : disabled ? "저장 후" : "결과"}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -802,7 +833,6 @@ function Onboarding({
   pipelineMeta,
   pipelineSteps,
   registrationStatus,
-  usingSample,
   isManualSaving,
   lastManualCustomerHref,
   manualSaveMessage,
@@ -828,7 +858,6 @@ function Onboarding({
   pipelineMeta: { rows: number; qualityScore: number; persisted: boolean };
   pipelineSteps: PipelineStep[];
   registrationStatus: RegistrationStatus;
-  usingSample: boolean;
   isManualSaving: boolean;
   lastManualCustomerHref: string;
   manualSaveMessage: string;
