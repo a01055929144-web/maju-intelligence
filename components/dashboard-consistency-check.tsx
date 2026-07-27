@@ -91,6 +91,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "샘플/대체 데이터" : "확인 중";
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const dataRegistrationHref = `/${query}`;
   const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
   const routeProviderCounts = payload?.summary?.routeProviderCounts || {};
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
@@ -99,17 +100,21 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const routeHref = `/routes/today${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
   const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;
-  const fixItems = buildFixItems({
-    consistencyScore,
-    dashboardCustomers: payload?.summary?.dashboardCustomers || 0,
-    isSupabase,
-    masterCustomers: payload?.summary?.masterCustomers || 0,
-    missingAddressCustomers: payload?.summary?.missingAddressCustomers || 0,
-    routeCoverage,
-    routeStops: payload?.summary?.routeStops || 0,
-    timelineHref,
-    routeHref
-  });
+  const hasPayload = Boolean(payload);
+  const fixItems = hasPayload
+    ? buildFixItems({
+        consistencyScore,
+        dashboardCustomers: payload?.summary?.dashboardCustomers || 0,
+        dataRegistrationHref,
+        isSupabase,
+        masterCustomers: payload?.summary?.masterCustomers || 0,
+        missingAddressCustomers: payload?.summary?.missingAddressCustomers || 0,
+        routeCoverage,
+        routeStops: payload?.summary?.routeStops || 0,
+        timelineHref,
+        routeHref
+      })
+    : [];
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -144,8 +149,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
-          <StatusTile label="실도로 계산" value={formatCount(cachedRouteCount, "곳")} />
-          <StatusTile label="추정 거리" value={formatCount(estimatedRouteCount, "곳")} />
+          <StatusTile label="실도로 계산" value={formatCount(payload ? cachedRouteCount : undefined, "곳")} />
+          <StatusTile label="추정 거리" value={formatCount(payload ? estimatedRouteCount : undefined, "곳")} />
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
@@ -199,7 +204,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-sm font-black text-slate-950">다음 조치</p>
             <div className="mt-3 space-y-2">
-              {fixItems.map((item) => (
+              {fixItems.length ? (
+                fixItems.map((item) => (
                 <Link
                   className={`block rounded-md border bg-white px-3 py-3 hover:bg-slate-50 ${getFixBorderClass(item.tone)}`}
                   href={item.href}
@@ -213,7 +219,12 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                     <Badge className={getFixBadgeClass(item.tone)}>{item.status}</Badge>
                   </div>
                 </Link>
-              ))}
+                ))
+              ) : (
+                <div className="rounded-md border border-slate-200 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-500">
+                  {loading ? "데이터 기준을 점검하는 중입니다." : "점검 결과를 불러오면 필요한 조치를 표시합니다."}
+                </div>
+              )}
             </div>
             <p className="mt-4 text-xs font-black text-slate-500">진단 메모</p>
             <div className="mt-3 space-y-2">
@@ -251,11 +262,6 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                 </div>
               </div>
             ) : null}
-            <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-              <QuickFixLink href={`/${query}`} label="데이터 등록" />
-              <QuickFixLink href={timelineHref} label={missingAddressExamples.length ? "주소 보완 열기" : "거래처 히스토리"} />
-              <QuickFixLink href={routeHref} label={estimatedRouteCount > 0 ? "티맵 거리 계산" : "코스 관리"} />
-            </div>
           </div>
         </div>
       )}
@@ -263,16 +269,9 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   );
 }
 
-function QuickFixLink({ href, label }: { readonly href: string; readonly label: string }) {
-  return (
-    <Link className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={href}>
-      {label}
-    </Link>
-  );
-}
-
 function buildFixItems({
   consistencyScore,
+  dataRegistrationHref,
   dashboardCustomers,
   isSupabase,
   masterCustomers,
@@ -283,6 +282,7 @@ function buildFixItems({
   timelineHref
 }: {
   readonly consistencyScore: number;
+  readonly dataRegistrationHref: string;
   readonly dashboardCustomers: number;
   readonly isSupabase: boolean;
   readonly masterCustomers: number;
@@ -295,7 +295,7 @@ function buildFixItems({
   const items: FixItem[] = [];
 
   items.push({
-    href: "/",
+    href: dataRegistrationHref,
     label: isSupabase ? "운영 DB 기준으로 거래처 원장이 연결되어 있습니다." : "샘플/대체 데이터가 섞이면 화면별 숫자가 다르게 보일 수 있습니다.",
     status: isSupabase ? "정상" : "필수",
     title: "데이터 저장소",
@@ -303,7 +303,7 @@ function buildFixItems({
   });
 
   items.push({
-    href: "/",
+    href: dataRegistrationHref,
     label:
       dashboardCustomers === masterCustomers
         ? "대시보드와 거래처 원장의 전체 매장 수가 같습니다."
