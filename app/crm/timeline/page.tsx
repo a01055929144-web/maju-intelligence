@@ -129,6 +129,12 @@ function getSelectedCustomerIdFromUrl() {
   return new URLSearchParams(window.location.search).get("customerId") || "";
 }
 
+function getOperationFilterFromUrl(): OperationFilter {
+  if (typeof window === "undefined") return "all";
+  const value = new URLSearchParams(window.location.search).get("operationFilter");
+  return isOperationFilter(value) ? value : "all";
+}
+
 function withCompanyQuery(path: string) {
   const companyId = getAdminCompanyIdFromUrl();
   if (!companyId) return path;
@@ -193,11 +199,15 @@ export default function CrmTimelinePage() {
           setSelectedIndex(0);
           return;
         }
+        const nextCustomers = Array.isArray(payload.customers) ? payload.customers : [];
         setCustomerSource("supabase");
-        setCustomers(Array.isArray(payload.customers) ? payload.customers : []);
+        setCustomers(nextCustomers);
         const requestedCustomerId = getSelectedCustomerIdFromUrl();
-        const requestedIndex = requestedCustomerId ? payload.customers.findIndex((customer: CustomerView) => customer.id === requestedCustomerId) : -1;
-        setSelectedIndex(requestedIndex >= 0 ? requestedIndex : 0);
+        const requestedFilter = getOperationFilterFromUrl();
+        const requestedIndex = requestedCustomerId ? nextCustomers.findIndex((customer: CustomerView) => customer.id === requestedCustomerId) : -1;
+        const filteredIndex = requestedFilter === "all" ? -1 : nextCustomers.findIndex((customer: CustomerView) => customerMatchesOperationFilter(customer, requestedFilter));
+        setOperationFilter(requestedFilter);
+        setSelectedIndex(requestedIndex >= 0 ? requestedIndex : filteredIndex >= 0 ? filteredIndex : 0);
       })
       .catch(() => {
         if (!active) return;
@@ -2019,6 +2029,18 @@ function customerMatchesOperationFilter(customer: CustomerView, filter: Operatio
   if (filter === "loading-missing") return !customer.loadingPosition;
   if (filter === "manager-missing") return !customer.deliveryManager;
   return true;
+}
+
+function isOperationFilter(value: string | null): value is OperationFilter {
+  return (
+    value === "all" ||
+    value === "address-missing" ||
+    value === "business-check" ||
+    value === "business-number-missing" ||
+    value === "contact-missing" ||
+    value === "loading-missing" ||
+    value === "manager-missing"
+  );
 }
 
 function formatDbCount(value: number | null) {

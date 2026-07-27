@@ -78,6 +78,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
+  const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -173,7 +174,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
               <QuickFixLink href={`/${query}`} label="데이터 등록" />
-              <QuickFixLink href={`/crm/timeline${query}`} label="거래처 히스토리" />
+              <QuickFixLink href={timelineHref} label={missingAddressExamples.length ? "주소 보완 열기" : "거래처 히스토리"} />
               <QuickFixLink href={`/routes/today${query}`} label="코스 관리" />
             </div>
           </div>
@@ -189,6 +190,14 @@ function QuickFixLink({ href, label }: { readonly href: string; readonly label: 
       {label}
     </Link>
   );
+}
+
+function buildTimelineHref(companyId: string | undefined, missingAddressCount: number) {
+  const params = new URLSearchParams();
+  if (companyId) params.set("companyId", companyId);
+  if (missingAddressCount > 0) params.set("operationFilter", "address-missing");
+  const query = params.toString();
+  return query ? `/crm/timeline?${query}` : "/crm/timeline";
 }
 
 function StatusTile({ label, value }: { readonly label: string; readonly value: string }) {
