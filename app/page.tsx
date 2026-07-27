@@ -1286,6 +1286,7 @@ function Onboarding({
           latestUpload={latestUpload}
           ledgerHref={currentLedgerHref}
           ledgerLabel={currentLedgerLabel}
+          onOpenReviewTab={setReviewTab}
           persisted={pipelineMeta.persisted}
           readinessItems={saveReadinessItems}
           readinessPercent={readinessPercent}
@@ -1612,7 +1613,7 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-2" id="mapping">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-2 scroll-mt-4" id="review-panel">
                   <div className="grid gap-2 md:grid-cols-3">
                     {reviewTabs.map((tab) => {
                       const selected = reviewTab === tab.key;
@@ -1673,13 +1674,15 @@ function Onboarding({
                 </div>
                 {reviewTab === "mapping" ? (
                   <>
-                    <ExcelHeaderMappingPreview
-                      fields={template.fields}
-                      fieldMap={fieldMap}
-                      headers={headers}
-                      onMap={onMap}
-                      rows={rawRows}
-                    />
+                    <div className="scroll-mt-4" id="mapping-panel">
+                      <ExcelHeaderMappingPreview
+                        fields={template.fields}
+                        fieldMap={fieldMap}
+                        headers={headers}
+                        onMap={onMap}
+                        rows={rawRows}
+                      />
+                    </div>
                     <MappingPresetCard
                       canLoad={Boolean(savedPreset)}
                       canSave={headers.length > 0 && Object.keys(fieldMap).length > 0}
@@ -1691,9 +1694,13 @@ function Onboarding({
                     />
                   </>
                 ) : null}
-                {reviewTab === "quality" ? <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} /> : null}
+                {reviewTab === "quality" ? (
+                  <div className="scroll-mt-4" id="quality-panel">
+                    <DataQualityCard summary={dataQuality} onDownloadIssues={downloadIssueRows} />
+                  </div>
+                ) : null}
                 {reviewTab === "save" ? (
-                  <>
+                  <div className="scroll-mt-4 space-y-5" id="save-panel">
                     <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} />
                     <OperationalHandoffPanel
                       dashboardHref={dashboardHref}
@@ -1703,7 +1710,7 @@ function Onboarding({
                       typeLabel={template.label}
                     />
                     <RecentUploadHistoryCard uploads={uploadHistory} />
-                  </>
+                  </div>
                 ) : null}
                 {!headers.length ? (
                   <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
@@ -1898,6 +1905,7 @@ function RegistrationLiveStatusBoard({
   latestUpload,
   ledgerHref,
   ledgerLabel,
+  onOpenReviewTab,
   persisted,
   readinessItems,
   readinessPercent,
@@ -1913,6 +1921,7 @@ function RegistrationLiveStatusBoard({
   latestUpload?: UploadHistoryRow;
   ledgerHref: string;
   ledgerLabel: string;
+  onOpenReviewTab: (tab: "mapping" | "quality" | "save") => void;
   persisted: boolean;
   readinessItems: Array<{ detail: string; label: string; ok: boolean }>;
   readinessPercent: number;
@@ -1998,14 +2007,7 @@ function RegistrationLiveStatusBoard({
           </div>
           <div className="grid gap-2 md:grid-cols-3">
             {diagnosticLinks.map((link, index) => (
-              <Link className="rounded-md border border-amber-100 bg-white px-3 py-2 transition hover:bg-amber-50/60" href={link.href} key={link.label}>
-                <span className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-black text-amber-700">{index + 1}순위</span>
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                </span>
-                <span className="mt-1 block text-sm font-black text-slate-950">{link.label}</span>
-                <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{link.description}</span>
-              </Link>
+              <RegistrationDiagnosticAction action={link} index={index} key={link.label} onOpenReviewTab={onOpenReviewTab} />
             ))}
           </div>
         </div>
@@ -2029,13 +2031,13 @@ function RegistrationLiveStatusBoard({
               href={link.href}
               key={link.label}
             >
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-xs font-black text-slate-400">{index + 1}단계</span>
-                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
-              </span>
-              <span className="mt-1 block text-sm font-black text-slate-950">{link.label}</span>
-              <span className="mt-1 block text-xs font-bold text-slate-500">{link.value}</span>
-            </Link>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-black text-slate-400">{index + 1}단계</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                </span>
+                <span className="mt-1 block text-sm font-black text-slate-950">{link.label}</span>
+                <span className="mt-1 block text-xs font-bold text-slate-500">{link.value}</span>
+              </Link>
           ))}
         </div>
       </div>
@@ -2043,7 +2045,57 @@ function RegistrationLiveStatusBoard({
   );
 }
 
-function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], canAnalyze: boolean, persisted: boolean, rows: number) {
+type RegistrationDiagnosticLink = {
+  description: string;
+  href: string;
+  label: string;
+  tab?: "mapping" | "quality" | "save";
+};
+
+function RegistrationDiagnosticAction({
+  action,
+  index,
+  onOpenReviewTab
+}: {
+  action: RegistrationDiagnosticLink;
+  index: number;
+  onOpenReviewTab: (tab: "mapping" | "quality" | "save") => void;
+}) {
+  const className = "rounded-md border border-amber-100 bg-white px-3 py-2 text-left transition hover:bg-amber-50/60";
+  const content = (
+    <>
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-xs font-black text-amber-700">{index + 1}순위</span>
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+      </span>
+      <span className="mt-1 block text-sm font-black text-slate-950">{action.label}</span>
+      <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{action.description}</span>
+    </>
+  );
+
+  if (action.tab) {
+    return (
+      <button
+        className={className}
+        onClick={() => {
+          onOpenReviewTab(action.tab!);
+          window.setTimeout(() => document.getElementById(`${action.tab}-panel`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+        }}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link className={className} href={action.href}>
+      {content}
+    </Link>
+  );
+}
+
+function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], canAnalyze: boolean, persisted: boolean, rows: number): RegistrationDiagnosticLink[] {
   if (persisted) return [];
 
   if (status === "error") {
@@ -2056,15 +2108,15 @@ function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], ca
 
   if (status === "warning") {
     return [
-      { description: "필수 컬럼 연결, 품질 검증, 서버 저장 상태를 같은 화면에서 다시 확인합니다.", href: "#mapping", label: "매핑/품질 조건 확인" },
+      { description: "필수 컬럼 연결 상태를 열어 저장 차단 조건을 확인합니다.", href: "#mapping-panel", label: "필수 컬럼 매핑", tab: "mapping" },
+      { description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.", href: "#quality-panel", label: "품질 검증 확인", tab: "quality" },
       { description: "서버 반영이 안 보이면 DB와 운영 환경값을 확인합니다.", href: "/admin/system", label: "DB 저장 상태 확인" },
-      { description: "업로드 결과가 이력에 남았는지 관리자 기준으로 확인합니다.", href: "/admin/uploads", label: "업로드 이력 확인" }
     ];
   }
 
   if (canAnalyze) {
     return [
-      { description: "저장 버튼 실행 전 최종 조건을 확인합니다.", href: "#save-check", label: "저장 실행 점검" },
+      { description: "저장 버튼 실행 전 최종 조건과 반영 경로를 확인합니다.", href: "#save-panel", label: "저장 실행 점검", tab: "save" },
       { description: "저장 후 이력이 생기는 위치를 미리 확인합니다.", href: "/admin/uploads", label: "업로드 이력 위치 확인" },
       { description: "저장 후 운영 화면 기준값이 맞는지 확인합니다.", href: "/dashboard", label: "대시보드 기준 확인" }
     ];
@@ -2072,8 +2124,8 @@ function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], ca
 
   if (rows > 0) {
     return [
-      { description: "필수 필드가 MAJU 표준 필드에 연결됐는지 확인합니다.", href: "#mapping", label: "필수 컬럼 매핑" },
-      { description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.", href: "#mapping", label: "품질 검증 확인" },
+      { description: "필수 필드가 MAJU 표준 필드에 연결됐는지 확인합니다.", href: "#mapping-panel", label: "필수 컬럼 매핑", tab: "mapping" },
+      { description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.", href: "#quality-panel", label: "품질 검증 확인", tab: "quality" },
       { description: "로그인/DB 문제인지 구분하려면 시스템 점검을 봅니다.", href: "/admin/system", label: "저장 환경 확인" }
     ];
   }
