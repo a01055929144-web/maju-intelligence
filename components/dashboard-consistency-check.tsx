@@ -80,7 +80,10 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
   const routeProviderCounts = payload?.summary?.routeProviderCounts || {};
+  const cachedRouteCount = Number(routeProviderCounts.cached || 0);
+  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
+  const routeHref = `/routes/today${query}`;
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -115,8 +118,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
-          <StatusTile label="실도로 계산" value={formatCount(routeProviderCounts.cached, "곳")} />
-          <StatusTile label="추정 거리" value={formatCount(routeProviderCounts.estimated || routeProviderCounts.sample, "곳")} />
+          <StatusTile label="실도로 계산" value={formatCount(cachedRouteCount, "곳")} />
+          <StatusTile label="추정 거리" value={formatCount(estimatedRouteCount, "곳")} />
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
@@ -176,10 +179,23 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                 </div>
               </div>
             ) : null}
+            {estimatedRouteCount > 0 ? (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black text-blue-950">티맵 거리 계산 필요</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-blue-800">
+                      현재 {estimatedRouteCount.toLocaleString()}곳은 추정 거리입니다. 코스 화면에서 배송 거리 전체 계산을 실행하면 실제 도로 기준으로 맞춰집니다.
+                    </p>
+                  </div>
+                  <Badge className="shrink-0 bg-blue-600 text-white">{cachedRouteCount.toLocaleString()}곳 완료</Badge>
+                </div>
+              </div>
+            ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
               <QuickFixLink href={`/${query}`} label="데이터 등록" />
               <QuickFixLink href={timelineHref} label={missingAddressExamples.length ? "주소 보완 열기" : "거래처 히스토리"} />
-              <QuickFixLink href={`/routes/today${query}`} label="코스 관리" />
+              <QuickFixLink href={routeHref} label={estimatedRouteCount > 0 ? "티맵 거리 계산" : "코스 관리"} />
             </div>
           </div>
         </div>

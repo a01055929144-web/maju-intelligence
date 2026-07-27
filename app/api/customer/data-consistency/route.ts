@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
     masterCount,
     masterWithoutRouteCount,
     missingAddressCount,
+    routeProviderCounts,
     routeWithoutMasterCount,
     visitCount
   });
@@ -142,6 +143,7 @@ function buildRecommendations({
   masterCount,
   masterWithoutRouteCount,
   missingAddressCount,
+  routeProviderCounts,
   routeWithoutMasterCount,
   visitCount
 }: {
@@ -150,10 +152,13 @@ function buildRecommendations({
   masterCount: number;
   masterWithoutRouteCount: number;
   missingAddressCount: number;
+  routeProviderCounts: Record<string, number>;
   routeWithoutMasterCount: number;
   visitCount: number;
 }) {
   const items: string[] = [];
+  const cachedRouteCount = Number(routeProviderCounts.cached || 0);
+  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
 
   if (!isSupabaseSource) {
     items.push("현재 샘플/대체 데이터가 섞여 있습니다. 데이터 등록에서 거래처 마스터를 저장하고 Supabase 환경변수 연결을 먼저 확인하세요.");
@@ -174,7 +179,13 @@ function buildRecommendations({
     items.push(`주소가 없어 지도에 표시되지 않는 매장이 ${missingAddressCount.toLocaleString()}곳 있습니다. 거래처 히스토리에서 주소를 보완하세요.`);
   }
   if (masterCount > 0 && masterWithoutRouteCount === 0 && routeWithoutMasterCount === 0) {
-    items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 티맵 실제 도로 계산 캐시를 채워 추정값을 줄이세요.");
+    items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 코스 거리 계산 기준을 확인하세요.");
+  }
+  if (estimatedRouteCount > 0) {
+    items.push(`티맵 실제 도로값이 아닌 추정 거리 매장이 ${estimatedRouteCount.toLocaleString()}곳 있습니다. 영업·배송 코스에서 배송 거리 전체 계산을 실행하세요.`);
+  }
+  if (cachedRouteCount > 0 && estimatedRouteCount === 0) {
+    items.push("코스 거리 기준이 티맵 실제 도로값으로 정리되어 있습니다. 담당자/배송차 필터별 거리합만 추가 점검하면 됩니다.");
   }
   if (visitCount === 0) {
     items.push("방문/메모 히스토리가 없습니다. 현장 방문 기록 또는 배송완료 증빙을 먼저 쌓아야 합니다.");
