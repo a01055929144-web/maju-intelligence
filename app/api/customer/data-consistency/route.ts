@@ -36,6 +36,15 @@ export async function GET(request: NextRequest) {
   const dashboardCount = dashboard.briefing.currentCustomers;
   const routeStops = routePlan.groups.flatMap((group) => group.stops);
   const routeCount = routePlan.totalStops;
+  const routeProviderCounts = routeStops.reduce(
+    (counts, stop) => {
+      const provider = stop.routeProvider || "unknown";
+      counts[provider] = (counts[provider] || 0) + 1;
+      return counts;
+    },
+    {} as Record<string, number>
+  );
+  const mappableMasterCount = customerMaster.customers.filter((customer) => Boolean(customer.address?.trim())).length;
   const missingAddressCustomers = customerMaster.customers
     .filter((customer) => !customer.address?.trim())
     .slice(0, 8)
@@ -46,7 +55,7 @@ export async function GET(request: NextRequest) {
       deliveryZone: customer.deliveryZone || customer.region || "미분류"
     }));
   const missingAddressCount = customerMaster.customers.filter((customer) => !customer.address?.trim()).length;
-  const mappableRouteCount = Math.max(routeCount - missingAddressCount, 0);
+  const mappableRouteCount = Math.min(routeCount, mappableMasterCount);
   const routeWithoutMasterCount = Math.max(routeCount - masterCount, 0);
   const masterWithoutRouteCount = Math.max(masterCount - routeCount, 0);
   const visitCount = timeline.length;
@@ -73,10 +82,16 @@ export async function GET(request: NextRequest) {
       value: `${masterCount.toLocaleString()} / ${routeCount.toLocaleString()}곳`
     },
     {
-      detail: "지도는 주소가 있는 매장만 표시할 수 있습니다.",
+      detail: "지도는 주소가 있는 매장만 표시할 수 있습니다. 주소가 있으면 내부 지도와 코스 화면의 마커 기준값이 됩니다.",
       label: "원장 주소 ↔ 지도 표시 가능",
       ok: missingAddressCount === 0,
       value: `${mappableRouteCount.toLocaleString()} / ${masterCount.toLocaleString()}곳`
+    },
+    {
+      detail: "경로 계산은 티맵 캐시가 있으면 실제 도로값, 없으면 임시 추정값으로 표시됩니다.",
+      label: "코스 거리 계산 기준",
+      ok: Number(routeProviderCounts.cached || 0) > 0 || routeCount === 0,
+      value: `실도로 ${Number(routeProviderCounts.cached || 0).toLocaleString()} / 추정 ${Number(routeProviderCounts.estimated || 0).toLocaleString()}곳`
     },
     {
       detail: "거래처 히스토리에 방문/메모 데이터가 연결되어 있는지 확인합니다.",
@@ -112,6 +127,7 @@ export async function GET(request: NextRequest) {
         mappableRouteStops: mappableRouteCount,
         missingAddressCustomers: missingAddressCount,
         missingAddressExamples: missingAddressCustomers,
+        routeProviderCounts,
         routeStops: routeCount
       },
       checks
@@ -156,6 +172,9 @@ function buildRecommendations({
   }
   if (missingAddressCount > 0) {
     items.push(`주소가 없어 지도에 표시되지 않는 매장이 ${missingAddressCount.toLocaleString()}곳 있습니다. 거래처 히스토리에서 주소를 보완하세요.`);
+  }
+  if (masterCount > 0 && masterWithoutRouteCount === 0 && routeWithoutMasterCount === 0) {
+    items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 티맵 실제 도로 계산 캐시를 채워 추정값을 줄이세요.");
   }
   if (visitCount === 0) {
     items.push("방문/메모 히스토리가 없습니다. 현장 방문 기록 또는 배송완료 증빙을 먼저 쌓아야 합니다.");

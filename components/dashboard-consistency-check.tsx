@@ -31,6 +31,7 @@ type ConsistencyPayload = {
       deliveryManager?: string;
       deliveryZone?: string;
     }>;
+    routeProviderCounts?: Record<string, number>;
     routeStops?: number;
   };
 };
@@ -78,6 +79,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
+  const routeProviderCounts = payload?.summary?.routeProviderCounts || {};
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
 
   return (
@@ -108,11 +110,13 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
       </div>
 
       <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
           <StatusTile label="거래처 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
           <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
+          <StatusTile label="실도로 계산" value={formatCount(routeProviderCounts.cached, "곳")} />
+          <StatusTile label="추정 거리" value={formatCount(routeProviderCounts.estimated || routeProviderCounts.sample, "곳")} />
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
