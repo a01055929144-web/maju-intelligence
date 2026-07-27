@@ -2486,7 +2486,9 @@ function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMo
       id: "excel" as EntryMode,
       label: "대량 등록",
       meta: "엑셀 업로드",
-      next: "파일 업로드 → 전체 미리보기 → 컬럼 매핑"
+      next: "파일 업로드 → 전체 미리보기 → 컬럼 매핑",
+      output: "원장 일괄 반영",
+      recommendedFor: "ERP 자료가 있을 때"
     },
     {
       badge: "자주 사용",
@@ -2495,7 +2497,9 @@ function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMo
       id: "manual" as EntryMode,
       label: "수기 등록",
       meta: "신규 1곳",
-      next: "주소 검색 → 사업자번호 확인 → 저장"
+      next: "주소 검색 → 사업자번호 확인 → 저장",
+      output: "거래처 히스토리 생성",
+      recommendedFor: "신규 매장 추가"
     },
     {
       badge: "선택",
@@ -2504,7 +2508,9 @@ function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMo
       id: "document" as EntryMode,
       label: "OCR 보조",
       meta: "필수 아님",
-      next: "파일 업로드 → 후보값 확인 → 수기 보정"
+      next: "파일 업로드 → 후보값 확인 → 수기 보정",
+      output: "기본정보 후보값",
+      recommendedFor: "서류가 먼저 있을 때"
     }
   ];
 
@@ -2534,6 +2540,14 @@ function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMo
             <span className="mt-3 block text-sm font-black">{method.label}</span>
             <span className={`mt-1 block text-[11px] font-black ${selected ? "text-white/75" : "text-slate-400"}`}>{method.meta}</span>
             <span className={`mt-2 block text-xs font-semibold leading-5 ${selected ? "text-white/80" : "text-slate-500"}`}>{method.description}</span>
+            <span className="mt-3 grid gap-1.5">
+              <span className={`rounded-md px-2.5 py-2 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-50 text-slate-700"}`}>
+                추천: {method.recommendedFor}
+              </span>
+              <span className={`rounded-md px-2.5 py-2 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-emerald-50 text-emerald-700"}`}>
+                결과: {method.output}
+              </span>
+            </span>
             <span className={`mt-3 block rounded-md px-2.5 py-2 text-xs font-black ${selected ? "bg-white/15 text-white" : "bg-slate-50 text-slate-600"}`}>{method.next}</span>
           </button>
         );
@@ -2659,6 +2673,17 @@ function RegistrationPathGuide({
   const typeLabel = isMaster ? "거래처 마스터" : "매출 거래내역";
   const targetLabel = isMaster ? "거래처 히스토리 · 영업/배송 코스" : "매출 원장 · AI 리포트";
   const statusLabel = persisted ? "서버 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
+  const nextActionLabel = persisted
+    ? "운영 화면에서 반영값을 확인하세요."
+    : canAnalyze
+      ? "저장 탭에서 최종 확인 후 상단 저장 버튼을 실행하세요."
+      : rowsWaiting
+        ? "컬럼 매핑과 품질 검증을 완료하세요."
+        : entryMode === "excel"
+          ? "파일을 업로드해 원본 행과 헤더를 확인하세요."
+          : entryMode === "manual"
+            ? "필수값, 주소, 사업자번호를 입력하세요."
+            : "사업자등록증 파일을 올리거나 수기 입력으로 전환하세요.";
   const modeSteps =
     entryMode === "excel"
       ? [
@@ -2720,6 +2745,10 @@ function RegistrationPathGuide({
           <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
             저장이 완료되면 같은 기준값이 운영 화면 전체에 반영되어야 합니다. 화면별 숫자가 다르면 DB 저장 또는 필터 기준을 먼저 확인합니다.
           </p>
+          <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
+            <p className="text-xs font-black text-blue-900">현재 다음 행동</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-blue-700">{nextActionLabel}</p>
+          </div>
         </div>
       </div>
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
