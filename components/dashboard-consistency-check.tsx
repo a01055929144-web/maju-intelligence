@@ -20,7 +20,9 @@ type ConsistencyPayload = {
   recommendations?: string[];
   source?: "sample" | "supabase" | string;
   summary?: {
+    consistencyScore?: number;
     dashboardCustomers?: number;
+    estimatedRouteStops?: number;
     historyItems?: number;
     mappableRouteStops?: number;
     masterCustomers?: number;
@@ -31,8 +33,11 @@ type ConsistencyPayload = {
       deliveryManager?: string;
       deliveryZone?: string;
     }>;
+    passedChecks?: number;
+    routeCalculationCoverage?: number;
     routeProviderCounts?: Record<string, number>;
     routeStops?: number;
+    totalChecks?: number;
   };
 };
 
@@ -84,6 +89,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
   const routeHref = `/routes/today${query}`;
+  const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
+  const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -129,6 +136,21 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             {payload?.latencyMs === undefined ? "응답 대기 중" : `${payload.latencyMs}ms 응답`}
           </p>
         </div>
+      </div>
+
+      <div className="grid gap-3 border-t border-slate-100 px-5 py-4 lg:grid-cols-2">
+        <ScoreBar
+          description={`${okCount}/${Math.max(checks.length, 1)}개 기준 통과`}
+          label="데이터 기준 일치율"
+          tone={consistencyScore >= 80 ? "good" : consistencyScore >= 50 ? "warn" : "bad"}
+          value={consistencyScore}
+        />
+        <ScoreBar
+          description={`실도로 ${cachedRouteCount.toLocaleString()}곳 · 추정 ${estimatedRouteCount.toLocaleString()}곳`}
+          label="티맵 실제거리 반영률"
+          tone={routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"}
+          value={routeCoverage}
+        />
       </div>
 
       {error ? (
@@ -225,6 +247,37 @@ function StatusTile({ label, value }: { readonly label: string; readonly value: 
     <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
       <p className="text-[11px] font-black uppercase text-slate-400">{label}</p>
       <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function ScoreBar({
+  description,
+  label,
+  tone,
+  value
+}: {
+  readonly description: string;
+  readonly label: string;
+  readonly tone: "bad" | "good" | "warn";
+  readonly value: number;
+}) {
+  const safeValue = Math.max(0, Math.min(100, value));
+  const barClass = tone === "good" ? "bg-emerald-600" : tone === "warn" ? "bg-amber-500" : "bg-rose-500";
+  const textClass = tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : "text-rose-700";
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-4">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-black text-slate-950">{label}</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{description}</p>
+        </div>
+        <p className={`text-2xl font-black ${textClass}`}>{safeValue}%</p>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${barClass}`} style={{ width: `${safeValue}%` }} />
+      </div>
     </div>
   );
 }

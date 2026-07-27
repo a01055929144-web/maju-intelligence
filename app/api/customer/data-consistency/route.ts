@@ -59,6 +59,8 @@ export async function GET(request: NextRequest) {
   const routeWithoutMasterCount = Math.max(routeCount - masterCount, 0);
   const masterWithoutRouteCount = Math.max(masterCount - routeCount, 0);
   const visitCount = timeline.length;
+  const cachedRouteCount = Number(routeProviderCounts.cached || 0);
+  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
 
   const checks: ConsistencyCheck[] = [
     {
@@ -112,6 +114,9 @@ export async function GET(request: NextRequest) {
     visitCount
   });
   const ok = checks.every((check) => check.ok);
+  const passedCheckCount = checks.filter((check) => check.ok).length;
+  const consistencyScore = checks.length ? Math.round((passedCheckCount / checks.length) * 100) : 0;
+  const routeCalculationCoverage = routeCount > 0 ? Math.round((cachedRouteCount / routeCount) * 100) : 100;
 
   return NextResponse.json(
     {
@@ -122,14 +127,19 @@ export async function GET(request: NextRequest) {
       recommendations,
       source: customerMaster.source,
       summary: {
+        consistencyScore,
         dashboardCustomers: dashboardCount,
+        estimatedRouteStops: estimatedRouteCount,
         historyItems: visitCount,
         masterCustomers: masterCount,
         mappableRouteStops: mappableRouteCount,
         missingAddressCustomers: missingAddressCount,
         missingAddressExamples: missingAddressCustomers,
+        passedChecks: passedCheckCount,
+        routeCalculationCoverage,
         routeProviderCounts,
-        routeStops: routeCount
+        routeStops: routeCount,
+        totalChecks: checks.length
       },
       checks
     },
