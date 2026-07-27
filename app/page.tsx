@@ -1942,6 +1942,7 @@ function RegistrationLiveStatusBoard({
     { href: ledgerHref, label: ledgerLabel.replace(" 보기", ""), value: "원장 반영 확인" },
     { href: routeHref, label: "영업·배송 코스", value: "지도/코스 확인" }
   ];
+  const diagnosticLinks = getRegistrationDiagnosticLinks(registrationStatus.status, canAnalyze, persisted, rows);
 
   return (
     <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
@@ -1989,6 +1990,26 @@ function RegistrationLiveStatusBoard({
           </div>
         ))}
       </div>
+      {diagnosticLinks.length ? (
+        <div className="border-t border-slate-100 bg-slate-50/70 p-3">
+          <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-black text-slate-500">문제 발생 시 확인 순서</p>
+            <p className="text-xs font-bold text-slate-400">저장 실패나 반영 불일치가 있으면 아래 순서대로 확인합니다.</p>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {diagnosticLinks.map((link, index) => (
+              <Link className="rounded-md border border-amber-100 bg-white px-3 py-2 transition hover:bg-amber-50/60" href={link.href} key={link.label}>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-black text-amber-700">{index + 1}순위</span>
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                </span>
+                <span className="mt-1 block text-sm font-black text-slate-950">{link.label}</span>
+                <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{link.description}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {rows ? (
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
           현재 파일: <span className="font-black text-slate-800">{filename}</span>
@@ -2020,6 +2041,44 @@ function RegistrationLiveStatusBoard({
       </div>
     </div>
   );
+}
+
+function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], canAnalyze: boolean, persisted: boolean, rows: number) {
+  if (persisted) return [];
+
+  if (status === "error") {
+    return [
+      { description: "Supabase 연결, 테이블, Storage, 환경변수 상태를 먼저 봅니다.", href: "/admin/system", label: "관리자 시스템 점검" },
+      { description: "최근 업로드 실패와 품질 점수, 리포트 생성 여부를 확인합니다.", href: "/admin/uploads", label: "업로드 이력 확인" },
+      { description: "로그인 세션이 만료됐는지 고객사 계정으로 다시 확인합니다.", href: "/dashboard/login", label: "고객사 로그인 확인" }
+    ];
+  }
+
+  if (status === "warning") {
+    return [
+      { description: "필수 컬럼 연결, 품질 검증, 서버 저장 상태를 같은 화면에서 다시 확인합니다.", href: "#mapping", label: "매핑/품질 조건 확인" },
+      { description: "서버 반영이 안 보이면 DB와 운영 환경값을 확인합니다.", href: "/admin/system", label: "DB 저장 상태 확인" },
+      { description: "업로드 결과가 이력에 남았는지 관리자 기준으로 확인합니다.", href: "/admin/uploads", label: "업로드 이력 확인" }
+    ];
+  }
+
+  if (canAnalyze) {
+    return [
+      { description: "저장 버튼 실행 전 최종 조건을 확인합니다.", href: "#save-check", label: "저장 실행 점검" },
+      { description: "저장 후 이력이 생기는 위치를 미리 확인합니다.", href: "/admin/uploads", label: "업로드 이력 위치 확인" },
+      { description: "저장 후 운영 화면 기준값이 맞는지 확인합니다.", href: "/dashboard", label: "대시보드 기준 확인" }
+    ];
+  }
+
+  if (rows > 0) {
+    return [
+      { description: "필수 필드가 MAJU 표준 필드에 연결됐는지 확인합니다.", href: "#mapping", label: "필수 컬럼 매핑" },
+      { description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.", href: "#mapping", label: "품질 검증 확인" },
+      { description: "로그인/DB 문제인지 구분하려면 시스템 점검을 봅니다.", href: "/admin/system", label: "저장 환경 확인" }
+    ];
+  }
+
+  return [];
 }
 
 function ImplementationProgressCard({
