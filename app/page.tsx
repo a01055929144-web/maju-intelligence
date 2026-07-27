@@ -1702,7 +1702,7 @@ function Onboarding({
                 ) : null}
                 {reviewTab === "save" ? (
                   <div className="scroll-mt-4 space-y-5" id="save-panel">
-                    <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} />
+                    <SaveReadinessPanel items={saveReadinessItems} canAnalyze={canAnalyze} persisted={pipelineMeta.persisted} />
                     <OperationalHandoffPanel
                       dashboardHref={dashboardHref}
                       ledgerHref={currentLedgerHref}
@@ -3775,10 +3775,12 @@ function DataQualityCard({
 
 function SaveReadinessPanel({
   canAnalyze,
-  items
+  items,
+  persisted
 }: {
   canAnalyze: boolean;
   items: Array<{ detail: string; label: string; ok: boolean }>;
+  persisted: boolean;
 }) {
   const readyCount = items.filter((item) => item.ok).length;
   const blockingItems = items.filter((item) => !item.ok && item.label !== "서버 반영");
@@ -3832,6 +3834,35 @@ function SaveReadinessPanel({
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
         <p className="text-xs font-black text-slate-500">반영 확인 위치</p>
         <p className="mt-1 text-xs font-bold leading-5 text-slate-700">거래처 마스터는 거래처 히스토리와 영업·배송 코스에, 매출 거래내역은 매출 원장과 AI 리포트에 반영됩니다.</p>
+      </div>
+      <div className="border-t border-slate-100 bg-white px-4 py-4">
+        <div className="grid gap-2 lg:grid-cols-3">
+          {[
+            {
+              detail: canAnalyze ? "상단 관제판의 저장하고 리포트 갱신 버튼을 실행합니다." : "아직 저장 버튼이 열리지 않았습니다.",
+              label: "1. 저장 실행",
+              ok: canAnalyze
+            },
+            {
+              detail: "서버 응답이 저장 완료인지, 저장 확인 필요인지 확인합니다.",
+              label: "2. DB 반영 확인",
+              ok: persisted
+            },
+            {
+              detail: "대시보드, 원장, 코스 화면의 기준값이 같은지 대조합니다.",
+              label: "3. 운영 화면 대조",
+              ok: persisted
+            }
+          ].map((step) => (
+            <div key={step.label} className={`rounded-md border px-3 py-3 ${step.ok ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black text-slate-950">{step.label}</p>
+                {step.ok ? <Check className="h-4 w-4 text-blue-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
+              </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{step.detail}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
