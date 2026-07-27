@@ -252,7 +252,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         <DashboardDataBasisPanel
           customerCount={customerDataCount}
           customerSource={customerMaster.source}
-          dataRegistrationHref={withCompanyQuery("/")}
+          dataRegistrationHref={withCompanyQuery("/?type=customer-master")}
           latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}

@@ -112,6 +112,12 @@ function getAdminCompanyIdFromUrl() {
   return new URLSearchParams(window.location.search).get("companyId") || "";
 }
 
+function getUploadTypeFromUrl(): UploadTemplateType {
+  if (typeof window === "undefined") return "customer-master";
+  const value = new URLSearchParams(window.location.search).get("type") || new URLSearchParams(window.location.search).get("uploadType");
+  return isUploadTemplateType(value) ? value : "customer-master";
+}
+
 export default function Home() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
@@ -138,6 +144,13 @@ export default function Home() {
 
   useEffect(() => {
     refreshUploadHistory();
+  }, []);
+
+  useEffect(() => {
+    const requestedUploadType = getUploadTypeFromUrl();
+    setUploadType(requestedUploadType);
+    setFieldMap(autoMapHeaders(headers, uploadTemplates[requestedUploadType].fields));
+    setScreen("onboarding");
   }, []);
 
   function downloadTemplate(type: UploadTemplateType) {
@@ -4719,6 +4732,10 @@ function mappingPresetEndpoint(type: UploadTemplateType) {
   const companyId = getAdminCompanyIdFromUrl();
   if (companyId) params.set("companyId", companyId);
   return `/api/excel-mapping-presets?${params.toString()}`;
+}
+
+function isUploadTemplateType(value: string | null): value is UploadTemplateType {
+  return value === "customer-master" || value === "sales-analysis";
 }
 
 function uploadHistoryEndpoint() {

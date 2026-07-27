@@ -217,9 +217,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     excludeClosedStores ? "이탈 제외" : ""
   ].filter(Boolean);
   const dataRegistrationHref = useMemo(() => {
-    if (typeof window === "undefined") return "/";
+    if (typeof window === "undefined") return "/?type=customer-master";
     const companyId = new URLSearchParams(window.location.search).get("companyId");
-    return companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/";
+    const params = new URLSearchParams({ type: "customer-master" });
+    if (companyId) params.set("companyId", companyId);
+    return `/?${params.toString()}`;
   }, []);
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
