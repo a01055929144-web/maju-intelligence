@@ -31,6 +31,12 @@ type KakaoAddressMapProps = {
   readonly showList?: boolean;
 };
 
+type FullscreenMapPayload = {
+  focusedMarkerId?: string;
+  markers: ReadonlyArray<KakaoMapMarker>;
+  routePath: ReadonlyArray<KakaoRoutePoint>;
+};
+
 declare global {
   interface Window {
     kakao?: any;
@@ -226,10 +232,11 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   };
 
   const openLargeMap = () => {
-    const center = mapInstanceRef.current?.getCenter?.();
-    const markerUrl = createKakaoSearchUrl(focusedMarker);
-    const url = markerUrl || (center ? `https://map.kakao.com/link/map/MAJU%20지도,${center.getLat()},${center.getLng()}` : "https://map.kakao.com");
-    openPopup(url, "maju-kakao-large-map");
+    openInternalLargeMap({
+      focusedMarkerId,
+      markers,
+      routePath
+    });
   };
 
   return (
@@ -288,6 +295,16 @@ function MapControls({
 
 function openPopup(url: string, name: string) {
   window.open(url, name, "popup=yes,width=1440,height=920,left=80,top=40,noopener,noreferrer");
+}
+
+function openInternalLargeMap(payload: FullscreenMapPayload) {
+  const mapId = `maju-map-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    window.sessionStorage.setItem(mapId, JSON.stringify(payload));
+  } catch {
+    // If sessionStorage is blocked, the fullscreen page will show an empty-state message.
+  }
+  openPopup(`/map/fullscreen?mapId=${encodeURIComponent(mapId)}`, "maju-internal-large-map");
 }
 
 function createKakaoSearchUrl(marker?: KakaoMapMarker) {
@@ -477,7 +494,6 @@ function FallbackAddressMap({
 }: KakaoAddressMapProps) {
   const focusedMarker = markers.find((marker) => marker.id === focusedMarkerId);
   const displayMarkers = focusedMarker?.id ? prioritizeFocusedMarker(markers, focusedMarker.id) : markers;
-  const firstMarker = markers.find((marker) => marker.tone !== "origin") || markers[0];
 
   return (
     <div className="space-y-4">
@@ -485,7 +501,7 @@ function FallbackAddressMap({
         <div className="absolute right-3 top-3 z-30">
           <button
             className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800"
-            onClick={() => openPopup(firstMarker ? `https://map.kakao.com/link/search/${encodeURIComponent(firstMarker.address)}` : "https://map.kakao.com", "maju-kakao-large-map")}
+            onClick={() => openInternalLargeMap({ focusedMarkerId, markers, routePath: routePath || emptyRoutePath })}
             type="button"
           >
             <ExternalLink className="h-3.5 w-3.5" />

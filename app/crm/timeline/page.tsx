@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { sampleCustomers } from "@/lib/sample-data";
 
 type TimelineItem = {
   id: string;
@@ -99,6 +98,26 @@ const defaultDbSummary: DbSummary = {
   visitResults: null
 };
 
+const emptyCustomer: CustomerView = {
+  address: "",
+  businessNumber: "",
+  businessStatus: "확인 필요",
+  customerName: "거래처를 선택하세요",
+  deliveryKm: 0,
+  deliveryManager: "",
+  email: "",
+  grade: "C",
+  industry: "",
+  lastOrderDays: 0,
+  loadingPosition: "",
+  memoCount: 0,
+  monthlyRevenue: 0,
+  phone: "",
+  region: "",
+  representativeName: "",
+  visitCount: 0
+};
+
 function getAdminCompanyIdFromUrl() {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("companyId") || "";
@@ -118,9 +137,10 @@ function withCompanyQuery(path: string) {
 export default function CrmTimelinePage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
-  const [timeline, setTimeline] = useState<TimelineItem[]>(sampleVisitTimeline);
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
+  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "sample" | "error">("loading");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [customerSearch, setCustomerSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
@@ -154,28 +174,7 @@ export default function CrmTimelinePage() {
     };
   }, []);
 
-  const sampleCustomerViews = useMemo(
-    () =>
-      sampleCustomers.map((customer, index) => ({
-        ...customer,
-        id: `sample-${index + 1}`,
-        businessNumber: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
-        businessStatus: index % 7 === 0 ? "확인 필요" : "정상",
-        deliveryManager: ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
-        grade: revenueGrade(customer.monthlyRevenue) as "A" | "B" | "C",
-        memoCount: 2 + (index % 4),
-        phone: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
-        email: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
-        loadingPosition: index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역",
-        naverPlaceUrl: customer.naverPlaceUrl || "",
-        kakaoPlaceUrl: customer.kakaoPlaceUrl || "",
-        googleMapUrl: customer.googleMapUrl || "",
-        placeLinksCheckedAt: customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl ? "운영 링크 등록" : "",
-        representativeName: index % 2 === 0 ? "김민준" : "이서연"
-      })),
-    []
-  );
-  const [customers, setCustomers] = useState<CustomerView[]>(sampleCustomerViews);
+  const [customers, setCustomers] = useState<CustomerView[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -186,20 +185,32 @@ export default function CrmTimelinePage() {
         return response.json();
       })
       .then((payload) => {
-        if (!active || !payload?.customers?.length) return;
-        setCustomers(payload.customers);
+        if (!active) return;
+        if (payload?.source !== "supabase") {
+          setCustomerSource(payload?.source === "sample" ? "sample" : "error");
+          setCustomers([]);
+          setSelectedIndex(0);
+          return;
+        }
+        setCustomerSource("supabase");
+        setCustomers(Array.isArray(payload.customers) ? payload.customers : []);
         const requestedCustomerId = getSelectedCustomerIdFromUrl();
         const requestedIndex = requestedCustomerId ? payload.customers.findIndex((customer: CustomerView) => customer.id === requestedCustomerId) : -1;
         setSelectedIndex(requestedIndex >= 0 ? requestedIndex : 0);
       })
-      .catch(() => null);
+      .catch(() => {
+        if (!active) return;
+        setCustomerSource("error");
+        setCustomers([]);
+      });
 
     return () => {
       active = false;
     };
   }, []);
 
-  const selectedCustomer = customers[selectedIndex] || customers[0];
+  const selectedCustomer = customers[selectedIndex] || emptyCustomer;
+  const hasCustomers = customers.length > 0;
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
   const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
   const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
@@ -580,6 +591,16 @@ export default function CrmTimelinePage() {
             <SummaryCard helper={`방문 결과 ${formatDbCount(dbSummary.visitResults)}`} label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} tone="violet" />
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+          {!hasCustomers ? (
+            <div className="mx-4 mb-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-black text-amber-900">
+                {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
+              </p>
+              <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
+                샘플 거래처는 더 이상 히스토리 화면에 실제 데이터처럼 표시하지 않습니다. 데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 원장 기준으로 연결됩니다.
+              </p>
+            </div>
+          ) : null}
           <CustomerLedgerBasisPanel
             customerCount={customers.length}
             filteredCount={filteredCustomers.length}
@@ -728,8 +749,10 @@ export default function CrmTimelinePage() {
               })}
               {!filteredCustomers.length ? (
                 <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
-                  <p className="text-sm font-black text-slate-700">조건에 맞는 거래처가 없습니다.</p>
-                  <p className="mt-1 text-xs font-bold text-slate-400">검색어, 등급 또는 운영 필터를 바꿔보세요.</p>
+                  <p className="text-sm font-black text-slate-700">{hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처 마스터를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -784,7 +807,9 @@ export default function CrmTimelinePage() {
                 completeCount={operationalReadyCount}
                 isEditing={isEditing}
                 progress={ledgerProgress}
-                onEdit={() => setIsEditing(true)}
+                onEdit={() => {
+                  if (hasCustomers) setIsEditing(true);
+                }}
                 totalCount={operationalChecks.length}
               />
               <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
@@ -958,7 +983,9 @@ export default function CrmTimelinePage() {
                       <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
                     </div>
                     <div className="p-4 md:col-span-2">
-                      <PlaceLinksPanel customer={selectedCustomer} onEdit={() => setIsEditing(true)} />
+                      <PlaceLinksPanel customer={selectedCustomer} onEdit={() => {
+                        if (hasCustomers) setIsEditing(true);
+                      }} />
                     </div>
                   </div>
                 )}
