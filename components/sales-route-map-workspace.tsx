@@ -2447,17 +2447,19 @@ function RouteBasisStrip({
   readonly visibleMapReadyStoreCount: number;
 }) {
   const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "주소 기준 정상";
+  const sourceLabel = routePlan.source === "supabase" ? "Supabase 실원장" : "샘플 기준";
+  const sourceHelper = routePlan.source === "supabase" ? "DB 거래처 원장 기준" : "실제 거래처 등록 필요";
 
   return (
     <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
       <div className="min-w-0">
         <p className="text-xs font-black text-slate-500">운영 기준 데이터</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          대시보드, 거래처 히스토리, 이 화면은 동일한 거래처 원장과 물류 출발지 기준을 사용합니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
+          현재 화면의 데이터 출처는 {sourceLabel}입니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
         </p>
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
-        <RouteBasisMetric label="거래처 원장" value={`${routePlan.totalStops.toLocaleString()}곳`} helper="대시보드 기준" />
+        <RouteBasisMetric label="데이터 출처" value={sourceLabel} helper={sourceHelper} tone={routePlan.source === "supabase" ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시 가능" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
         <RouteBasisMetric label="출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} helper="단건 거리 합" />
         <RouteBasisMetric label="출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} helper="단건 시간 합" />

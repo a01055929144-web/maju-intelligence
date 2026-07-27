@@ -17,11 +17,13 @@ export default function FullscreenMapPage() {
     const mapId = new URLSearchParams(window.location.search).get("mapId");
     if (!mapId) return;
 
-    const raw = window.sessionStorage.getItem(mapId);
+    const raw = window.localStorage.getItem(mapId) || window.sessionStorage.getItem(mapId);
     if (!raw) return;
 
     try {
       setPayload(JSON.parse(raw) as FullscreenMapPayload);
+      window.localStorage.removeItem(mapId);
+      window.sessionStorage.removeItem(mapId);
     } catch {
       setPayload(null);
     }

@@ -300,9 +300,9 @@ function openPopup(url: string, name: string) {
 function openInternalLargeMap(payload: FullscreenMapPayload) {
   const mapId = `maju-map-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
-    window.sessionStorage.setItem(mapId, JSON.stringify(payload));
+    window.localStorage.setItem(mapId, JSON.stringify(payload));
   } catch {
-    // If sessionStorage is blocked, the fullscreen page will show an empty-state message.
+    // If browser storage is blocked, the fullscreen page will show an empty-state message.
   }
   openPopup(`/map/fullscreen?mapId=${encodeURIComponent(mapId)}`, "maju-internal-large-map");
 }

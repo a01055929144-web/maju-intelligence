@@ -154,6 +154,7 @@ export type RoutePlanGroup = {
 };
 export type RoutePlan = {
   groups: RoutePlanGroup[];
+  source: "sample" | "supabase";
   totalDistanceKm: number;
   totalDurationMinutes: number;
   totalExpectedRevenue: number;
@@ -2482,6 +2483,7 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
 
   return {
     groups,
+    source: customerMaster.source,
     totalDistanceKm: roundToOneDecimal(planned.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
     totalDurationMinutes: planned.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0),
     totalExpectedRevenue: planned.reduce((total, stop) => total + stop.expectedRevenue, 0),
