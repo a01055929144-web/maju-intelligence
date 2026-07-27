@@ -36,8 +36,17 @@ export async function GET(request: NextRequest) {
   const dashboardCount = dashboard.briefing.currentCustomers;
   const routeStops = routePlan.groups.flatMap((group) => group.stops);
   const routeCount = routePlan.totalStops;
-  const mappableRouteCount = routeStops.filter((stop) => Boolean(stop.address?.trim())).length;
-  const missingAddressCount = routeCount - mappableRouteCount;
+  const missingAddressCustomers = customerMaster.customers
+    .filter((customer) => !customer.address?.trim())
+    .slice(0, 8)
+    .map((customer) => ({
+      customerId: customer.id,
+      customerName: customer.customerName,
+      deliveryManager: customer.deliveryManager,
+      deliveryZone: customer.deliveryZone || customer.region || "미분류"
+    }));
+  const missingAddressCount = customerMaster.customers.filter((customer) => !customer.address?.trim()).length;
+  const mappableRouteCount = Math.max(routeCount - missingAddressCount, 0);
   const routeWithoutMasterCount = Math.max(routeCount - masterCount, 0);
   const masterWithoutRouteCount = Math.max(masterCount - routeCount, 0);
   const visitCount = timeline.length;
@@ -65,9 +74,9 @@ export async function GET(request: NextRequest) {
     },
     {
       detail: "지도는 주소가 있는 매장만 표시할 수 있습니다.",
-      label: "코스 ↔ 지도 표시 가능",
+      label: "원장 주소 ↔ 지도 표시 가능",
       ok: missingAddressCount === 0,
-      value: `${mappableRouteCount.toLocaleString()} / ${routeCount.toLocaleString()}곳`
+      value: `${mappableRouteCount.toLocaleString()} / ${masterCount.toLocaleString()}곳`
     },
     {
       detail: "거래처 히스토리에 방문/메모 데이터가 연결되어 있는지 확인합니다.",
@@ -102,6 +111,7 @@ export async function GET(request: NextRequest) {
         masterCustomers: masterCount,
         mappableRouteStops: mappableRouteCount,
         missingAddressCustomers: missingAddressCount,
+        missingAddressExamples: missingAddressCustomers,
         routeStops: routeCount
       },
       checks

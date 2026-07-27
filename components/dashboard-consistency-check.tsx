@@ -25,6 +25,12 @@ type ConsistencyPayload = {
     mappableRouteStops?: number;
     masterCustomers?: number;
     missingAddressCustomers?: number;
+    missingAddressExamples?: Array<{
+      customerId?: string;
+      customerName: string;
+      deliveryManager?: string;
+      deliveryZone?: string;
+    }>;
     routeStops?: number;
   };
 };
@@ -71,6 +77,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "샘플/대체 데이터" : "확인 중";
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -104,7 +111,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           <StatusTile label="거래처 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
           <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
-          <StatusTile label="히스토리" value={formatCount(payload?.summary?.historyItems, "건")} />
+          <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
@@ -152,6 +159,18 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             <p className="mt-3 text-xs font-bold text-slate-500">
               {okCount}/{Math.max(checks.length, 1)}개 기준 통과
             </p>
+            {missingAddressExamples.length ? (
+              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-black text-amber-900">주소 보완 대상</p>
+                <div className="mt-2 space-y-1">
+                  {missingAddressExamples.slice(0, 4).map((customer) => (
+                    <p key={customer.customerId || customer.customerName} className="truncate text-xs font-bold text-amber-900">
+                      {customer.customerName} · {customer.deliveryZone || "권역 미지정"} · {customer.deliveryManager || "담당자 미지정"}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
               <QuickFixLink href={`/${query}`} label="데이터 등록" />
               <QuickFixLink href={`/crm/timeline${query}`} label="거래처 히스토리" />
