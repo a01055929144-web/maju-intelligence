@@ -333,6 +333,8 @@ export default function CrmTimelinePage() {
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
   const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
+  const selectedFilteredPosition = filteredCustomers.findIndex(({ index }) => index === selectedIndex) + 1;
+  const activeCleanupLabel = operationFilterLabel(operationFilter);
   const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
   const readyCustomerCount = customers.length - needsAttentionCustomers.length;
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
@@ -786,6 +788,13 @@ export default function CrmTimelinePage() {
                 />
                 </div>
               </div>
+              <CleanupWorkStatus
+                filterLabel={activeCleanupLabel}
+                filteredCount={filteredCustomers.length}
+                isActive={operationFilter !== "all"}
+                onClear={() => setOperationFilter("all")}
+                selectedPosition={selectedFilteredPosition}
+              />
             </div>
             <div className="max-h-[640px] space-y-2 overflow-auto p-3">
               {filteredCustomers.map(({ customer, index }) => {
@@ -1325,6 +1334,53 @@ function CustomerFilterButton({
       <span className="truncate">{label}</span>
       <span className={`ml-2 rounded-full px-1.5 py-0.5 ${active ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{count}</span>
     </button>
+  );
+}
+
+function CleanupWorkStatus({
+  filterLabel,
+  filteredCount,
+  isActive,
+  onClear,
+  selectedPosition
+}: {
+  filterLabel: string;
+  filteredCount: number;
+  isActive: boolean;
+  onClear: () => void;
+  selectedPosition: number;
+}) {
+  if (!isActive) {
+    return (
+      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-500">
+        운영 상태 필터를 선택하면 보완 대상만 모아보고 저장 후 다음 대상으로 이동합니다.
+      </div>
+    );
+  }
+
+  const progressLabel = filteredCount > 0 && selectedPosition > 0 ? `${selectedPosition}/${filteredCount}` : `0/${filteredCount}`;
+
+  return (
+    <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50/80 p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-black text-teal-900">현재 보완 작업</p>
+          <p className="mt-1 text-sm font-black text-slate-950">
+            {filterLabel} · {progressLabel}건
+          </p>
+        </div>
+        <button
+          className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-teal-200 bg-white px-3 text-xs font-black text-teal-800 hover:bg-teal-50"
+          onClick={onClear}
+          type="button"
+        >
+          필터 해제
+        </button>
+      </div>
+      <p className="mt-2 text-xs font-bold leading-5 text-teal-800">
+        저장하면 조건이 해결된 거래처는 목록에서 빠지고, 다음 보완 대상으로 자동 이동합니다.
+      </p>
+    </div>
   );
 }
 
@@ -2075,6 +2131,16 @@ function findNextMatchingCustomerIndex(customers: CustomerView[], filter: Operat
   const afterCurrent = customers.findIndex((customer, index) => index > currentIndex && customerMatchesOperationFilter(customer, filter));
   if (afterCurrent >= 0) return afterCurrent;
   return customers.findIndex((customer, index) => index < currentIndex && customerMatchesOperationFilter(customer, filter));
+}
+
+function operationFilterLabel(filter: OperationFilter) {
+  if (filter === "address-missing") return "주소 미등록";
+  if (filter === "business-check") return "사업자 확인";
+  if (filter === "business-number-missing") return "사업자번호 미등록";
+  if (filter === "contact-missing") return "연락처 미등록";
+  if (filter === "loading-missing") return "적재위치 미등록";
+  if (filter === "manager-missing") return "담당자 미지정";
+  return "운영 전체";
 }
 
 function isOperationFilter(value: string | null): value is OperationFilter {
