@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, Database, KeyRound, LayoutDashboard, ServerCog, ShieldAlert, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Database, FileClock, KeyRound, LayoutDashboard, ServerCog, ShieldAlert, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession } from "@/lib/auth";
-import { getSystemDiagnostics } from "@/lib/store";
+import { getAdminAuditLogs, getSystemDiagnostics } from "@/lib/store";
 import { AdminPageHeader } from "../admin-page-header";
 
 const statusLabels = {
@@ -19,6 +19,7 @@ export default async function AdminSystemPage() {
   if (!session) redirect("/admin/login");
 
   const system = await getSystemDiagnostics();
+  const auditLogs = await getAdminAuditLogs().catch(() => []);
   const databaseReady = system.mode === "production-db" && system.databaseChecks.length > 0 && system.databaseChecks.every((check) => check.status === "ready");
   const storageReady = system.storageChecks.length > 0 && system.storageChecks.every((check) => check.status === "ready");
   const authReady = system.adminConfigured && system.customerConfigured;
@@ -328,6 +329,59 @@ export default async function AdminSystemPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <FileClock className="h-5 w-5 text-primary" />
+                  최근 감사 로그
+                </CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  업로드 분석, 원장 반영처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
+                </p>
+              </div>
+              <Badge className={auditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
+                {auditLogs.length ? `${auditLogs.length}건 확인` : "기록 대기"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {auditLogs.length ? (
+              <div className="overflow-hidden rounded-md border border-border">
+                <div className="grid grid-cols-[160px_1fr_160px_160px] gap-3 border-b border-border bg-muted/50 px-4 py-3 text-xs font-black text-muted-foreground">
+                  <span>일시</span>
+                  <span>작업</span>
+                  <span>고객사</span>
+                  <span>수행자</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="grid gap-3 px-4 py-3 text-sm md:grid-cols-[160px_1fr_160px_160px] md:items-center">
+                      <span className="font-bold text-muted-foreground">{log.createdAt}</span>
+                      <div className="min-w-0">
+                        <p className="font-black text-slate-950">{auditActionLabel(log.action)}</p>
+                        <p className="mt-1 truncate text-xs font-bold text-muted-foreground">
+                          {log.targetType} · {auditMetadataSummary(log.metadata)}
+                        </p>
+                      </div>
+                      <span className="truncate font-bold text-slate-700">{log.company}</span>
+                      <span className="truncate font-bold text-slate-700">{log.actorName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border bg-muted/35 p-5">
+                <p className="text-sm font-black text-slate-900">아직 표시할 감사 로그가 없습니다.</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  거래처 마스터나 매출 거래내역을 저장하면 업로드 분석 기록이 이곳에 남습니다. 운영 전환 후에는 고객사별 변경 이력을 여기서 확인합니다.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <Card>
             <CardHeader>
@@ -461,6 +515,29 @@ function ReadinessList({ empty, icon, items, title }: { empty: string; icon: "da
       )}
     </div>
   );
+}
+
+function auditActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    excel_upload_analyzed: "엑셀 업로드 분석 및 원장 반영"
+  };
+
+  return labels[action] || action;
+}
+
+function auditMetadataSummary(metadata: Record<string, unknown>) {
+  const rows = Number(metadata.rows || 0);
+  const rawRows = Number(metadata.rawRows || 0);
+  const duplicateCount = Number(metadata.duplicateCount || 0);
+  const qualityScore = Number(metadata.qualityScore || 0);
+  const parts = [
+    rows ? `정제 ${rows.toLocaleString()}행` : "",
+    rawRows ? `원본 ${rawRows.toLocaleString()}행` : "",
+    qualityScore ? `품질 ${qualityScore}%` : "",
+    duplicateCount ? `중복 ${duplicateCount.toLocaleString()}건` : ""
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" · ") : "상세값 없음";
 }
 
 function SystemActionCard({

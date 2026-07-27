@@ -18,6 +18,17 @@ export type UploadHistoryItem = {
   healthScore: number;
   createdAt: string;
 };
+export type AdminAuditLogItem = {
+  id: string;
+  action: string;
+  actorName: string;
+  company: string;
+  companyId: string;
+  metadata: Record<string, unknown>;
+  targetId: string;
+  targetType: string;
+  createdAt: string;
+};
 export type ExcelMappingPreset = {
   id?: string;
   companyId: string;
@@ -3083,6 +3094,45 @@ export async function getUploadHistory(companyId?: string): Promise<UploadHistor
     healthScore: row.ai_reports?.[0]?.health_score || 0,
     createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
   }));
+}
+
+export async function getAdminAuditLogs(companyId?: string, limit = 12): Promise<AdminAuditLogItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+
+  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      action: string;
+      target_type: string | null;
+      target_id: string | null;
+      company_id: string | null;
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+      companies: { name: string } | null;
+    }>
+  >(
+    `admin_audit_logs?select=id,action,target_type,target_id,company_id,metadata,created_at,companies(name)${companyFilter}&order=created_at.desc&limit=${Math.max(
+      1,
+      Math.min(limit, 50)
+    )}`
+  );
+
+  return rows.map((row) => {
+    const metadata = row.metadata || {};
+
+    return {
+      id: row.id,
+      action: row.action,
+      actorName: String(metadata.actorName || "시스템"),
+      company: row.companies?.name || "고객사 미확인",
+      companyId: row.company_id || "",
+      metadata,
+      targetId: row.target_id || "",
+      targetType: row.target_type || "대상 미확인",
+      createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+    };
+  });
 }
 
 async function saveSalesTransactions(companyId: string, importId: string, rawRows: RawUploadRow[], columnMapping: ColumnMapping) {
