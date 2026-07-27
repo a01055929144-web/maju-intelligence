@@ -41,6 +41,14 @@ type ConsistencyPayload = {
   };
 };
 
+type FixItem = {
+  href: string;
+  label: string;
+  status: string;
+  title: string;
+  tone: "bad" | "good" | "warn";
+};
+
 export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: string }) {
   const [payload, setPayload] = useState<ConsistencyPayload | null>(null);
   const [error, setError] = useState("");
@@ -91,6 +99,17 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const routeHref = `/routes/today${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
   const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;
+  const fixItems = buildFixItems({
+    consistencyScore,
+    dashboardCustomers: payload?.summary?.dashboardCustomers || 0,
+    isSupabase,
+    masterCustomers: payload?.summary?.masterCustomers || 0,
+    missingAddressCustomers: payload?.summary?.missingAddressCustomers || 0,
+    routeCoverage,
+    routeStops: payload?.summary?.routeStops || 0,
+    timelineHref,
+    routeHref
+  });
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -180,6 +199,24 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
             <p className="text-sm font-black text-slate-950">다음 조치</p>
             <div className="mt-3 space-y-2">
+              {fixItems.map((item) => (
+                <Link
+                  className={`block rounded-md border bg-white px-3 py-3 hover:bg-slate-50 ${getFixBorderClass(item.tone)}`}
+                  href={item.href}
+                  key={item.title}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-slate-950">{item.title}</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.label}</p>
+                    </div>
+                    <Badge className={getFixBadgeClass(item.tone)}>{item.status}</Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <p className="mt-4 text-xs font-black text-slate-500">진단 메모</p>
+            <div className="mt-3 space-y-2">
               {(payload?.recommendations || ["점검 결과를 불러온 뒤 다음 조치를 표시합니다."]).slice(0, 3).map((item) => (
                 <p key={item} className="rounded-md bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600">
                   {item}
@@ -234,12 +271,97 @@ function QuickFixLink({ href, label }: { readonly href: string; readonly label: 
   );
 }
 
+function buildFixItems({
+  consistencyScore,
+  dashboardCustomers,
+  isSupabase,
+  masterCustomers,
+  missingAddressCustomers,
+  routeCoverage,
+  routeHref,
+  routeStops,
+  timelineHref
+}: {
+  readonly consistencyScore: number;
+  readonly dashboardCustomers: number;
+  readonly isSupabase: boolean;
+  readonly masterCustomers: number;
+  readonly missingAddressCustomers: number;
+  readonly routeCoverage: number;
+  readonly routeHref: string;
+  readonly routeStops: number;
+  readonly timelineHref: string;
+}): FixItem[] {
+  const items: FixItem[] = [];
+
+  items.push({
+    href: "/",
+    label: isSupabase ? "운영 DB 기준으로 거래처 원장이 연결되어 있습니다." : "샘플/대체 데이터가 섞이면 화면별 숫자가 다르게 보일 수 있습니다.",
+    status: isSupabase ? "정상" : "필수",
+    title: "데이터 저장소",
+    tone: isSupabase ? "good" : "bad"
+  });
+
+  items.push({
+    href: "/",
+    label:
+      dashboardCustomers === masterCustomers
+        ? "대시보드와 거래처 원장의 전체 매장 수가 같습니다."
+        : `대시보드 ${dashboardCustomers.toLocaleString()}곳, 원장 ${masterCustomers.toLocaleString()}곳으로 다릅니다.`,
+    status: dashboardCustomers === masterCustomers ? "일치" : "확인",
+    title: "거래처 수 기준",
+    tone: dashboardCustomers === masterCustomers ? "good" : "warn"
+  });
+
+  items.push({
+    href: timelineHref,
+    label:
+      missingAddressCustomers > 0
+        ? `주소가 없는 매장 ${missingAddressCustomers.toLocaleString()}곳은 지도와 코스에서 빠질 수 있습니다.`
+        : "지도 표시용 주소가 모두 준비되어 있습니다.",
+    status: missingAddressCustomers > 0 ? "보완" : "정상",
+    title: "주소/지도 기준",
+    tone: missingAddressCustomers > 0 ? "warn" : "good"
+  });
+
+  items.push({
+    href: routeHref,
+    label:
+      routeCoverage >= 80
+        ? `코스 ${routeStops.toLocaleString()}곳의 실제거리 반영률이 안정적입니다.`
+        : "영업·배송 코스에서 티맵 거리 계산을 실행해 추정값을 줄이세요.",
+    status: `${routeCoverage}%`,
+    title: "티맵 거리 기준",
+    tone: routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"
+  });
+
+  return items.sort((a, b) => getFixPriority(a.tone) - getFixPriority(b.tone)).slice(0, consistencyScore >= 90 ? 3 : 4);
+}
+
 function buildTimelineHref(companyId: string | undefined, missingAddressCount: number) {
   const params = new URLSearchParams();
   if (companyId) params.set("companyId", companyId);
   if (missingAddressCount > 0) params.set("operationFilter", "address-missing");
   const query = params.toString();
   return query ? `/crm/timeline?${query}` : "/crm/timeline";
+}
+
+function getFixBadgeClass(tone: FixItem["tone"]) {
+  if (tone === "good") return "shrink-0 bg-emerald-100 text-emerald-800";
+  if (tone === "warn") return "shrink-0 bg-amber-100 text-amber-800";
+  return "shrink-0 bg-rose-100 text-rose-800";
+}
+
+function getFixBorderClass(tone: FixItem["tone"]) {
+  if (tone === "good") return "border-emerald-100";
+  if (tone === "warn") return "border-amber-200";
+  return "border-rose-200";
+}
+
+function getFixPriority(tone: FixItem["tone"]) {
+  if (tone === "bad") return 0;
+  if (tone === "warn") return 1;
+  return 2;
 }
 
 function StatusTile({ label, value }: { readonly label: string; readonly value: string }) {
