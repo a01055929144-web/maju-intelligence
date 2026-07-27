@@ -20,6 +20,9 @@ export default async function AdminSystemPage() {
 
   const system = await getSystemDiagnostics();
   const auditLogs = await getAdminAuditLogs().catch(() => []);
+  const sensitiveAuditCount = auditLogs.filter((log) => auditHasSensitiveChange(log.metadata)).length;
+  const dataAuditCount = auditLogs.filter((log) => auditActionTone(log.action) === "data").length;
+  const accountAuditCount = auditLogs.filter((log) => auditActionTone(log.action) === "account").length;
   const databaseReady = system.mode === "production-db" && system.databaseChecks.length > 0 && system.databaseChecks.every((check) => check.status === "ready");
   const storageReady = system.storageChecks.length > 0 && system.storageChecks.every((check) => check.status === "ready");
   const authReady = system.adminConfigured && system.customerConfigured;
@@ -338,7 +341,7 @@ export default async function AdminSystemPage() {
                   최근 감사 로그
                 </CardTitle>
                 <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  업로드 분석, 원장 반영처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
+                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
                 </p>
               </div>
               <Badge className={auditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
@@ -348,27 +351,42 @@ export default async function AdminSystemPage() {
           </CardHeader>
           <CardContent>
             {auditLogs.length ? (
-              <div className="overflow-hidden rounded-md border border-border">
-                <div className="grid grid-cols-[160px_1fr_160px_160px] gap-3 border-b border-border bg-muted/50 px-4 py-3 text-xs font-black text-muted-foreground">
-                  <span>일시</span>
-                  <span>작업</span>
-                  <span>고객사</span>
-                  <span>수행자</span>
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <AuditSummaryTile label="계정/권한 작업" tone="account" value={accountAuditCount} />
+                  <AuditSummaryTile label="데이터 변경 작업" tone="data" value={dataAuditCount} />
+                  <AuditSummaryTile label="민감 변경 작업" tone="danger" value={sensitiveAuditCount} />
                 </div>
-                <div className="divide-y divide-border">
-                  {auditLogs.map((log) => (
-                    <div key={log.id} className="grid gap-3 px-4 py-3 text-sm md:grid-cols-[160px_1fr_160px_160px] md:items-center">
-                      <span className="font-bold text-muted-foreground">{log.createdAt}</span>
-                      <div className="min-w-0">
-                        <p className="font-black text-slate-950">{auditActionLabel(log.action)}</p>
-                        <p className="mt-1 truncate text-xs font-bold text-muted-foreground">
-                          {log.targetType} · {auditMetadataSummary(log.metadata)}
-                        </p>
-                      </div>
-                      <span className="truncate font-bold text-slate-700">{log.company}</span>
-                      <span className="truncate font-bold text-slate-700">{log.actorName}</span>
-                    </div>
-                  ))}
+
+                <div className="overflow-hidden rounded-md border border-border">
+                  <div className="hidden grid-cols-[160px_1fr_160px_150px] gap-3 border-b border-border bg-muted/50 px-4 py-3 text-xs font-black text-muted-foreground md:grid">
+                    <span>일시</span>
+                    <span>작업 내용</span>
+                    <span>고객사</span>
+                    <span>수행자</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {auditLogs.map((log) => {
+                      const tone = auditHasSensitiveChange(log.metadata) ? "danger" : auditActionTone(log.action);
+
+                      return (
+                        <div key={log.id} className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[160px_1fr_160px_150px] md:items-center">
+                          <span className="font-bold text-muted-foreground">{log.createdAt}</span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className={auditToneClass(tone)}>{auditToneLabel(tone)}</Badge>
+                              <p className="font-black text-slate-950">{auditActionLabel(log.action)}</p>
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-muted-foreground">
+                              {auditTargetTypeLabel(log.targetType)} · {auditMetadataSummary(log.metadata)}
+                            </p>
+                          </div>
+                          <span className="truncate font-bold text-slate-700">{log.company}</span>
+                          <span className="truncate font-bold text-slate-700">{log.actorName}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -534,6 +552,58 @@ function auditActionLabel(action: string) {
   return labels[action] || action;
 }
 
+function auditActionTone(action: string) {
+  if (["auth_credentials_updated", "managed_company_created", "managed_company_updated", "staff_invitation_created", "staff_invitation_updated"].includes(action)) {
+    return "account";
+  }
+  if (["customer_master_created", "customer_master_updated", "customer_note_created", "customer_attachment_created", "excel_upload_analyzed"].includes(action)) {
+    return "data";
+  }
+  if (action.includes("password") || action.includes("secret")) return "danger";
+  return "default";
+}
+
+function auditHasSensitiveChange(metadata: Record<string, unknown>) {
+  return Boolean(metadata.adminPasswordChanged || metadata.customerPasswordChanged || metadata.secretChanged);
+}
+
+function auditToneClass(tone: string) {
+  const classes: Record<string, string> = {
+    account: "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+    danger: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+    data: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+    default: "bg-slate-100 text-slate-700"
+  };
+
+  return classes[tone] || classes.default;
+}
+
+function auditToneLabel(tone: string) {
+  const labels: Record<string, string> = {
+    account: "계정/권한",
+    danger: "민감",
+    data: "데이터",
+    default: "기록"
+  };
+
+  return labels[tone] || labels.default;
+}
+
+function auditTargetTypeLabel(targetType: string) {
+  const labels: Record<string, string> = {
+    auth_credentials: "로그인 계정",
+    company: "고객사",
+    customer_attachment: "첨부자료",
+    customer_master: "거래처 원장",
+    customer_note: "거래처 메모",
+    staff_invitation: "직원 초대",
+    upload_import: "업로드 분석",
+    "대상 미확인": "대상 미확인"
+  };
+
+  return labels[targetType] || targetType;
+}
+
 function auditMetadataSummary(metadata: Record<string, unknown>) {
   const customerName = String(metadata.customerName || "");
   const attachmentType = String(metadata.attachmentType || "");
@@ -574,6 +644,16 @@ function auditMetadataSummary(metadata: Record<string, unknown>) {
   ].filter(Boolean);
 
   return parts.length ? parts.join(" · ") : "상세값 없음";
+}
+
+function AuditSummaryTile({ label, tone, value }: { label: string; tone: string; value: number }) {
+  return (
+    <div className="rounded-md border border-border bg-white p-4">
+      <Badge className={auditToneClass(tone)}>{auditToneLabel(tone)}</Badge>
+      <p className="mt-3 text-sm font-black text-slate-700">{label}</p>
+      <p className="mt-1 text-3xl font-black text-slate-950">{value.toLocaleString()}건</p>
+    </div>
+  );
 }
 
 function attachmentTypeLabel(type: string) {
