@@ -36,6 +36,8 @@ export function ExcelHeaderMappingPreview({
   const requiredFields = fields.filter((field) => field.required);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
+  const mappedHeaderCount = Object.keys(mappedByHeader).length;
+  const unusedHeaderCount = Math.max(0, headers.length - mappedHeaderCount);
 
   function updateHeaderMapping(header: string, nextFieldKey: string) {
     const nextMap = { ...fieldMap };
@@ -111,6 +113,12 @@ export function ExcelHeaderMappingPreview({
           <MappingStep label="1" title="엑셀 원본 확인" description={`${rows.length.toLocaleString()}개 행 전체를 기준으로 누락값과 컬럼 의미를 봅니다.`} />
           <MappingStep label="2" title="표준 필드 지정" description="거래처명, 주소, 사업자번호, 매출 필드처럼 저장 기준이 되는 값을 연결합니다." />
           <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 서버 저장과 리포트 갱신을 진행할 수 있습니다." />
+        </div>
+        <div className="mt-3 grid overflow-hidden rounded-md border border-slate-200 bg-white text-xs sm:grid-cols-4">
+          <MappingCounter label="엑셀 컬럼" value={`${headers.length.toLocaleString()}개`} />
+          <MappingCounter label="연결 컬럼" value={`${mappedHeaderCount.toLocaleString()}개`} />
+          <MappingCounter label="미사용 컬럼" value={`${unusedHeaderCount.toLocaleString()}개`} />
+          <MappingCounter label="필수 연결" value={`${requiredMappedCount}/${requiredFields.length}`} />
         </div>
       </div>
       <div className="max-h-[560px] overflow-auto bg-white">
@@ -204,6 +212,15 @@ export function ExcelHeaderMappingPreview({
           onHeaderMap={updateHeaderMapping}
         />
       ) : null}
+    </div>
+  );
+}
+
+function MappingCounter({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-r border-slate-200 px-3 py-2.5 last:border-r-0 sm:border-b-0">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }

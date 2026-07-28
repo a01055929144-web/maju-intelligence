@@ -3850,21 +3850,29 @@ function DataQualityCard({
                 문제 행 엑셀 다운로드
               </Button>
             </div>
-            <div className="overflow-hidden rounded-md border border-slate-200">
-              <div className="grid grid-cols-[72px_120px_minmax(0,1fr)] bg-slate-50 px-3 py-2 text-[11px] font-black text-slate-500">
-                <span>행 번호</span>
-                <span>유형</span>
-                <span>보완 내용</span>
+            <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+              <div className="max-h-[320px] overflow-auto">
+                <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-xs">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 shadow-[0_1px_0_#e2e8f0]">
+                    <tr>
+                      <th className="w-[92px] border-r border-slate-200 px-3 py-2.5 font-black">행 번호</th>
+                      <th className="w-[150px] border-r border-slate-200 px-3 py-2.5 font-black">유형</th>
+                      <th className="px-3 py-2.5 font-black">보완 내용</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {visibleIssues.map((issue) => (
+                      <tr key={`${issue.type}-${issue.rowNumber}`} className="align-top hover:bg-slate-50">
+                        <td className="border-r border-slate-100 px-3 py-2.5 font-black text-slate-950">{issue.rowNumber}행</td>
+                        <td className="border-r border-slate-100 px-3 py-2.5">
+                          <Badge className={issue.tone === "rose" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}>{issue.type}</Badge>
+                        </td>
+                        <td className="px-3 py-2.5 font-bold leading-5 text-slate-700">{issue.detail}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              {visibleIssues.map((issue) => (
-                <div key={`${issue.type}-${issue.rowNumber}`} className="grid grid-cols-[72px_120px_minmax(0,1fr)] items-start border-t border-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-                  <span className="font-black text-slate-950">{issue.rowNumber}행</span>
-                  <span>
-                    <Badge className={issue.tone === "rose" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}>{issue.type}</Badge>
-                  </span>
-                  <span className="leading-5">{issue.detail}</span>
-                </div>
-              ))}
             </div>
             {issuePreview.length > visibleIssues.length ? <p className="text-xs font-bold text-amber-700">외 {issuePreview.length - visibleIssues.length}개 문제 행은 다운로드 파일에서 확인하세요.</p> : null}
           </div>
@@ -4408,39 +4416,54 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
       </div>
 
       {latestUploads.length ? (
-        <div className="divide-y divide-slate-100">
-          {latestUploads.map((upload) => (
-            <div key={upload.id} className="grid gap-3 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_220px_120px] xl:items-center">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-black text-slate-900">{upload.filename}</p>
-                  <Badge className={upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
-                    {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
-                  </Badge>
-                </div>
-                <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-                  <Clock className="h-3.5 w-3.5" />
-                  {upload.createdAt}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <MiniStatus label="행" value={`${upload.rows.toLocaleString()}개`} />
-                <MiniStatus label="중복" value={`${upload.duplicateCount.toLocaleString()}개`} />
-                <MiniStatus label="건강도" value={`${upload.healthScore}점`} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] font-black text-slate-500">
-                  <span>품질</span>
-                  <span>{upload.qualityScore}%</span>
-                </div>
-                <Progress value={upload.qualityScore} />
-                <Link className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50" href={`/reports/${upload.reportId}`}>
-                  리포트 확인
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-xs">
+            <thead className="bg-slate-50 text-slate-500 shadow-[0_1px_0_#e2e8f0]">
+              <tr>
+                <th className="w-[34%] border-r border-slate-200 px-4 py-3 font-black">파일명</th>
+                <th className="w-[116px] border-r border-slate-200 px-3 py-3 font-black">상태</th>
+                <th className="w-[100px] border-r border-slate-200 px-3 py-3 text-right font-black">행</th>
+                <th className="w-[100px] border-r border-slate-200 px-3 py-3 text-right font-black">중복</th>
+                <th className="w-[120px] border-r border-slate-200 px-3 py-3 text-right font-black">건강도</th>
+                <th className="w-[150px] border-r border-slate-200 px-3 py-3 font-black">품질</th>
+                <th className="w-[130px] px-3 py-3 font-black">리포트</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {latestUploads.map((upload) => (
+                <tr key={upload.id} className="align-middle hover:bg-slate-50/80">
+                  <td className="min-w-0 border-r border-slate-100 px-4 py-3">
+                    <p className="truncate font-black text-slate-900">{upload.filename}</p>
+                    <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-500">
+                      <Clock className="h-3.5 w-3.5" />
+                      {upload.createdAt}
+                    </p>
+                  </td>
+                  <td className="border-r border-slate-100 px-3 py-3">
+                    <Badge className={upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
+                      {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
+                    </Badge>
+                  </td>
+                  <td className="border-r border-slate-100 px-3 py-3 text-right font-black text-slate-900">{upload.rows.toLocaleString()}개</td>
+                  <td className="border-r border-slate-100 px-3 py-3 text-right font-black text-slate-700">{upload.duplicateCount.toLocaleString()}개</td>
+                  <td className="border-r border-slate-100 px-3 py-3 text-right font-black text-slate-900">{upload.healthScore}점</td>
+                  <td className="border-r border-slate-100 px-3 py-3">
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-black text-slate-500">
+                      <span>품질</span>
+                      <span>{upload.qualityScore}%</span>
+                    </div>
+                    <Progress className="mt-1.5 h-1.5" value={upload.qualityScore} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <Link className="inline-flex h-8 w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 hover:bg-slate-50" href={`/reports/${upload.reportId}`}>
+                      확인
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="p-4">
