@@ -2647,23 +2647,23 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
       const details = store as RoutePlanStoreDetails;
       return {
         ...store,
-        accountCopyStatus: getSampleDocumentStatus(index + 3),
-        bankAccount: createBankAccount(index),
-        birthDate: store.birthDate || createSampleDate(1974 + (index % 18), (index % 12) + 1, (index % 27) + 1),
-        businessCertificateStatus: getSampleDocumentStatus(index),
-        businessRegistrationNumber: details.businessNumber || createBusinessNumber(index),
-        businessStatus: normalizeStoreBusinessStatus(details.businessStatus, index),
+        accountCopyStatus: "missing",
+        bankAccount: "",
+        birthDate: store.birthDate || "",
+        businessCertificateStatus: "missing",
+        businessRegistrationNumber: details.businessNumber || "",
+        businessStatus: normalizeStoreBusinessStatus(details.businessStatus),
         deliveryArea: (store as RoutePlanStop & { deliveryArea?: string }).deliveryArea || store.region,
         deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || defaultDriverByIndex(index),
-        email: store.email || createStoreEmail(store.name, index),
+        email: store.email || "",
         grade: getRevenueGrade(store.expectedRevenue),
-        industry: store.industry || getSampleIndustry(index),
+        industry: store.industry || "미분류",
         markerX: marker?.x ?? 18 + ((index * 13) % 68),
         markerY: marker?.y ?? 20 + ((index * 17) % 58),
         memo: details.loadingPosition || "정기 납품 조건 확인 필요",
-        openingDate: store.openingDate || createSampleDate(2015 + (index % 9), (index % 12) + 1, (index % 27) + 1),
-        phone: store.phone || createPhoneNumber(index),
-        representativeName: store.representativeName || createRepresentativeName(index)
+        openingDate: store.openingDate || "",
+        phone: store.phone || "",
+        representativeName: store.representativeName || ""
       };
     });
 }
@@ -2676,25 +2676,25 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
       const details = store as StoreRow & RoutePlanStoreDetails;
       return {
         ...store,
-        accountCopyStatus: getSampleDocumentStatus(globalIndex + 3),
-        bankAccount: createBankAccount(globalIndex),
-        birthDate: store.birthDate || createSampleDate(1974 + (globalIndex % 18), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
-        businessCertificateStatus: getSampleDocumentStatus(globalIndex),
-        businessRegistrationNumber: details.businessRegistrationNumber || details.businessNumber || createBusinessNumber(globalIndex),
-        businessStatus: normalizeStoreBusinessStatus(details.businessStatus, globalIndex),
+        accountCopyStatus: details.accountCopyStatus || "missing",
+        bankAccount: details.bankAccount || "",
+        birthDate: store.birthDate || details.birthDate || "",
+        businessCertificateStatus: details.businessCertificateStatus || "missing",
+        businessRegistrationNumber: details.businessRegistrationNumber || details.businessNumber || "",
+        businessStatus: normalizeStoreBusinessStatus(details.businessStatus),
         deliveryArea: vehicle.area,
         deliveryDriver: vehicle.driver,
         deliveryVehicleId: vehicle.id,
         deliveryVehicleName: vehicle.name,
-        email: store.email || createStoreEmail(store.name, globalIndex),
+        email: store.email || details.email || "",
         grade: getRevenueGrade(store.expectedRevenue),
-        industry: store.industry || getSampleIndustry(globalIndex),
+        industry: store.industry || details.industry || "미분류",
         markerX: marker?.x ?? 16 + (((vehicleIndex * 15 + storeIndex) * 7) % 70),
         markerY: marker?.y ?? 18 + (((vehicleIndex * 15 + storeIndex) * 11) % 58),
         memo: details.loadingPosition || details.memo || "배송 시간대와 결제 조건 확인 필요",
-        openingDate: store.openingDate || createSampleDate(2015 + (globalIndex % 9), (globalIndex % 12) + 1, (globalIndex % 27) + 1),
-        phone: store.phone || createPhoneNumber(globalIndex),
-        representativeName: store.representativeName || createRepresentativeName(globalIndex)
+        openingDate: store.openingDate || details.openingDate || "",
+        phone: store.phone || details.phone || "",
+        representativeName: store.representativeName || details.representativeName || ""
       };
     })
   );
@@ -2704,11 +2704,11 @@ function findMarkerForStore(existingMarkers: KakaoMapMarker[], store: Pick<Route
   return existingMarkers.find((item) => (store.id && item.id === store.id) || item.address === store.address || item.name === store.name);
 }
 
-function normalizeStoreBusinessStatus(status: string | undefined, index: number): StoreRow["businessStatus"] {
+function normalizeStoreBusinessStatus(status: string | undefined): StoreRow["businessStatus"] {
   if (status === "active" || status === "정상") return "active";
   if (status === "closed" || status === "폐업") return "closed";
   if (status === "unknown" || status === "확인 필요" || status === "확인 예정") return "unknown";
-  return getSampleBusinessStatus(index);
+  return "unknown";
 }
 
 function toCustomerPayload(store: StoreRow) {
@@ -2888,45 +2888,6 @@ function getBusinessRegistrationCheckDigit(firstNineDigits: string) {
   return (10 - (sum % 10)) % 10;
 }
 
-function getSampleBusinessStatus(index: number): StoreRow["businessStatus"] {
-  if (index % 37 === 0) return "closed";
-  if (index % 11 === 0) return "unknown";
-  return "active";
-}
-
-function getSampleDocumentStatus(index: number): StoreRow["businessCertificateStatus"] {
-  return index % 5 === 0 ? "missing" : "received";
-}
-
-function createBankAccount(index: number) {
-  return `신한 ${110000000000 + index * 92831}`;
-}
-
-function createPhoneNumber(index: number) {
-  const middle = String(3100 + ((index * 37) % 6000)).padStart(4, "0");
-  const last = String(1000 + ((index * 53) % 8999)).padStart(4, "0");
-  return `010-${middle}-${last}`;
-}
-
-function createRepresentativeName(index: number) {
-  const names = ["김민준", "이서연", "박도윤", "최하린", "정우진", "한지아", "오현우", "서지훈", "문가은", "신유나"];
-  return names[index % names.length];
-}
-
-function createStoreEmail(name: string, index: number) {
-  const slug = name.replace(/[^0-9a-zA-Z가-힣]/g, "").slice(0, 10) || `store${index + 1}`;
-  return `${slug.toLowerCase()}${index + 1}@example.com`;
-}
-
-function createSampleDate(year: number, month: number, day: number) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function getSampleIndustry(index: number) {
-  const industries = ["한식", "일식", "중식", "분식", "카페", "베이커리", "급식", "정육", "반찬", "주점"];
-  return industries[index % industries.length];
-}
-
 function countGrades(stores: StoreRow[]) {
   return stores.reduce(
     (counts, store) => ({
@@ -3001,7 +2962,7 @@ function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
   if (provider === "cached") return "티맵 캐시";
   if (provider === "tmap") return "티맵";
   if (provider === "estimated") return "추정";
-  return "기준 데이터";
+  return "계산 전";
 }
 
 function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {
