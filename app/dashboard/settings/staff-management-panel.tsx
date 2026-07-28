@@ -48,7 +48,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
     setInvitations((current) => [payload.invitation as StaffInvitation, ...current]);
     setForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setMessage(payload.persisted ? "직원 초대 링크가 생성되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요." : "직원 초대가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 초대 링크가 DB에 저장되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요." : "직원 초대가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function updateStaff(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -73,7 +73,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    setMessage(payload.persisted ? "직원 정보가 저장되었습니다." : "직원 정보가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 정보가 DB에 저장되었습니다." : "직원 정보가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function copyInviteUrl(url: string) {

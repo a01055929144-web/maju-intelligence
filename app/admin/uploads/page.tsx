@@ -61,7 +61,7 @@ export default async function AdminUploadsPage() {
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
             {[
-              ["저장 여부", "업로드 후 이 화면에 이력이 생기면 서버 저장 흐름이 동작한 것입니다."],
+              ["저장 여부", "업로드 후 이 화면에 이력이 생기면 DB 저장 흐름이 동작한 것입니다."],
               ["품질 점수", "주소/지역/필수 컬럼 완성도가 낮으면 매핑과 원본 파일을 다시 확인합니다."],
               ["중복 건수", "사업자번호 또는 거래처명+주소 기준으로 중복 후보를 확인합니다."]
             ].map(([title, description]) => (

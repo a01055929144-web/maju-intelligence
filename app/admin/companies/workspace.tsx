@@ -111,7 +111,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       customerEmail: saved.customerEmail,
       customerPassword: saved.customerPassword
     });
-    setMessage(payload.persisted ? "고객사와 로그인 계정이 저장되었습니다." : "고객사 정보가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "고객사와 로그인 계정이 DB에 저장되었습니다." : "고객사 정보가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function createInvite() {
@@ -151,7 +151,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       )
     );
     setInviteForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크가 생성되었습니다." : "초대 링크가 화면에 생성되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크가 DB에 저장되었습니다." : "초대 링크가 화면에 생성되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function updateStaffInvitation(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -188,7 +188,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           : company
       )
     );
-    setInviteMessage(payload.persisted ? "직원 업무 구분/상태가 저장되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. 서버 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 업무 구분/상태가 DB에 저장되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);

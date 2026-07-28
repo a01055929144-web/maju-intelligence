@@ -1914,7 +1914,7 @@ function DeliveryProofPanel({
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-xs font-black text-slate-900">{proof.fileName}</p>
                 <span className={`rounded px-2 py-0.5 text-[11px] font-black ${proof.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                  {proof.persisted ? "서버 저장" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
+                  {proof.persisted ? "DB 저장" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
                 </span>
               </div>
               <p className="mt-1 text-[11px] font-black text-blue-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
@@ -2043,7 +2043,7 @@ function StoreDetail({
       phone: draftPhone,
       representativeName: draftRepresentativeName
       });
-      const persistedLabel = result?.persisted === false ? "서버 저장 미확인" : "서버 저장 완료";
+      const persistedLabel = result?.persisted === false ? "DB 저장 미확인" : "DB 저장 완료";
       setSavedAt(`${persistedLabel} · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
