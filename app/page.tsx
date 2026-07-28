@@ -4255,22 +4255,22 @@ function OperationalHandoffPanel({
     <div className="overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm font-black text-slate-950">저장 후 운영 확인 순서</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{typeLabel} 등록 후 같은 데이터 기준으로 확인해야 하는 화면입니다.</p>
+          <p className="text-sm font-black text-slate-950">저장 후 DB 반영 확인 순서</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{typeLabel} 등록 후 같은 DB 기준으로 확인해야 하는 화면입니다.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge className="w-fit bg-white text-teal-800 ring-1 ring-inset ring-teal-200">운영 연결</Badge>
-          <Badge className="w-fit bg-white text-slate-600 ring-1 ring-inset ring-slate-200">기준 데이터 동기화</Badge>
+          <Badge className="w-fit bg-white text-teal-800 ring-1 ring-inset ring-teal-200">DB 저장 확인</Badge>
+          <Badge className="w-fit bg-white text-slate-600 ring-1 ring-inset ring-slate-200">화면별 기준값 확인</Badge>
         </div>
       </div>
       <div className="grid border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-xs font-bold leading-5 text-slate-600 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
         <span className="font-black text-slate-950">확인 원칙</span>
-        <span>등록된 데이터는 대시보드, 원장, 영업·배송 코스에서 같은 고객사 기준으로 보여야 합니다. 숫자가 다르면 최근 등록 이력과 DB 연결 상태를 먼저 확인합니다.</span>
+        <span>등록된 데이터는 대시보드, 원장, 영업·배송 코스에서 같은 고객사와 같은 DB 기준으로 보여야 합니다. 숫자가 다르면 최근 등록 이력과 DB 연결 상태를 먼저 확인합니다.</span>
       </div>
       <div className="border-b border-slate-100 bg-white px-4 py-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs font-black text-slate-400">화면 간 데이터 일치 기준</p>
+            <p className="text-xs font-black text-slate-400">화면 간 DB 일치 기준</p>
             <p className="mt-1 text-sm font-black text-slate-950">저장 후 아래 3곳의 기준값이 같아야 DB 반영 데이터로 봅니다.</p>
           </div>
           <Badge className="w-fit bg-slate-100 text-slate-700">불일치 시 DB 저장상태 먼저 확인</Badge>
@@ -4842,28 +4842,28 @@ function ReportDataBasisCard({
   ];
   const checkLinks = [
     {
-      description: "대표가 보는 KPI와 Health Score가 갱신됐는지 확인합니다.",
+      description: "대표가 보는 KPI와 Health Score가 DB 저장값 기준으로 갱신됐는지 확인합니다.",
       href: dashboardHref,
       label: "대시보드",
-      value: "회사 현황"
+      value: "KPI 확인"
     },
     {
       description: isSalesReport ? "거래원장 행이 매출 분석 화면에 누적됐는지 확인합니다." : "사업자번호, 주소, 담당자, 첨부자료가 원장에 반영됐는지 확인합니다.",
       href: ledgerHref,
       label: isSalesReport ? "매출 원장" : "거래처 히스토리",
-      value: isSalesReport ? "매출 반영" : "원장 반영"
+      value: isSalesReport ? "매출 확인" : "원장 확인"
     },
     {
       description: "거래처 주소와 담당자 배정값이 지도와 배송차 코스에 이어졌는지 확인합니다.",
       href: routeHref,
       label: "영업·배송 코스",
-      value: "지도·코스"
+      value: "코스 확인"
     },
     {
       description: "현장 직원 모바일 화면에서 오늘 코스와 거래처 액션이 보이는지 확인합니다.",
       href: mobileHref,
       label: "모바일 현장",
-      value: "직원 실행"
+      value: "현장 확인"
     }
   ];
 
@@ -4891,7 +4891,7 @@ function ReportDataBasisCard({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-black text-slate-950">저장 후 반영 확인 순서</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 완료 후 아래 4개 화면이 같은 회사 데이터 기준으로 보이면 운영 반영이 된 상태입니다.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 완료 후 아래 4개 화면이 같은 회사와 같은 DB 기준으로 보이면 반영이 완료된 상태입니다.</p>
           </div>
           <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
             {persisted ? "확인 가능" : "저장 확인 후"}
