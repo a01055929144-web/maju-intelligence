@@ -462,20 +462,28 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
               </Card>
 
               <Card className="border-slate-200/80 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Truck className="h-5 w-5 text-primary" />
-                    배송 운영
-                  </CardTitle>
+                <CardHeader className="flex flex-col gap-2 pb-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Truck className="h-5 w-5 text-primary" />
+                      배송 운영
+                    </CardTitle>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">출발지 기준 참고값과 코스 확정 상태를 봅니다.</p>
+                  </div>
+                  <Badge className="w-fit bg-blue-50 text-blue-700">티맵 확정 전 참고값</Badge>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2">
-                    <SmallMetric label="출발지-매장 거리합" value={routeDistanceKm ? `${routeDistanceKm.toLocaleString()}km` : "등록 필요"} />
-                    <SmallMetric label="출발지-매장 시간합" value={routeDurationMinutes ? formatMinutes(routeDurationMinutes) : "등록 필요"} />
-                    <SmallMetric label="선택 배송매장" value={`${routeStopCount.toLocaleString()}곳`} />
-                    <SmallMetric label="참고 주유비" value={referenceFuelCost ? `${referenceFuelCost.toLocaleString()}원` : "등록 필요"} />
+                    <SmallMetric helper="단건 거리 합산" label="출발지-매장 거리합" value={routeDistanceKm ? `${routeDistanceKm.toLocaleString()}km` : "등록 필요"} />
+                    <SmallMetric helper="단건 시간 합산" label="출발지-매장 시간합" value={routeDurationMinutes ? formatMinutes(routeDurationMinutes) : "등록 필요"} />
+                    <SmallMetric helper="코스 후보 매장" label="선택 배송매장" value={`${routeStopCount.toLocaleString()}곳`} />
+                    <SmallMetric helper="1L 1,650원 기준" label="참고 주유비" value={referenceFuelCost ? `${referenceFuelCost.toLocaleString()}원` : "등록 필요"} />
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-muted-foreground">거리는 물류 출발지에서 각 매장까지의 단건 합계입니다. 실제 경유 순서와 도로 기준 시간은 영업·배송 코스에서 티맵 계산으로 확정합니다.</p>
+                  <Link className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-xs font-black text-white transition hover:bg-slate-800" href={withCompanyQuery("/routes/today")}>
+                    배송차별 경유 코스 계산
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                  <p className="mt-3 text-xs font-bold leading-5 text-muted-foreground">거리는 물류 출발지에서 각 매장까지의 단건 합계입니다. 실제 경유 순서와 도로 기준 시간은 영업·배송 코스에서 티맵 계산으로 확정합니다.</p>
                 </CardContent>
               </Card>
             </div>
@@ -815,11 +823,12 @@ function QuickActionCard({
   );
 }
 
-function SmallMetric({ label, value }: { label: string; value: string }) {
+function SmallMetric({ helper, label, value }: { helper: string; label: string; value: string }) {
   return (
     <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
-      <p className="text-xs font-black text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
+      <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-lg font-black leading-none text-slate-950">{value}</p>
+      <p className="mt-2 truncate text-xs font-bold text-slate-500">{helper}</p>
     </div>
   );
 }
