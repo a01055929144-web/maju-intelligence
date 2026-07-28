@@ -698,7 +698,7 @@ export default function CrmTimelinePage() {
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
           {!hasCustomers ? (
-            <div className="mx-4 mb-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-black text-amber-900">
                 {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
               </p>
@@ -853,6 +853,15 @@ export default function CrmTimelinePage() {
                 onClear={clearOperationFilter}
                 selectedPosition={selectedFilteredPosition}
               />
+              <LedgerListStatusStrip
+                customerSource={customerSource}
+                gradeFilter={gradeFilter}
+                hasCustomers={hasCustomers}
+                operationFilter={operationFilter}
+                query={customerSearch}
+                visibleCount={filteredCustomers.length}
+                totalCount={customers.length}
+              />
             </div>
             <div className="max-h-[560px] space-y-2 overflow-auto p-3 xl:max-h-[calc(100vh-520px)] xl:min-h-[360px]">
               {filteredCustomers.map(({ customer, index }) => {
@@ -917,7 +926,7 @@ export default function CrmTimelinePage() {
                   </Badge>
                   <Link
                     className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50"
-                    href="/routes/today"
+                    href={withCompanyQuery("/routes/today")}
                   >
                     <Route className="h-3.5 w-3.5" />
                     코스 보기
@@ -1100,7 +1109,7 @@ export default function CrmTimelinePage() {
                       <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
                       <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
                       <EditableField label="배송담당자" value={draftCustomer.deliveryManager} inputRef={deliveryManagerInputRef} onChange={(value) => updateDraft("deliveryManager", value)} />
-                      <EditableField label="배송거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
+                      <EditableField label="출발지 거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
@@ -1452,6 +1461,62 @@ function CleanupWorkStatus({
       <p className="mt-2 text-xs font-bold leading-5 text-teal-800">
         저장하면 조건이 해결된 거래처는 목록에서 빠지고, 다음 보완 대상으로 자동 이동합니다.
       </p>
+    </div>
+  );
+}
+
+function LedgerListStatusStrip({
+  customerSource,
+  gradeFilter,
+  hasCustomers,
+  operationFilter,
+  query,
+  totalCount,
+  visibleCount
+}: {
+  customerSource: "loading" | "supabase" | "sample" | "error";
+  gradeFilter: "all" | "A" | "B" | "C";
+  hasCustomers: boolean;
+  operationFilter: OperationFilter;
+  query: string;
+  totalCount: number;
+  visibleCount: number;
+}) {
+  const chips = [
+    query.trim() ? `검색: ${query.trim()}` : "",
+    gradeFilter !== "all" ? `등급: ${gradeFilter}` : "",
+    operationFilter !== "all" ? `상태: ${operationFilterLabel(operationFilter)}` : ""
+  ].filter(Boolean);
+  const sourceLabel =
+    customerSource === "loading"
+      ? "원장 불러오는 중"
+      : customerSource === "supabase"
+        ? "운영 원장"
+        : "운영 원장 미연결";
+
+  return (
+    <div className={`mt-3 rounded-lg border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className={`text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>{sourceLabel}</p>
+          <p className={`mt-1 text-[11px] font-bold leading-4 ${hasCustomers ? "text-slate-500" : "text-amber-800"}`}>
+            {hasCustomers ? `현재 ${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳 표시` : "거래처 마스터 등록 후 목록, 상세, 코스가 같은 기준으로 연결됩니다."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          {chips.length ? (
+            chips.map((chip) => (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700" key={chip}>
+                {chip}
+              </span>
+            ))
+          ) : (
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${hasCustomers ? "bg-emerald-50 text-emerald-700" : "bg-white text-amber-800"}`}>
+              전체 원장 기준
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
