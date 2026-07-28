@@ -1129,30 +1129,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   if (!isProductionStoreConfigured()) {
     return {
       persisted: false,
-      invitations: [
-        {
-          id: "sample-driver-invite",
-          companyId,
-          employeeName: "김배송 매니저",
-          employeePhone: "010-3000-1000",
-          inviteCode: "SAMPLEDRIVER",
-          inviteUrl: createStaffInviteUrl("SAMPLEDRIVER"),
-          role: "driver",
-          status: "accepted",
-          createdAt: "기준 데이터"
-        },
-        {
-          id: "sample-sales-invite",
-          companyId,
-          employeeName: "박영업 매니저",
-          employeePhone: "010-3000-2000",
-          inviteCode: "SAMPLESALES",
-          inviteUrl: createStaffInviteUrl("SAMPLESALES"),
-          role: "sales",
-          status: "pending",
-          createdAt: "기준 데이터"
-        }
-      ]
+      invitations: []
     };
   }
 
