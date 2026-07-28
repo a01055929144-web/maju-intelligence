@@ -453,7 +453,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             출발지 보기
           </button>
           <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
-            {sourceReady ? selectedVehicleLabel : "운영 원장 미연결"}
+            {sourceReady ? selectedVehicleLabel : "DB 원장 미연결"}
           </span>
           <span className="ml-1 text-xs font-black text-slate-500">
             {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
@@ -2579,7 +2579,7 @@ function RouteBasisStrip({
         ) : null}
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
-        <RouteBasisMetric label="운영 데이터" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
+        <RouteBasisMetric label="DB 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
         <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 매장 합산" tone={sourceReady ? "default" : "warning"} />
         <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={sourceReady ? "default" : "warning"} />

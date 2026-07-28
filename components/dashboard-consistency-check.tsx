@@ -88,7 +88,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const okCount = checks.filter((check) => check.ok).length;
   const isSupabase = payload?.source === "supabase";
   const isHealthy = Boolean(payload?.ok && isSupabase);
-  const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "운영 원장 미연결" : "확인 중";
+  const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "DB 거래처 원장 미연결" : "확인 중";
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const dataRegistrationHref = `/${query}`;
@@ -129,7 +129,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             <Badge className="border border-slate-200 bg-white text-slate-600">{sourceLabel}</Badge>
           </div>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-            대시보드, 거래처 히스토리, 영업·배송 코스가 같은 거래처 원장을 보고 있는지 API로 직접 확인합니다.
+            대시보드, 거래처 히스토리, 영업·배송 코스가 같은 DB 거래처 원장을 보고 있는지 API로 직접 확인합니다.
           </p>
         </div>
         <button
@@ -145,7 +145,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
 
       <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-          <StatusTile label="거래처 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
+          <StatusTile label="DB 거래처 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
           <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
@@ -296,7 +296,7 @@ function buildFixItems({
 
   items.push({
     href: dataRegistrationHref,
-    label: isSupabase ? "운영 DB 기준으로 거래처 원장이 연결되어 있습니다." : "운영 원장이 연결되지 않으면 화면별 숫자를 확정할 수 없습니다.",
+    label: isSupabase ? "DB 거래처 원장이 연결되어 있습니다." : "DB 거래처 원장이 연결되지 않으면 화면별 숫자를 확정할 수 없습니다.",
     status: isSupabase ? "정상" : "필수",
     title: "데이터 저장소",
     tone: isSupabase ? "good" : "bad"

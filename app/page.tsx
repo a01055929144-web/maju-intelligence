@@ -190,10 +190,10 @@ export default function Home() {
     if (!customers.length) {
       setRegistrationStatus({
         actionLabel: "등록 데이터 필요",
-        description: "운영 리포트는 샘플이 아니라 저장된 거래처 또는 매출 거래내역을 기준으로 생성합니다.",
+        description: "운영 리포트는 샘플이 아니라 DB에 저장된 거래처 또는 매출 거래내역을 기준으로 생성합니다.",
         nextAction: "거래처 마스터를 수기 등록하거나 엑셀로 업로드한 뒤 저장·이력을 확인하세요.",
         status: "warning",
-        title: "아직 리포트로 만들 운영 데이터가 없습니다."
+        title: "아직 리포트로 만들 DB 데이터가 없습니다."
       });
       setScreen("onboarding");
       return;
@@ -357,7 +357,7 @@ export default function Home() {
     if (!mapped.length) {
       setRegistrationStatus({
         actionLabel: "정제 결과 없음",
-        description: "업로드 행은 있지만 거래처명, 주소, 매출 등 표준 필드로 변환된 운영 데이터가 없습니다.",
+        description: "업로드 행은 있지만 거래처명, 주소, 매출 등 DB 표준 필드로 변환된 데이터가 없습니다.",
         nextAction: "컬럼 매핑과 품질 검증을 다시 확인한 뒤 저장을 실행하세요.",
         status: "warning",
         title: "리포트를 생성할 거래처 데이터가 없습니다."
@@ -1597,7 +1597,7 @@ function Onboarding({
           <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-black text-slate-950">양식 · 내보내기</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">처음 등록할 양식과 현재 운영 데이터를 구분해서 내려받습니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">처음 등록할 양식과 현재 DB 반영 데이터를 구분해서 내려받습니다.</p>
             </div>
             <Badge className="w-fit bg-slate-100 text-slate-600">{template.label}</Badge>
           </div>
@@ -1611,7 +1611,7 @@ function Onboarding({
               onClick={() => onDownloadTemplate(uploadType)}
             />
             <DownloadActionCard
-              description="현재 저장된 운영 데이터를 백업하거나 ERP 보정 작업에 사용합니다."
+              description="현재 DB에 저장된 데이터를 백업하거나 ERP 보정 작업에 사용합니다."
               icon={FileSpreadsheet}
               label="현재 데이터"
               value={`${currentExportLabel} 받기`}
@@ -1855,7 +1855,7 @@ function RegistrationControlStrip({
       : entryMode === "manual"
         ? "수기 등록 폼에서 필수값과 사업자번호를 확인하면 저장할 수 있습니다."
         : "OCR은 보조 기능입니다. 파일이 없으면 수기 등록으로 바로 진행하세요.";
-  const actionTitle = canAnalyze ? "운영 데이터로 반영" : rows ? "필수 조건 확인" : waitingActionLabel;
+  const actionTitle = canAnalyze ? "DB 데이터로 반영" : rows ? "필수 조건 확인" : waitingActionLabel;
   const actionDescription = canAnalyze
     ? "원본 저장, 정제, 리포트 갱신을 한 번에 실행합니다."
     : rows
@@ -3534,7 +3534,7 @@ function BulkNextActionPanel({
             disabled: false,
             icon: Check,
             tab: "save" as const,
-            title: "운영 데이터 반영 준비가 끝났습니다."
+            title: "DB 데이터 반영 준비가 끝났습니다."
           };
   const Icon = nextAction.icon;
 
@@ -4271,7 +4271,7 @@ function OperationalHandoffPanel({
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-black text-slate-400">화면 간 데이터 일치 기준</p>
-            <p className="mt-1 text-sm font-black text-slate-950">저장 후 아래 3곳의 기준값이 같아야 운영 데이터로 봅니다.</p>
+            <p className="mt-1 text-sm font-black text-slate-950">저장 후 아래 3곳의 기준값이 같아야 DB 반영 데이터로 봅니다.</p>
           </div>
           <Badge className="w-fit bg-slate-100 text-slate-700">불일치 시 DB 저장상태 먼저 확인</Badge>
         </div>
@@ -4837,7 +4837,7 @@ function ReportDataBasisCard({
     {
       label: "운영 신뢰도",
       value: persisted ? "DB 저장 확인" : "저장 확인 필요",
-      description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 DB 저장 상태를 먼저 확인해야 운영 데이터로 볼 수 있습니다."
+      description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 DB 저장 상태를 먼저 확인해야 DB 반영 데이터로 볼 수 있습니다."
     }
   ];
   const checkLinks = [
