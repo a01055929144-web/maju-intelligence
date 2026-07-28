@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 
@@ -346,7 +346,10 @@ export default function CrmTimelinePage() {
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
   const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
-  const selectedFilteredPosition = filteredCustomers.findIndex(({ index }) => index === selectedIndex) + 1;
+  const selectedFilteredArrayIndex = filteredCustomers.findIndex(({ index }) => index === selectedIndex);
+  const selectedFilteredPosition = selectedFilteredArrayIndex + 1;
+  const previousFilteredCustomer = selectedFilteredArrayIndex > 0 ? filteredCustomers[selectedFilteredArrayIndex - 1] : null;
+  const nextFilteredCustomer = selectedFilteredArrayIndex >= 0 && selectedFilteredArrayIndex < filteredCustomers.length - 1 ? filteredCustomers[selectedFilteredArrayIndex + 1] : null;
   const activeCleanupLabel = operationFilterLabel(operationFilter);
   const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
   const readyCustomerCount = customers.length - needsAttentionCustomers.length;
@@ -451,6 +454,14 @@ export default function CrmTimelinePage() {
     setIsEditing(false);
     setSaveMessage("");
     setCustomerSearch("");
+  }
+
+  function moveFilteredSelection(direction: "next" | "previous") {
+    const target = direction === "next" ? nextFilteredCustomer : previousFilteredCustomer;
+    if (!target) return;
+    setSelectedIndex(target.index);
+    setIsEditing(false);
+    setSaveMessage("");
   }
 
   function updateDraft(field: keyof CustomerView, value: string) {
@@ -920,6 +931,29 @@ export default function CrmTimelinePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
+                  <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
+                    <button
+                      aria-label="이전 거래처"
+                      className="grid h-full w-8 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      disabled={!previousFilteredCustomer}
+                      onClick={() => moveFilteredSelection("previous")}
+                      type="button"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[72px] px-2 text-center">
+                      {filteredCustomers.length ? `${selectedFilteredPosition}/${filteredCustomers.length}` : "0/0"}
+                    </span>
+                    <button
+                      aria-label="다음 거래처"
+                      className="grid h-full w-8 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      disabled={!nextFilteredCustomer}
+                      onClick={() => moveFilteredSelection("next")}
+                      type="button"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
                   <Badge className={gradeClassName(selectedCustomer.grade)}>매출 {selectedCustomer.grade}등급</Badge>
                   <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}>
                     사업자 {selectedCustomer.businessStatus}
