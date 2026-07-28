@@ -346,15 +346,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                     </CardTitle>
                     <p className="mt-1 text-sm font-semibold text-muted-foreground">대시보드에서는 현황만 보고, 상세 코스는 영업·배송 코스에서 조정합니다.</p>
                   </div>
-                  <Link className="inline-flex h-9 shrink-0 items-center rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={withCompanyQuery("/routes/today")}>
-                    상세 열기
+                  <Link className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md bg-slate-950 px-3 text-xs font-black text-white shadow-sm transition hover:bg-slate-800" href={withCompanyQuery("/routes/today")}>
+                    코스 작업 열기
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid gap-2 text-sm sm:grid-cols-3">
-                    <MapSummary label="출발지" value={originAddress} />
-                    <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
-                    <MapSummary label="등록 코스 매장" value={`${routeStopCount.toLocaleString()}곳`} />
+                  <div className="grid gap-2 text-sm md:grid-cols-3">
+                    <MapSummary helper="회사 설정 기준" label="물류 출발지" value={originAddress} />
+                    <MapSummary helper="주소 좌표 보유" label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
+                    <MapSummary helper="배송/영업 코스 후보" label="등록 코스 매장" value={`${routeStopCount.toLocaleString()}곳`} />
                   </div>
                   <KakaoAddressMap mapClassName="h-[640px]" markers={mapMarkers} showList={false} />
                 </CardContent>
@@ -792,11 +793,12 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MapSummary({ label, value }: { label: string; value: string }) {
+function MapSummary({ helper, label, value }: { helper: string; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/70 px-3 py-2">
-      <p className="text-[11px] font-black text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
+    <div className="min-w-0 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
+      <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-lg font-black leading-none text-slate-950">{value}</p>
+      <p className="mt-2 truncate text-xs font-bold text-slate-500">{helper}</p>
     </div>
   );
 }
