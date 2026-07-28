@@ -1666,8 +1666,19 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-2 scroll-mt-4" id="review-panel">
-                  <div className="grid gap-2 md:grid-cols-3">
+                <div className="overflow-hidden rounded-md border border-slate-200 bg-white scroll-mt-4" id="review-panel">
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <p className="text-sm font-black text-slate-950">등록 검수 작업 탭</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">엑셀 확인, 품질 검증, 저장 반영을 한 줄 흐름으로 처리합니다.</p>
+                      </div>
+                      <Badge className="w-fit bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
+                        현재 {activeReviewTab.step} · {activeReviewTab.statusLabel}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="grid divide-y divide-slate-100 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
                     {reviewTabs.map((tab) => {
                       const selected = reviewTab === tab.key;
                       const toneClass =
@@ -1689,29 +1700,29 @@ function Onboarding({
                       return (
                         <button
                           key={tab.key}
-                          className={`rounded-md border p-3 text-left transition ${
+                          className={`min-w-0 p-4 text-left transition ${
                             selected
-                              ? "border-violet-300 bg-white text-violet-900 shadow-sm ring-1 ring-violet-100"
-                              : "border-transparent bg-transparent text-slate-500 hover:bg-white/80 hover:text-slate-800"
+                              ? "bg-blue-50 text-blue-950 shadow-[inset_0_-3px_0_#2563eb]"
+                              : "bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                           }`}
                           onClick={() => setReviewTab(tab.key)}
                           type="button"
                         >
                           <span className="flex items-start justify-between gap-3">
                             <span className="min-w-0">
-                              <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-100 text-violet-800" : "bg-white text-slate-500"}`}>
+                              <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-black ${selected ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                                 {tab.step}
                               </span>
                               <span className="mt-2 block text-sm font-black">{tab.label}</span>
-                              <span className={`mt-1 block text-xs font-bold leading-5 ${selected ? "text-violet-700" : "text-slate-500"}`}>{tab.description}</span>
+                              <span className={`mt-1 block truncate text-xs font-bold ${selected ? "text-blue-700" : "text-slate-500"}`}>{tab.description}</span>
                               <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-black ${toneClass}`}>
                                 {tab.statusLabel}
                               </span>
-                              <span className={`mt-2 block text-[11px] font-black leading-5 ${selected ? "text-slate-800" : "text-slate-400"}`}>
+                              <span className={`mt-2 block truncate text-[11px] font-black ${selected ? "text-slate-800" : "text-slate-400"}`}>
                                 다음: {tab.actionHint}
                               </span>
                             </span>
-                            <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-violet-700 text-white" : "bg-white text-slate-500"}`}>
+                            <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                               {tab.value}
                             </span>
                           </span>
@@ -1719,8 +1730,8 @@ function Onboarding({
                       );
                     })}
                   </div>
-                  <div className="mt-2 rounded-md border border-white bg-white/90 px-3 py-2 text-xs font-bold leading-5 text-slate-600">
-                    현재 단계 <span className="font-black text-slate-950">{activeReviewTab.label}</span>
+                  <div className="border-t border-slate-200 bg-white px-4 py-2 text-xs font-bold leading-5 text-slate-600">
+                    <span className="font-black text-slate-950">{activeReviewTab.label}</span>
                     <span className="mx-2 text-slate-300">|</span>
                     {activeReviewTab.actionHint}
                   </div>
@@ -3447,8 +3458,8 @@ function BulkEntryProgress({
   const doneCount = items.filter((item) => item.ok).length;
 
   return (
-    <div className={`mt-3 rounded-md border p-3 ${complete ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className={`mt-3 overflow-hidden rounded-md border ${complete ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-col gap-2 border-b border-white/70 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">대량 등록 준비 상태</p>
           <p className="mt-1 text-xs font-bold text-slate-500">파일 업로드, 필수 컬럼 매핑, 품질 검증이 끝나면 상단에서 바로 서버 저장을 실행합니다.</p>
@@ -3457,14 +3468,14 @@ function BulkEntryProgress({
           {doneCount}/4 완료
         </Badge>
       </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-4">
+      <div className="grid divide-y divide-slate-100 bg-white md:grid-cols-4 md:divide-x md:divide-y-0">
         {items.map((item) => (
-          <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-white text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+          <div key={item.label} className={`px-4 py-3 ${item.ok ? "bg-emerald-50/70 text-emerald-900" : "bg-white text-slate-700"}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-black">{item.label}</span>
               {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
             </div>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.detail}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500" title={item.detail}>{item.detail}</p>
           </div>
         ))}
       </div>
@@ -3529,21 +3540,21 @@ function BulkNextActionPanel({
 
   return (
     <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="flex items-start gap-3 p-4">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="flex items-start gap-3 p-3">
           <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${nextAction.disabled ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>
             <Icon className="h-5 w-5" />
           </span>
           <div className="min-w-0">
             <Badge className={nextAction.disabled ? "bg-slate-100 text-slate-600" : "bg-blue-50 text-blue-700"}>{nextAction.badge}</Badge>
-            <p className="mt-2 text-base font-black text-slate-950">{nextAction.title}</p>
-            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{nextAction.body}</p>
+            <p className="mt-2 text-sm font-black text-slate-950">{nextAction.title}</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{nextAction.body}</p>
           </div>
         </div>
-        <div className="border-t border-slate-100 bg-slate-50 p-4 lg:border-l lg:border-t-0">
+        <div className="border-t border-slate-100 bg-slate-50 p-3 lg:border-l lg:border-t-0">
           <p className="text-xs font-black text-slate-500">바로가기</p>
           <Button
-            className="mt-2 h-11 w-full"
+            className="mt-2 h-10 w-full"
             disabled={nextAction.disabled}
             onClick={() => onOpenTab(nextAction.tab)}
             type="button"
