@@ -406,7 +406,7 @@ export default function CrmTimelinePage() {
       title: "필수 첨부자료"
     },
     {
-      description: customerNotes.length ? "최근 메모가 서버 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
+      description: customerNotes.length ? "최근 메모가 DB 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
       ok: customerNotes.length > 0 || selectedCustomer.memoCount > 0,
       title: "메모 히스토리"
     }
@@ -426,7 +426,7 @@ export default function CrmTimelinePage() {
     deliveryProofCount: deliveryProofAttachments,
     loadingPositionCount: loadingPositionAttachments,
     memoCount: historyCount,
-    recentMemoAt: latestNote?.createdAt || "서버 이력 대기",
+    recentMemoAt: latestNote?.createdAt || "DB 이력 대기",
     visitCount: selectedCustomer.visitCount
   };
   const draftBusinessNumberChanged = Boolean(
@@ -564,12 +564,12 @@ export default function CrmTimelinePage() {
       setIsEditing(!movedToNext && !completedCleanupFilter && operationFilter !== "all");
       setSaveMessage(
         payload?.persisted === false
-          ? "거래처 정보가 화면에 반영되었습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요."
+          ? "거래처 정보가 화면에 반영되었습니다. DB 저장 상태는 관리자 시스템 점검에서 확인하세요."
           : movedToNext
             ? "저장되었습니다. 같은 보완 조건의 다음 거래처로 이동했습니다."
             : completedCleanupFilter
               ? "저장되었습니다. 현재 보완 필터의 남은 거래처가 없어 전체 목록으로 돌아갑니다."
-            : "거래처 정보가 서버에 저장되었습니다."
+            : "거래처 정보가 DB에 저장되었습니다."
       );
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
@@ -1345,7 +1345,7 @@ export default function CrmTimelinePage() {
                     ))
                   ) : (
                     <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
-                      <p className="text-sm font-black text-slate-700">아직 서버 메모가 없습니다.</p>
+                      <p className="text-sm font-black text-slate-700">아직 DB 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
                       </p>
@@ -1905,7 +1905,7 @@ function HistoryInputSummary({
           <Badge className="bg-violet-700 text-white">{historyCount}건</Badge>
         </div>
         <p className="mt-2 text-sm font-black text-slate-950">
-          {latestNote ? "최근 메모가 서버 이력으로 관리 중입니다." : "아직 서버 메모가 없습니다."}
+          {latestNote ? "최근 메모가 DB 이력으로 관리 중입니다." : "아직 DB 메모가 없습니다."}
         </p>
         <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
           {latestNote ? latestNote.memo : "상담, 배송 특이사항, 대표 요청사항을 남기면 거래처별 히스토리로 누적됩니다."}

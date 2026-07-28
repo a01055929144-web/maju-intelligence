@@ -101,7 +101,7 @@ const initialPipelineSteps: PipelineStep[] = [
 ];
 const initialRegistrationStatus: RegistrationStatus = {
   actionLabel: "대기 중",
-  description: "엑셀 업로드 또는 수기 입력을 시작하면 이곳에서 저장 가능 여부와 서버 반영 결과를 확인합니다.",
+  description: "엑셀 업로드 또는 수기 입력을 시작하면 이곳에서 저장 가능 여부와 DB 반영 결과를 확인합니다.",
   nextAction: "거래처 마스터 또는 매출 거래내역 등록 방식을 선택하세요.",
   status: "idle",
   title: "아직 등록이 시작되지 않았습니다."
@@ -281,10 +281,10 @@ export default function Home() {
     setHeaders(nextHeaders);
     setFieldMap(createIdentityFieldMap(currentTemplate.fields));
     setUploadedFilename(`${currentTemplate.label}-manual`);
-    setManualSaveMessage("검수 목록에 추가했습니다. 서버 반영 상태를 확인 중입니다.");
+    setManualSaveMessage("검수 목록에 추가했습니다. DB 반영 상태를 확인 중입니다.");
     setRegistrationStatus({
       actionLabel: "수기 등록 저장 중",
-      description: `${String(nextRow.customerName || nextRow.name || "신규 거래처")} 정보를 검수 목록에 추가하고 서버 반영 결과를 확인하고 있습니다.`,
+      description: `${String(nextRow.customerName || nextRow.name || "신규 거래처")} 정보를 검수 목록에 추가하고 DB 반영 결과를 확인하고 있습니다.`,
       nextAction: "저장 결과를 확인 중입니다.",
       status: "running",
       title: "수기 입력값을 처리하고 있습니다."
@@ -324,7 +324,7 @@ export default function Home() {
           setManualSaveMessage(payload?.message ? `검수 목록에는 반영됐습니다. DB 저장 확인: ${payload.message}` : "검수 목록에는 반영됐습니다. DB 저장은 나중에 다시 시도하세요.");
           setRegistrationStatus({
             actionLabel: "DB 저장 확인 필요",
-            description: payload?.message || "서버가 DB 저장 완료 응답을 주지 않았습니다.",
+            description: payload?.message || "DB 저장 완료 응답을 확인하지 못했습니다.",
             nextAction: "입력값을 확인한 뒤 다시 저장하거나 관리자 시스템 상태를 확인하세요.",
             status: "warning",
             title: "DB 반영 확인이 필요합니다."
@@ -348,7 +348,7 @@ export default function Home() {
   async function analyzeUploadedRows() {
     setRegistrationStatus({
       actionLabel: "리포트 갱신 시작",
-      description: `${rawRows.length.toLocaleString()}개 원본 행을 정제하고 서버 저장을 시도합니다.`,
+      description: `${rawRows.length.toLocaleString()}개 원본 행을 정제하고 DB 저장을 시도합니다.`,
       nextAction: "파이프라인 단계가 모두 완료될 때까지 기다려 주세요.",
       status: "running",
       title: "데이터 업데이트를 시작했습니다."
@@ -419,10 +419,10 @@ export default function Home() {
       setPipelineSteps((steps) => steps.map((step) => (step.key === "report" ? { ...step, status: "error" } : step)));
       setRegistrationStatus({
         actionLabel: response?.status === 401 ? "로그인 필요" : "저장 실패",
-        description: payload?.message || payload?.error || "서버 저장 API가 완료 응답을 주지 않았습니다.",
+        description: payload?.message || payload?.error || "DB 저장 API가 완료 응답을 주지 않았습니다.",
         nextAction: response?.status === 401 ? "고객사 또는 관리자 계정으로 로그인한 뒤 다시 리포트를 갱신하세요." : "관리자 시스템 상태와 DB 연결을 확인하세요.",
         status: response?.status === 401 ? "warning" : "error",
-        title: "데이터 등록이 서버에 반영되지 않았습니다."
+        title: "데이터 등록이 DB에 반영되지 않았습니다."
       });
     }
 
@@ -945,7 +945,7 @@ function Onboarding({
     },
     {
       detail: pipelineMeta.persisted ? "운영 화면 반영 확인" : "저장 버튼 실행 후 확인됩니다.",
-      label: "서버 반영",
+      label: "DB 반영",
       ok: pipelineMeta.persisted
     }
   ];
@@ -960,7 +960,7 @@ function Onboarding({
         }
       : canAnalyze
         ? {
-            helper: "검증·저장 실행을 누르면 서버 저장과 리포트 갱신을 함께 시도합니다.",
+            helper: "검증·저장 실행을 누르면 DB 저장과 리포트 갱신을 함께 시도합니다.",
             label: "저장 실행 가능",
             tone: "action" as const
           }
@@ -995,10 +995,10 @@ function Onboarding({
       value: hasDataRows ? `${mappedRequiredCount}/${requiredFields.length} 필수 매핑` : "대기 중"
     },
     {
-      description: pipelineMeta.persisted ? "서버 저장 후 리포트와 운영 화면에 반영됐습니다." : "업데이트 후 리포트 갱신을 눌러 서버 저장을 확인합니다.",
+      description: pipelineMeta.persisted ? "DB 저장 후 리포트와 운영 화면에 반영됐습니다." : "업데이트 후 리포트 갱신을 눌러 DB 저장을 확인합니다.",
       done: pipelineMeta.persisted,
       label: "반영",
-      value: pipelineMeta.persisted ? "서버 저장" : "저장 확인 전"
+      value: pipelineMeta.persisted ? "DB 저장" : "저장 확인 전"
     }
   ];
   const implementationProgressItems = [
@@ -1053,7 +1053,7 @@ function Onboarding({
       label: "운영 QA 정리"
     },
     {
-      description: "수기 등록, 서버 반영, 검수 목록, 빈 상태 안내 문구를 운영자가 이해하기 쉽게 정리했습니다.",
+      description: "수기 등록, DB 반영, 검수 목록, 빈 상태 안내 문구를 운영자가 이해하기 쉽게 정리했습니다.",
       done: true,
       label: "운영 문구 정리"
     },
@@ -1063,7 +1063,7 @@ function Onboarding({
       label: "배포 전 체크리스트"
     },
     {
-      description: "등록 유형, 방식, 반영 화면, 서버 상태를 하나의 운영 기준 요약 카드로 압축했습니다.",
+      description: "등록 유형, 방식, 반영 화면, DB 상태를 하나의 운영 기준 요약 카드로 압축했습니다.",
       done: true,
       label: "운영 카드 압축"
     },
@@ -1126,7 +1126,7 @@ function Onboarding({
     },
     {
       actionHint: pipelineMeta.persisted ? "운영 화면에서 반영 결과를 확인하세요." : canAnalyze ? "저장하고 리포트를 갱신하세요." : "앞 단계를 먼저 완료하세요.",
-      description: "서버 저장 조건과 최근 등록 이력을 확인합니다.",
+      description: "DB 저장 조건과 최근 등록 이력을 확인합니다.",
       key: "save" as const,
       label: "저장·이력",
       statusLabel: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "저장 가능" : "대기",
@@ -1241,7 +1241,7 @@ function Onboarding({
         if (!active || !payload?.preset?.mapping) return;
         setSavedPreset(payload.preset.mapping);
         saveMappingPreset(uploadType, payload.preset.mapping);
-        setPresetMessage(payload.persisted ? `${template.label} 서버 매핑 프리셋이 저장되어 있습니다.` : `${template.label} 브라우저 매핑 프리셋이 저장되어 있습니다.`);
+        setPresetMessage(payload.persisted ? `${template.label} DB 매핑 프리셋이 저장되어 있습니다.` : `${template.label} 브라우저 매핑 프리셋이 저장되어 있습니다.`);
       })
       .catch(() => undefined);
 
@@ -1268,8 +1268,8 @@ function Onboarding({
 
     setPresetMessage(
       payload?.persisted
-        ? `${template.label} 매핑을 서버에 저장했습니다. 같은 고객사는 다른 PC에서도 불러올 수 있습니다.`
-        : `${template.label} 매핑을 이 브라우저에 저장했습니다. 서버 저장은 환경 확인이 필요합니다.`
+        ? `${template.label} 매핑을 DB에 저장했습니다. 같은 고객사는 다른 PC에서도 불러올 수 있습니다.`
+        : `${template.label} 매핑을 이 브라우저에 저장했습니다. DB 저장은 환경 확인이 필요합니다.`
     );
   }
 
@@ -1293,7 +1293,7 @@ function Onboarding({
     }).catch(() => null);
     const payload = response?.ok ? await response.json().catch(() => null) : null;
 
-    setPresetMessage(payload?.persisted ? "서버 매핑 프리셋을 삭제했습니다." : "이 브라우저의 매핑 프리셋을 삭제했습니다.");
+    setPresetMessage(payload?.persisted ? "DB 매핑 프리셋을 삭제했습니다." : "이 브라우저의 매핑 프리셋을 삭제했습니다.");
   }
 
   function downloadIssueRows() {
@@ -1459,7 +1459,7 @@ function Onboarding({
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 검수 목록에 추가하고 서버 반영 상태를 확인합니다.</p>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 검수 목록에 추가하고 DB 반영 상태를 확인합니다.</p>
                     {manualSaveMessage ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
@@ -1789,7 +1789,7 @@ function Onboarding({
                 {!headers.length ? (
                   <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
                     <p className="font-black text-slate-950">아직 검수할 등록 데이터가 없습니다.</p>
-                    <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 컬럼 매핑, 품질 검증, 서버 반영 상태가 순서대로 표시됩니다.</p>
+                    <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 컬럼 매핑, 품질 검증, DB 반영 상태가 순서대로 표시됩니다.</p>
                   </div>
                 ) : null}
                 <SaveResultSummary
@@ -1863,26 +1863,26 @@ function RegistrationControlStrip({
       : waitingActionHelper;
   const serverState = persisted
     ? {
-        badge: "서버 저장 완료",
+        badge: "DB 저장 완료",
         description: "거래처 원장, 매출 원장, 리포트 화면에서 같은 데이터 기준으로 확인할 수 있습니다.",
         tone: "ready" as const
       }
     : registrationStatus.status === "running"
       ? {
           badge: "저장 확인 중",
-          description: "서버 저장 응답을 기다리고 있습니다. 완료 후 운영 화면 반영 여부가 갱신됩니다.",
+          description: "DB 저장 응답을 기다리고 있습니다. 완료 후 운영 화면 반영 여부가 갱신됩니다.",
           tone: "action" as const
         }
       : canAnalyze
         ? {
             badge: "저장 실행 가능",
-            description: "아직 서버 저장 전입니다. 저장하고 리포트 갱신 버튼을 눌러 반영을 확인하세요.",
+            description: "아직 DB 저장 전입니다. 저장하고 리포트 갱신 버튼을 눌러 반영을 확인하세요.",
             tone: "action" as const
           }
         : rows
           ? {
               badge: "저장 조건 미충족",
-              description: "필수 매핑이나 품질 검증을 먼저 해결해야 서버 저장을 시도할 수 있습니다.",
+              description: "필수 매핑이나 품질 검증을 먼저 해결해야 DB 저장을 시도할 수 있습니다.",
               tone: "warning" as const
             }
           : {
@@ -1911,7 +1911,7 @@ function RegistrationControlStrip({
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{state.helper}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-md border border-white/80 bg-white/70 px-2.5 py-1 text-slate-600">
-              서버 반영: {serverState.badge}
+              DB 반영: {serverState.badge}
             </span>
             <span className="rounded-md border border-white/80 bg-white/70 px-2.5 py-1 text-slate-600">
               최근 이력: {latestUploadAt || "없음"}
@@ -2018,7 +2018,7 @@ function RegistrationLiveStatusBoard({
     { label: "등록 유형", value: typeLabel },
     { label: "등록 방식", value: modeLabel },
     { label: "대기 행", value: `${rows.toLocaleString()}행` },
-    { label: "최근 서버 이력", value: latestUpload?.createdAt || "아직 없음" }
+    { label: "최근 DB 이력", value: latestUpload?.createdAt || "아직 없음" }
   ];
   const verificationLinks = [
     { href: dashboardHref, label: "대시보드", value: "회사 KPI 확인" },
@@ -2219,7 +2219,7 @@ function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], ca
     return [
       { description: "필수 컬럼 연결 상태를 열어 저장 차단 조건을 확인합니다.", href: "#mapping-panel", label: "필수 컬럼 매핑", tab: "mapping" },
       { description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.", href: "#quality-panel", label: "품질 검증 확인", tab: "quality" },
-      { description: "서버 반영이 안 보이면 DB와 운영 환경값을 확인합니다.", href: "/admin/system", label: "DB 저장 상태 확인" },
+      { description: "DB 반영이 안 보이면 DB와 운영 환경값을 확인합니다.", href: "/admin/system", label: "DB 저장 상태 확인" },
     ];
   }
 
@@ -2308,7 +2308,7 @@ function DeploymentReadinessChecklist({
   const checks = [
     {
       done: persisted,
-      helper: persisted ? "서버 저장 응답 확인" : "Vercel env, Supabase schema, 로그인 상태 확인",
+      helper: persisted ? "DB 저장 응답 확인" : "Vercel env, Supabase schema, 로그인 상태 확인",
       label: "DB 반영"
     },
     {
@@ -2400,7 +2400,7 @@ function CoreFlowCheckPanel({
       icon: Database,
       label: "관리자 점검",
       steps: ["환경변수", "DB 테이블", "Storage"],
-      summary: "서버 연결과 필수 테이블 상태 확인"
+      summary: "DB 연결과 필수 테이블 상태 확인"
     },
     {
       href: dashboardHref,
@@ -2413,7 +2413,7 @@ function CoreFlowCheckPanel({
       href: dataHref,
       icon: Upload,
       label: "데이터 등록",
-      steps: ["업로드", "매핑", "서버 반영"],
+      steps: ["업로드", "매핑", "DB 반영"],
       summary: "거래처 마스터와 매출 거래내역 등록"
     },
     {
@@ -2508,7 +2508,7 @@ function OperationalCommandStrip({
   const activeLabel = activeType === "customer-master" ? "거래처 마스터" : "매출 거래내역";
   const modeLabel = entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력";
   const targetLabel = activeType === "customer-master" ? "히스토리 · 지도 · 배송 코스" : "매출 원장 · AI 리포트";
-  const status = persisted ? "서버 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
+  const status = persisted ? "DB 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
   const cards = [
     {
       description: "사업자번호, 주소, 담당자, 첨부자료를 기준값으로 저장합니다.",
@@ -2540,7 +2540,7 @@ function OperationalCommandStrip({
           <MiniStatus label="현재 유형" value={activeLabel} />
           <MiniStatus label="등록 방식" value={modeLabel} />
           <MiniStatus label="반영 화면" value={targetLabel} />
-          <MiniStatus label="서버 상태" value={status} />
+          <MiniStatus label="DB 상태" value={status} />
         </div>
       </div>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -2780,7 +2780,7 @@ function RegistrationPathGuide({
   const isMaster = activeType === "customer-master";
   const typeLabel = isMaster ? "거래처 마스터" : "매출 거래내역";
   const targetLabel = isMaster ? "거래처 히스토리 · 영업/배송 코스" : "매출 원장 · AI 리포트";
-  const statusLabel = persisted ? "서버 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
+  const statusLabel = persisted ? "DB 반영 완료" : canAnalyze ? "저장 실행 가능" : rowsWaiting ? "검증 필요" : "등록 전";
   const nextActionLabel = persisted
     ? "운영 화면에서 반영값을 확인하세요."
     : canAnalyze
@@ -3101,7 +3101,7 @@ function DataRegistrationDecisionPanel({
         })}
       </div>
       <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black leading-5 text-blue-800">
-        최근 서버 반영: {latestUploadAt || "아직 확인된 업로드 이력이 없습니다."}
+        최근 DB 반영: {latestUploadAt || "아직 확인된 업로드 이력이 없습니다."}
       </p>
     </div>
   );
@@ -3462,7 +3462,7 @@ function BulkEntryProgress({
       <div className="flex flex-col gap-2 border-b border-white/70 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">대량 등록 준비 상태</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">파일 업로드, 필수 컬럼 매핑, 품질 검증이 끝나면 상단에서 바로 서버 저장을 실행합니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">파일 업로드, 필수 컬럼 매핑, 품질 검증이 끝나면 상단에서 바로 DB 저장을 실행합니다.</p>
         </div>
         <Badge className={complete ? "bg-emerald-700 text-white" : "bg-slate-900 text-white"}>
           {doneCount}/4 완료
@@ -3529,7 +3529,7 @@ function BulkNextActionPanel({
           }
         : {
             badge: canAnalyze ? "저장 가능" : "저장 확인",
-            body: "서버 저장, 거래처 원장 반영, AI 리포트 갱신을 실행할 준비가 됐습니다.",
+            body: "DB 저장, 거래처 원장 반영, AI 리포트 갱신을 실행할 준비가 됐습니다.",
             buttonLabel: "저장·이력 열기",
             disabled: false,
             icon: Check,
@@ -3854,7 +3854,7 @@ function DataQualityCard({
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-sm font-black text-slate-950">먼저 보완할 행</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">아래 행은 서버 저장 전에 값 확인이 필요합니다.</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">아래 행은 DB 저장 전에 값 확인이 필요합니다.</p>
               </div>
               <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={onDownloadIssues} size="sm">
                 <Download className="h-4 w-4" />
@@ -3904,7 +3904,7 @@ function DataQualityCard({
             <div>
               <p className="text-sm font-black text-slate-950">{hasRowIssues ? "보완 후 저장 단계로 이동하세요." : "저장 단계로 이동할 수 있습니다."}</p>
               <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                {hasRowIssues ? "문제 행을 내려받아 ERP 원본 또는 매핑 값을 수정한 뒤 다시 업로드하는 흐름이 안전합니다." : "저장 실행 점검에서 서버 반영, 운영 화면 연결, 리포트 갱신 조건을 최종 확인합니다."}
+                {hasRowIssues ? "문제 행을 내려받아 ERP 원본 또는 매핑 값을 수정한 뒤 다시 업로드하는 흐름이 안전합니다." : "저장 실행 점검에서 DB 반영, 운영 화면 연결, 리포트 갱신 조건을 최종 확인합니다."}
               </p>
             </div>
             <Button className="h-11" disabled={hasRowIssues} onClick={onOpenSaveReview} type="button">
@@ -3938,7 +3938,7 @@ function SaveReadinessPanel({
   typeLabel: string;
 }) {
   const readyCount = items.filter((item) => item.ok).length;
-  const blockingItems = items.filter((item) => !item.ok && item.label !== "서버 반영");
+  const blockingItems = items.filter((item) => !item.ok && item.label !== "DB 반영");
   const progress = items.length ? Math.round((readyCount / items.length) * 100) : 0;
   const nextStep =
     blockingItems[0]?.label ||
@@ -3958,7 +3958,7 @@ function SaveReadinessPanel({
             </Badge>
           </div>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-            {canAnalyze ? "검증·저장 실행 후 거래처 히스토리, 매출 원장, AI 리포트에 같은 기준으로 반영됩니다." : `${blockingItems.map((item) => item.label).join(", ") || "서버 반영"} 조건을 먼저 확인하세요.`}
+            {canAnalyze ? "검증·저장 실행 후 거래처 히스토리, 매출 원장, AI 리포트에 같은 기준으로 반영됩니다." : `${blockingItems.map((item) => item.label).join(", ") || "DB 반영"} 조건을 먼저 확인하세요.`}
           </p>
         </div>
         <div className="rounded-md border border-white/70 bg-white/85 p-3 shadow-sm">
@@ -4030,7 +4030,7 @@ function SaveReadinessPanel({
               ok: canAnalyze
             },
             {
-              detail: "서버 응답이 저장 완료인지, 저장 확인 필요인지 확인합니다.",
+              detail: "DB 저장 응답이 완료인지, 추가 확인이 필요한지 확인합니다.",
               label: "2. DB 반영 확인",
               ok: persisted
             },
@@ -4092,15 +4092,15 @@ function SaveResultSummary({
       title: "등록할 데이터가 아직 없습니다."
     },
     persisted: {
-      badge: "서버 반영 완료",
-      body: "서버 저장이 확인됐습니다. 운영 화면에서 같은 데이터 기준으로 확인할 수 있습니다.",
+      badge: "DB 반영 완료",
+      body: "DB 저장이 확인됐습니다. 운영 화면에서 같은 데이터 기준으로 확인할 수 있습니다.",
       className: "border-emerald-200 bg-emerald-50",
       icon: <Check className="h-4 w-4 text-emerald-700" />,
       title: "데이터 등록이 운영 화면에 반영됐습니다."
     },
     ready: {
       badge: "저장 가능",
-      body: "상단 데이터 등록 관제판에서 검증·저장 실행을 누르면 서버 저장과 리포트 갱신을 함께 시도합니다.",
+      body: "상단 데이터 등록 관제판에서 검증·저장 실행을 누르면 DB 저장과 리포트 갱신을 함께 시도합니다.",
       className: "border-blue-200 bg-blue-50",
       icon: <Check className="h-4 w-4 text-blue-700" />,
       title: "저장 실행 준비가 끝났습니다."
@@ -4417,7 +4417,7 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
             <History className="h-4 w-4 text-slate-500" />
             최근 등록 이력
           </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">서버에 남은 업로드 결과와 품질, 중복 후보를 확인합니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">DB에 남은 업로드 결과와 품질, 중복 후보를 확인합니다.</p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-xs lg:min-w-[320px]">
           <MiniStatus label="완료" value={`${completedCount.toLocaleString()}건`} />
@@ -4479,7 +4479,7 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
       ) : (
         <div className="p-4">
           <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
-            <p className="text-sm font-black text-slate-900">아직 서버 등록 이력이 없습니다.</p>
+            <p className="text-sm font-black text-slate-900">아직 DB 등록 이력이 없습니다.</p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">엑셀 업로드 후 저장하면 파일명, 품질, 중복 후보, 리포트 링크가 이곳에 표시됩니다.</p>
           </div>
         </div>
@@ -4553,7 +4553,7 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
       <Progress value={progress} />
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <PipelineMetric icon={FileSpreadsheet} label="처리 rows" value={`${meta.rows}개`} />
-        <PipelineMetric icon={Database} label="저장 상태" value={meta.persisted ? "서버 저장" : "저장 확인 필요"} />
+        <PipelineMetric icon={Database} label="저장 상태" value={meta.persisted ? "DB 저장" : "저장 확인 필요"} />
         <PipelineMetric icon={Save} label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "계산 중"} />
       </div>
       </div>
@@ -4669,7 +4669,7 @@ function Report({
 
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             <ResultMetric label="처리 데이터" value={`${meta.rows.toLocaleString()}행`} />
-            <ResultMetric label="저장 상태" value={meta.persisted ? "서버 저장" : "저장 확인 필요"} />
+            <ResultMetric label="저장 상태" value={meta.persisted ? "DB 저장" : "저장 확인 필요"} />
             <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "확인 필요"} />
             <ResultMetric label="잠재매출" value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} />
           </div>
@@ -4872,7 +4872,7 @@ function ReportDataBasisCard({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-black text-blue-950">리포트 데이터 기준</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">대표가 보는 점수는 등록된 데이터 종류와 서버 저장 상태를 기준으로 해석해야 합니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">대표가 보는 점수는 등록된 데이터 종류와 DB 저장 상태를 기준으로 해석해야 합니다.</p>
         </div>
         <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {persisted ? "운영 반영 가능" : "저장 확인 필요"}

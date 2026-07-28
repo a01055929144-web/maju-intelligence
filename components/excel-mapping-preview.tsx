@@ -112,7 +112,7 @@ export function ExcelHeaderMappingPreview({
         <div className="mt-3 grid gap-2 md:grid-cols-3">
           <MappingStep label="1" title="엑셀 원본 확인" description={`${rows.length.toLocaleString()}개 행 전체를 기준으로 누락값과 컬럼 의미를 봅니다.`} />
           <MappingStep label="2" title="표준 필드 지정" description="거래처명, 주소, 사업자번호, 매출 필드처럼 저장 기준이 되는 값을 연결합니다." />
-          <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 서버 저장과 리포트 갱신을 진행할 수 있습니다." />
+          <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 DB 저장과 리포트 갱신을 진행할 수 있습니다." />
         </div>
         <div className="mt-3 grid overflow-hidden rounded-md border border-slate-200 bg-white text-xs sm:grid-cols-4">
           <MappingCounter label="엑셀 컬럼" value={`${headers.length.toLocaleString()}개`} />
@@ -397,7 +397,7 @@ function MappingWorkspaceModal({
                 <div>
                   <p className="text-sm font-black text-slate-950">{missingRequiredFields.length ? "먼저 연결할 필수 필드" : "필수 필드 연결 완료"}</p>
                   <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-                    {missingRequiredFields.length ? "필수 필드를 모두 연결해야 서버 저장 버튼이 활성화됩니다." : "선택 필드는 운영 품질을 높이기 위해 가능한 만큼 연결하세요."}
+                    {missingRequiredFields.length ? "필수 필드를 모두 연결해야 DB 저장 버튼이 활성화됩니다." : "선택 필드는 운영 품질을 높이기 위해 가능한 만큼 연결하세요."}
                   </p>
                 </div>
                 <Badge className={missingRequiredFields.length ? "bg-white text-amber-800" : "bg-white text-emerald-800"}>
