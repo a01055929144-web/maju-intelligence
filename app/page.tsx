@@ -140,6 +140,14 @@ export default function Home() {
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
   const currentTemplate = uploadTemplates[uploadType];
+  const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
+  const reportLedgerHref = adminCompanyId
+    ? `${uploadType === "customer-master" ? "/crm/timeline" : "/revenue/transactions"}?companyId=${encodeURIComponent(adminCompanyId)}`
+    : uploadType === "customer-master"
+      ? "/crm/timeline"
+      : "/revenue/transactions";
+  const routeHref = adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today";
+  const mobileTodayHref = adminCompanyId ? `/mobile/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/mobile/today";
 
   useEffect(() => {
     refreshUploadHistory();
@@ -492,7 +500,18 @@ export default function Home() {
             onDownloadSalesExport={downloadSalesExport}
           />
         )}
-        {screen === "report" && <Report analysis={analysis} meta={pipelineMeta} onReset={() => setScreen("onboarding")} uploadType={uploadType} />}
+        {screen === "report" && (
+          <Report
+            analysis={analysis}
+            dashboardHref={dashboardHref}
+            ledgerHref={reportLedgerHref}
+            meta={pipelineMeta}
+            mobileHref={mobileTodayHref}
+            onReset={() => setScreen("onboarding")}
+            routeHref={routeHref}
+            uploadType={uploadType}
+          />
+        )}
       </div>
     </CustomerAppShell>
   );
@@ -4546,13 +4565,21 @@ function PipelineMetric({ icon: Icon, label, value }: { icon: typeof FileSpreads
 
 function Report({
   analysis,
+  dashboardHref,
+  ledgerHref,
   meta,
+  mobileHref,
   onReset,
+  routeHref,
   uploadType
 }: {
   analysis: AnalysisResult;
+  dashboardHref: string;
+  ledgerHref: string;
   meta: { rows: number; qualityScore: number; persisted: boolean };
+  mobileHref: string;
   onReset: () => void;
+  routeHref: string;
   uploadType: UploadTemplateType;
 }) {
   const scoreRows = [
@@ -4587,14 +4614,20 @@ function Report({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href="/dashboard">
+              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href={dashboardHref}>
                 대시보드 보기
               </Link>
               <Link
                 className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-                href={isSalesReport ? "/revenue/transactions" : "/crm/timeline"}
+                href={ledgerHref}
               >
                 {isSalesReport ? "매출 원장 보기" : "거래처 히스토리 보기"}
+              </Link>
+              <Link
+                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                href={routeHref}
+              >
+                영업·배송 코스 보기
               </Link>
               <Button variant="outline" onClick={onReset}>데이터 다시 등록</Button>
             </div>
@@ -4607,9 +4640,13 @@ function Report({
             <ResultMetric label="잠재매출" value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} />
           </div>
           <ReportDataBasisCard
+            dashboardHref={dashboardHref}
             isSalesReport={isSalesReport}
+            ledgerHref={ledgerHref}
+            mobileHref={mobileHref}
             persisted={meta.persisted}
             qualityScore={meta.qualityScore}
+            routeHref={routeHref}
             rows={meta.rows}
           />
         </div>
@@ -4733,14 +4770,22 @@ function Report({
 }
 
 function ReportDataBasisCard({
+  dashboardHref,
   isSalesReport,
+  ledgerHref,
+  mobileHref,
   persisted,
   qualityScore,
+  routeHref,
   rows
 }: {
+  dashboardHref: string;
   isSalesReport: boolean;
+  ledgerHref: string;
+  mobileHref: string;
   persisted: boolean;
   qualityScore: number;
+  routeHref: string;
   rows: number;
 }) {
   const sourceLabel = isSalesReport ? "매출 거래내역" : "거래처 마스터";
@@ -4761,9 +4806,35 @@ function ReportDataBasisCard({
       description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 DB 저장 상태를 먼저 확인해야 운영 데이터로 볼 수 있습니다."
     }
   ];
+  const checkLinks = [
+    {
+      description: "대표가 보는 KPI와 Health Score가 갱신됐는지 확인합니다.",
+      href: dashboardHref,
+      label: "대시보드",
+      value: "회사 현황"
+    },
+    {
+      description: isSalesReport ? "거래원장 행이 매출 분석 화면에 누적됐는지 확인합니다." : "사업자번호, 주소, 담당자, 첨부자료가 원장에 반영됐는지 확인합니다.",
+      href: ledgerHref,
+      label: isSalesReport ? "매출 원장" : "거래처 히스토리",
+      value: isSalesReport ? "매출 반영" : "원장 반영"
+    },
+    {
+      description: "거래처 주소와 담당자 배정값이 지도와 배송차 코스에 이어졌는지 확인합니다.",
+      href: routeHref,
+      label: "영업·배송 코스",
+      value: "지도·코스"
+    },
+    {
+      description: "현장 직원 모바일 화면에서 오늘 코스와 거래처 액션이 보이는지 확인합니다.",
+      href: mobileHref,
+      label: "모바일 현장",
+      value: "직원 실행"
+    }
+  ];
 
   return (
-    <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+    <div className="mt-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-black text-blue-950">리포트 데이터 기준</p>
@@ -4781,6 +4852,26 @@ function ReportDataBasisCard({
             <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{row.description}</p>
           </div>
         ))}
+      </div>
+      <div className="rounded-lg border border-white/80 bg-white/80 p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-black text-slate-950">저장 후 반영 확인 순서</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 완료 후 아래 4개 화면이 같은 회사 데이터 기준으로 보이면 운영 반영이 된 상태입니다.</p>
+          </div>
+          <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+            {persisted ? "확인 가능" : "저장 확인 후"}
+          </Badge>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-4">
+          {checkLinks.map((item) => (
+            <Link className="rounded-md border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50/60" href={item.href} key={item.label}>
+              <span className="block text-[11px] font-black text-slate-400">{item.label}</span>
+              <span className="mt-1 block text-sm font-black text-slate-950">{item.value}</span>
+              <span className="mt-2 block text-xs font-bold leading-5 text-slate-500">{item.description}</span>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );
