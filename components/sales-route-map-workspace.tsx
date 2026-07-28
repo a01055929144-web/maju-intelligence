@@ -476,7 +476,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-[720px] grid-cols-1 overflow-hidden rounded-b-xl xl:h-[calc(100vh-250px)] xl:min-h-[720px] ${leftCollapsed ? "xl:grid-cols-[56px_minmax(0,1fr)_360px]" : "xl:grid-cols-[320px_minmax(0,1fr)_360px]"}`}>
+        <section className={`grid min-h-[620px] grid-cols-1 overflow-hidden rounded-b-xl xl:h-[calc(100vh-280px)] xl:min-h-[620px] ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_340px]" : "xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
@@ -487,13 +487,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             vehicles={deliveryVehicles}
           />
 
-          <div className="relative h-[720px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
+          <div className="relative h-[620px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                    mapClassName="h-full min-h-[720px] rounded-none border-0 xl:min-h-0"
+                    mapClassName="h-full min-h-[620px] rounded-none border-0 xl:min-h-0"
                     markers={markers}
                     onMarkerClick={(marker) => {
                       if (!marker.id || marker.tone === "origin") return;
@@ -537,11 +537,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
 
       {activeView === "customers" ? (
         <CustomerDirectoryView
-            dataRegistrationHref={dataRegistrationHref}
-            onSelectStore={setSelectedId}
-            selectedStoreId={selectedId}
-            sourceReady={sourceReady}
-            stores={visibleStores}
+          dataRegistrationHref={dataRegistrationHref}
+          onSelectStore={setSelectedId}
+          selectedStoreId={selectedId}
+          sourceReady={sourceReady}
+          stores={visibleStores}
         />
       ) : null}
 
@@ -989,7 +989,7 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-[720px] overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:h-[calc(100vh-250px)] xl:min-h-[720px]">
+    <section className="min-h-[620px] overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:h-[calc(100vh-280px)] xl:min-h-[620px]">
       <div className="grid gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
@@ -997,7 +997,7 @@ function CustomerDirectoryView({
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="mt-4 min-h-[560px] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm xl:h-[calc(100%-96px)]">
+      <div className="mt-4 min-h-[480px] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm xl:h-[calc(100%-92px)]">
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
@@ -1192,7 +1192,7 @@ function TodayCourseView({
 
   if (!sourceReady) {
     return (
-      <section className="min-h-[720px] rounded-b-xl bg-[#f6f8fb] p-4">
+      <section className="min-h-[620px] rounded-b-xl bg-[#f6f8fb] p-4">
         <OperationalEmptyState
           actionHref={dataRegistrationHref}
           actionLabel="거래처 마스터 등록"
@@ -1308,7 +1308,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-[720px] grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:h-[calc(100vh-250px)] xl:min-h-[720px] ${routePanelCollapsed ? "xl:grid-cols-[300px_minmax(0,1fr)_60px]" : "xl:grid-cols-[300px_minmax(0,1fr)_440px]"}`}>
+    <section className={`grid min-h-[620px] grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:h-[calc(100vh-280px)] xl:min-h-[620px] ${routePanelCollapsed ? "xl:grid-cols-[280px_minmax(0,1fr)_56px]" : "xl:grid-cols-[280px_minmax(0,1fr)_400px]"}`}>
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
@@ -1354,11 +1354,11 @@ function TodayCourseView({
         </div>
       </aside>
 
-      <div className="relative h-[720px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
+      <div className="relative h-[620px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
         <div className="h-full min-h-0 [&>div]:h-full">
           <KakaoAddressMap
             focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-            mapClassName="h-full min-h-[720px] rounded-none border-0 xl:min-h-0"
+            mapClassName="h-full min-h-[620px] rounded-none border-0 xl:min-h-0"
             markers={routeMapMarkers}
             onMarkerClick={(marker) => {
               if (!marker.id || marker.tone === "origin") return;
