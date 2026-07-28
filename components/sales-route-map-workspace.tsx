@@ -518,8 +518,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               <OperationalEmptyState
                 actionHref={dataRegistrationHref}
                 actionLabel="거래처 마스터 등록"
-                description="지도 마커는 저장된 거래처 원장의 주소를 기준으로 생성됩니다. 거래처 마스터를 등록하면 대시보드, 거래처 히스토리, 영업·배송 코스가 같은 매장 기준으로 연결됩니다."
-                title="지도에 표시할 운영 거래처 원장이 없습니다."
+                description="지도 마커는 DB에 저장된 거래처 주소와 좌표 기준으로 생성됩니다. 거래처 마스터를 등록하면 대시보드, 거래처 히스토리, 영업·배송 코스가 같은 원장으로 연결됩니다."
+                title="지도에 표시할 DB 거래처 원장이 없습니다."
               />
             )}
           </div>
@@ -1002,8 +1002,8 @@ function CustomerDirectoryView({
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
             actionLabel="거래처 마스터 등록"
-            description="현재 회사에 연결된 운영 거래처 원장이 없습니다. 마스터를 등록하면 이 목록에서 사업자번호, 담당자, 매출등급, 주소를 바로 관리할 수 있습니다."
-            title="거래처 목록을 시작하려면 원장 등록이 필요합니다."
+            description="현재 회사에 연결된 DB 거래처 원장이 없습니다. 마스터를 등록하면 사업자번호, 담당자, 매출등급, 주소, 지도 좌표를 같은 기준으로 관리합니다."
+            title="거래처 목록을 시작하려면 DB 원장 등록이 필요합니다."
           />
         ) : null}
         {sourceReady ? (
@@ -1055,8 +1055,8 @@ function CustomerDirectoryView({
             <OperationalEmptyState
               actionHref={dataRegistrationHref}
               actionLabel="거래처 원장 확인"
-              description="검색어, 등급, 배송차 조건에 맞는 거래처가 없습니다. 조건을 바꾸거나 거래처 원장을 확인하세요."
-              title="표시할 거래처가 없습니다."
+              description="검색어, 매출등급, 배송차 조건에 맞는 거래처가 없습니다. 현재 필터를 초기화하거나 거래처 원장 값을 확인하세요."
+              title="현재 조건에 맞는 거래처가 없습니다."
             />
           )
         ) : null}
@@ -1196,8 +1196,8 @@ function TodayCourseView({
         <OperationalEmptyState
           actionHref={dataRegistrationHref}
           actionLabel="거래처 마스터 등록"
-          description="배송차별 경유 코스는 등록된 거래처 주소와 담당자 배정값을 기준으로 계산합니다. 먼저 거래처 마스터를 등록한 뒤 배송차를 선택하세요."
-          title="경유 코스 계산을 시작하려면 운영 거래처가 필요합니다."
+          description="배송차별 경유 코스는 DB에 저장된 거래처 주소, 좌표, 담당자 배정값을 기준으로 계산합니다. 먼저 거래처 마스터를 등록한 뒤 배송차를 선택하세요."
+          title="경유 코스 계산을 시작하려면 DB 거래처 원장이 필요합니다."
         />
       </section>
     );
@@ -2555,17 +2555,19 @@ function RouteBasisStrip({
   readonly routePlan: RoutePlan;
   readonly visibleMapReadyStoreCount: number;
 }) {
-  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "주소 기준 정상";
-  const sourceLabel = routePlan.source === "supabase" ? "운영 원장 연결" : "운영 데이터 미연결";
-  const sourceHelper = routePlan.source === "supabase" ? "거래처 원장 기준" : "거래처 마스터 등록 필요";
+  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 매장 주소 정상";
+  const sourceLabel = routePlan.source === "supabase" ? "DB 원장 연결" : "샘플 데이터 표시";
+  const sourceHelper = routePlan.source === "supabase" ? "거래처 마스터 DB 기준" : "DB 연결 또는 거래처 등록 필요";
   const sourceReady = routePlan.source === "supabase";
+  const distanceValue = sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산";
+  const durationValue = sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산";
 
   return (
     <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
       <div className="min-w-0">
-        <p className="text-xs font-black text-slate-500">운영 기준 데이터</p>
+        <p className="text-xs font-black text-slate-500">화면 기준값</p>
         <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          현재 화면은 {sourceLabel} 상태입니다. 지도는 주소가 있는 매장만 표시하며, 배송차 경유 코스는 티맵 계산 후 별도로 갱신됩니다.
+          이 화면의 숫자는 전체 거래처 원장, 현재 필터, 지도 표시 가능 매장을 구분해서 보여줍니다. 경유 최적화 값은 오늘 코스에서 티맵 계산을 실행하면 별도로 갱신됩니다.
         </p>
         {!sourceReady ? (
           <Link
@@ -2577,11 +2579,11 @@ function RouteBasisStrip({
         ) : null}
       </div>
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
-        <RouteBasisMetric label="데이터 출처" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
-        <RouteBasisMetric label="지도 표시 가능" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
-        <RouteBasisMetric label="출발지-매장 거리합" value={sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산"} helper="각 매장 단건 거리 합" tone={sourceReady ? "default" : "warning"} />
-        <RouteBasisMetric label="출발지 기준 시간합" value={sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산"} helper="단건 시간 합" tone={sourceReady ? "default" : "warning"} />
-        <RouteBasisMetric label="현재 필터 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
+        <RouteBasisMetric label="운영 데이터" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
+        <RouteBasisMetric label="지도 표시" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
+        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 매장 합산" tone={sourceReady ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={sourceReady ? "default" : "warning"} />
+        <RouteBasisMetric label="현재 화면 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · 매출 ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
   );
@@ -2589,10 +2591,14 @@ function RouteBasisStrip({
 
 function RouteBasisMetric({ helper, label, tone = "default", value }: { readonly helper?: string; readonly label: string; readonly tone?: "default" | "ready" | "warning"; readonly value: string }) {
   const valueClass = tone === "ready" ? "text-emerald-700" : tone === "warning" ? "text-amber-700" : "text-slate-950";
+  const dotClass = tone === "ready" ? "bg-emerald-500" : tone === "warning" ? "bg-amber-500" : "bg-slate-300";
 
   return (
     <div className="min-w-0 border-b border-r border-slate-100 px-3 py-2 last:border-r-0 2xl:border-b-0">
-      <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
+      <p className="flex min-w-0 items-center gap-1.5 truncate text-[11px] font-black text-slate-400">
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
+        <span className="truncate">{label}</span>
+      </p>
       <p className={`mt-1 truncate text-sm font-black ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{helper}</p> : null}
     </div>
