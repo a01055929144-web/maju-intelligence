@@ -5,13 +5,24 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
-import { getRevenuePipeline } from "@/lib/store";
+import { getRevenuePipeline, type RevenuePipeline } from "@/lib/store";
 
 const resultLabels: Record<string, string> = {
   interested: "관심 있음",
   "quote-requested": "견적 요청",
   pending: "보류",
   failed: "실패"
+};
+
+const emptyPipeline: RevenuePipeline = {
+  conversionRate: 0,
+  expectedRevenue: 0,
+  failed: 0,
+  interested: 0,
+  items: [],
+  pending: 0,
+  quoteRequests: 0,
+  weightedRevenue: 0
 };
 
 export default async function RevenuePipelinePage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
@@ -23,23 +34,31 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
-  const pipeline = await getRevenuePipeline(companyId);
+  let pipeline = emptyPipeline;
+  let pipelineError = "";
+
+  try {
+    pipeline = await getRevenuePipeline(companyId);
+  } catch (error) {
+    pipelineError = error instanceof Error ? error.message : "매출 파이프라인을 불러오지 못했습니다.";
+  }
+
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const pipelineActions = [
     {
-      description: "견적 요청 건은 단가표와 방문 일정을 바로 확정해야 합니다.",
+      description: "단가표와 방문일 확정",
       label: "견적 요청",
       tone: "blue" as const,
       value: `${pipeline.quoteRequests}건`
     },
     {
-      description: "관심 거래처는 품목 제안과 샘플 납품 가능 여부를 확인합니다.",
+      description: "품목 제안, 샘플 확인",
       label: "관심 있음",
       tone: "emerald" as const,
       value: `${pipeline.interested}건`
     },
     {
-      description: "보류·실패 건은 메모를 남기고 다음 연락 시점을 분리 관리합니다.",
+      description: "메모 후 재연락",
       label: "재관리",
       tone: "slate" as const,
       value: `${pipeline.pending + pipeline.failed}건`
@@ -57,8 +76,8 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           돌아가기
         </Link>
       }
-      subtitle="방문 결과를 기반으로 이번 달 열려 있는 추가매출을 추정합니다."
-      title="예상 매출 파이프라인"
+      subtitle="견적·관심·보류 건을 금액 기준으로 봅니다."
+      title="매출 파이프라인"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
@@ -66,8 +85,8 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div>
-              <p className="text-sm font-black text-slate-950">매출 파이프라인 현황</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">방문 결과와 견적 요청을 기준으로 열려 있는 추가매출을 집계합니다.</p>
+              <p className="text-sm font-black text-slate-950">파이프라인 현황</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">방문 결과 기준</p>
             </div>
             <Badge className="bg-blue-100 text-blue-800">{pipeline.items.length.toLocaleString()}건 관리 중</Badge>
           </div>
@@ -78,6 +97,12 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             <Metric icon={Percent} label="전환 기대율" value={`${pipeline.conversionRate}%`} />
           </div>
         </div>
+
+        {pipelineError ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-900">
+            DB 연결 또는 방문 기록 테이블을 확인하세요. 화면은 계속 사용할 수 있도록 비어 있는 상태로 표시합니다.
+          </div>
+        ) : null}
 
         <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-3">
           {pipelineActions.map((action) => (
@@ -98,7 +123,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
               <h2 className="text-lg font-black text-slate-950">파이프라인 상태</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">결과 단계별 건수를 확인합니다.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">단계별 건수</p>
             </div>
             <div className="space-y-4 p-5">
               <PipelineLine label="견적 요청" value={pipeline.quoteRequests} total={pipeline.items.length} />
@@ -112,7 +137,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div>
                 <h2 className="text-lg font-black text-slate-950">매출 후보</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">확률과 가중 매출 기준으로 우선순위를 정합니다.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">우선순위 목록</p>
               </div>
               <Badge className="bg-slate-900 text-white">가중 매출 {pipeline.weightedRevenue.toLocaleString()}만원</Badge>
             </div>
@@ -178,11 +203,11 @@ function PipelineBasisPanel({
   weightedRevenue: number;
 }) {
   const items = [
-    { label: "방문 결과", value: `${itemCount.toLocaleString()}건`, helper: "메모·방문 기록 기준" },
-    { label: "견적 요청", value: `${quoteRequests.toLocaleString()}건`, helper: "즉시 follow-up 대상" },
-    { label: "예상 매출", value: `${expectedRevenue.toLocaleString()}만원`, helper: "후보 매출 합계" },
-    { label: "가중 매출", value: `${weightedRevenue.toLocaleString()}만원`, helper: "확률 반영 금액" },
-    { label: "전환 기대율", value: `${conversionRate}%`, helper: "상태별 확률 기준" }
+    { label: "방문", value: `${itemCount.toLocaleString()}건`, helper: "기록 기준" },
+    { label: "견적", value: `${quoteRequests.toLocaleString()}건`, helper: "후속 대상" },
+    { label: "예상", value: `${expectedRevenue.toLocaleString()}만원`, helper: "후보 합계" },
+    { label: "가중", value: `${weightedRevenue.toLocaleString()}만원`, helper: "확률 반영" },
+    { label: "전환", value: `${conversionRate}%`, helper: "상태 기준" }
   ];
   const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);
   const actionLinks = [
@@ -195,12 +220,10 @@ function PipelineBasisPanel({
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
         <div>
-          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">방문 결과가 매출 후보로 바뀌는 기준값입니다.</p>
+          <p className="text-sm font-black text-slate-950">집계 기준</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">방문 결과 기반</p>
         </div>
-        <p className="text-xs font-bold leading-5 text-slate-600">
-          파이프라인은 확정 매출이 아니라 방문·상담 결과에 확률을 적용한 실행 후보입니다. 견적 요청과 관심 거래처부터 후속 액션을 잡아야 합니다.
-        </p>
+        <p className="text-xs font-bold leading-5 text-slate-600">확정 매출이 아닌 실행 후보입니다. 견적 요청과 관심 거래처부터 처리합니다.</p>
         <div className="flex flex-wrap gap-2">
           {actionLinks.map((item) => {
             const Icon = item.icon;

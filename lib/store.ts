@@ -2830,7 +2830,7 @@ export async function getVisitTimeline(companyId?: string): Promise<VisitTimelin
 }
 
 export async function getRevenuePipeline(companyId?: string): Promise<RevenuePipeline> {
-  const timeline = await getVisitTimeline(companyId);
+  const timeline = await getVisitTimeline(companyId).catch(() => []);
   const items = timeline
     .filter((item) => item.result === "quote-requested" || item.result === "interested" || item.result === "pending" || item.result === "failed")
     .map((item) => {
