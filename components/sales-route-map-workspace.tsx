@@ -433,11 +433,11 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <button className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800" onClick={focusOrigin} type="button">
             내 위치
           </button>
-          <span className="rounded-md bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">
-            {selectedVehicleLabel}
+          <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
+            {sourceReady ? selectedVehicleLabel : "운영 원장 미연결"}
           </span>
           <span className="ml-1 text-xs font-black text-slate-500">
-            {visibleStores.length}/{allStores.length}개
+            {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
           </span>
         </div>
         <div className="flex min-h-7 flex-wrap items-center gap-2 xl:col-span-2">
@@ -448,8 +448,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
                 {label}
               </span>
             ))
-          ) : (
+          ) : sourceReady ? (
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
+          ) : (
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 마스터 등록 후 표시</span>
           )}
         </div>
       </section>
@@ -467,29 +469,40 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           />
 
           <div className="relative h-[720px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
-            <div className="h-full min-h-0 [&>div]:h-full">
-              <KakaoAddressMap
-                focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                mapClassName="h-full min-h-[720px] rounded-none border-0 xl:min-h-0"
-                markers={markers}
-                onMarkerClick={(marker) => {
-                  if (!marker.id || marker.tone === "origin") return;
-                  setMapFocusId("");
-                  setPreviewStoreId(marker.id);
-                }}
-                showList={false}
+            {sourceReady ? (
+              <>
+                <div className="h-full min-h-0 [&>div]:h-full">
+                  <KakaoAddressMap
+                    focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
+                    mapClassName="h-full min-h-[720px] rounded-none border-0 xl:min-h-0"
+                    markers={markers}
+                    onMarkerClick={(marker) => {
+                      if (!marker.id || marker.tone === "origin") return;
+                      setMapFocusId("");
+                      setPreviewStoreId(marker.id);
+                    }}
+                    showList={false}
+                  />
+                </div>
+                {previewStore ? (
+                  <StoreQuickCard
+                    onClose={() => setPreviewStoreId("")}
+                    onOpenDetail={() => {
+                      setSelectedId(previewStore.id);
+                      setPreviewStoreId("");
+                    }}
+                    store={previewStore}
+                  />
+                ) : null}
+              </>
+            ) : (
+              <OperationalEmptyState
+                actionHref={dataRegistrationHref}
+                actionLabel="거래처 마스터 등록"
+                description="지도 마커는 저장된 거래처 원장의 주소를 기준으로 생성됩니다. 거래처 마스터를 등록하면 대시보드, 거래처 히스토리, 영업·배송 코스가 같은 매장 기준으로 연결됩니다."
+                title="지도에 표시할 운영 거래처 원장이 없습니다."
               />
-            </div>
-            {previewStore ? (
-              <StoreQuickCard
-                onClose={() => setPreviewStoreId("")}
-                onOpenDetail={() => {
-                  setSelectedId(previewStore.id);
-                  setPreviewStoreId("");
-                }}
-                store={previewStore}
-              />
-            ) : null}
+            )}
           </div>
 
           <StoreManagementPanel
