@@ -755,8 +755,8 @@ export default function CrmTimelinePage() {
             title="거래처 목록과 상세 관리"
             description="왼쪽에서 거래처를 고르고 오른쪽에서 기본정보, 첨부자료, 메모 히스토리를 정리합니다."
           />
-          <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
-          <aside className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
+          <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
+          <aside className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
             <div className="border-b border-slate-200/80 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -854,7 +854,7 @@ export default function CrmTimelinePage() {
                 selectedPosition={selectedFilteredPosition}
               />
             </div>
-            <div className="max-h-[640px] space-y-2 overflow-auto p-3">
+            <div className="max-h-[560px] space-y-2 overflow-auto p-3 xl:max-h-[calc(100vh-520px)] xl:min-h-[360px]">
               {filteredCustomers.map(({ customer, index }) => {
                 const issues = customerOperationalIssues(customer);
                 const readyScore = Math.round(((4 - issues.length) / 4) * 100);
@@ -933,16 +933,18 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber} />
-                <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone} />
-                <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
-                <InfoTile icon={Route} label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
-              </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                <PriorityTile label="배송 적재위치" value={selectedCustomer.loadingPosition || "미등록"} helper={`${loadingPositionAttachments}개 자료 등록`} tone="blue" />
-                <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
-                <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager} helper={`${selectedCustomer.region} 권역`} tone="emerald" />
+              <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
+                <div className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4">
+                  <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber || "미등록"} />
+                  <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone || "미등록"} />
+                  <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
+                  <InfoTile icon={Route} label="출발지 거리" value={`${selectedCustomer.deliveryKm}km`} />
+                </div>
+                <div className="grid gap-0 border-t border-slate-200 sm:grid-cols-3">
+                  <PriorityTile label="배송 적재위치" value={selectedCustomer.loadingPosition || "미등록"} helper={`${loadingPositionAttachments}개 자료 등록`} tone="blue" />
+                  <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
+                  <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager || "미지정"} helper={`${selectedCustomer.region || "미분류"} 권역`} tone="emerald" />
+                </div>
               </div>
               <OperationalActionStrip
                 actionItems={operationalActionItems}
@@ -1109,9 +1111,9 @@ export default function CrmTimelinePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
+                  <div className="grid divide-y divide-slate-100 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:divide-x xl:divide-y-0">
                     <div className="p-4">
-                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">사업자 정보</p>
+                      <LedgerSectionLabel eyebrow="Business" title="사업자 정보" />
                       <DetailRow label="상호명" value={selectedCustomer.customerName} />
                       <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
                       <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
@@ -1119,14 +1121,14 @@ export default function CrmTimelinePage() {
                       <DetailRow label="사업자상태" value={selectedCustomer.businessStatus} />
                     </div>
                     <div className="p-4">
-                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">배송 / 운영 정보</p>
+                      <LedgerSectionLabel eyebrow="Operation" title="배송 / 운영 정보" />
                       <DetailRow label="지역" value={selectedCustomer.region} />
                       <DetailRow label="주소" value={selectedCustomer.address} />
                       <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
-                      <DetailRow label="배송거리" value={`${selectedCustomer.deliveryKm}km`} />
+                      <DetailRow label="출발지 거리" value={`${selectedCustomer.deliveryKm}km`} />
                       <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
                     </div>
-                    <div className="p-4 md:col-span-2">
+                    <div className="p-4 xl:col-span-2">
                       <PlaceLinksPanel customer={selectedCustomer} onEdit={() => {
                         if (hasCustomers) setIsEditing(true);
                       }} />
@@ -1317,7 +1319,7 @@ export default function CrmTimelinePage() {
                   <h3 className="text-base font-black text-slate-950">최근 액션</h3>
                   <p className="mt-1 text-sm font-medium leading-6 text-slate-500">메모 저장, 방문 결과, 견적 요청이 거래처 기준으로 누적됩니다.</p>
                 </div>
-                <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto">
+                <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto xl:max-h-[calc(100vh-360px)]">
                   {timeline.length ? (
                     timeline.map((item) => (
                       <div key={item.id} className="p-4">
@@ -1733,9 +1735,21 @@ function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string;
   );
 }
 
+function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <div className="mb-3 flex items-end justify-between gap-3 border-b border-slate-200 pb-2">
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{eyebrow}</p>
+        <p className="mt-0.5 text-sm font-black text-slate-950">{title}</p>
+      </div>
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">원장</span>
+    </div>
+  );
+}
+
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200/80 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+    <div className="min-w-0 border-b border-r border-slate-200 bg-white p-3 last:border-r-0 xl:border-b-0">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-400" />
         <p className="text-xs font-black text-slate-500">{label}</p>
@@ -1759,13 +1773,13 @@ function PriorityTile({
   value: string;
 }) {
   const toneClassName = {
-    blue: "border-blue-100 bg-blue-50/80 text-blue-800",
-    emerald: "border-emerald-100 bg-emerald-50/80 text-emerald-800",
-    slate: "border-slate-200 bg-slate-50/80 text-slate-800"
+    blue: "bg-blue-50/80 text-blue-800",
+    emerald: "bg-emerald-50/80 text-emerald-800",
+    slate: "bg-slate-50/80 text-slate-800"
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-md border p-4 ${toneClassName}`}>
+    <div className={`min-w-0 border-r border-slate-200 p-4 last:border-r-0 ${toneClassName}`}>
       <p className="text-xs font-black opacity-70">{label}</p>
       <p className="mt-2 truncate text-sm font-black" title={value}>
         {value}
@@ -1904,9 +1918,9 @@ function AttachmentChecklistPanel({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-h-10 grid-cols-[112px_minmax(0,1fr)] items-center border-b border-slate-100 text-sm last:border-b-0">
-      <p className="h-full bg-slate-50 px-3 py-2.5 font-black text-slate-500">{label}</p>
-      <p className="min-w-0 px-3 py-2.5 font-black text-slate-900 break-keep">{value}</p>
+    <div className="grid min-h-11 grid-cols-[132px_minmax(0,1fr)] items-stretch overflow-hidden border-b border-slate-100 text-sm last:border-b-0">
+      <p className="flex items-center bg-slate-50 px-3 py-2.5 font-black text-slate-500">{label}</p>
+      <p className="min-w-0 break-keep px-3 py-2.5 font-black leading-6 text-slate-900">{value || "미등록"}</p>
     </div>
   );
 }
