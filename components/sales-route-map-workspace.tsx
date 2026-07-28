@@ -169,7 +169,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
-  const routeSeedStores = useMemo(() => createStoreRows(routePlan, mapMarkers), [mapMarkers, routePlan]);
+  const sourceReady = routePlan.source === "supabase";
+  const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
   const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehiclesFromStores(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
   const gradeBaseStores = useMemo(
@@ -208,8 +209,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
-  const distanceKpiHelper = kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
-  const durationKpiHelper = kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
+  const distanceKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
+  const durationKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
   const activeFilterLabels = [
     query.trim() ? `검색: ${query.trim()}` : "",
     isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
@@ -356,17 +357,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
           tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
-          value={`${kpiSummary?.selectedCount ?? selectedGradeCount}곳`}
+          value={sourceReady ? `${kpiSummary?.selectedCount ?? selectedGradeCount}곳` : "등록 필요"}
         />
         <Kpi
           helper={selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "전체 배송차 기준"}
           label={selectedVehicle ? "선택 배송차" : "배송차량"}
           tone="blue"
-          value={selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`}
+          value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
         />
-        <Kpi label="매장 매출합" tone="green" value={`${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원`} />
-        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지 기준 거리합"} tone="purple" value={`${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km`} />
-        <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes)} />
+        <Kpi label="매장 매출합" tone="green" value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"} />
+        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지 기준 거리합"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
+        <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
       </section>
 
       <RouteBasisStrip
@@ -2480,8 +2481,8 @@ function RouteBasisStrip({
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
         <RouteBasisMetric label="데이터 출처" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시 가능" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
-        <RouteBasisMetric label="출발지 기준 거리합" value={`${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km`} helper="단건 거리 합" />
-        <RouteBasisMetric label="출발지 기준 시간합" value={formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes)} helper="단건 시간 합" />
+        <RouteBasisMetric label="출발지 기준 거리합" value={sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산"} helper="단건 거리 합" tone={sourceReady ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지 기준 시간합" value={sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산"} helper="단건 시간 합" tone={sourceReady ? "default" : "warning"} />
         <RouteBasisMetric label="현재 필터 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
