@@ -366,7 +366,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
         />
         <Kpi label="매장 매출합" tone="green" value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"} />
-        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지 기준 거리합"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
+        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지-매장 거리합"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
       </section>
 
@@ -1491,7 +1491,7 @@ function TodayCourseView({
                 </div>
                 <div className="mb-3 grid grid-cols-3 gap-2">
                   <RouteMetric label="계산 대상" value={`${selectedRouteStores.length}곳`} />
-                  <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지 기준 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
+                  <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지-매장 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
                   <RouteMetric label={routeSequence ? "티맵 경유 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
                 <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
@@ -2605,7 +2605,7 @@ function RouteBasisStrip({
       <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
         <RouteBasisMetric label="데이터 출처" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시 가능" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
-        <RouteBasisMetric label="출발지 기준 거리합" value={sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산"} helper="단건 거리 합" tone={sourceReady ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지-매장 거리합" value={sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산"} helper="각 매장 단건 거리 합" tone={sourceReady ? "default" : "warning"} />
         <RouteBasisMetric label="출발지 기준 시간합" value={sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산"} helper="단건 시간 합" tone={sourceReady ? "default" : "warning"} />
         <RouteBasisMetric label="현재 필터 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
