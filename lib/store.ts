@@ -2215,7 +2215,7 @@ export async function saveAnalysis(
     uploadType?: "customer-master" | "sales-analysis";
   } = {}
 ) {
-  let report = analyzeCompany(rows.length ? rows : sampleCustomers);
+  let report = analyzeCompany(rows);
   const duplicateCount = countDuplicates(rows);
   const qualityScore = estimateQualityScore(rows);
 
@@ -2448,7 +2448,7 @@ export async function saveAnalysis(
 }
 
 export async function getLatestReport(companyId?: string): Promise<AnalysisResult> {
-  if (!isProductionStoreConfigured()) return analyzeCompany(sampleCustomers);
+  if (!isProductionStoreConfigured()) return analyzeCompany([]);
 
   try {
     const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
@@ -2463,13 +2463,13 @@ export async function getLatestReport(companyId?: string): Promise<AnalysisResul
 }
 
 async function analyzeCurrentCustomerMaster(companyId?: string): Promise<AnalysisResult> {
-  if (!isProductionStoreConfigured()) return analyzeCompany(sampleCustomers);
+  if (!isProductionStoreConfigured()) return analyzeCompany([]);
   const rows = await getNormalizedCustomersForAnalysis(companyId || getDefaultCompanyId());
   return analyzeCompany(rows);
 }
 
 export async function getReportById(reportId: string, companyId?: string): Promise<AnalysisResult | null> {
-  if (!isProductionStoreConfigured()) return analyzeCompany(sampleCustomers);
+  if (!isProductionStoreConfigured()) return analyzeCompany([]);
 
   const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
   const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
@@ -2529,7 +2529,7 @@ function getEmptyBriefing(source: "sample" | "supabase" = "supabase") {
 }
 
 export async function getLatestLeads(companyId?: string) {
-  if (!isProductionStoreConfigured()) return getLeadPayload();
+  if (!isProductionStoreConfigured()) return { total: 0, leads: [] };
 
   try {
     const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
