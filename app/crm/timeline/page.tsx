@@ -93,7 +93,7 @@ const customerDetailTabs: Array<{ description: string; icon: typeof Building2; i
 ];
 
 const defaultDbSummary: DbSummary = {
-  description: "DB 상태를 확인 중입니다. 실패해도 거래처 화면은 기준 데이터로 표시됩니다.",
+  description: "DB 상태를 확인 중입니다. 운영 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
   label: "DB 확인 중",
   normalizedCustomers: null,
   tone: "fallback",
@@ -171,7 +171,7 @@ export default function CrmTimelinePage() {
         if (!active) return;
         setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
         setDbSummary({
-          description: "DB 상태 API 호출에 실패했습니다. 거래처 화면은 기준 데이터로 표시합니다.",
+          description: "DB 상태 API 호출에 실패했습니다. 샘플 거래처는 표시하지 않고 원장 연결 상태만 안내합니다.",
           label: "DB 확인 실패",
           normalizedCustomers: null,
           tone: "fallback",
@@ -305,6 +305,16 @@ export default function CrmTimelinePage() {
 
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
+  const hasOperationalLedger = customerSource === "supabase";
+  const ledgerStatusLabel =
+    customerSource === "loading"
+      ? "원장 확인 중"
+      : hasOperationalLedger
+        ? "운영 원장 연결"
+        : "운영 원장 미연결";
+  const ledgerStatusDescription = hasOperationalLedger
+    ? "Supabase 거래처 원장 기준으로 목록과 상세를 표시합니다."
+    : "데이터 등록에서 거래처 마스터를 저장하면 이 화면에 실제 원장이 표시됩니다.";
   const filteredCustomers = useMemo(() => {
     const keyword = customerSearch.trim().toLowerCase();
 
@@ -668,18 +678,23 @@ export default function CrmTimelinePage() {
           <SectionHeader
             eyebrow="01 · 원장 요약"
             title="거래처 원장 요약"
-            description="DB 상태, 전체 거래처 수, 매출 등급, 현재 필터 결과를 먼저 확인합니다."
+            description="운영 원장 연결 상태, 전체 거래처 수, 보완 필요 항목을 먼저 확인합니다."
           />
           <div className="p-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[160px_repeat(4,minmax(0,1fr))]">
             <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-black text-slate-400">DB 상태</p>
-              <Badge className={`mt-2 ${dbSummary.tone === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{dbSummary.label}</Badge>
+              <p className="text-[11px] font-black text-slate-400">원장 상태</p>
+              <Badge className={`mt-2 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
+              <p className="mt-2 text-[11px] font-bold leading-4 text-slate-500">{dbSummary.label}</p>
             </div>
-            <SummaryCard helper={`정제 ${formatDbCount(dbSummary.normalizedCustomers)}`} label="전체 거래처" value={`${customers.length}곳`} />
+            <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
             <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
             <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
-            <SummaryCard helper={`방문 결과 ${formatDbCount(dbSummary.visitResults)}`} label="예상매출" value={`${expectedRevenue.toLocaleString()}만원`} tone="violet" />
+            <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
+          </div>
+          <div className={`mt-3 rounded-md border px-3 py-3 ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
+            <p className={`text-xs font-black ${hasOperationalLedger ? "text-emerald-900" : "text-amber-900"}`}>{ledgerStatusLabel}</p>
+            <p className={`mt-1 text-xs font-bold leading-5 ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
           {!hasCustomers ? (
@@ -690,6 +705,12 @@ export default function CrmTimelinePage() {
               <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
                 샘플 거래처는 더 이상 히스토리 화면에 실제 데이터처럼 표시하지 않습니다. 데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 원장 기준으로 연결됩니다.
               </p>
+              <Link
+                className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
+                href={withCompanyQuery("/?type=customer-master")}
+              >
+                거래처 마스터 등록하기
+              </Link>
             </div>
           ) : null}
           <CustomerLedgerBasisPanel
