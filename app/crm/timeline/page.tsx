@@ -87,9 +87,9 @@ const resultLabels: Record<string, string> = {
   failed: "실패"
 };
 
-const customerDetailTabs: Array<{ description: string; icon: typeof Building2; id: CustomerDetailTab; label: string }> = [
-  { description: "사업자정보, 배송 담당자, 첨부자료를 관리합니다.", icon: Building2, id: "ledger", label: "원장·첨부" },
-  { description: "상담 메모와 영업 방문 기록을 누적합니다.", icon: FileText, id: "history", label: "메모·방문" }
+const customerDetailTabs: Array<{ description: string; helper: string; icon: typeof Building2; id: CustomerDetailTab; label: string; shortLabel: string }> = [
+  { description: "사업자정보, 배송 담당자, 첨부자료를 관리합니다.", helper: "사업자·주소·적재위치", icon: Building2, id: "ledger", label: "원장·첨부", shortLabel: "기본정보" },
+  { description: "상담 메모와 영업 방문 기록을 누적합니다.", helper: "메모·방문·다음 액션", icon: FileText, id: "history", label: "메모·방문", shortLabel: "이력관리" }
 ];
 
 const defaultDbSummary: DbSummary = {
@@ -1013,28 +1013,30 @@ export default function CrmTimelinePage() {
                   <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">거래처 상세 탭</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
-                <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">
+                <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">
                   {customerDetailTabs.map((tab) => {
                     const Icon = tab.icon;
                     const selected = detailTab === tab.id;
                     return (
                       <button
-                        className={`group min-w-[132px] rounded-lg border px-3 py-2.5 text-left transition ${
+                        className={`group relative min-w-[170px] overflow-hidden rounded-lg border px-3 py-3 text-left transition ${
                           selected
-                            ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.18)]"
-                            : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                            ? "border-teal-700 bg-teal-700 text-white shadow-[0_10px_22px_rgba(15,118,110,0.18)]"
+                            : "border-slate-200 bg-white text-slate-600 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
                         }`}
                         key={tab.id}
                         onClick={() => setDetailTab(tab.id)}
                         type="button"
                       >
+                        {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-white/80" /> : null}
                         <span className="flex items-center gap-2 text-sm font-black">
-                          <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
+                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${selected ? "bg-white/15" : "bg-slate-100 group-hover:bg-white"}`}>
+                            <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
+                          </span>
                           {tab.label}
                         </span>
-                        <span className={`mt-1 block truncate text-[11px] font-bold ${selected ? "text-white/75" : "text-slate-400"}`}>
-                          {tab.id === "ledger" ? "기본정보" : "이력관리"}
-                        </span>
+                        <span className={`mt-2 block truncate text-[11px] font-bold ${selected ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>{tab.shortLabel}</span>
+                        <span className={`mt-1 block truncate text-[10px] font-black ${selected ? "text-white/60" : "text-slate-500"}`}>{tab.helper}</span>
                       </button>
                     );
                   })}
