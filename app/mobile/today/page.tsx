@@ -16,10 +16,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   if (!session) redirect("/mobile/join");
 
   const routePlan = await getTodayRoutePlan(session.companyId);
+  const sourceReady = routePlan.source === "supabase";
   const firstGroup = routePlan.groups[0];
-  const todayStops = firstGroup?.stops.slice(0, 6) || [];
+  const todayStops = sourceReady ? firstGroup?.stops.slice(0, 6) || [] : [];
   const driverName = session.name || "모바일 담당자";
-  const routeArea = firstGroup?.region || "전체 권역";
+  const routeArea = sourceReady ? firstGroup?.region || "전체 권역" : "거래처 등록 필요";
   const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops[0];
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
@@ -48,10 +49,14 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </section>
 
           <section className="grid grid-cols-3 gap-2">
-            <MobileMetric icon={Building2} label="방문처" value={`${todayStops.length || routePlan.totalStops}곳`} />
-            <MobileMetric icon={Route} label="거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-            <MobileMetric icon={Clock} label="시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
+            <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${todayStops.length || routePlan.totalStops}곳` : "등록 필요"} />
+            <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routePlan.totalDistanceKm.toLocaleString()}km` : "-"} />
+            <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routePlan.totalDurationMinutes) : "-"} />
           </section>
+
+          {!sourceReady ? (
+            <MobileOperationalEmptyState />
+          ) : null}
 
           <MobileFieldFlowPanel hasSelectedStop={Boolean(selectedStop)} selectedStopName={selectedStop?.name || "선택 거래처 없음"} />
 
@@ -60,7 +65,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             driverName={driverName}
             roleLabel={roleLabel}
             selectedStopName={selectedStop?.name || "선택 거래처 없음"}
-            totalStops={routePlan.totalStops}
+            totalStops={sourceReady ? routePlan.totalStops : 0}
             visibleStops={todayStops.length}
           />
 
@@ -195,6 +200,27 @@ function MobileOperationBasisPanel({
       <div className="border-t border-slate-100 px-4 py-3">
         <p className="text-[11px] font-black text-slate-400">선택 거래처</p>
         <p className="mt-1 truncate text-sm font-black text-slate-950">{selectedStopName}</p>
+      </div>
+    </section>
+  );
+}
+
+function MobileOperationalEmptyState() {
+  return (
+    <section className="rounded-xl border border-dashed border-teal-200 bg-teal-50/70 p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-teal-700 shadow-sm ring-1 ring-inset ring-teal-100">
+          <Building2 className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-black text-slate-950">운영 거래처 등록이 필요합니다.</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
+            관리자 또는 고객사 담당자가 거래처 마스터를 등록하면 오늘 코스, 지도, 전화, 배송완료 기록이 모바일에 표시됩니다.
+          </p>
+          <Link className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm" href="/?type=customer-master">
+            거래처 등록 화면으로 이동
+          </Link>
+        </div>
       </div>
     </section>
   );

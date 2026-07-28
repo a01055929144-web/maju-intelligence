@@ -33,9 +33,10 @@ export async function GET(request: NextRequest) {
 
   const masterCount = customerMaster.customers.length;
   const isSupabaseSource = customerMaster.source === "supabase";
-  const dashboardCount = dashboard.briefing.currentCustomers;
-  const routeStops = routePlan.groups.flatMap((group) => group.stops);
-  const routeCount = routePlan.totalStops;
+  const dashboardCount = isSupabaseSource ? dashboard.briefing.currentCustomers : 0;
+  const routeStops = isSupabaseSource ? routePlan.groups.flatMap((group) => group.stops) : [];
+  const routeCount = isSupabaseSource ? routePlan.totalStops : 0;
+  const operationalMasterCount = isSupabaseSource ? masterCount : 0;
   const routeProviderCounts = routeStops.reduce(
     (counts, stop) => {
       const provider = stop.routeProvider || "unknown";
@@ -44,20 +45,22 @@ export async function GET(request: NextRequest) {
     },
     {} as Record<string, number>
   );
-  const mappableMasterCount = customerMaster.customers.filter((customer) => Boolean(customer.address?.trim())).length;
-  const missingAddressCustomers = customerMaster.customers
-    .filter((customer) => !customer.address?.trim())
-    .slice(0, 8)
-    .map((customer) => ({
-      customerId: customer.id,
-      customerName: customer.customerName,
-      deliveryManager: customer.deliveryManager,
-      deliveryZone: customer.deliveryZone || customer.region || "미분류"
-    }));
-  const missingAddressCount = customerMaster.customers.filter((customer) => !customer.address?.trim()).length;
+  const mappableMasterCount = isSupabaseSource ? customerMaster.customers.filter((customer) => Boolean(customer.address?.trim())).length : 0;
+  const missingAddressCustomers = isSupabaseSource
+    ? customerMaster.customers
+        .filter((customer) => !customer.address?.trim())
+        .slice(0, 8)
+        .map((customer) => ({
+          customerId: customer.id,
+          customerName: customer.customerName,
+          deliveryManager: customer.deliveryManager,
+          deliveryZone: customer.deliveryZone || customer.region || "미분류"
+        }))
+    : [];
+  const missingAddressCount = isSupabaseSource ? customerMaster.customers.filter((customer) => !customer.address?.trim()).length : 0;
   const mappableRouteCount = Math.min(routeCount, mappableMasterCount);
-  const routeWithoutMasterCount = Math.max(routeCount - masterCount, 0);
-  const masterWithoutRouteCount = Math.max(masterCount - routeCount, 0);
+  const routeWithoutMasterCount = Math.max(routeCount - operationalMasterCount, 0);
+  const masterWithoutRouteCount = Math.max(operationalMasterCount - routeCount, 0);
   const visitCount = timeline.length;
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
   const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
@@ -74,20 +77,20 @@ export async function GET(request: NextRequest) {
     {
       detail: "대시보드의 전체 거래처 수와 거래처 원장 수가 같은 기준인지 확인합니다.",
       label: "대시보드 ↔ 거래처 원장",
-      ok: dashboardCount === masterCount,
-      value: `${dashboardCount.toLocaleString()} / ${masterCount.toLocaleString()}곳`
+      ok: isSupabaseSource && dashboardCount === operationalMasterCount,
+      value: `${dashboardCount.toLocaleString()} / ${operationalMasterCount.toLocaleString()}곳`
     },
     {
       detail: "영업·배송 코스가 거래처 원장 기준으로 생성되는지 확인합니다.",
       label: "거래처 원장 ↔ 코스",
-      ok: masterCount === routeCount,
-      value: `${masterCount.toLocaleString()} / ${routeCount.toLocaleString()}곳`
+      ok: isSupabaseSource && operationalMasterCount === routeCount,
+      value: `${operationalMasterCount.toLocaleString()} / ${routeCount.toLocaleString()}곳`
     },
     {
       detail: "지도는 주소가 있는 매장만 표시할 수 있습니다. 주소가 있으면 내부 지도와 코스 화면의 마커 기준값이 됩니다.",
       label: "원장 주소 ↔ 지도 표시 가능",
-      ok: missingAddressCount === 0,
-      value: `${mappableRouteCount.toLocaleString()} / ${masterCount.toLocaleString()}곳`
+      ok: isSupabaseSource && missingAddressCount === 0,
+      value: `${mappableRouteCount.toLocaleString()} / ${operationalMasterCount.toLocaleString()}곳`
     },
     {
       detail: "경로 계산은 티맵 캐시가 있으면 실제 도로값, 없으면 임시 추정값으로 표시됩니다.",
@@ -104,9 +107,9 @@ export async function GET(request: NextRequest) {
   ];
 
   const recommendations = buildRecommendations({
-    dashboardCount,
-    isSupabaseSource,
-    masterCount,
+      dashboardCount,
+      isSupabaseSource,
+      masterCount: operationalMasterCount,
     masterWithoutRouteCount,
     missingAddressCount,
     routeProviderCounts,
@@ -131,7 +134,7 @@ export async function GET(request: NextRequest) {
         dashboardCustomers: dashboardCount,
         estimatedRouteStops: estimatedRouteCount,
         historyItems: visitCount,
-        masterCustomers: masterCount,
+        masterCustomers: operationalMasterCount,
         mappableRouteStops: mappableRouteCount,
         missingAddressCustomers: missingAddressCount,
         missingAddressExamples: missingAddressCustomers,
