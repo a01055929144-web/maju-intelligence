@@ -430,8 +430,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           >
             {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
           </button>
-          <button className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800" onClick={focusOrigin} type="button">
-            내 위치
+          <button
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+            onClick={focusOrigin}
+            title="물류 출발지로 지도 이동"
+            type="button"
+          >
+            출발지 보기
           </button>
           <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
             {sourceReady ? selectedVehicleLabel : "운영 원장 미연결"}
