@@ -3234,7 +3234,7 @@ function getEmptyAdminDashboardPayload(source: "sample" | "supabase"): AdminDash
 function getOperationalScoringWeights(): AdminDashboardPayload["scoringWeights"] {
   return [
     { label: "영업력", value: 22, note: "최근 주문과 거래 규모" },
-    { label: "배송효율", value: 18, note: "출발지 기준 거리와 배송권역" },
+    { label: "배송효율", value: 18, note: "출발지-매장 거리와 배송권역" },
     { label: "CRM관리", value: 16, note: "메모, 방문, 첨부자료 완성도" },
     { label: "신규영업", value: 18, note: "White Space와 신규 기회" },
     { label: "집중도", value: 14, note: "지역과 업종 편중 위험" },

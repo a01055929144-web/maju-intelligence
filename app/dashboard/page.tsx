@@ -429,12 +429,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2">
-                    <SmallMetric label="출발지 기준 거리" value={routeDistanceKm ? `${routeDistanceKm.toLocaleString()}km` : "등록 필요"} />
-                    <SmallMetric label="예상 이동시간" value={routeDurationMinutes ? formatMinutes(routeDurationMinutes) : "등록 필요"} />
+                    <SmallMetric label="출발지-매장 거리합" value={routeDistanceKm ? `${routeDistanceKm.toLocaleString()}km` : "등록 필요"} />
+                    <SmallMetric label="출발지-매장 시간합" value={routeDurationMinutes ? formatMinutes(routeDurationMinutes) : "등록 필요"} />
                     <SmallMetric label="선택 배송매장" value={`${routeStopCount.toLocaleString()}곳`} />
                     <SmallMetric label="참고 주유비" value={referenceFuelCost ? `${referenceFuelCost.toLocaleString()}원` : "등록 필요"} />
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-muted-foreground">거리는 물류 출발지와 선택 매장 기준의 운영 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">거리는 물류 출발지에서 각 매장까지의 단건 합계입니다. 실제 경유 순서와 도로 기준 시간은 영업·배송 코스에서 티맵 계산으로 확정합니다.</p>
                 </CardContent>
               </Card>
             </div>

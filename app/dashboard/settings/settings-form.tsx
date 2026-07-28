@@ -188,7 +188,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <ol className="mt-2 space-y-2 text-xs font-bold leading-5 text-blue-900">
               <li>1. 출발지 주소 저장 상태 확인</li>
               <li>2. 거래처 등록 화면에서 배송주소 데이터 확인</li>
-              <li>3. 영업·배송 코스에서 출발지 기준 거리 확인</li>
+              <li>3. 영업·배송 코스에서 출발지-매장 거리 확인</li>
             </ol>
           </div>
           <p className="text-xs">마지막 수정: {initial.updatedAt}</p>
