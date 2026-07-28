@@ -1310,8 +1310,12 @@ export default function CrmTimelinePage() {
                     latestNote={latestNote}
                     nextActionCount={nextActionCount}
                   />
-                  <div className="mt-3 rounded-md border border-slate-200/80 bg-white p-3">
-                    <div className="mb-3 flex flex-wrap gap-2">
+                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200/80 bg-white">
+                    <div className="border-b border-slate-100 bg-slate-50 px-3 py-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">빠른 메모</p>
+                      <p className="mt-1 text-sm font-black text-slate-950">현장에서 자주 남기는 문구를 먼저 선택하고, 필요한 내용을 이어서 보완합니다.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 p-3">
                       {[
                         "대표 요청사항 확인 필요",
                         "배송 특이사항 있음",
@@ -1328,27 +1332,35 @@ export default function CrmTimelinePage() {
                         </button>
                       ))}
                     </div>
-                    <textarea
-                      className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                      onChange={(event) => setNewMemo(event.target.value)}
-                      placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
-                      value={newMemo}
-                    />
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                      <input
-                        className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                        onChange={(event) => setNewNextAction(event.target.value)}
-                        placeholder="다음 액션 예: 견적서 발송"
-                        value={newNextAction}
-                      />
-                      <button
-                        className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
-                        disabled={!newMemo.trim() || isNoteSaving}
-                        onClick={saveNote}
-                        type="button"
-                      >
-                        {isNoteSaving ? "저장 중" : "메모 저장"}
-                      </button>
+                    <div className="grid gap-3 border-t border-slate-100 p-3">
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-black text-slate-500">상담·배송 메모</span>
+                        <textarea
+                          className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          onChange={(event) => setNewMemo(event.target.value)}
+                          placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
+                          value={newMemo}
+                        />
+                      </label>
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px]">
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-black text-slate-500">다음 액션</span>
+                          <input
+                            className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                            onChange={(event) => setNewNextAction(event.target.value)}
+                            placeholder="예: 견적서 발송"
+                            value={newNextAction}
+                          />
+                        </label>
+                        <button
+                          className="mt-auto h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          disabled={!newMemo.trim() || isNoteSaving}
+                          onClick={saveNote}
+                          type="button"
+                        >
+                          {isNoteSaving ? "저장 중" : "메모 저장"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
