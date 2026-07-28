@@ -180,8 +180,8 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 
       {filteredUploads.length ? (
         <div className="overflow-x-auto rounded-md border border-border">
-          <div className="min-w-[1180px]">
-            <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_240px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
+          <div className="min-w-[1320px]">
+            <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_360px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
               <span>파일</span>
               <span>고객사</span>
               <span className="text-right">행 수</span>
@@ -214,7 +214,7 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
   const companyQuery = `companyId=${encodeURIComponent(upload.companyId)}`;
 
   return (
-    <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_240px] items-center gap-2 px-4 py-3 text-sm">
+    <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_360px] items-center gap-2 px-4 py-3 text-sm">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate font-black">{upload.filename}</p>
@@ -258,8 +258,14 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/?${companyQuery}`}>
           등록
         </Link>
+        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/crm/timeline?${companyQuery}`}>
+          원장
+        </Link>
         <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
           매출
+        </Link>
+        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/routes/today?${companyQuery}`}>
+          코스
         </Link>
         <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/admin/companies`}>
           고객사

@@ -3190,7 +3190,7 @@ export async function getAdminDashboardPayload() {
 }
 
 export async function getUploadHistory(companyId?: string): Promise<UploadHistoryItem[]> {
-  if (!isProductionStoreConfigured()) return getSampleUploadHistory(companyId);
+  if (!isProductionStoreConfigured()) return [];
 
   const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
   const rows = await supabaseRequest<
