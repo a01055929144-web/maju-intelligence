@@ -57,21 +57,27 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const routePlan = await getTodayRoutePlan(companyId);
   const customerMaster = await getCustomerMaster(companyId);
   const originAddress = await getCompanyOriginAddress(companyId);
-  const referenceFuelCost = estimateFuelCost(routePlan.totalDistanceKm);
-  const customerDataCount = customerMaster.source === "supabase" ? customerMaster.customers.length : Math.max(customerMaster.customers.length, briefing.currentCustomers);
+  const hasOperationalCustomerMaster = customerMaster.source === "supabase";
+  const customerDataCount = hasOperationalCustomerMaster ? customerMaster.customers.length : 0;
+  const hasOperationalReport = hasOperationalCustomerMaster && report.health.total > 0;
+  const routeDistanceKm = hasOperationalCustomerMaster ? routePlan.totalDistanceKm : 0;
+  const routeDurationMinutes = hasOperationalCustomerMaster ? routePlan.totalDurationMinutes : 0;
+  const referenceFuelCost = estimateFuelCost(routeDistanceKm);
   const routeStops = routePlan.groups.flatMap((group) => group.stops);
-  const mapMarkers = createRouteMapMarkers(originAddress, routeStops);
-  const routeMapStoreCount = Math.max(mapMarkers.length - 1, 0);
+  const displayRouteStops = hasOperationalCustomerMaster ? routeStops : [];
+  const mapMarkers = createRouteMapMarkers(originAddress, displayRouteStops);
+  const routeMapStoreCount = hasOperationalCustomerMaster ? Math.max(mapMarkers.length - 1, 0) : 0;
+  const routeStopCount = hasOperationalCustomerMaster ? routePlan.totalStops : 0;
   const topLeads = leadPayload.leads.slice(0, 6);
   const primaryLead = topLeads[0];
   const latestUpload = uploadHistory[0];
-  const placeLinkedCustomers = customerMaster.customers.filter((customer) => customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl).length;
-  const placeLinkRate = customerMaster.customers.length ? Math.round((placeLinkedCustomers / customerMaster.customers.length) * 100) : 0;
+  const placeLinkedCustomers = hasOperationalCustomerMaster ? customerMaster.customers.filter((customer) => customer.naverPlaceUrl || customer.kakaoPlaceUrl || customer.googleMapUrl).length : 0;
+  const placeLinkRate = hasOperationalCustomerMaster && customerMaster.customers.length ? Math.round((placeLinkedCustomers / customerMaster.customers.length) * 100) : 0;
   const dataReadiness = [
     { label: "거래처 마스터", ready: customerDataCount > 0, detail: `${customerDataCount.toLocaleString()}개 거래처` },
     { label: "최근 업로드", ready: Boolean(latestUpload), detail: latestUpload ? latestUpload.createdAt : "업로드 필요" },
-    { label: "지도 표시", ready: routeMapStoreCount === routePlan.totalStops, detail: `주소 ${routeMapStoreCount.toLocaleString()}곳 / 전체 ${routePlan.totalStops.toLocaleString()}곳` },
-    { label: "외부 매장 정보", ready: placeLinkedCustomers > 0, detail: `${placeLinkedCustomers.toLocaleString()}/${customerMaster.customers.length.toLocaleString()}곳 연결` }
+    { label: "지도 표시", ready: routeStopCount > 0 && routeMapStoreCount === routeStopCount, detail: `주소 ${routeMapStoreCount.toLocaleString()}곳 / 전체 ${routeStopCount.toLocaleString()}곳` },
+    { label: "외부 매장 정보", ready: placeLinkedCustomers > 0, detail: `${placeLinkedCustomers.toLocaleString()}/${customerDataCount.toLocaleString()}곳 연결` }
   ];
   const operationChecklist = [
     {
@@ -102,17 +108,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       actionHref: withCompanyQuery("/routes/today"),
       actionLabel: "코스 확정",
       description: "배송차별 매장을 선택하고 실제 도로 경유 순서를 계산해 현장 실행 코스를 만듭니다.",
-      done: routePlan.totalStops > 0,
+      done: routeStopCount > 0,
       label: "영업·배송 코스",
-      value: `${routePlan.totalStops.toLocaleString()}곳`
+      value: `${routeStopCount.toLocaleString()}곳`
     },
     {
       actionHref: withCompanyQuery("/assistant"),
       actionLabel: "리포트 확인",
       description: "거래처와 매출 데이터가 쌓이면 Company Health Score와 실행 제안이 더 정확해집니다.",
-      done: report.health.total > 0,
+      done: hasOperationalReport,
       label: "AI 리포트",
-      value: `${report.health.total}점`
+      value: hasOperationalReport ? `${report.health.total}점` : "등록 후"
     }
   ];
   const completedChecklistCount = operationChecklist.filter((item) => item.done).length;
@@ -143,8 +149,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       description: "차량별 경유 매장을 선택하고 티맵 도로 기준으로 계산합니다.",
       icon: Truck,
       label: "배송 운영",
-      ready: routePlan.totalStops > 0,
-      value: `${routePlan.totalStops.toLocaleString()}곳`
+      ready: routeStopCount > 0,
+      value: `${routeStopCount.toLocaleString()}곳`
     },
     {
       actionHref: withCompanyQuery("/crm/timeline"),
@@ -190,7 +196,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 <Badge className="mb-3 bg-slate-100 text-slate-700">오늘 운영 요약</Badge>
                 <h1 className="text-[26px] font-black leading-tight text-slate-950">오늘의 거래처, 매출 데이터, 배송 코스를 한 번에 확인합니다.</h1>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                  거래처 {customerDataCount.toLocaleString()}개 중 오늘 추천 {briefing.todayRecommendations}곳, 동선 내 신규 리드 {briefing.routeLeads}곳을 먼저 확인하세요.
+                  {hasOperationalCustomerMaster
+                    ? `거래처 ${customerDataCount.toLocaleString()}개 중 오늘 추천 ${briefing.todayRecommendations}곳, 동선 내 신규 리드 ${briefing.routeLeads}곳을 먼저 확인하세요.`
+                    : "아직 운영 거래처 원장이 연결되지 않았습니다. 거래처 마스터를 먼저 등록하면 대시보드, 히스토리, 코스 화면이 같은 기준으로 연결됩니다."}
                 </p>
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -221,9 +229,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric icon={Building2} label="전체 거래처" value={`${customerDataCount}개`} />
-              <Metric icon={Route} label="배송 코스 매장" value={`${routePlan.totalStops}곳`} />
-              <Metric icon={Fuel} label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
+              <Metric icon={Building2} label="운영 거래처" value={hasOperationalCustomerMaster ? `${customerDataCount}개` : "등록 필요"} />
+              <Metric icon={Route} label="배송 코스 매장" value={routeStopCount ? `${routeStopCount}곳` : "등록 필요"} />
+              <Metric icon={Fuel} label="참고 주유비" value={referenceFuelCost ? `${referenceFuelCost.toLocaleString()}원` : "등록 필요"} />
               <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
               <Metric icon={Link2} label="외부 링크 연결" value={`${placeLinkRate}%`} />
             </div>
@@ -232,7 +240,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase text-slate-400">Company Health Score</p>
             <div className="mt-3 flex items-end gap-3">
-              <span className="text-6xl font-black text-emerald-700">{report.health.total}</span>
+              <span className="text-6xl font-black text-emerald-700">{hasOperationalReport ? report.health.total : "-"}</span>
               <span className="pb-2 text-sm font-bold text-slate-400">/ 100</span>
             </div>
             <div className="mt-4 space-y-2">
@@ -240,9 +248,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 <div key={label as string}>
                   <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
                     <span>{label as string}</span>
-                    <span>{value as number}</span>
+                    <span>{hasOperationalReport ? value as number : "-"}</span>
                   </div>
-                  <Progress value={value as number} />
+                  <Progress value={hasOperationalReport ? value as number : 0} />
                 </div>
               ))}
             </div>
@@ -256,9 +264,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}
-          placeLinkLabel={`${placeLinkedCustomers.toLocaleString()}/${customerMaster.customers.length.toLocaleString()}곳`}
+          placeLinkLabel={`${placeLinkedCustomers.toLocaleString()}/${customerDataCount.toLocaleString()}곳`}
           routeMapStoreCount={routeMapStoreCount}
-          routeStops={routePlan.totalStops}
+          routeStops={routeStopCount}
         />
 
         <DashboardConsistencyCheck companyId={isAdminPreview ? companyId : undefined} />
@@ -312,7 +320,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <NextAction description="사업자 상태, 배송 적재위치, 첨부자료, 메모 히스토리를 먼저 확인합니다." href={withCompanyQuery("/crm/timeline")} label="1. 거래처 원장·첨부 확인" value={`${customerDataCount.toLocaleString()}개`} />
-                  <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 순서를 확정합니다." href={withCompanyQuery("/routes/today")} label="2. 영업·배송 코스 확정" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                  <NextAction description="출발지와 매장 주소를 기준으로 차량별 경유 순서를 확정합니다." href={withCompanyQuery("/routes/today")} label="2. 영업·배송 코스 확정" value={`${routeStopCount.toLocaleString()}곳`} />
                   <NextAction description="ERP 거래원장 업로드 상태와 기간별 매출 변화를 확인합니다." href={withCompanyQuery("/revenue/transactions")} label="3. 매출 거래내역 점검" value={latestUpload ? "업데이트됨" : "업로드 필요"} />
                 </CardContent>
               </Card>
@@ -334,7 +342,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                   <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <MapSummary label="출발지" value={originAddress} />
                     <MapSummary label="지도 표시 매장" value={`${routeMapStoreCount.toLocaleString()}곳`} />
-                    <MapSummary label="등록 코스 매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
+                    <MapSummary label="등록 코스 매장" value={`${routeStopCount.toLocaleString()}곳`} />
                   </div>
                   <KakaoAddressMap mapClassName="h-[640px]" markers={mapMarkers} showList={false} />
                 </CardContent>
@@ -418,10 +426,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2">
-                    <SmallMetric label="출발지 기준 거리" value={`${routePlan.totalDistanceKm.toLocaleString()}km`} />
-                    <SmallMetric label="예상 이동시간" value={formatMinutes(routePlan.totalDurationMinutes)} />
-                    <SmallMetric label="선택 배송매장" value={`${routePlan.totalStops.toLocaleString()}곳`} />
-                    <SmallMetric label="참고 주유비" value={`${referenceFuelCost.toLocaleString()}원`} />
+                    <SmallMetric label="출발지 기준 거리" value={routeDistanceKm ? `${routeDistanceKm.toLocaleString()}km` : "등록 필요"} />
+                    <SmallMetric label="예상 이동시간" value={routeDurationMinutes ? formatMinutes(routeDurationMinutes) : "등록 필요"} />
+                    <SmallMetric label="선택 배송매장" value={`${routeStopCount.toLocaleString()}곳`} />
+                    <SmallMetric label="참고 주유비" value={referenceFuelCost ? `${referenceFuelCost.toLocaleString()}원` : "등록 필요"} />
                   </div>
                   <p className="mt-3 text-xs leading-5 text-muted-foreground">거리는 물류 출발지와 선택 매장 기준의 운영 참고값입니다. 실제 배송일과 차량 배차는 영업·배송 코스에서 확정합니다.</p>
                 </CardContent>
