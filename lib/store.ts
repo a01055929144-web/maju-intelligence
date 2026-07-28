@@ -757,7 +757,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerCount: getSampleCustomerMaster().length,
           salesTransactionCount: 0,
           uploadCount: 0,
-          recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
+          recentUploads: [],
           staffInvitationCount: 0,
           staffInvitations: [],
           updatedAt: "기준 데이터"
@@ -909,7 +909,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           customerCount: getSampleCustomerMaster().length,
           salesTransactionCount: 0,
           uploadCount: 0,
-          recentUploads: getSampleUploadHistory(fallbackCredentials.customerCompanyId).slice(0, 5),
+          recentUploads: [],
           staffInvitationCount: 0,
           staffInvitations: [],
           updatedAt: "fallback"
@@ -3122,7 +3122,7 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
 }
 
 export async function getAdminDashboardPayload() {
-  if (!isProductionStoreConfigured()) return { ...getAdminDashboard(), uploadHistory: getSampleUploadHistory(), source: "sample" };
+  if (!isProductionStoreConfigured()) return { ...getAdminDashboard(), uploadHistory: [], source: "sample" };
 
   const [companies, imports, reports, leads, uploadHistory] = await Promise.all([
     supabaseRequest<SupabaseRow[]>("companies?select=id"),
