@@ -1197,37 +1197,56 @@ export default function CrmTimelinePage() {
                     }}
                   />
                   <AttachmentChecklistPanel checklist={attachmentChecklist} />
-                  <div className="mt-4 rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
-                    <p className="mb-3 text-xs font-black text-slate-500">자료 추가</p>
-                    <div className="grid gap-2">
-                      <select
-                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                        onChange={(event) => {
-                          setNewAttachmentType(event.target.value);
-                          setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
-                        }}
-                        value={newAttachmentType}
-                      >
-                        <option value="loading_position">배송 적재위치 사진/영상</option>
-                        <option value="business_license">사업자등록증</option>
-                        <option value="bank_account">통장사본</option>
-                        <option value="etc">기타 첨부자료</option>
-                      </select>
-                      <input
-                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                        onChange={(event) => setNewAttachmentTitle(event.target.value)}
-                        placeholder="자료명"
-                        value={newAttachmentTitle}
-                      />
-                      <input
-                        className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                        onChange={(event) => setNewAttachmentUrl(event.target.value)}
-                        placeholder="파일 링크 또는 외부 URL"
-                        value={newAttachmentUrl}
-                      />
-                      <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-white p-3 text-center text-sm font-black text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">
-                        <span>{newAttachmentFile ? newAttachmentFile.name : "파일 직접 선택"}</span>
-                        <span className="mt-1 text-xs font-bold text-slate-400">이미지/PDF/영상, 최대 50MB</span>
+                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200/80 bg-white">
+                    <div className="border-b border-slate-100 bg-slate-50 px-3 py-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
+                      <p className="mt-1 text-sm font-black text-slate-950">적재위치, 사업자등록증, 통장사본을 같은 거래처 원장에 보관합니다.</p>
+                    </div>
+                    <div className="grid gap-3 p-3">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-black text-slate-500">자료 종류</span>
+                          <select
+                            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                            onChange={(event) => {
+                              setNewAttachmentType(event.target.value);
+                              setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
+                            }}
+                            value={newAttachmentType}
+                          >
+                            <option value="loading_position">배송 적재위치 사진/영상</option>
+                            <option value="business_license">사업자등록증</option>
+                            <option value="bank_account">통장사본</option>
+                            <option value="etc">기타 첨부자료</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-black text-slate-500">자료명</span>
+                          <input
+                            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                            onChange={(event) => setNewAttachmentTitle(event.target.value)}
+                            placeholder="예: 후문 냉장창고 앞 적재사진"
+                            value={newAttachmentTitle}
+                          />
+                        </label>
+                      </div>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs font-black text-slate-500">파일 링크</span>
+                        <input
+                          className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          onChange={(event) => setNewAttachmentUrl(event.target.value)}
+                          placeholder="외부 URL이 있으면 붙여넣고, 없으면 아래에서 파일을 선택하세요."
+                          value={newAttachmentUrl}
+                        />
+                      </label>
+                      <label className="flex min-h-24 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-700 text-white">
+                          <Plus className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black text-slate-950">{newAttachmentFile ? newAttachmentFile.name : "사진·PDF·영상을 직접 선택"}</span>
+                          <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">배송 적재위치는 여러 장의 사진이나 짧은 영상으로 남기면 현장 전달이 가장 정확합니다. 최대 50MB.</span>
+                        </span>
                         <input
                           accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
                           className="hidden"
@@ -1236,7 +1255,7 @@ export default function CrmTimelinePage() {
                         />
                       </label>
                       <button
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                         disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFile) || isAttachmentSaving}
                         onClick={saveAttachment}
                         type="button"
