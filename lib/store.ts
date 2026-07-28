@@ -1632,7 +1632,7 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
 
   if (!isProductionStoreConfigured()) {
     return {
-      customers: getSampleCustomerMaster(),
+      customers: [],
       source: "sample"
     };
   }
@@ -1825,8 +1825,8 @@ export async function getCustomerOperations(customerId: string, companyId?: stri
 
   if (!isProductionStoreConfigured() || customerId.startsWith("sample-") || customerId.startsWith("local-")) {
     return {
-      attachments: getSampleCustomerAttachments(customerId),
-      notes: getSampleCustomerNotes(),
+      attachments: [],
+      notes: [],
       source: "sample" as const
     };
   }
@@ -2780,7 +2780,7 @@ export async function saveVisitResult(input: {
 }
 
 export async function getVisitTimeline(companyId?: string): Promise<VisitTimelineItem[]> {
-  if (!isProductionStoreConfigured()) return getSampleVisitTimeline();
+  if (!isProductionStoreConfigured()) return [];
 
   const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
   const rows = await supabaseRequest<
