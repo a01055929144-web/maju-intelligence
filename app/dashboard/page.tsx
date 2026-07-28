@@ -198,7 +198,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
                   {hasOperationalCustomerMaster
                     ? `거래처 ${customerDataCount.toLocaleString()}개 중 오늘 추천 ${briefing.todayRecommendations}곳, 동선 내 신규 리드 ${briefing.routeLeads}곳을 먼저 확인하세요.`
-                    : "아직 운영 거래처 원장이 연결되지 않았습니다. 거래처 마스터를 먼저 등록하면 대시보드, 히스토리, 코스 화면이 같은 기준으로 연결됩니다."}
+                    : "아직 DB 거래처 원장이 연결되지 않았습니다. 거래처 마스터를 먼저 등록하면 대시보드, 히스토리, 코스 화면이 같은 기준으로 연결됩니다."}
                 </p>
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -542,11 +542,11 @@ function DashboardDataBasisPanel({
   routeStops: number;
   transactionsHref: string;
 }) {
-  const sourceLabel = customerSource === "supabase" ? "운영 원장 연결" : "운영 데이터 미연결";
+  const sourceLabel = customerSource === "supabase" ? "DB 거래처 원장 연결" : "DB 거래처 원장 미연결";
   const sourceReady = customerSource === "supabase";
   const items = [
-    { label: "데이터 출처", value: sourceLabel, helper: sourceReady ? "거래처 원장 기준" : "거래처 마스터 등록 필요" },
-    { label: "거래처 원장", value: `${customerCount.toLocaleString()}곳`, helper: "히스토리·지도 기준" },
+    { label: "데이터 출처", value: sourceLabel, helper: sourceReady ? "DB 거래처 원장 기준" : "거래처 마스터 등록 필요" },
+    { label: "DB 거래처 원장", value: `${customerCount.toLocaleString()}곳`, helper: "히스토리·지도 기준" },
     { label: "물류 출발지", value: originAddress, helper: "거리·코스 계산 기준" },
     { label: "매출 원장", value: latestUploadLabel, helper: "등급·리포트 갱신 기준" },
     { label: "코스 매장", value: `${routeStops.toLocaleString()}곳`, helper: "배송차별 경유 후보" },
@@ -554,7 +554,7 @@ function DashboardDataBasisPanel({
   ];
   const consistencyChecks = [
     {
-      detail: sourceReady ? "저장된 거래처 원장을 기준으로 화면을 계산합니다." : "아직 운영 원장이 연결되지 않았습니다. 데이터 등록에서 거래처 마스터를 먼저 저장하세요.",
+      detail: sourceReady ? "저장된 DB 거래처 원장을 기준으로 화면을 계산합니다." : "아직 DB 거래처 원장이 연결되지 않았습니다. 데이터 등록에서 거래처 마스터를 먼저 저장하세요.",
       label: "데이터 출처",
       ok: sourceReady
     },
@@ -580,7 +580,7 @@ function DashboardDataBasisPanel({
       description: sourceReady ? "기초 거래처 보완" : "먼저 거래처 저장",
       href: dataRegistrationHref,
       label: "데이터 등록",
-      value: sourceReady ? "운영 원장 기준" : "등록 필요"
+      value: sourceReady ? "DB 원장 기준" : "등록 필요"
     },
     {
       description: "사업자·첨부·메모 관리",
@@ -606,7 +606,7 @@ function DashboardDataBasisPanel({
     <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)_auto] lg:items-center">
         <div>
-          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="text-sm font-black text-slate-950">DB 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드, 거래처 히스토리, 영업·배송 코스가 공유하는 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
@@ -655,10 +655,10 @@ function DashboardDataBasisPanel({
           <div className="flex flex-col gap-1 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-black text-slate-950">연결 화면 기준</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">아래 화면들이 같은 고객사와 같은 거래처 원장을 기준으로 움직입니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">아래 화면들이 같은 고객사와 같은 DB 거래처 원장을 기준으로 움직입니다.</p>
             </div>
             <Badge className={sourceReady ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>
-              {sourceReady ? "운영 데이터 연결" : "데이터 등록 필요"}
+              {sourceReady ? "DB 원장 연결" : "데이터 등록 필요"}
             </Badge>
           </div>
           <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-4 md:divide-x md:divide-y-0">
