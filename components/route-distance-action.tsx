@@ -64,7 +64,7 @@ export function RouteDistanceAction({ destinationAddress, distanceKm, durationMi
         {isLoading ? "계산 중" : "티맵 재계산"}
       </Button>
       {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
-      {route.provider === "estimated" ? <span className="text-xs font-bold text-amber-700">추정값</span> : null}
+      {route.provider === "estimated" ? <span className="text-xs font-bold text-amber-700">티맵 계산 전</span> : null}
     </div>
   );
 }

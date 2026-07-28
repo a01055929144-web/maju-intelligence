@@ -107,7 +107,7 @@ export function RouteSequenceAction({
                   {shortenAddress(leg.fromAddress)} → {shortenAddress(leg.toAddress)}
                 </span>
                 <span className="font-bold"> · {leg.distanceKm}km · {formatMinutes(leg.durationMinutes)}</span>
-                {leg.provider === "estimated" ? <span className="font-bold text-amber-700"> · 추정</span> : null}
+                {leg.provider === "estimated" ? <span className="font-bold text-amber-700"> · 티맵 계산 전</span> : null}
               </div>
             ))}
           </div>

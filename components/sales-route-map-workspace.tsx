@@ -2995,7 +2995,7 @@ function formatMinutes(minutes: number) {
 function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
   if (provider === "cached") return "티맵 캐시";
   if (provider === "tmap") return "티맵";
-  if (provider === "estimated") return "추정";
+  if (provider === "estimated") return "티맵 계산 전";
   return "계산 전";
 }
 

@@ -93,10 +93,10 @@ export async function GET(request: NextRequest) {
       value: `${mappableRouteCount.toLocaleString()} / ${operationalMasterCount.toLocaleString()}곳`
     },
     {
-      detail: "경로 계산은 티맵 캐시가 있으면 실제 도로값, 없으면 임시 추정값으로 표시됩니다.",
+      detail: "경로 계산은 티맵 캐시가 있으면 실제 도로값, 없으면 도로 미계산 상태로 구분합니다.",
       label: "코스 거리 계산 기준",
       ok: Number(routeProviderCounts.cached || 0) > 0 || routeCount === 0,
-      value: `실도로 ${Number(routeProviderCounts.cached || 0).toLocaleString()} / 추정 ${Number(routeProviderCounts.estimated || 0).toLocaleString()}곳`
+      value: `실도로 ${Number(routeProviderCounts.cached || 0).toLocaleString()} / 미계산 ${Number(routeProviderCounts.estimated || 0).toLocaleString()}곳`
     },
     {
       detail: "거래처 히스토리에 방문/메모 데이터가 연결되어 있는지 확인합니다.",
@@ -195,7 +195,7 @@ function buildRecommendations({
     items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 코스 거리 계산 기준을 확인하세요.");
   }
   if (estimatedRouteCount > 0) {
-    items.push(`티맵 실제 도로값이 아닌 추정 거리 매장이 ${estimatedRouteCount.toLocaleString()}곳 있습니다. 영업·배송 코스에서 배송 거리 전체 계산을 실행하세요.`);
+    items.push(`티맵 도로 계산 전 매장이 ${estimatedRouteCount.toLocaleString()}곳 있습니다. 영업·배송 코스에서 배송 거리 전체 계산을 실행하세요.`);
   }
   if (cachedRouteCount > 0 && estimatedRouteCount === 0) {
     items.push("코스 거리 기준이 티맵 실제 도로값으로 정리되어 있습니다. 담당자/배송차 필터별 거리합만 추가 점검하면 됩니다.");

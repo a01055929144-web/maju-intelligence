@@ -95,7 +95,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
   const routeProviderCounts = payload?.summary?.routeProviderCounts || {};
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
-  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
+  const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
   const routeHref = `/routes/today${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
@@ -150,7 +150,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
           <StatusTile label="실도로 계산" value={formatCount(payload ? cachedRouteCount : undefined, "곳")} />
-          <StatusTile label="추정 거리" value={formatCount(payload ? estimatedRouteCount : undefined, "곳")} />
+          <StatusTile label="도로 미계산" value={formatCount(payload ? roadPendingRouteCount : undefined, "곳")} />
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
@@ -170,7 +170,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           value={consistencyScore}
         />
         <ScoreBar
-          description={`실도로 ${cachedRouteCount.toLocaleString()}곳 · 추정 ${estimatedRouteCount.toLocaleString()}곳`}
+          description={`실도로 ${cachedRouteCount.toLocaleString()}곳 · 미계산 ${roadPendingRouteCount.toLocaleString()}곳`}
           label="티맵 실제거리 반영률"
           tone={routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"}
           value={routeCoverage}
@@ -249,13 +249,13 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                 </div>
               </div>
             ) : null}
-            {estimatedRouteCount > 0 ? (
+            {roadPendingRouteCount > 0 ? (
               <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-black text-blue-950">티맵 거리 계산 필요</p>
                     <p className="mt-1 text-xs font-bold leading-5 text-blue-800">
-                      현재 {estimatedRouteCount.toLocaleString()}곳은 추정 거리입니다. 코스 화면에서 배송 거리 전체 계산을 실행하면 실제 도로 기준으로 맞춰집니다.
+                      현재 {roadPendingRouteCount.toLocaleString()}곳은 티맵 도로 계산 전입니다. 코스 화면에서 배송 거리 전체 계산을 실행하면 실제 도로 기준으로 맞춰집니다.
                     </p>
                   </div>
                   <Badge className="shrink-0 bg-blue-600 text-white">{cachedRouteCount.toLocaleString()}곳 완료</Badge>
@@ -329,7 +329,7 @@ function buildFixItems({
     label:
       routeCoverage >= 80
         ? `코스 ${routeStops.toLocaleString()}곳의 실제거리 반영률이 안정적입니다.`
-        : "영업·배송 코스에서 티맵 거리 계산을 실행해 추정값을 줄이세요.",
+        : "영업·배송 코스에서 티맵 거리 계산을 실행해 도로 미계산 매장을 줄이세요.",
     status: `${routeCoverage}%`,
     title: "티맵 거리 기준",
     tone: routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"
