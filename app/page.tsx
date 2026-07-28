@@ -302,32 +302,32 @@ export default function Home() {
         if (response?.ok) {
           const customerId = String(payload?.customer?.id || "");
           setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
-          setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. 서버 저장 상태는 관리자 시스템 점검에서 확인하세요." : "서버에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+          setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. DB 반영 상태는 관리자 시스템 점검에서 확인하세요." : "DB에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
           setRegistrationStatus({
-            actionLabel: payload?.persisted === false ? "서버 확인 필요" : "서버 저장 완료",
-            description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 서버 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
+            actionLabel: payload?.persisted === false ? "DB 반영 확인" : "DB 저장 완료",
+            description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 DB 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
             nextAction: customerId ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "거래처 히스토리 화면에서 저장 결과를 확인하세요.",
             status: payload?.persisted === false ? "warning" : "success",
             title: payload?.persisted === false ? "저장 확인이 필요합니다." : "수기 등록이 완료됐습니다."
           });
           await refreshUploadHistory();
         } else if (response?.status === 401) {
-          setManualSaveMessage("검수 목록에는 반영됐습니다. 서버 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
+          setManualSaveMessage("검수 목록에는 반영됐습니다. DB 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
           setRegistrationStatus({
             actionLabel: "로그인 필요",
-            description: "화면의 검수 목록에는 추가됐지만, 서버 저장 API가 로그인을 요구했습니다.",
+            description: "화면의 검수 목록에는 추가됐지만, DB 저장 API가 로그인을 요구했습니다.",
             nextAction: "고객사 또는 관리자 계정으로 로그인한 뒤 다시 저장하세요.",
             status: "warning",
-            title: "서버 저장은 아직 완료되지 않았습니다."
+            title: "DB 저장은 아직 완료되지 않았습니다."
           });
         } else {
-          setManualSaveMessage(payload?.message ? `검수 목록에는 반영됐습니다. 서버 저장 확인: ${payload.message}` : "검수 목록에는 반영됐습니다. 서버 저장은 나중에 다시 시도하세요.");
+          setManualSaveMessage(payload?.message ? `검수 목록에는 반영됐습니다. DB 저장 확인: ${payload.message}` : "검수 목록에는 반영됐습니다. DB 저장은 나중에 다시 시도하세요.");
           setRegistrationStatus({
-            actionLabel: "서버 저장 확인 필요",
-            description: payload?.message || "서버가 저장 완료 응답을 주지 않았습니다.",
+            actionLabel: "DB 저장 확인 필요",
+            description: payload?.message || "서버가 DB 저장 완료 응답을 주지 않았습니다.",
             nextAction: "입력값을 확인한 뒤 다시 저장하거나 관리자 시스템 상태를 확인하세요.",
             status: "warning",
-            title: "서버 반영 확인이 필요합니다."
+            title: "DB 반영 확인이 필요합니다."
           });
         }
       }
@@ -406,11 +406,11 @@ export default function Home() {
         persisted
       });
       setRegistrationStatus({
-        actionLabel: persisted ? "서버 저장 완료" : "분석 완료 · 저장 확인 필요",
-        description: persisted ? `${nextFilename} 데이터가 서버에 저장되고 AI 리포트가 갱신됐습니다.` : "분석은 완료됐지만 서버 저장이 확인되지 않았습니다.",
+        actionLabel: persisted ? "DB 저장 완료" : "분석 완료 · DB 확인 필요",
+        description: persisted ? `${nextFilename} 데이터가 DB에 저장되고 AI 리포트가 갱신됐습니다.` : "분석은 완료됐지만 DB 저장이 확인되지 않았습니다.",
         nextAction: persisted ? "AI 리포트와 거래처 히스토리, 매출 원장에서 반영 결과를 확인하세요." : "로그인/DB 환경변수를 확인한 뒤 다시 저장을 시도하세요.",
         status: persisted ? "success" : "warning",
-        title: persisted ? "데이터 등록이 완료됐습니다." : "분석은 됐지만 서버 저장 확인이 필요합니다."
+        title: persisted ? "데이터 등록이 완료됐습니다." : "분석은 됐지만 DB 저장 확인이 필요합니다."
       });
       await completePipelineStep("report");
     } else {
@@ -4836,7 +4836,7 @@ function ReportDataBasisCard({
     },
     {
       label: "운영 신뢰도",
-      value: persisted ? "서버 저장 확인" : "저장 확인 필요",
+      value: persisted ? "DB 저장 확인" : "저장 확인 필요",
       description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 DB 저장 상태를 먼저 확인해야 운영 데이터로 볼 수 있습니다."
     }
   ];

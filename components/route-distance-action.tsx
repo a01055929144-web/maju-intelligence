@@ -46,7 +46,7 @@ export function RouteDistanceAction({ destinationAddress, distanceKm, durationMi
       durationMinutes: payload?.route?.durationMinutes,
       provider: payload?.route?.provider
     });
-    setMessage(payload?.route?.persisted ? "경로 캐시 저장" : "계산 완료 · 저장 미확인");
+    setMessage(payload?.route?.persisted ? "티맵 계산 저장" : "계산 완료 · 서버 캐시 미확인");
     setIsLoading(false);
   }
 
