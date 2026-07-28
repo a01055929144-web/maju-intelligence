@@ -378,13 +378,24 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                     </Link>
                   </CardHeader>
                   <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {dataReadiness.map((item) => (
-                      <div key={item.label} className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black">{item.label}</p>
-                          <p className="mt-1 truncate text-xs font-bold text-muted-foreground">{item.detail}</p>
+                    {dataReadiness.map((item, index) => (
+                      <div
+                        key={item.label}
+                        className={`relative overflow-hidden rounded-md border p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)] ${item.ready ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"}`}
+                      >
+                        <span className={`absolute inset-x-0 top-0 h-1 ${item.ready ? "bg-emerald-600" : "bg-amber-500"}`} />
+                        <div className="flex items-start justify-between gap-3">
+                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-black ${item.ready ? "bg-emerald-700 text-white" : "bg-amber-500 text-white"}`}>
+                            {index + 1}
+                          </span>
+                          <Badge className={item.ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+                            {item.ready ? "준비" : "필요"}
+                          </Badge>
                         </div>
-                        <Badge className={item.ready ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>{item.ready ? "준비" : "필요"}</Badge>
+                        <div className="mt-3 min-w-0">
+                          <p className="truncate text-sm font-black text-slate-950">{item.label}</p>
+                          <p className="mt-2 text-xs font-bold leading-5 text-slate-600">{item.detail}</p>
+                        </div>
                       </div>
                     ))}
                   </CardContent>
