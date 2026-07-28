@@ -1395,18 +1395,21 @@ export default function CrmTimelinePage() {
                   <h3 className="text-base font-black text-slate-950">최근 액션</h3>
                   <p className="mt-1 text-sm font-medium leading-6 text-slate-500">메모 저장, 방문 결과, 견적 요청이 거래처 기준으로 누적됩니다.</p>
                 </div>
-                <div className="max-h-[620px] divide-y divide-slate-100 overflow-auto xl:max-h-[calc(100vh-360px)]">
+                <div className="max-h-[620px] space-y-3 overflow-auto bg-slate-50/60 p-3 xl:max-h-[calc(100vh-360px)]">
                   {timeline.length ? (
                     timeline.map((item) => (
-                      <div key={item.id} className="p-4">
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <p className="font-black text-slate-950">{item.leadName}</p>
+                      <div key={item.id} className="rounded-md border border-slate-200 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-slate-950">{item.leadName}</p>
+                            <p className="mt-1 text-xs font-bold text-slate-400">{item.visitedAt}</p>
+                          </div>
                           <Badge className="bg-blue-50 text-blue-700">{resultLabels[item.result] || item.result}</Badge>
                         </div>
-                        <p className="text-sm font-medium leading-6 text-slate-600">{item.memo || "메모 없음"}</p>
-                        <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs font-bold text-slate-500">
-                          <span>다음 액션: {item.nextAction || "미정"}</span>
-                          <span>{item.visitedAt}</span>
+                        <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold leading-6 text-slate-700">{item.memo || "메모 없음"}</p>
+                        <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
+                          <p className="text-[11px] font-black uppercase tracking-wide text-blue-500">다음 액션</p>
+                          <p className="mt-1 text-xs font-black leading-5 text-blue-800">{item.nextAction || "미정"}</p>
                         </div>
                       </div>
                     ))
