@@ -2977,7 +2977,7 @@ export async function getCompanyDashboardPayload(companyId?: string) {
     getLatestBriefing(companyId).catch(() => getSampleBriefing()),
     getLatestReport(companyId).catch(() => analyzeCompany(sampleCustomers)),
     getLatestLeads(companyId).catch(() => getLeadPayload()),
-    getUploadHistory(companyId).catch(() => getSampleUploadHistory(companyId))
+    getUploadHistory(companyId).catch(() => [])
   ]);
 
   return {
