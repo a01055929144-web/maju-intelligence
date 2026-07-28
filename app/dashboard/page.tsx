@@ -261,12 +261,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           customerCount={customerDataCount}
           customerSource={customerMaster.source}
           dataRegistrationHref={withCompanyQuery("/?type=customer-master")}
+          ledgerHref={withCompanyQuery("/crm/timeline")}
           latestUploadReady={Boolean(latestUpload)}
           latestUploadLabel={latestUpload ? `${latestUpload.createdAt} · ${latestUpload.rows.toLocaleString()}행` : "매출 거래내역 업로드 필요"}
           originAddress={originAddress}
           placeLinkLabel={`${placeLinkedCustomers.toLocaleString()}/${customerDataCount.toLocaleString()}곳`}
           routeMapStoreCount={routeMapStoreCount}
+          routeHref={withCompanyQuery("/routes/today")}
           routeStops={routeStopCount}
+          transactionsHref={withCompanyQuery("/revenue/transactions")}
         />
 
         <DashboardConsistencyCheck companyId={isAdminPreview ? companyId : undefined} />
@@ -467,22 +470,28 @@ function DashboardDataBasisPanel({
   customerCount,
   customerSource,
   dataRegistrationHref,
+  ledgerHref,
   latestUploadReady,
   latestUploadLabel,
   originAddress,
   placeLinkLabel,
   routeMapStoreCount,
-  routeStops
+  routeHref,
+  routeStops,
+  transactionsHref
 }: {
   customerCount: number;
   customerSource: "sample" | "supabase";
   dataRegistrationHref: string;
+  ledgerHref: string;
   latestUploadReady: boolean;
   latestUploadLabel: string;
   originAddress: string;
   placeLinkLabel: string;
   routeMapStoreCount: number;
+  routeHref: string;
   routeStops: number;
+  transactionsHref: string;
 }) {
   const sourceLabel = customerSource === "supabase" ? "운영 원장 연결" : "운영 데이터 미연결";
   const sourceReady = customerSource === "supabase";
@@ -517,6 +526,32 @@ function DashboardDataBasisPanel({
     }
   ];
   const okCount = consistencyChecks.filter((item) => item.ok).length;
+  const linkedScreens = [
+    {
+      description: sourceReady ? "기초 거래처 보완" : "먼저 거래처 저장",
+      href: dataRegistrationHref,
+      label: "데이터 등록",
+      value: sourceReady ? "운영 원장 기준" : "등록 필요"
+    },
+    {
+      description: "사업자·첨부·메모 관리",
+      href: ledgerHref,
+      label: "거래처 히스토리",
+      value: customerCount > 0 ? `${customerCount.toLocaleString()}곳` : "원장 없음"
+    },
+    {
+      description: "차량별 경유지 확정",
+      href: routeHref,
+      label: "영업·배송 코스",
+      value: routeStops > 0 ? `${routeStops.toLocaleString()}곳` : "코스 대기"
+    },
+    {
+      description: "매출 등급 갱신",
+      href: transactionsHref,
+      label: "매출 거래내역",
+      value: latestUploadReady ? "업데이트됨" : "업로드 필요"
+    }
+  ];
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
@@ -566,6 +601,35 @@ function DashboardDataBasisPanel({
               <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{item.detail}</p>
             </div>
           ))}
+        </div>
+        <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+          <div className="flex flex-col gap-1 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-950">연결 화면 기준</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">아래 화면들이 같은 고객사와 같은 거래처 원장을 기준으로 움직입니다.</p>
+            </div>
+            <Badge className={sourceReady ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>
+              {sourceReady ? "운영 데이터 연결" : "데이터 등록 필요"}
+            </Badge>
+          </div>
+          <div className="grid divide-y divide-slate-200 bg-white md:grid-cols-4 md:divide-x md:divide-y-0">
+            {linkedScreens.map((screen) => (
+              <Link
+                className="group flex min-w-0 items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50"
+                href={screen.href}
+                key={screen.label}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-black text-slate-950">{screen.label}</span>
+                  <span className="mt-1 block truncate text-xs font-bold text-slate-500">{screen.description}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs font-black text-teal-700">
+                  {screen.value}
+                  <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </div>
