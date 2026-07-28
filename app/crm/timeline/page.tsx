@@ -171,7 +171,7 @@ export default function CrmTimelinePage() {
         if (!active) return;
         setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
         setDbSummary({
-          description: "DB 상태 API 호출에 실패했습니다. 샘플 거래처는 표시하지 않고 원장 연결 상태만 안내합니다.",
+          description: "DB 상태 API 호출에 실패했습니다. 운영 원장 연결 상태를 먼저 확인해야 합니다.",
           label: "DB 확인 실패",
           normalizedCustomers: null,
           tone: "fallback",
@@ -703,7 +703,7 @@ export default function CrmTimelinePage() {
                 {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
               </p>
               <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                샘플 거래처는 더 이상 히스토리 화면에 실제 데이터처럼 표시하지 않습니다. 데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 원장 기준으로 연결됩니다.
+                데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 운영 원장 기준으로 연결됩니다.
               </p>
               <Link
                 className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
@@ -1336,7 +1336,7 @@ export default function CrmTimelinePage() {
                     <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
                       <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 샘플 기록은 실제 운영 데이터와 섞이지 않도록 숨겼습니다.
+                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 실제 저장된 운영 데이터만 표시합니다.
                       </p>
                     </div>
                   )}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { CustomerRow, sampleCustomers } from "@/lib/sample-data";
+import { CustomerRow } from "@/lib/sample-data";
 import { ColumnMapping, RawUploadRow, saveAnalysis } from "@/lib/store";
 
 export async function POST(request: NextRequest) {
@@ -19,7 +19,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const rows = body?.rows?.length ? body.rows : sampleCustomers;
+  const rows = body?.rows || [];
+  if (!rows.length) {
+    return NextResponse.json({ message: "저장할 거래처 또는 매출 데이터가 없습니다. 엑셀 업로드나 수기 등록을 먼저 완료하세요." }, { status: 400 });
+  }
+
   const result = await saveAnalysis(rows, body?.companyName, {
     actorName: body?.actorName,
     columnMapping: body?.columnMapping,
