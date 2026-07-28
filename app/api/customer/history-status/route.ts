@@ -61,7 +61,7 @@ function buildDatabaseSummary(system: Awaited<ReturnType<typeof getSystemDiagnos
       ? "Supabase 실 DB가 연결되어 있고 주요 테이블 조회가 가능합니다."
       : system.mode === "production-db"
         ? "Supabase 환경변수는 있으나 일부 테이블 조회를 확인해야 합니다."
-        : "Supabase 환경변수가 없거나 미완성이라 기준 데이터와 함께 표시합니다.",
+        : "Supabase 환경변수가 없거나 미완성이라 운영 원장을 표시할 수 없습니다. 데이터 등록과 환경변수를 먼저 확인하세요.",
     label: ready ? "실 DB 연결" : system.mode === "production-db" ? "DB 점검 필요" : "저장 확인 필요",
     normalizedCustomers,
     tone: ready ? "ready" : "fallback",

@@ -69,10 +69,10 @@ export async function GET(request: NextRequest) {
     {
       detail: isSupabaseSource
         ? "Supabase 거래처 원장을 기준으로 대시보드, 히스토리, 코스를 계산합니다."
-        : "샘플 또는 대체 데이터 기준입니다. 운영 데이터 등록과 Supabase 연결 상태를 확인하세요.",
+        : "운영 거래처 원장이 아직 연결되지 않았습니다. 데이터 등록과 Supabase 연결 상태를 확인하세요.",
       label: "데이터 저장소",
       ok: isSupabaseSource,
-      value: isSupabaseSource ? "Supabase 실데이터" : "샘플/대체 데이터"
+      value: isSupabaseSource ? "Supabase 실데이터" : "운영 원장 미연결"
     },
     {
       detail: "대시보드의 전체 거래처 수와 거래처 원장 수가 같은 기준인지 확인합니다.",
@@ -174,7 +174,7 @@ function buildRecommendations({
   const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
 
   if (!isSupabaseSource) {
-    items.push("현재 샘플/대체 데이터가 섞여 있습니다. 데이터 등록에서 거래처 마스터를 저장하고 Supabase 환경변수 연결을 먼저 확인하세요.");
+    items.push("운영 거래처 원장이 연결되지 않았습니다. 데이터 등록에서 거래처 마스터를 저장하고 Supabase 환경변수 연결을 먼저 확인하세요.");
   }
   if (dashboardCount !== masterCount) {
     items.push("대시보드 수치와 거래처 원장 수가 다릅니다. 최신 거래처 마스터 업로드 또는 DB 저장 상태를 확인하세요.");
@@ -186,7 +186,7 @@ function buildRecommendations({
     items.push(`거래처 원장에는 있으나 코스에 반영되지 않은 매장이 ${masterWithoutRouteCount.toLocaleString()}곳 있습니다. 코스 생성 기준을 확인하세요.`);
   }
   if (routeWithoutMasterCount > 0) {
-    items.push(`코스에는 있으나 원장 기준과 맞지 않는 매장이 ${routeWithoutMasterCount.toLocaleString()}곳 있습니다. 샘플/캐시 데이터가 섞였는지 확인하세요.`);
+    items.push(`코스에는 있으나 원장 기준과 맞지 않는 매장이 ${routeWithoutMasterCount.toLocaleString()}곳 있습니다. 코스 캐시 또는 고객사 선택 기준을 확인하세요.`);
   }
   if (missingAddressCount > 0) {
     items.push(`주소가 없어 지도에 표시되지 않는 매장이 ${missingAddressCount.toLocaleString()}곳 있습니다. 거래처 히스토리에서 주소를 보완하세요.`);
