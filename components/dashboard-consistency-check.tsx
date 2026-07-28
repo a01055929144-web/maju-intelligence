@@ -88,7 +88,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const okCount = checks.filter((check) => check.ok).length;
   const isSupabase = payload?.source === "supabase";
   const isHealthy = Boolean(payload?.ok && isSupabase);
-  const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "샘플/대체 데이터" : "확인 중";
+  const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "운영 원장 미연결" : "확인 중";
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const dataRegistrationHref = `/${query}`;
@@ -296,7 +296,7 @@ function buildFixItems({
 
   items.push({
     href: dataRegistrationHref,
-    label: isSupabase ? "운영 DB 기준으로 거래처 원장이 연결되어 있습니다." : "샘플/대체 데이터가 섞이면 화면별 숫자가 다르게 보일 수 있습니다.",
+    label: isSupabase ? "운영 DB 기준으로 거래처 원장이 연결되어 있습니다." : "운영 원장이 연결되지 않으면 화면별 숫자를 확정할 수 없습니다.",
     status: isSupabase ? "정상" : "필수",
     title: "데이터 저장소",
     tone: isSupabase ? "good" : "bad"

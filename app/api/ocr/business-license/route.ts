@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const sampleExtractedFields = {
+const reviewDraftFields = {
   address: "서울 성동구 성수이로 88 1층",
   bankAccount: "신한 110-000-000000",
   bankbookCopyStatus: "추가 업로드 필요",
-  businessCertificateStatus: "OCR 확인 완료",
+  businessCertificateStatus: "검수 필요",
   businessRegistrationNumber: "123-10-10004",
   businessStatus: "정상",
   customerName: "성수 마주식당",
@@ -42,16 +42,16 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({
-    confidence: 0.92,
-    extracted: sampleExtractedFields,
+    confidence: provider.configured ? 0.92 : 0,
+    extracted: reviewDraftFields,
     filename: file.name,
     message: provider.configured
       ? `${provider.provider} OCR 환경변수가 감지됐습니다. 추출값을 저장 전 검수하세요.`
-      : "OCR 보조 입력 검증이 완료됐습니다. 실제 OCR 공급자 연결 전에는 표준 후보값으로 저장 흐름을 확인합니다.",
+      : "자동 OCR 공급자가 아직 연결되지 않았습니다. 아래 값은 저장 흐름 확인용 기본 후보이며, 실제 사업자등록증 내용은 사용자가 직접 확인해 입력해야 합니다.",
     mode: provider.mode,
     provider: provider.provider,
     warnings: [
-      "추출값은 사용자가 저장 전 반드시 확인해야 합니다.",
+      provider.configured ? "추출값은 사용자가 저장 전 반드시 확인해야 합니다." : "현재 값은 자동 추출 결과가 아니라 검수용 기본 후보입니다.",
       "신분증은 민감정보 마스킹 후 별도 첨부로 보관하세요.",
       ...(!provider.configured ? ["자동 OCR 추출을 사용하려면 CLOVA_OCR_INVOKE_URL/CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY를 등록하세요."] : [])
     ]

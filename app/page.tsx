@@ -5171,7 +5171,7 @@ function templateSampleValue(key: string) {
     address: "서울 성동구 왕십리로 63",
     deliveryKm: 7.4,
     phone: "010-3100-1000",
-    email: "sample@example.com",
+    email: "store@maju-demo.kr",
     birthDate: "1974-01-01",
     region: "성동구",
     industry: "한식",
