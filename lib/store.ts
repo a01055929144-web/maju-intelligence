@@ -754,7 +754,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           status: "active",
           customerEmail: fallbackCredentials.customerEmail,
           customerPassword: fallbackCredentials.customerPassword,
-          customerCount: getSampleCustomerMaster().length,
+          customerCount: 0,
           salesTransactionCount: 0,
           uploadCount: 0,
           recentUploads: [],
@@ -906,7 +906,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           status: "fallback",
           customerEmail: fallbackCredentials.customerEmail,
           customerPassword: fallbackCredentials.customerPassword,
-          customerCount: getSampleCustomerMaster().length,
+          customerCount: 0,
           salesTransactionCount: 0,
           uploadCount: 0,
           recentUploads: [],
@@ -2514,6 +2514,20 @@ function getSampleBriefing() {
   };
 }
 
+function getEmptyBriefing(source: "sample" | "supabase" = "supabase") {
+  return {
+    greeting: "안녕하세요 정두영님.",
+    currentCustomers: 0,
+    weeklyOpportunities: 0,
+    todayRecommendations: 0,
+    highProbability: 0,
+    routeLeads: 0,
+    missingRegions: [],
+    healthScore: 0,
+    source
+  };
+}
+
 export async function getLatestLeads(companyId?: string) {
   if (!isProductionStoreConfigured()) return getLeadPayload();
 
@@ -2532,7 +2546,7 @@ export async function getLatestLeads(companyId?: string) {
     };
   } catch (error) {
     console.error("Latest leads fallback:", error);
-    return getLeadPayload();
+    return { total: 0, leads: [] };
   }
 }
 
@@ -2980,9 +2994,9 @@ export async function getSalesAssistantDrafts(companyId?: string): Promise<Sales
 
 export async function getCompanyDashboardPayload(companyId?: string) {
   const [briefing, report, leads, uploadHistory] = await Promise.all([
-    getLatestBriefing(companyId).catch(() => getSampleBriefing()),
-    getLatestReport(companyId).catch(() => analyzeCompany(sampleCustomers)),
-    getLatestLeads(companyId).catch(() => getLeadPayload()),
+    getLatestBriefing(companyId).catch(() => getEmptyBriefing(isProductionStoreConfigured() ? "supabase" : "sample")),
+    getLatestReport(companyId).catch(() => analyzeCompany([])),
+    getLatestLeads(companyId).catch(() => ({ total: 0, leads: [] })),
     getUploadHistory(companyId).catch(() => [])
   ]);
 
