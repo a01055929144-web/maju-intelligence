@@ -2455,11 +2455,17 @@ export async function getLatestReport(companyId?: string): Promise<AnalysisResul
     const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
       `ai_reports?select=report${companyFilter}&order=created_at.desc&limit=1`
     );
-    return reports[0]?.report || analyzeCompany(sampleCustomers);
+    return reports[0]?.report || analyzeCurrentCustomerMaster(companyId);
   } catch (error) {
     console.error("Latest report fallback:", error);
-    return analyzeCompany(sampleCustomers);
+    return analyzeCurrentCustomerMaster(companyId).catch(() => analyzeCompany([]));
   }
+}
+
+async function analyzeCurrentCustomerMaster(companyId?: string): Promise<AnalysisResult> {
+  if (!isProductionStoreConfigured()) return analyzeCompany(sampleCustomers);
+  const rows = await getNormalizedCustomersForAnalysis(companyId || getDefaultCompanyId());
+  return analyzeCompany(rows);
 }
 
 export async function getReportById(reportId: string, companyId?: string): Promise<AnalysisResult | null> {
@@ -2476,7 +2482,7 @@ export async function getReportById(reportId: string, companyId?: string): Promi
 export async function getLatestBriefing(companyId?: string) {
   const [report, customerMaster] = await Promise.all([
     getLatestReport(companyId),
-    getCustomerMaster(companyId).catch(() => ({ customers: getSampleCustomerMaster(), source: "sample" as const }))
+    getCustomerMaster(companyId).catch(() => ({ customers: [], source: "sample" as const }))
   ]);
   const currentCustomers = customerMaster.customers.length || report.customers;
 

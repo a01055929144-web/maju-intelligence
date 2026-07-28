@@ -102,7 +102,7 @@ export function analyzeCompany(inputRows: CustomerRow[]): AnalysisResult {
   const crmManagement = clamp(85 - neglectedCustomers * 7 + rows.filter((row) => row.visitCount >= 3).length * 2);
   const newSales = clamp(42 + newOpportunities / 2.2 - rows.length * 0.15);
   const concentration = clamp(100 - ((regionDistribution[0]?.count || 0) / Math.max(rows.length, 1)) * 36);
-  const risk = clamp(82 - neglectedCustomers * 6 - industryDistribution[0]?.share * 0.12);
+  const risk = clamp(82 - neglectedCustomers * 6 - (industryDistribution[0]?.share || 0) * 0.12);
   const total = clamp(
     salesPower * 0.22 +
       deliveryEfficiency * 0.18 +
@@ -141,8 +141,9 @@ export function analyzeCompany(inputRows: CustomerRow[]): AnalysisResult {
 }
 
 function buildLeadRecommendations(regions: AnalysisResult["regionDistribution"], industry: string): LeadRecommendation[] {
-  const regionPool = regions.length ? regions : [{ region: "성수동", count: 3, potential: 214, whitespace: 211 }];
-  return regionPool
+  if (!regions.length) return [];
+
+  return regions
     .flatMap((region, index) => [
       {
         name: `${region.region} ${industry} A`,
