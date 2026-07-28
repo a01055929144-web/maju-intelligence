@@ -93,7 +93,7 @@ const customerDetailTabs: Array<{ description: string; helper: string; icon: typ
 ];
 
 const defaultDbSummary: DbSummary = {
-  description: "DB 상태를 확인 중입니다. 운영 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
+  description: "DB 상태를 확인 중입니다. DB 거래처 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
   label: "DB 확인 중",
   normalizedCustomers: null,
   tone: "fallback",
@@ -171,7 +171,7 @@ export default function CrmTimelinePage() {
         if (!active) return;
         setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
         setDbSummary({
-          description: "DB 상태 API 호출에 실패했습니다. 운영 원장 연결 상태를 먼저 확인해야 합니다.",
+          description: "DB 상태 API 호출에 실패했습니다. DB 거래처 원장 연결 상태를 먼저 확인해야 합니다.",
           label: "DB 확인 실패",
           normalizedCustomers: null,
           tone: "fallback",
@@ -310,8 +310,8 @@ export default function CrmTimelinePage() {
     customerSource === "loading"
       ? "원장 확인 중"
       : hasOperationalLedger
-        ? "운영 원장 연결"
-        : "운영 원장 미연결";
+        ? "DB 거래처 원장 연결"
+        : "DB 거래처 원장 미연결";
   const ledgerStatusDescription = hasOperationalLedger
     ? "Supabase 거래처 원장 기준으로 목록과 상세를 표시합니다."
     : "데이터 등록에서 거래처 마스터를 저장하면 이 화면에 실제 원장이 표시됩니다.";
@@ -688,8 +688,8 @@ export default function CrmTimelinePage() {
         <div className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
           <SectionHeader
             eyebrow="01 · 원장 요약"
-            title="거래처 원장 요약"
-            description="운영 원장 연결 상태, 전체 거래처 수, 보완 필요 항목을 먼저 확인합니다."
+            title="DB 거래처 원장 요약"
+            description="DB 원장 연결 상태, 전체 거래처 수, 보완 필요 항목을 먼저 확인합니다."
           />
           <div className="p-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[160px_repeat(4,minmax(0,1fr))]">
@@ -714,7 +714,7 @@ export default function CrmTimelinePage() {
                 {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
               </p>
               <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 운영 원장 기준으로 연결됩니다.
+                데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 DB 거래처 원장 기준으로 연결됩니다.
               </p>
               <Link
                 className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
@@ -1561,8 +1561,8 @@ function LedgerListStatusStrip({
     customerSource === "loading"
       ? "원장 불러오는 중"
       : customerSource === "supabase"
-        ? "운영 원장"
-        : "운영 원장 미연결";
+        ? "DB 거래처 원장"
+        : "DB 거래처 원장 미연결";
 
   return (
     <div className={`mt-3 rounded-lg border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
@@ -1570,7 +1570,7 @@ function LedgerListStatusStrip({
         <div className="min-w-0">
           <p className={`text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>{sourceLabel}</p>
           <p className={`mt-1 text-[11px] font-bold leading-4 ${hasCustomers ? "text-slate-500" : "text-amber-800"}`}>
-            {hasCustomers ? `현재 ${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳 표시` : "거래처 마스터 등록 후 목록, 상세, 코스가 같은 기준으로 연결됩니다."}
+            {hasCustomers ? `현재 목록 ${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳 표시` : "거래처 마스터 등록 후 목록, 상세, 코스가 같은 DB 기준으로 연결됩니다."}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -1582,7 +1582,7 @@ function LedgerListStatusStrip({
             ))
           ) : (
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${hasCustomers ? "bg-emerald-50 text-emerald-700" : "bg-white text-amber-800"}`}>
-              전체 원장 기준
+              전체 DB 원장 기준
             </span>
           )}
         </div>
@@ -1611,9 +1611,9 @@ function CustomerLedgerBasisPanel({
   memoCount: number;
 }) {
   const items = [
-    { label: "전체 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
+    { label: "전체 DB 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
     { label: "현재 필터", value: `${filteredCount.toLocaleString()}곳`, helper: "목록·상세 표시 기준" },
-    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "코스 필터 기준" },
+    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "영업·배송 코스 필터" },
     { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
     { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
   ];
@@ -1628,7 +1628,7 @@ function CustomerLedgerBasisPanel({
     <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50/70">
       <div className="grid gap-2 border-b border-slate-200 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
         <p className="font-black text-slate-950">거래처 기준값</p>
-        <p>이 화면의 원장 수, 배송 담당자, 적재위치, 메모 수는 대시보드와 영업·배송 코스의 기준 데이터로 사용됩니다.</p>
+        <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 대시보드와 영업·배송 코스가 함께 사용하는 기준 데이터입니다.</p>
       </div>
       <div className="grid divide-y divide-slate-200 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
         {items.map((item) => (
