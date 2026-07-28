@@ -295,11 +295,20 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
                         고객사가 실제로 쓰기 전 반드시 맞춰야 하는 기준값입니다. 완료되지 않은 항목부터 처리하세요.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-2 sm:items-end">
+                      <Link
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-800 transition hover:bg-teal-100"
+                        href={nextChecklistItem.actionHref}
+                      >
+                        다음 처리: {nextChecklistItem.label}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                      <div className="flex items-center gap-2">
                       <Badge className={completedChecklistCount === operationChecklist.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
                         {completedChecklistCount}/{operationChecklist.length} 완료 · {operationalProgress}%
                       </Badge>
                       <Progress className="h-2 w-32" value={operationalProgress} />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -723,7 +732,8 @@ function ChecklistStep({
   value: string;
 }) {
   return (
-    <div className={`flex min-h-0 flex-col rounded-md border p-4 ${done ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"}`}>
+    <div className={`relative flex min-h-0 flex-col overflow-hidden rounded-md border p-4 shadow-[0_1px_0_rgba(15,23,42,0.03)] ${done ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"}`}>
+      <span className={`absolute inset-x-0 top-0 h-1 ${done ? "bg-emerald-600" : "bg-amber-500"}`} />
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className={`grid h-8 w-8 place-items-center rounded-md text-xs font-black ${done ? "bg-emerald-700 text-white" : "bg-amber-500 text-white"}`}>
@@ -740,7 +750,7 @@ function ChecklistStep({
         <p className="mt-2 text-xl font-black leading-none text-slate-950">{value}</p>
         <p className="mt-3 text-xs font-bold leading-5 text-slate-600">{description}</p>
       </div>
-      <Link className="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" href={actionHref}>
+      <Link className={`mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-black transition ${done ? "bg-white text-slate-800 ring-1 ring-inset ring-slate-200 hover:bg-slate-50" : "bg-slate-950 text-white hover:bg-slate-800"}`} href={actionHref}>
         {actionLabel}
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
