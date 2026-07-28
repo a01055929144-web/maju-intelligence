@@ -69,10 +69,10 @@ export async function GET(request: NextRequest) {
     {
       detail: isSupabaseSource
         ? "Supabase 거래처 원장을 기준으로 대시보드, 히스토리, 코스를 계산합니다."
-        : "운영 거래처 원장이 아직 연결되지 않았습니다. 데이터 등록과 Supabase 연결 상태를 확인하세요.",
+        : "DB 거래처 원장이 아직 연결되지 않았습니다. 데이터 등록과 Supabase 연결 상태를 확인하세요.",
       label: "데이터 저장소",
       ok: isSupabaseSource,
-      value: isSupabaseSource ? "Supabase 실데이터" : "운영 원장 미연결"
+      value: isSupabaseSource ? "Supabase 실데이터" : "DB 원장 미연결"
     },
     {
       detail: "대시보드의 전체 거래처 수와 거래처 원장 수가 같은 기준인지 확인합니다.",

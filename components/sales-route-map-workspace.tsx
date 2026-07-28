@@ -2556,7 +2556,7 @@ function RouteBasisStrip({
   readonly visibleMapReadyStoreCount: number;
 }) {
   const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 매장 주소 정상";
-  const sourceLabel = routePlan.source === "supabase" ? "DB 원장 연결" : "샘플 데이터 표시";
+  const sourceLabel = routePlan.source === "supabase" ? "DB 원장 연결" : "DB 원장 미연결";
   const sourceHelper = routePlan.source === "supabase" ? "거래처 마스터 DB 기준" : "DB 연결 또는 거래처 등록 필요";
   const sourceReady = routePlan.source === "supabase";
   const distanceValue = sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산";

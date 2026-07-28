@@ -51,7 +51,7 @@ export default async function AdminSystemPage() {
     },
     {
       description: operationDataReady ? "정제 거래처 데이터가 DB에 적재되어 있습니다." : "거래처 마스터를 업로드하거나 수기 등록 후 정제 테이블을 확인하세요.",
-      label: "운영 데이터",
+      label: "DB 반영 데이터",
       ready: operationDataReady
     }
   ];
@@ -341,7 +341,7 @@ export default async function AdminSystemPage() {
                   최근 감사 로그
                 </CardTitle>
                 <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
+                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 DB 반영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
                 </p>
               </div>
               <Badge className={auditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
