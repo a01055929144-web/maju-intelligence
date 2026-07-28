@@ -291,26 +291,31 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">거래처 위치 확인, 원장 관리, 배송차별 티맵 경유 계산을 같은 기준으로 처리합니다.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-[auto_auto_40px] xl:justify-end">
-          <div className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+          <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
             <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">지도 표시 기준</p>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "매장 등급별", value: "grade" },
-                { label: "배송차별", value: "vehicle" }
-              ].map((item) => (
+                { helper: "A/B/C 매출 등급", label: "매장 등급별", value: "grade" },
+                { helper: "차량 담당 구역", label: "배송차별", value: "vehicle" }
+              ].map((item) => {
+                const selected = markerViewMode === item.value;
+                return (
                 <button
-                  className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-                    markerViewMode === item.value
+                  className={`relative min-h-[54px] overflow-hidden rounded-md border px-3 py-2 text-left transition ${
+                    selected
                       ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_14px_rgba(37,99,235,0.18)]"
-                      : "border-transparent bg-slate-50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
                   }`}
                   key={item.value}
                   onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
                   type="button"
                 >
-                  {item.label}
+                  {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-white/80" /> : null}
+                  <span className="block text-xs font-black leading-none">{item.label}</span>
+                  <span className={`mt-1.5 block truncate text-[10px] font-bold leading-none ${selected ? "text-white/70" : "text-slate-400"}`}>{item.helper}</span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
           <nav className="rounded-lg border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
@@ -345,12 +350,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           </nav>
           <button
             aria-label="필터 초기화"
-            className="grid h-full min-h-10 w-full place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 xl:w-10"
+            className="inline-flex h-full min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 xl:w-10 xl:px-0"
             onClick={resetWorkspace}
             title="필터 초기화"
             type="button"
           >
             <RefreshCw className="h-4 w-4" />
+            <span className="xl:hidden">초기화</span>
           </button>
         </div>
       </header>
