@@ -131,10 +131,10 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "B등급", value: "B" },
   { label: "C등급", value: "C" }
 ];
-const workspaceViews: Array<{ icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
-  { icon: MapPin, label: "지도", shortLabel: "위치 확인", value: "map" },
-  { icon: Store, label: "거래처 목록", shortLabel: "원장 관리", value: "customers" },
-  { icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
+const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
+  { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치 확인", value: "map" },
+  { helper: "검색·상세·편집", icon: Store, label: "거래처 목록", shortLabel: "원장 관리", value: "customers" },
+  { helper: "선택·경유·티맵", icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차와 매장을 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
@@ -313,16 +313,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               ))}
             </div>
           </div>
-          <nav className="rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+          <nav className="rounded-lg border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
             <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 탭</p>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               {workspaceViews.map((item) => {
                 const Icon = item.icon;
+                const selected = activeView === item.value;
                 return (
                   <button
-                    className={`group h-11 rounded-md border px-3 text-left transition ${
-                      activeView === item.value
-                        ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.20)]"
+                    className={`group relative min-h-[64px] overflow-hidden rounded-md border px-3 py-2.5 text-left transition ${
+                      selected
+                        ? "border-teal-700 bg-teal-700 text-white shadow-[0_10px_22px_rgba(15,118,110,0.20)]"
                         : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                     }`}
                     key={item.value}
@@ -330,11 +331,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
                     title={workspaceViewDescriptions[item.value]}
                     type="button"
                   >
+                    {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-white/80" /> : null}
                     <span className="flex items-center gap-1.5 text-xs font-black leading-none">
-                      <Icon className={`h-3.5 w-3.5 ${activeView === item.value ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
+                      <Icon className={`h-3.5 w-3.5 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
                       {item.label}
                     </span>
-                    <span className={`mt-1 block truncate text-[10px] font-bold leading-none ${activeView === item.value ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>{item.shortLabel}</span>
+                    <span className={`mt-1.5 block truncate text-[10px] font-bold leading-none ${selected ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>{item.shortLabel}</span>
+                    <span className={`mt-1.5 block truncate text-[10px] font-black leading-none ${selected ? "text-white/60" : "text-slate-500"}`}>{item.helper}</span>
                   </button>
                 );
               })}
