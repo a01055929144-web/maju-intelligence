@@ -385,8 +385,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       <RouteWorkspaceGuide
         activeView={activeView}
         courseSummary={courseSummary}
+        dataRegistrationHref={dataRegistrationHref}
         markerViewMode={markerViewMode}
         selectedVehicleLabel={selectedVehicleLabel}
+        sourceReady={sourceReady}
         visibleStoreCount={visibleStores.length}
       />
 
@@ -491,8 +493,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           </div>
 
           <StoreManagementPanel
+            dataRegistrationHref={dataRegistrationHref}
             onSelectStore={setSelectedId}
             selectedStoreId={selectedId}
+            sourceReady={sourceReady}
             title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 매장 거래처"}
             stores={visibleStores}
           />
@@ -501,14 +505,17 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
 
       {activeView === "customers" ? (
         <CustomerDirectoryView
+            dataRegistrationHref={dataRegistrationHref}
             onSelectStore={setSelectedId}
             selectedStoreId={selectedId}
+            sourceReady={sourceReady}
             stores={visibleStores}
         />
       ) : null}
 
       {activeView === "course" ? (
         <TodayCourseView
+          dataRegistrationHref={dataRegistrationHref}
           markers={markers}
           onPreviewStore={setPreviewStoreId}
           onSummaryChange={setCourseSummary}
@@ -518,6 +525,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           selectedStoreId={selectedId}
           selectedVehicle={selectedVehicle}
           selectedVehicleId={vehicleFilterId}
+          sourceReady={sourceReady}
           stores={visibleStores}
           vehicles={deliveryVehicles}
         />
@@ -706,20 +714,26 @@ function DeliveryAssignmentPanel({
 function RouteWorkspaceGuide({
   activeView,
   courseSummary,
+  dataRegistrationHref,
   markerViewMode,
   selectedVehicleLabel,
+  sourceReady,
   visibleStoreCount
 }: {
   readonly activeView: WorkspaceView;
   readonly courseSummary: CourseSummary | null;
+  readonly dataRegistrationHref: string;
   readonly markerViewMode: MarkerViewMode;
   readonly selectedVehicleLabel: string;
+  readonly sourceReady: boolean;
   readonly visibleStoreCount: number;
 }) {
   const viewLabel = activeView === "map" ? "지도 확인" : activeView === "customers" ? "거래처 목록" : "경유 코스";
   const markerLabel = markerViewMode === "grade" ? "매장 등급별 마커" : "배송차별 마커";
   const guide =
-    activeView === "course"
+    !sourceReady
+      ? "거래처 마스터를 등록하면 지도, 거래처 목록, 배송차 경유 계산이 같은 원장 기준으로 열립니다."
+      : activeView === "course"
       ? courseSummary
         ? `${selectedVehicleLabel} 기준 경유 ${courseSummary.selectedCount}곳의 도로 거리와 시간이 계산되었습니다.`
         : `${selectedVehicleLabel} 기준 경유 매장을 선택한 뒤 티맵 계산을 실행하세요.`
@@ -735,7 +749,14 @@ function RouteWorkspaceGuide({
           <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{markerLabel}</span>
           <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">{visibleStoreCount.toLocaleString()}개 표시</span>
         </div>
-        <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
+        <div className="flex min-w-0 flex-col gap-2 lg:items-end">
+          <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
+          {!sourceReady ? (
+            <Link className="inline-flex h-8 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800" href={dataRegistrationHref}>
+              거래처 마스터 등록
+            </Link>
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -900,13 +921,17 @@ function VehicleEditForm({
 }
 
 function StoreManagementPanel({
+  dataRegistrationHref,
   onSelectStore,
   selectedStoreId,
+  sourceReady,
   stores,
   title
 }: {
+  readonly dataRegistrationHref: string;
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
+  readonly sourceReady: boolean;
   readonly stores: StoreRow[];
   readonly title: string;
 }) {
@@ -947,8 +972,15 @@ function StoreManagementPanel({
           ) : (
             <div className="grid h-full min-h-[180px] place-items-center px-5 text-center">
               <div>
-                <p className="text-sm font-black text-slate-700">조건에 맞는 거래처가 없습니다.</p>
-                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">등급 필터나 검색어를 조정해 주세요.</p>
+                <p className="text-sm font-black text-slate-700">{sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}</p>
+                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
+                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처 마스터를 먼저 등록하면 담당자별 매장 목록이 표시됩니다."}
+                </p>
+                {!sourceReady ? (
+                  <Link className="mt-3 inline-flex h-8 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white hover:bg-teal-800" href={dataRegistrationHref}>
+                    거래처 등록하기
+                  </Link>
+                ) : null}
               </div>
             </div>
           )}
@@ -962,12 +994,16 @@ function StoreManagementPanel({
 }
 
 function CustomerDirectoryView({
+  dataRegistrationHref,
   onSelectStore,
   selectedStoreId,
+  sourceReady,
   stores
 }: {
+  readonly dataRegistrationHref: string;
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
+  readonly sourceReady: boolean;
   readonly stores: StoreRow[];
 }) {
   const totals = getStoreTotals(stores);
@@ -984,6 +1020,15 @@ function CustomerDirectoryView({
       </div>
 
       <div className="mt-4 min-h-[560px] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm xl:h-[calc(100%-96px)]">
+        {!sourceReady ? (
+          <OperationalEmptyState
+            actionHref={dataRegistrationHref}
+            actionLabel="거래처 마스터 등록"
+            description="현재 회사에 연결된 운영 거래처 원장이 없습니다. 마스터를 등록하면 이 목록에서 사업자번호, 담당자, 매출등급, 주소를 바로 관리할 수 있습니다."
+            title="거래처 목록을 시작하려면 원장 등록이 필요합니다."
+          />
+        ) : null}
+        {sourceReady ? (
         <div className="overflow-x-auto">
         <div className="grid min-w-[840px] grid-cols-[minmax(180px,1.5fr)_120px_130px_110px_120px_120px] border-b border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs font-black text-slate-500">
           <span>거래처</span>
@@ -1020,12 +1065,14 @@ function CustomerDirectoryView({
           ))}
         </div>
         </div>
+        ) : null}
       </div>
     </section>
   );
 }
 
 function TodayCourseView({
+  dataRegistrationHref,
   markers,
   onPreviewStore,
   onSummaryChange,
@@ -1035,9 +1082,11 @@ function TodayCourseView({
   selectedStoreId,
   selectedVehicle,
   selectedVehicleId,
+  sourceReady,
   stores,
   vehicles
 }: {
+  readonly dataRegistrationHref: string;
   readonly markers: KakaoMapMarker[];
   readonly onPreviewStore: (storeId: string) => void;
   readonly onSummaryChange: (summary: CourseSummary) => void;
@@ -1047,6 +1096,7 @@ function TodayCourseView({
   readonly selectedStoreId: string;
   readonly selectedVehicle?: DeliveryVehicle;
   readonly selectedVehicleId: string;
+  readonly sourceReady: boolean;
   readonly stores: StoreRow[];
   readonly vehicles: DeliveryVehicle[];
 }) {
@@ -1145,6 +1195,19 @@ function TodayCourseView({
   }, [onSummaryChange, routeDistanceKm, routeDurationMinutes, routeRevenue, selectedRouteStores.length]);
 
   useEffect(() => saveLocalJson(localStoreKeys.deliveryProofs, deliveryProofs), [deliveryProofs]);
+
+  if (!sourceReady) {
+    return (
+      <section className="min-h-[680px] rounded-b-xl bg-[#f6f8fb] p-4">
+        <OperationalEmptyState
+          actionHref={dataRegistrationHref}
+          actionLabel="거래처 마스터 등록"
+          description="배송차별 경유 코스는 등록된 거래처 주소와 담당자 배정값을 기준으로 계산합니다. 먼저 거래처 마스터를 등록한 뒤 배송차를 선택하세요."
+          title="경유 코스 계산을 시작하려면 운영 거래처가 필요합니다."
+        />
+      </section>
+    );
+  }
 
   const toggleRouteStore = (storeId: string) => {
     setSelectedRouteStoreIds((current) => {
@@ -1636,6 +1699,33 @@ function DirectoryStat({ label, tone = "slate", value }: { readonly label: strin
     <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs font-black uppercase text-slate-400">{label}</p>
       <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    </div>
+  );
+}
+
+function OperationalEmptyState({
+  actionHref,
+  actionLabel,
+  description,
+  title
+}: {
+  readonly actionHref: string;
+  readonly actionLabel: string;
+  readonly description: string;
+  readonly title: string;
+}) {
+  return (
+    <div className="grid h-full min-h-[520px] place-items-center px-5 text-center">
+      <div className="max-w-xl rounded-xl border border-dashed border-teal-200 bg-teal-50/60 px-6 py-8 shadow-[0_8px_22px_rgba(15,118,110,0.08)]">
+        <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-white text-teal-700 shadow-sm ring-1 ring-inset ring-teal-100">
+          <Store className="h-5 w-5" />
+        </div>
+        <h3 className="mt-4 text-lg font-black text-slate-950">{title}</h3>
+        <p className="mt-2 text-sm font-bold leading-6 text-slate-600">{description}</p>
+        <Link className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href={actionHref}>
+          {actionLabel}
+        </Link>
+      </div>
     </div>
   );
 }
