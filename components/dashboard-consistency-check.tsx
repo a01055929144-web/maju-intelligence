@@ -145,7 +145,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
 
       <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-          <StatusTile label="DB 거래처 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
+          <StatusTile label="DB 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
           <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
@@ -202,7 +202,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
           </div>
 
           <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
-            <p className="text-sm font-black text-slate-950">다음 조치</p>
+            <p className="text-sm font-black text-slate-950">우선 조치</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">위험도가 높은 항목부터 눌러서 바로 보완합니다.</p>
             <div className="mt-3 space-y-2">
               {fixItems.length ? (
                 fixItems.map((item) => (
@@ -226,7 +227,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                 </div>
               )}
             </div>
-            <p className="mt-4 text-xs font-black text-slate-500">진단 메모</p>
+            <p className="mt-4 text-xs font-black text-slate-500">자동 진단 메모</p>
             <div className="mt-3 space-y-2">
               {(payload?.recommendations || ["점검 결과를 불러온 뒤 다음 조치를 표시합니다."]).slice(0, 3).map((item) => (
                 <p key={item} className="rounded-md bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600">
@@ -296,9 +297,9 @@ function buildFixItems({
 
   items.push({
     href: dataRegistrationHref,
-    label: isSupabase ? "DB 거래처 원장이 연결되어 있습니다." : "DB 거래처 원장이 연결되지 않으면 화면별 숫자를 확정할 수 없습니다.",
+    label: isSupabase ? "Supabase DB 원장 조회가 정상입니다." : "DB 원장이 연결되지 않으면 대시보드, 히스토리, 코스 숫자를 확정할 수 없습니다.",
     status: isSupabase ? "정상" : "필수",
-    title: "데이터 저장소",
+    title: "DB 연결",
     tone: isSupabase ? "good" : "bad"
   });
 
@@ -306,10 +307,10 @@ function buildFixItems({
     href: dataRegistrationHref,
     label:
       dashboardCustomers === masterCustomers
-        ? "대시보드와 거래처 원장의 전체 매장 수가 같습니다."
-        : `대시보드 ${dashboardCustomers.toLocaleString()}곳, 원장 ${masterCustomers.toLocaleString()}곳으로 다릅니다.`,
+        ? "대시보드와 DB 원장의 전체 매장 수가 같습니다."
+        : `대시보드 ${dashboardCustomers.toLocaleString()}곳, DB 원장 ${masterCustomers.toLocaleString()}곳으로 다릅니다.`,
     status: dashboardCustomers === masterCustomers ? "일치" : "확인",
-    title: "거래처 수 기준",
+    title: "거래처 수 일치",
     tone: dashboardCustomers === masterCustomers ? "good" : "warn"
   });
 
@@ -317,10 +318,10 @@ function buildFixItems({
     href: timelineHref,
     label:
       missingAddressCustomers > 0
-        ? `주소가 없는 매장 ${missingAddressCustomers.toLocaleString()}곳은 지도와 코스에서 빠질 수 있습니다.`
-        : "지도 표시용 주소가 모두 준비되어 있습니다.",
+        ? `주소가 없는 매장 ${missingAddressCustomers.toLocaleString()}곳은 지도와 코스에서 제외될 수 있습니다.`
+        : "지도 표시용 주소와 좌표 기준이 준비되어 있습니다.",
     status: missingAddressCustomers > 0 ? "보완" : "정상",
-    title: "주소/지도 기준",
+    title: "주소·좌표",
     tone: missingAddressCustomers > 0 ? "warn" : "good"
   });
 
@@ -328,10 +329,10 @@ function buildFixItems({
     href: routeHref,
     label:
       routeCoverage >= 80
-        ? `코스 ${routeStops.toLocaleString()}곳의 실제거리 반영률이 안정적입니다.`
+        ? `코스 ${routeStops.toLocaleString()}곳의 티맵 도로거리 반영률이 안정적입니다.`
         : "영업·배송 코스에서 티맵 거리 계산을 실행해 도로 미계산 매장을 줄이세요.",
     status: `${routeCoverage}%`,
-    title: "티맵 거리 기준",
+    title: "티맵 도로거리",
     tone: routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"
   });
 
@@ -366,8 +367,11 @@ function getFixPriority(tone: FixItem["tone"]) {
 
 function StatusTile({ label, value }: { readonly label: string; readonly value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
-      <p className="text-[11px] font-black uppercase text-slate-400">{label}</p>
+    <div className="rounded-md border border-slate-200 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+      <p className="flex items-center gap-1.5 text-[11px] font-black uppercase text-slate-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+        {label}
+      </p>
       <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
     </div>
   );
