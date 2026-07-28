@@ -374,7 +374,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           tone="blue"
           value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
         />
-        <Kpi label="매장 매출합" tone="green" value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"} />
+        <Kpi
+          helper={kpiSummary ? "선택 경유지 기준" : "현재 필터 기준"}
+          label="매장 매출합"
+          tone="green"
+          value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"}
+        />
         <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지-매장 거리합"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
       </section>
@@ -2560,8 +2565,22 @@ function Kpi({
     purple: "text-violet-700",
     red: "text-rose-600"
   }[tone];
+  const accentClass = {
+    blue: "bg-blue-600",
+    green: "bg-emerald-600",
+    purple: "bg-violet-600",
+    red: "bg-rose-600"
+  }[tone];
+  const backgroundClass = {
+    blue: "bg-white",
+    green: "bg-emerald-50/40",
+    purple: "bg-violet-50/40",
+    red: "bg-rose-50/40"
+  }[tone];
+
   return (
-    <div className="min-w-0 border-r border-slate-200/80 px-4 py-3 last:border-r-0">
+    <div className={`relative min-w-0 overflow-hidden border-r border-slate-200/80 px-4 py-3 last:border-r-0 ${backgroundClass}`}>
+      <span className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
       <p className="truncate text-[11px] font-black text-slate-500">{label}</p>
       <p className={`mt-1 truncate text-[22px] font-black leading-none ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-2 truncate text-[11px] font-bold text-slate-400">{helper}</p> : null}
