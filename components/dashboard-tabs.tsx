@@ -32,15 +32,15 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
-      <div className="border-b border-slate-200/80 bg-white px-5 py-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="border-b border-slate-200/80 bg-white px-4 py-4 sm:px-5">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(560px,720px)] xl:items-center">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wide text-teal-700">운영 화면</p>
             <h2 className="mt-1 text-lg font-black text-slate-950">{active.label}</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{active.description}</p>
           </div>
-          <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1.5">
-            <div className="grid min-w-[680px] gap-2 sm:grid-cols-4 xl:min-w-[720px]">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-1.5">
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
             {tabs.map((tab, index) => {
               const Icon = tab.icon;
               const selected = activeTab === tab.id;
@@ -48,10 +48,10 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
               return (
                 <button
                   aria-pressed={selected}
-                  className={`group rounded-md border px-3 py-2.5 text-left transition ${
+                  className={`group min-w-0 rounded-md border px-3 py-2 text-left transition ${
                     selected
-                      ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.18)]"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-900"
+                      ? "border-teal-700 bg-teal-700 text-white shadow-sm"
+                      : "border-transparent bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-900"
                   }`}
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -63,8 +63,8 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
                     <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
                     <span className="truncate">{tab.label}</span>
                   </span>
-                  <span className={`mt-1 block truncate text-[11px] font-bold ${selected ? "text-white/75" : "text-slate-400"}`}>
-                    {tab.shortLabel} · {tab.description}
+                  <span className={`mt-1 block text-[11px] font-bold leading-4 ${selected ? "text-white/75" : "text-slate-400"}`}>
+                    {tab.shortLabel}
                   </span>
                 </button>
               );
