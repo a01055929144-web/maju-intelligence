@@ -198,7 +198,7 @@ export default async function AdminPage() {
                     <p className="text-xs text-muted-foreground">{lead.region}</p>
                   </div>
                   <Badge className="justify-center bg-accent/20 text-foreground">{lead.score}점</Badge>
-                  {"id" in lead ? <LeadStatusSelect leadId={String(lead.id)} value={getLeadStatusValue(lead)} /> : <Badge className="justify-center">{lead.status}</Badge>}
+                  <LeadStatusSelect leadId={lead.id} value={getLeadStatusValue(lead)} />
                 </div>
               ))}
             </CardContent>

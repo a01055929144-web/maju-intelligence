@@ -1,5 +1,4 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
-import { getAdminDashboard, getLeadPayload } from "./backend";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { RouteDistanceResult } from "./tmap";
 
@@ -28,6 +27,27 @@ export type AdminAuditLogItem = {
   targetId: string;
   targetType: string;
   createdAt: string;
+};
+type AdminDashboardPayload = {
+  source: "sample" | "supabase";
+  overview: {
+    companies: number;
+    uploadedFiles: number;
+    processedRows: number;
+    avgHealthScore: number;
+  };
+  jobs: Array<{
+    id: string;
+    company: string;
+    rows: number;
+    status: "completed" | "running" | "failed";
+    uploadedAt: string;
+    qualityScore: number;
+  }>;
+  dataQuality: Array<{ label: string; value: number; description: string }>;
+  scoringWeights: Array<{ label: string; value: number; note: string }>;
+  leadQueue: Array<{ id: string; name: string; region: string; score: number; status: string; statusValue: string }>;
+  uploadHistory: UploadHistoryItem[];
 };
 export type ExcelMappingPreset = {
   id?: string;
@@ -3118,8 +3138,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
   };
 }
 
-export async function getAdminDashboardPayload() {
-  if (!isProductionStoreConfigured()) return { ...getAdminDashboard(), uploadHistory: [], source: "sample" };
+export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
+  if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("sample");
 
   const [companies, imports, reports, leads, uploadHistory] = await Promise.all([
     supabaseRequest<SupabaseRow[]>("companies?select=id"),
@@ -3150,9 +3170,11 @@ export async function getAdminDashboardPayload() {
   const avgQuality = imports.length
     ? Math.round(imports.reduce((total, item) => total + Number(item.quality_score || 0), 0) / imports.length)
     : 0;
+  const totalRows = Math.max(1, processedRows);
+  const duplicateRows = imports.reduce((total, item) => total + Number(item.duplicate_count || 0), 0);
+  const duplicateCleanRate = imports.length ? Math.max(0, Math.round(((totalRows - duplicateRows) / totalRows) * 100)) : 0;
 
   return {
-    ...getAdminDashboard(),
     source: "supabase",
     overview: {
       companies: companies.length,
@@ -3170,10 +3192,11 @@ export async function getAdminDashboardPayload() {
     })),
     dataQuality: [
       { label: "주소 인식률", value: avgQuality, description: "업로드 데이터의 주소/지역 필드 완성도를 봅니다." },
-      { label: "중복 제거율", value: 96, description: "거래처명과 주소를 기준으로 중복을 제거합니다." },
+      { label: "중복 제거율", value: duplicateCleanRate, description: "업로드 행 수 대비 중복 후보가 아닌 행 비율입니다." },
       { label: "필수 컬럼 완성도", value: avgQuality, description: "거래처명, 지역, 주소, 업종, 매출, 방문 정보를 확인합니다." },
       { label: "리포트 생성 성공률", value: reports.length ? 100 : 0, description: "실 DB에 생성된 AI 리포트 기준입니다." }
     ],
+    scoringWeights: getOperationalScoringWeights(),
     leadQueue: leads.map((lead) => ({
       id: lead.id,
       name: lead.name,
@@ -3184,6 +3207,39 @@ export async function getAdminDashboardPayload() {
     })),
     uploadHistory
   };
+}
+
+function getEmptyAdminDashboardPayload(source: "sample" | "supabase"): AdminDashboardPayload {
+  return {
+    source,
+    overview: {
+      companies: 0,
+      uploadedFiles: 0,
+      processedRows: 0,
+      avgHealthScore: 0
+    },
+    jobs: [],
+    dataQuality: [
+      { label: "주소 인식률", value: 0, description: "거래처 마스터를 등록하면 주소/지역 완성도를 계산합니다." },
+      { label: "중복 제거율", value: 0, description: "거래처명, 주소, 사업자번호 기준 중복 후보를 계산합니다." },
+      { label: "필수 컬럼 완성도", value: 0, description: "필수 필드 매핑 후 저장 품질을 표시합니다." },
+      { label: "리포트 생성 성공률", value: 0, description: "실 DB에 생성된 AI 리포트 기준으로 표시합니다." }
+    ],
+    scoringWeights: getOperationalScoringWeights(),
+    leadQueue: [],
+    uploadHistory: []
+  };
+}
+
+function getOperationalScoringWeights(): AdminDashboardPayload["scoringWeights"] {
+  return [
+    { label: "영업력", value: 22, note: "최근 주문과 거래 규모" },
+    { label: "배송효율", value: 18, note: "출발지 기준 거리와 배송권역" },
+    { label: "CRM관리", value: 16, note: "메모, 방문, 첨부자료 완성도" },
+    { label: "신규영업", value: 18, note: "White Space와 신규 기회" },
+    { label: "집중도", value: 14, note: "지역과 업종 편중 위험" },
+    { label: "리스크", value: 12, note: "이탈 가능성과 사업자 상태" }
+  ];
 }
 
 export async function getUploadHistory(companyId?: string): Promise<UploadHistoryItem[]> {
