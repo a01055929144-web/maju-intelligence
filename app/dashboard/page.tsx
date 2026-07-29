@@ -29,7 +29,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { DashboardTabs } from "@/components/dashboard-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { KakaoAddressMap } from "@/components/kakao-address-map";
+import { KakaoAddressMap, type KakaoMapMarker } from "@/components/kakao-address-map";
 import { Progress } from "@/components/ui/progress";
 import { LeadStatusSelect } from "@/components/lead-status-select";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
@@ -183,79 +183,28 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       companyName={customerSession?.companyName || company.name}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="거래처 히스토리, 배송 동선, 신규 리드 현황"
-      title="대시보드"
+      subtitle="기거래매장 관리와 신규리드 발굴을 지도에서 시작합니다"
+      title="영업 지도"
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
-              <div className="min-w-0">
-                <Badge className="mb-3 bg-slate-100 text-slate-700">오늘 운영 요약</Badge>
-                <h1 className="text-[26px] font-black leading-tight text-slate-950">오늘의 거래처, 매출 데이터, 배송 코스를 한 번에 확인합니다.</h1>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                  {hasOperationalCustomerMaster
-                    ? `거래처 ${customerDataCount.toLocaleString()}개 중 오늘 추천 ${briefing.todayRecommendations}곳, 동선 내 신규 리드 ${briefing.routeLeads}곳을 먼저 확인하세요.`
-                    : "아직 DB 거래처 원장이 연결되지 않았습니다. 거래처 마스터를 먼저 등록하면 대시보드, 히스토리, 코스 화면이 같은 기준으로 연결됩니다."}
-                </p>
-                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xs font-black text-slate-500">실운영 전환 진행률</p>
-                      <p className="mt-1 text-2xl font-black text-slate-950">{operationalProgress}%</p>
-                    </div>
-                    <div className="min-w-0 sm:w-[360px]">
-                      <div className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
-                        <span>{completedChecklistCount}/{operationChecklist.length} 완료</span>
-                        <span>다음: {nextChecklistItem.label}</span>
-                      </div>
-                      <Progress className="mt-2 h-2" value={operationalProgress} />
-                      <p className="mt-2 truncate text-xs font-bold text-slate-500">{nextChecklistItem.description}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm hover:bg-teal-800" href={withCompanyQuery("/routes/today")}>
-                  <Route className="h-4 w-4" />
-                  코스 관리 열기
-                </Link>
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" href={withCompanyQuery("/crm/timeline")}>
-                  <Building2 className="h-4 w-4" />
-                  거래처 관리
-                </Link>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric icon={Building2} label="운영 거래처" value={hasOperationalCustomerMaster ? `${customerDataCount}개` : "등록 필요"} />
-              <Metric icon={Route} label="배송 코스 매장" value={routeStopCount ? `${routeStopCount}곳` : "등록 필요"} />
-              <Metric icon={Fuel} label="참고 주유비" value={referenceFuelCost ? `${referenceFuelCost.toLocaleString()}원` : "등록 필요"} />
-              <Metric icon={Target} label="이번주 기회" value={`${briefing.weeklyOpportunities}곳`} />
-              <Metric icon={Link2} label="외부 링크 연결" value={`${placeLinkRate}%`} />
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
-            <p className="text-xs font-black uppercase text-slate-400">Company Health Score</p>
-            <div className="mt-3 flex items-end gap-3">
-              <span className="text-6xl font-black text-emerald-700">{hasOperationalReport ? report.health.total : "-"}</span>
-              <span className="pb-2 text-sm font-bold text-slate-400">/ 100</span>
-            </div>
-            <div className="mt-4 space-y-2">
-              {scoreRows.map(([label, value]) => (
-                <div key={label as string}>
-                  <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
-                    <span>{label as string}</span>
-                    <span>{hasOperationalReport ? value as number : "-"}</span>
-                  </div>
-                  <Progress value={hasOperationalReport ? value as number : 0} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <MapFirstCommandCenter
+          briefingRouteLeads={briefing.routeLeads}
+          customerCount={customerDataCount}
+          healthScore={hasOperationalReport ? report.health.total : null}
+          latestUploadReady={Boolean(latestUpload)}
+          mapMarkers={mapMarkers}
+          operationalProgress={operationalProgress}
+          originAddress={originAddress}
+          placeLinkRate={placeLinkRate}
+          routeHref={withCompanyQuery("/routes/today")}
+          routeStopCount={routeStopCount}
+          timelineHref={withCompanyQuery("/crm/timeline")}
+          topLeads={topLeads}
+          transactionsHref={withCompanyQuery("/revenue/transactions")}
+          weeklyOpportunities={briefing.weeklyOpportunities}
+        />
 
         <DashboardDataBasisPanel
           customerCount={customerDataCount}
@@ -512,6 +461,147 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         />
       </section>
     </CustomerAppShell>
+  );
+}
+
+function MapFirstCommandCenter({
+  briefingRouteLeads,
+  customerCount,
+  healthScore,
+  latestUploadReady,
+  mapMarkers,
+  operationalProgress,
+  originAddress,
+  placeLinkRate,
+  routeHref,
+  routeStopCount,
+  timelineHref,
+  topLeads,
+  transactionsHref,
+  weeklyOpportunities
+}: {
+  briefingRouteLeads: number;
+  customerCount: number;
+  healthScore: number | null;
+  latestUploadReady: boolean;
+  mapMarkers: KakaoMapMarker[];
+  operationalProgress: number;
+  originAddress: string;
+  placeLinkRate: number;
+  routeHref: string;
+  routeStopCount: number;
+  timelineHref: string;
+  topLeads: Array<{ expectedRevenue: number; id: string; name: string; region: string; score: number; status: string }>;
+  transactionsHref: string;
+  weeklyOpportunities: number;
+}) {
+  const primaryLead = topLeads[0];
+  const commandMetrics = [
+    { label: "기거래매장", value: customerCount ? `${customerCount.toLocaleString()}곳` : "등록 필요", helper: "CRM·업셀링·배송 기준", tone: "teal" },
+    { label: "신규리드", value: `${weeklyOpportunities.toLocaleString()}곳`, helper: "신규오픈·동선 인접 후보", tone: "blue" },
+    { label: "코스매장", value: routeStopCount ? `${routeStopCount.toLocaleString()}곳` : "대기", helper: "배송차·방문 경유지", tone: "slate" },
+    { label: "외부정보", value: `${placeLinkRate}%`, helper: "네이버·카카오·구글 링크", tone: "slate" }
+  ];
+  const actionCards = [
+    { description: "사업자, 메모, 첨부자료", href: timelineHref, icon: Building2, label: "기거래매장" },
+    { description: "배송차·방문 경유 계산", href: routeHref, icon: Route, label: "지도/코스" },
+    { description: "등급·품목 이탈 갱신", href: transactionsHref, icon: ReceiptText, label: "매출 원장" }
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="grid min-h-[720px] xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-h-0 flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">Map First</Badge>
+                <Badge className="bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-100">기거래 + 신규리드</Badge>
+              </div>
+              <h1 className="mt-2 truncate text-2xl font-black text-slate-950">매장 위치에서 영업과 배송을 시작합니다</h1>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" href={routeHref}>
+                <MapPin className="h-4 w-4" />
+                지도 열기
+              </Link>
+              <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={timelineHref}>
+                <Building2 className="h-4 w-4" />
+                거래처
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid border-b border-slate-200 bg-slate-50/60 sm:grid-cols-2 xl:grid-cols-4">
+            {commandMetrics.map((metric) => (
+              <MapCommandMetric key={metric.label} {...metric} />
+            ))}
+          </div>
+
+          <div className="min-h-0 flex-1 bg-slate-100">
+            <KakaoAddressMap mapClassName="h-full min-h-[520px] rounded-none border-0" markers={mapMarkers} showList={false} />
+          </div>
+        </div>
+
+        <aside className="border-t border-slate-200 bg-white xl:border-l xl:border-t-0">
+          <div className="border-b border-slate-200 p-5">
+            <p className="text-xs font-black uppercase tracking-wide text-slate-400">현재 기준</p>
+            <p className="mt-2 text-sm font-black text-slate-950">{originAddress}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <SmallMetric helper="실운영 전환" label="준비율" value={`${operationalProgress}%`} />
+              <SmallMetric helper="진단 점수" label="건강도" value={healthScore === null ? "-" : `${healthScore}점`} />
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-slate-950">신규리드 관점</p>
+              <Badge className="bg-blue-50 text-blue-700">동선 내 {briefingRouteLeads}곳</Badge>
+            </div>
+            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/70 p-4">
+              <p className="text-sm font-black text-slate-950">{primaryLead ? primaryLead.name : "추천 리드 대기"}</p>
+              <p className="mt-1 text-xs font-bold text-slate-600">{primaryLead ? `${primaryLead.region} · ${primaryLead.score}점 · 월 ${primaryLead.expectedRevenue.toLocaleString()}만원` : "거래처와 매출 원장이 쌓이면 후보가 표시됩니다."}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 p-5">
+            <p className="text-sm font-black text-slate-950">주요 작업</p>
+            {actionCards.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50/50" href={action.href} key={action.label}>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-black text-slate-950">{action.label}</span>
+                      <span className="block truncate text-xs font-bold text-slate-500">{action.description}</span>
+                    </span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </Link>
+              );
+            })}
+            <div className={`rounded-lg border px-4 py-3 text-xs font-bold ${latestUploadReady ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+              {latestUploadReady ? "매출 원장 연결됨" : "매출 원장 업로드 필요"}
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function MapCommandMetric({ helper, label, tone, value }: { helper: string; label: string; tone: string; value: string }) {
+  const toneClassName = tone === "teal" ? "text-teal-700" : tone === "blue" ? "text-blue-700" : "text-slate-950";
+
+  return (
+    <div className="min-w-0 border-b border-r border-slate-200 px-5 py-4 last:border-r-0 sm:border-b-0">
+      <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className={`mt-1 truncate text-2xl font-black ${toneClassName}`}>{value}</p>
+      <p className="mt-1 truncate text-xs font-bold text-slate-500">{helper}</p>
+    </div>
   );
 }
 
