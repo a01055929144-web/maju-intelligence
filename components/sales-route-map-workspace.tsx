@@ -283,16 +283,16 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   }
 
   return (
-    <div className="flex min-h-[760px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-      <header className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50 px-5 py-3 xl:flex-row xl:items-center xl:justify-between">
+    <div className="maju-section-card flex min-h-[760px] flex-col text-slate-900">
+      <header className="maju-card-header flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">영업·배송 운영</p>
+          <p className="maju-muted-label text-teal-700">영업·배송 운영</p>
           <h2 className="mt-1 whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 작업공간</h2>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">거래처 위치 확인, 원장 관리, 배송차별 티맵 경유 계산을 같은 기준으로 처리합니다.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-[auto_auto_40px] xl:justify-end">
-          <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-            <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">지도 표시 기준</p>
+          <div className="maju-filter-box">
+            <p className="maju-muted-label px-2 pb-1">지도 표시 기준</p>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { helper: "A/B/C 매출 등급", label: "매장 등급별", value: "grade" },
@@ -318,8 +318,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               })}
             </div>
           </div>
-          <nav className="rounded-lg border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-            <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">업무 탭</p>
+          <nav className="maju-filter-box">
+            <p className="maju-muted-label px-2 pb-1">업무 탭</p>
             <div className="grid grid-cols-3 gap-2">
               {workspaceViews.map((item) => {
                 const Icon = item.icon;
@@ -350,7 +350,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           </nav>
           <button
             aria-label="필터 초기화"
-            className="inline-flex h-full min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 xl:w-10 xl:px-0"
+            className="maju-button-secondary h-full min-h-10 w-full rounded-lg text-slate-500 xl:w-10 xl:px-0"
             onClick={resetWorkspace}
             title="필터 초기화"
             type="button"
@@ -407,10 +407,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
       />
 
       <section className="grid gap-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
-        <label className="relative min-w-0 flex-1">
+        <label className="maju-search-field relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
-            className="h-10 w-full rounded-md border border-slate-200 bg-white/90 pl-9 pr-3 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100"
+            className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="거래처명·지역·주소 검색..."
             value={query}
@@ -445,7 +445,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
           </button>
           <button
-            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+            className="maju-button-blue h-10 rounded-lg"
             onClick={focusOrigin}
             title="물류 출발지로 지도 이동"
             type="button"
@@ -784,7 +784,7 @@ function RouteWorkspaceGuide({
         <div className="flex min-w-0 flex-col gap-2 lg:items-end">
           <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
           {!sourceReady ? (
-            <Link className="inline-flex h-8 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800" href={dataRegistrationHref}>
+            <Link className="maju-button-primary h-8" href={dataRegistrationHref}>
               거래처 마스터 등록
             </Link>
           ) : null}
@@ -804,7 +804,7 @@ function StoreQuickCard({
   readonly store: StoreRow;
 }) {
   return (
-    <div className="absolute left-4 top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] rounded-lg border border-slate-200 bg-white/95 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur">
+    <div className="maju-surface absolute left-4 top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] rounded-lg">
       <div className="flex items-start justify-between gap-2 px-3.5 py-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -825,7 +825,7 @@ function StoreQuickCard({
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
         <div className="mt-2.5 flex justify-end">
-          <button className="h-7 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={onOpenDetail} type="button">
+          <button className="maju-button-primary h-7 px-2.5" onClick={onOpenDetail} type="button">
             상세
           </button>
         </div>
@@ -837,7 +837,7 @@ function StoreQuickCard({
 function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; readonly vehicles: DeliveryVehicle[] }) {
   if (mode === "grade") {
     return (
-      <div className="flex flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+      <div className="maju-filter-box flex flex-wrap items-center gap-1 px-2 py-1">
         <span className="mr-1 text-xs font-black text-slate-500">마커</span>
         {[
           ["A", "#7c3aed"],
@@ -854,7 +854,7 @@ function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; r
   }
 
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+    <div className="maju-filter-box flex max-w-full flex-wrap items-center gap-1 px-2 py-1">
       <span className="mr-1 text-xs font-black text-slate-500">마커</span>
       {vehicles.slice(0, 5).map((vehicle, index) => (
         <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={vehicle.id}>
@@ -955,9 +955,9 @@ function StoreManagementPanel({
                   {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처 마스터를 먼저 등록하면 담당자별 매장 목록이 표시됩니다."}
                 </p>
                 {!sourceReady ? (
-                  <Link className="mt-3 inline-flex h-8 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white hover:bg-teal-800" href={dataRegistrationHref}>
-                    거래처 등록하기
-                  </Link>
+                <Link className="maju-button-primary mt-3 h-8" href={dataRegistrationHref}>
+                  거래처 등록하기
+                </Link>
                 ) : null}
               </div>
             </div>
@@ -997,7 +997,7 @@ function CustomerDirectoryView({
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="mt-4 min-h-[480px] overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm xl:h-[calc(100%-92px)]">
+      <div className="maju-section-card mt-4 min-h-[480px] xl:h-[calc(100%-92px)]">
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
@@ -1690,8 +1690,8 @@ function TodayCourseView({
 
 function DirectoryStat({ label, tone = "slate", value }: { readonly label: string; readonly tone?: "rose" | "slate"; readonly value: string }) {
   return (
-    <div className="rounded-md border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-black uppercase text-slate-400">{label}</p>
+    <div className="maju-stat-card px-4 py-3">
+      <p className="maju-muted-label">{label}</p>
       <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
     </div>
   );
@@ -1716,7 +1716,7 @@ function OperationalEmptyState({
         </div>
         <h3 className="mt-4 text-lg font-black text-slate-950">{title}</h3>
         <p className="mt-2 text-sm font-bold leading-6 text-slate-600">{description}</p>
-        <Link className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href={actionHref}>
+        <Link className="maju-button-primary mt-5 h-10 px-4 text-sm" href={actionHref}>
           {actionLabel}
         </Link>
       </div>
