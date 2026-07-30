@@ -722,7 +722,7 @@ function DeliveryAssignmentPanel({
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
                     <span
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+                      className="maju-button-secondary inline-flex h-7 items-center gap-1 px-2 text-xs"
                       onClick={(event) => {
                         event.stopPropagation();
                         setEditingVehicleId(vehicle.id);
@@ -884,13 +884,13 @@ function VehicleEditForm({
   return (
     <div className="space-y-2">
       <p className="text-sm font-black text-slate-950">{vehicle.name} 편집</p>
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
+      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
       <div className="flex gap-2">
-        <button className="h-8 flex-1 rounded-md bg-teal-700 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={() => onSave({ area, driver })} type="button">
+        <button className="maju-button-primary h-8 flex-1 text-xs" onClick={() => onSave({ area, driver })} type="button">
           저장
         </button>
-        <button className="h-8 flex-1 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-600" onClick={onCancel} type="button">
+        <button className="maju-button-secondary h-8 flex-1 text-xs" onClick={onCancel} type="button">
           취소
         </button>
       </div>
@@ -1012,11 +1012,11 @@ function CustomerDirectoryView({
               <table className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
-                    <th className="w-[34%] px-4 py-3">거래처</th>
-                    <th className="w-[96px] px-4 py-3">매출등급</th>
-                    <th className="w-[150px] px-4 py-3">담당자</th>
-                    <th className="w-[120px] px-4 py-3 text-right">예상매출</th>
-                    <th className="w-[120px] px-4 py-3 text-right">출발지 거리</th>
+                    <th className="w-[34%] border-r border-slate-200 px-4 py-3">거래처</th>
+                    <th className="w-[96px] border-r border-slate-200 px-4 py-3">매출등급</th>
+                    <th className="w-[150px] border-r border-slate-200 px-4 py-3">담당자</th>
+                    <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">예상매출</th>
+                    <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">출발지 거리</th>
                     <th className="w-[120px] px-4 py-3">사업자 상태</th>
                   </tr>
                 </thead>
@@ -1033,16 +1033,16 @@ function CustomerDirectoryView({
                         if (event.key === "Enter" || event.key === " ") onSelectStore(store.id);
                       }}
                     >
-                      <td className="min-w-0 px-4 py-3">
+                      <td className="min-w-0 border-r border-slate-100 px-4 py-3">
                         <p className="truncate font-black text-slate-950">{store.name}</p>
                         <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="border-r border-slate-100 px-4 py-3">
                         <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                       </td>
-                      <td className="max-w-[150px] truncate px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
+                      <td className="max-w-[150px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
+                      <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
+                      <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
                       <td className="px-4 py-3">
                         <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
                       </td>
@@ -1489,7 +1489,7 @@ function TodayCourseView({
                 <label className="relative block">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
-                    className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-bold outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                    className="maju-search-field h-10 w-full bg-slate-50 pl-9 pr-3"
                     onChange={(event) => setRouteQuery(event.target.value)}
                     placeholder="경유 매장 검색..."
                     value={routeQuery}
@@ -1530,7 +1530,7 @@ function TodayCourseView({
                     </button>
                   </div>
                 ) : null}
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-500">
+                <div className="maju-filter-box bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-500">
                   티맵 경유지 제한 때문에 실제 도로 계산은 최대 {tmapWaypointLimit}곳씩 나눠 처리합니다.
                 </div>
               </div>
@@ -1567,7 +1567,7 @@ function TodayCourseView({
                           <span className="flex shrink-0 flex-col items-end gap-2">
                             <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                             <span
-                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50"
+                              className="maju-button-secondary px-2 py-1 text-[11px]"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 toggleRouteStore(store.id);
@@ -1837,7 +1837,7 @@ function DeliveryProofPanel({
         ))}
       </div>
       <textarea
-        className="mt-3 min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className="mt-3 min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
         onChange={(event) => setMemo(event.target.value)}
         placeholder="추가 메모 예: 요청하신 냉장고 앞에 적재했습니다."
         value={memo}
@@ -2016,7 +2016,7 @@ function StoreDetail({
     <>
       <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
       <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="border-b border-slate-200 bg-white px-6 py-5">
+        <header className="maju-card-header border-b px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
@@ -2036,13 +2036,13 @@ function StoreDetail({
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Link
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                className="maju-button-secondary inline-flex h-9 items-center gap-2 px-3 text-sm"
                 href={`/crm/timeline?customerId=${encodeURIComponent(store.id)}`}
               >
                 히스토리 열기
               </Link>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white hover:bg-blue-700"
+                className="maju-button-primary inline-flex h-9 items-center gap-2 px-3 text-sm"
                 disabled={isSaving}
                 onClick={saveDraft}
                 type="button"
@@ -2050,7 +2050,7 @@ function StoreDetail({
                 <Check className="h-4 w-4" />
                 {isSaving ? "저장 중" : "변경 저장"}
               </button>
-              <button className="grid h-9 w-9 place-items-center rounded-md bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700" onClick={onClose} type="button">
+              <button className="grid h-9 w-9 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700" onClick={onClose} type="button">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -2143,17 +2143,17 @@ function StoreDetail({
               </CollapsibleSection>
 
               <CollapsibleSection title="메모 히스토리">
-                <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
+                <div className="maju-filter-box mt-4 border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
                   메모는 상담·배송 이력이라 운영에서는 삭제 로그를 남기는 방식이 안전합니다. 개별 삭제와 전체 삭제는 확인 후 실행됩니다.
                 </div>
                 <textarea
-                  className="mt-4 min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"
+                  className="mt-4 min-h-28 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                   onChange={(event) => setHistoryMemo(event.target.value)}
                   placeholder="상담, 배송 특이사항, 대표 요청사항 등을 기록하세요."
                   value={historyMemo}
                 />
                 <button
-                  className="mt-2 h-9 w-full rounded-md bg-teal-700 text-sm font-black text-white shadow-sm transition hover:bg-teal-800"
+                  className="maju-button-primary mt-2 h-9 w-full text-sm"
                   onClick={() => {
                     const memo = historyMemo.trim();
                     if (!memo) return;
@@ -2178,7 +2178,7 @@ function StoreDetail({
                 <div className="mt-4 space-y-2">
                   {history.length ? (
                     history.map((item) => (
-                      <div className="rounded-md border border-slate-200 bg-white p-3" key={item.id}>
+                      <div className="maju-stat-card p-3" key={item.id}>
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-black text-slate-400">{item.recordedAt}</p>
                           <button className="text-xs font-black text-rose-500 hover:text-rose-700" onClick={() => onDeleteHistory(store.id, item.id)} type="button">
@@ -2189,7 +2189,7 @@ function StoreDetail({
                       </div>
                     ))
                   ) : (
-                    <p className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
+                    <p className="maju-empty-state p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
                   )}
                 </div>
               </CollapsibleSection>
@@ -2205,7 +2205,7 @@ function StoreDetail({
               <CollapsibleSection title="AI 추천 근거">
                 <div className="mt-4 grid gap-2 sm:grid-cols-3">
                   {(store.reasons?.length ? store.reasons : ["배송 반경", "예상 매출", "지역 확장성"]).map((reason) => (
-                    <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
+                    <p className="maju-filter-box px-3 py-2 text-sm font-bold text-slate-700" key={reason}>
                       {reason}
                     </p>
                   ))}
@@ -2222,7 +2222,7 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white">
+    <section className="maju-section-card">
       <button className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left" onClick={() => setOpen((value) => !value)} type="button">
         <span className="text-sm font-black text-slate-900">{title}</span>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -2296,7 +2296,7 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
 
 function MediaPreview({ file }: { readonly file: AttachmentFile }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200 bg-white p-2">
+    <div className="maju-stat-card min-w-0 p-2">
       {file.mediaType === "video" ? (
         <video className="h-28 w-full rounded bg-slate-100 object-cover" controls src={file.dataUrl} />
       ) : file.dataUrl ? (
@@ -2391,7 +2391,7 @@ function AttachmentBox({
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
           </div>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700">
+        <label className="maju-button-secondary inline-flex h-10 cursor-pointer items-center gap-2 px-3 text-sm">
           <Plus className="h-4 w-4" />
           추가
           <input
@@ -2418,7 +2418,7 @@ function AttachmentBox({
         {file ? (
           <MediaPreview file={file} />
       ) : (
-          <div className="grid h-24 place-items-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-center">
+          <div className="maju-empty-state grid h-24 place-items-center text-center">
           <div>
               <p className="text-xs font-black text-slate-600">아직 업로드된 자료가 없습니다.</p>
               <p className="mt-1 text-[11px] font-bold text-slate-400">+ 버튼으로 이미지/PDF를 추가하세요.</p>
@@ -2444,7 +2444,7 @@ function EditRow({
   return (
     <label className="grid gap-1.5 text-sm">
       <span className="text-xs font-black text-slate-500">{label}</span>
-      <input className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} type={type} value={value} />
+      <input className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => onChange(event.target.value)} type={type} value={value} />
     </label>
   );
 }
@@ -2459,7 +2459,7 @@ function BusinessNumberEditRow({ onChange, valid, value }: { readonly onChange: 
         </span>
       </span>
       <input
-        className={`h-10 min-w-0 rounded-md border bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500 ${valid ? "border-slate-200" : "border-rose-200"}`}
+        className={`h-10 min-w-0 rounded-md border bg-white px-3 font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 ${valid ? "border-slate-200" : "border-rose-200"}`}
         inputMode="numeric"
         onChange={(event) => onChange(formatBusinessRegistrationNumber(event.target.value))}
         placeholder="000-00-00000"
@@ -2483,7 +2483,7 @@ function SelectRow({
   return (
     <label className="grid gap-1.5 text-sm">
       <span className="text-xs font-black text-slate-500">{label}</span>
-      <select className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-blue-500" onChange={(event) => onChange(event.target.value)} value={value}>
+      <select className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => onChange(event.target.value)} value={value}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
