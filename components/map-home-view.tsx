@@ -51,6 +51,11 @@ type NavItem = {
   label: string;
 };
 
+type NavGroup = {
+  items: NavItem[];
+  label: string;
+};
+
 export type MapHomeViewProps = {
   companyId?: string;
   companyName: string;
@@ -107,15 +112,32 @@ export function MapHomeView({
     if (window.matchMedia("(min-width: 1024px)").matches) setDrawerOpen(true);
   }, []);
 
-  const navItems: NavItem[] = [
-    { active: true, href: "/dashboard", icon: LayoutDashboard, label: "지도 홈" },
-    { active: false, href: quickNav.routeHref, icon: Route, label: "영업·배송 코스" },
-    { active: false, href: quickNav.timelineHref, icon: Building2, label: "거래처 히스토리" },
-    { active: false, href: quickNav.pipelineHref, icon: TrendingUp, label: "매출 파이프라인" },
-    { active: false, href: quickNav.transactionsHref, icon: ReceiptText, label: "매출 거래내역" },
-    { active: false, href: quickNav.assistantHref, icon: Sparkles, label: "AI 영업 도우미" },
-    { active: false, href: quickNav.dataRegistrationHref, icon: FileSpreadsheet, label: "데이터 등록" },
-    { active: false, href: quickNav.reportHref, icon: HeartPulse, label: "AI 리포트" }
+  const mapHomeHref = isAdminPreview && companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard";
+  const navGroups: NavGroup[] = [
+    {
+      label: "지도 홈",
+      items: [{ active: true, href: mapHomeHref, icon: LayoutDashboard, label: "지도 홈" }]
+    },
+    {
+      label: "운영",
+      items: [
+        { active: false, href: quickNav.routeHref, icon: Route, label: "영업·배송 코스" },
+        { active: false, href: quickNav.timelineHref, icon: Building2, label: "거래처 히스토리" }
+      ]
+    },
+    {
+      label: "성장",
+      items: [
+        { active: false, href: quickNav.pipelineHref, icon: TrendingUp, label: "매출 파이프라인" },
+        { active: false, href: quickNav.transactionsHref, icon: ReceiptText, label: "매출 거래내역" },
+        { active: false, href: quickNav.assistantHref, icon: Sparkles, label: "AI 영업 도우미" },
+        { active: false, href: quickNav.reportHref, icon: HeartPulse, label: "AI 리포트" }
+      ]
+    },
+    {
+      label: "관리",
+      items: [{ active: false, href: quickNav.dataRegistrationHref, icon: FileSpreadsheet, label: "데이터 등록" }]
+    }
   ];
   const commandChips = [
     { label: "거래처", value: stats.customerCount ? `${stats.customerCount.toLocaleString()}곳` : "등록 필요" },
@@ -124,10 +146,10 @@ export function MapHomeView({
     { label: "건강", value: healthScore === null ? "-" : `${healthScore}점` }
   ];
   const primaryActions = [
-    { href: quickNav.routeHref, icon: Route, label: "코스" },
-    { href: quickNav.timelineHref, icon: Building2, label: "거래처" },
-    { href: quickNav.dataRegistrationHref, icon: FileSpreadsheet, label: "등록" },
-    { href: quickNav.reportHref, icon: HeartPulse, label: "리포트" }
+    { helper: "KPI", href: mapHomeHref, icon: LayoutDashboard, label: "대시보드" },
+    { helper: "코스", href: quickNav.routeHref, icon: Route, label: "영업배송" },
+    { helper: "원장", href: quickNav.timelineHref, icon: Building2, label: "거래처" },
+    { helper: "성장", href: quickNav.pipelineHref, icon: TrendingUp, label: "매출" }
   ];
 
   return (
@@ -222,30 +244,41 @@ export function MapHomeView({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="border-b border-slate-200 p-3">
-            <p className="maju-muted-label px-2 pb-2">바로 실행</p>
+            <div className="mb-3 rounded-lg border border-teal-100 bg-teal-50/80 p-3">
+              <p className="text-xs font-black text-teal-900">지도에서 시작</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">
+                거래처 위치를 먼저 보고 대시보드, 영업·배송, 거래처 관리, 성장 작업으로 이동합니다.
+              </p>
+            </div>
+            <p className="maju-muted-label px-2 pb-2">지도 홈 하위 작업</p>
             <div className="grid grid-cols-4 gap-1.5">
               {primaryActions.map((item) => (
-                <Link className="maju-filter-box flex h-16 flex-col items-center justify-center gap-1 px-1 text-center hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
+                <Link className="maju-filter-box flex h-[72px] flex-col items-center justify-center gap-1 px-1 text-center hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
                   <item.icon className="h-4 w-4 text-teal-700" />
                   <span className="text-[11px] font-black text-slate-700">{item.label}</span>
+                  <span className="text-[10px] font-bold text-slate-400">{item.helper}</span>
                 </Link>
               ))}
             </div>
           </div>
 
           <nav className="space-y-1 border-b border-slate-200 p-3">
-            <p className="maju-muted-label px-2 pb-2">전체 메뉴</p>
-            {navItems.map((item) => (
-              <Link
-                className={`maju-nav-item ${
-                  item.active ? "maju-nav-item-active" : "maju-nav-item-idle"
-                }`}
-                href={item.href}
-                key={item.label}
-              >
-                <item.icon className={`h-4 w-4 ${item.active ? "text-teal-700" : "text-slate-400"}`} />
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              </Link>
+            {navGroups.map((group) => (
+              <div className="space-y-1" key={group.label}>
+                <p className="maju-muted-label px-2 pb-1 pt-2 first:pt-0">{group.label}</p>
+                {group.items.map((item) => (
+                  <Link
+                    className={`maju-nav-item ${
+                      item.active ? "maju-nav-item-active" : "maju-nav-item-idle"
+                    }`}
+                    href={item.href}
+                    key={item.label}
+                  >
+                    <item.icon className={`h-4 w-4 ${item.active ? "text-teal-700" : "text-slate-400"}`} />
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
             ))}
           </nav>
 
