@@ -122,15 +122,13 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Database className="h-4 w-4 text-teal-700" />
-            <h2 className="text-sm font-black text-slate-950">실시간 데이터 일치 점검</h2>
+            <h2 className="text-sm font-black text-slate-950">데이터 일치 점검</h2>
             <Badge className={isHealthy ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
               {loading ? "확인 중" : isHealthy ? "정상" : "확인 필요"}
             </Badge>
             <Badge className="border border-slate-200 bg-white text-slate-600">{sourceLabel}</Badge>
           </div>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-            대시보드, 거래처 히스토리, 영업·배송 코스가 같은 DB 거래처 원장을 보고 있는지 API로 직접 확인합니다.
-          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드·히스토리·코스의 DB 기준을 확인합니다.</p>
         </div>
         <button
           className="maju-button-secondary shrink-0 disabled:cursor-not-allowed disabled:opacity-60"
@@ -146,7 +144,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
       <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
           <StatusTile label="DB 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
-          <StatusTile label="대시보드 거래처" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
+          <StatusTile label="대시보드" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
           <StatusTile label="실도로 계산" value={formatCount(payload ? cachedRouteCount : undefined, "곳")} />
@@ -203,12 +201,12 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
 
           <div className="maju-panel bg-slate-50/70 p-4">
             <p className="text-sm font-black text-slate-950">우선 조치</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">위험도가 높은 항목부터 눌러서 바로 보완합니다.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">필요한 항목만 바로 보완합니다.</p>
             <div className="mt-3 space-y-2">
               {fixItems.length ? (
                 fixItems.map((item) => (
                 <Link
-                  className={`block rounded-md border bg-white px-3 py-3 transition hover:bg-slate-50 ${getFixBorderClass(item.tone)}`}
+                  className={`maju-filter-box block bg-white px-3 py-3 hover:bg-slate-50 ${getFixBorderClass(item.tone)}`}
                   href={item.href}
                   key={item.title}
                 >
@@ -227,10 +225,10 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                 </div>
               )}
             </div>
-            <p className="mt-4 text-xs font-black text-slate-500">자동 진단 메모</p>
+            <p className="mt-4 text-xs font-black text-slate-500">진단 메모</p>
             <div className="mt-3 space-y-2">
               {(payload?.recommendations || ["점검 결과를 불러온 뒤 다음 조치를 표시합니다."]).slice(0, 3).map((item) => (
-                <p key={item} className="rounded-md bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                <p key={item} className="maju-stat-card bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600">
                   {item}
                 </p>
               ))}
@@ -239,7 +237,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
               {okCount}/{Math.max(checks.length, 1)}개 기준 통과
             </p>
             {missingAddressExamples.length ? (
-              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <div className="maju-filter-box mt-3 border-amber-200 bg-amber-50 p-3">
                 <p className="text-xs font-black text-amber-900">주소 보완 대상</p>
                 <div className="mt-2 space-y-1">
                   {missingAddressExamples.slice(0, 4).map((customer) => (
@@ -251,12 +249,12 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
               </div>
             ) : null}
             {roadPendingRouteCount > 0 ? (
-              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+              <div className="maju-filter-box mt-3 border-blue-200 bg-blue-50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-black text-blue-950">티맵 거리 계산 필요</p>
                     <p className="mt-1 text-xs font-bold leading-5 text-blue-800">
-                      현재 {roadPendingRouteCount.toLocaleString()}곳은 티맵 도로 계산 전입니다. 코스 화면에서 배송 거리 전체 계산을 실행하면 실제 도로 기준으로 맞춰집니다.
+                      {roadPendingRouteCount.toLocaleString()}곳은 티맵 도로 계산 전입니다. 코스 화면에서 거리 계산을 실행하세요.
                     </p>
                   </div>
                   <Badge className="shrink-0 bg-blue-600 text-white">{cachedRouteCount.toLocaleString()}곳 완료</Badge>
