@@ -117,7 +117,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   }, [mode, workspaceRole]);
 
   return (
-    <main className="min-h-screen bg-transparent text-slate-950">
+    <main className="maju-app-bg min-h-screen text-slate-950">
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200/80 bg-white/[0.94] backdrop-blur-2xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
@@ -134,7 +134,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                 </Link>
                 <button
                   aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-                  className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white/90 text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 lg:inline-flex"
+                  className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
                   onClick={() => setCollapsed((value) => !value)}
                   type="button"
                 >
@@ -154,8 +154,8 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                       return (
                         <Link
                           key={`${group.label}-${item.label}`}
-                          className={`relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-black transition ${collapsed ? "justify-center" : ""} ${
-                            selected ? "bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-100" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                          className={`maju-nav-item relative ${collapsed ? "justify-center" : ""} ${
+                            selected ? "maju-nav-item-active" : "maju-nav-item-idle"
                           }`}
                           href={itemHref}
                           title={collapsed ? item.label : undefined}
@@ -174,7 +174,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
 
             {!collapsed ? (
               <div className="border-t border-slate-200/80 p-3">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="maju-panel bg-slate-50 p-3">
                   <div className="flex items-center gap-2 text-xs font-black text-slate-700">
                     <HelpCircle className="h-4 w-4 text-teal-600" />
                     운영 체크리스트
@@ -196,7 +196,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </aside>
 
         <section className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/86 backdrop-blur-xl">
+          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/88 backdrop-blur-xl">
             <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2.5" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -213,14 +213,14 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               )}
               <div className={`flex max-w-full flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                  className="maju-button-secondary text-sm"
                   href={settingsHref}
                 >
                   <MapPinned className="h-4 w-4" />
                   {settingsLabel}
                 </Link>
                 <Link
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50/80 px-3 text-sm font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-blue-200 hover:bg-blue-100"
+                  className="maju-button-blue text-sm"
                   href={scopedHref("/assistant")}
                 >
                   <MessageSquareText className="h-4 w-4" />
@@ -274,7 +274,7 @@ function CustomerAccountActions() {
 
   return (
     <button
-      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/92 px-3 text-sm font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className="maju-button-secondary text-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
       onClick={logout}
       type="button"
     >

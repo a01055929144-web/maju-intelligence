@@ -141,10 +141,10 @@ export function MapHomeView({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col gap-2 p-3 sm:p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-xl bg-white/97 px-3 py-2 shadow-lg ring-1 ring-slate-200 backdrop-blur">
+          <div className="maju-surface pointer-events-auto flex items-center gap-2 rounded-xl px-3 py-2">
             <button
               aria-label="메뉴 열기"
-              className="grid h-8 w-8 place-items-center rounded-md text-slate-600 hover:bg-slate-100"
+              className="grid h-8 w-8 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100"
               onClick={() => setDrawerOpen((value) => !value)}
               type="button"
             >
@@ -159,14 +159,14 @@ export function MapHomeView({
 
           <div className="pointer-events-auto flex items-center gap-2">
             <Link
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50/95 px-3 text-xs font-black text-blue-800 shadow-lg backdrop-blur transition hover:bg-blue-100"
+              className="maju-button-blue shadow-lg"
               href={quickNav.assistantHref}
             >
               <Sparkles className="h-3.5 w-3.5" />
               AI 도우미
             </Link>
             <Link
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white/95 px-3 text-xs font-black text-slate-700 shadow-lg backdrop-blur transition hover:bg-slate-50"
+              className="maju-button-secondary shadow-lg"
               href={quickNav.settingsHref}
             >
               <Settings className="h-3.5 w-3.5" />
@@ -174,7 +174,7 @@ export function MapHomeView({
             </Link>
             {!isAdminPreview ? <LogoutButton /> : (
               <Link
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-amber-900 px-3 text-xs font-black text-white shadow-lg transition hover:bg-amber-950"
+                className="maju-button bg-amber-900 text-white shadow-lg hover:bg-amber-950"
                 href={quickNav.backHref}
               >
                 관리자로 돌아가기
@@ -185,8 +185,8 @@ export function MapHomeView({
 
         <div className="pointer-events-auto flex gap-2 overflow-x-auto pb-1">
           {commandChips.map((chip) => (
-            <div key={chip.label} className="flex shrink-0 items-center gap-2 rounded-lg bg-white/95 px-3 py-2 shadow-md ring-1 ring-slate-200 backdrop-blur">
-              <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">{chip.label}</span>
+            <div key={chip.label} className="maju-surface flex shrink-0 items-center gap-2 rounded-lg px-3 py-2">
+              <span className="maju-muted-label text-[10px]">{chip.label}</span>
               <span className="text-sm font-black text-slate-950">{chip.value}</span>
             </div>
           ))}
@@ -200,16 +200,16 @@ export function MapHomeView({
       </div>
 
       <aside
-        className={`pointer-events-auto absolute inset-y-0 left-0 z-40 flex w-[360px] max-w-[88vw] transform flex-col bg-white shadow-2xl transition-transform duration-200 ${
+        className={`maju-surface pointer-events-auto absolute inset-y-0 left-0 z-40 flex w-[360px] max-w-[88vw] transform flex-col rounded-r-xl border-l-0 border-y-0 transition-transform duration-150 ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
           <div className="min-w-0">
-            <p className="text-sm font-black text-slate-950">메뉴</p>
+            <p className="maju-section-title">메뉴</p>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{userName}님 · {originAddress}</p>
           </div>
-          <button aria-label="메뉴 닫기" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100" onClick={() => setDrawerOpen(false)} type="button">
+          <button aria-label="메뉴 닫기" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100" onClick={() => setDrawerOpen(false)} type="button">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -218,8 +218,8 @@ export function MapHomeView({
           <nav className="space-y-1 border-b border-slate-200 p-3">
             {navItems.map((item) => (
               <Link
-                className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-black transition ${
-                  item.active ? "bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-100" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                className={`maju-nav-item ${
+                  item.active ? "maju-nav-item-active" : "maju-nav-item-idle"
                 }`}
                 href={item.href}
                 key={item.label}
@@ -231,7 +231,7 @@ export function MapHomeView({
           </nav>
 
           <div className="border-b border-slate-200 p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-400">오늘 기준</p>
+            <p className="maju-muted-label">오늘 기준</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <SmallStat helper="준비율" label="운영 진행" value={`${operationalProgress}%`} />
               <SmallStat helper="외부 링크" label="네이버·카카오 연결" value={`${placeLinkRate}%`} />
@@ -240,7 +240,7 @@ export function MapHomeView({
 
           <div className="border-b border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-black text-slate-950">추천 리드 TOP</p>
+              <p className="maju-section-title">추천 리드 TOP</p>
               <Link className="text-xs font-black text-teal-700 hover:underline" href={quickNav.pipelineHref}>
                 전체보기
               </Link>
@@ -248,7 +248,7 @@ export function MapHomeView({
             <div className="mt-2 space-y-2">
               {topLeads.length ? (
                 topLeads.slice(0, 4).map((lead, index) => (
-                  <div className="rounded-md border border-slate-200 bg-white p-2.5" key={lead.id || lead.name}>
+                  <div className="maju-panel p-2.5" key={lead.id || lead.name}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 gap-2">
                         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-blue-700 text-[11px] font-black text-white">{index + 1}</span>
@@ -273,7 +273,7 @@ export function MapHomeView({
           </div>
 
           <div className="border-b border-slate-200 p-4">
-            <p className="text-sm font-black text-slate-950">운영 체크리스트</p>
+            <p className="maju-section-title">운영 체크리스트</p>
             <div className="mt-2 space-y-2">
               {operationChecklist.map((item) => (
                 <Link
@@ -321,7 +321,7 @@ export function MapHomeView({
 
       <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
         <Link
-          className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-black text-white shadow-xl transition hover:bg-slate-800"
+          className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full bg-teal-700 px-4 text-sm font-black text-white shadow-xl transition hover:bg-teal-800"
           href={quickNav.routeHref}
         >
           <Route className="h-4 w-4" />
@@ -329,7 +329,7 @@ export function MapHomeView({
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
         <Link
-          className="pointer-events-auto inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-xs font-black text-slate-800 shadow-xl ring-1 ring-slate-200 transition hover:bg-slate-50"
+          className="maju-button-secondary pointer-events-auto h-10 rounded-full px-4 shadow-xl"
           href={quickNav.timelineHref}
         >
           <Building2 className="h-3.5 w-3.5" />
@@ -348,7 +348,7 @@ function LogoutButton() {
 
   return (
     <button
-      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white/95 px-3 text-xs font-black text-slate-700 shadow-lg backdrop-blur transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className="maju-button-secondary shadow-lg hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
       onClick={logout}
       type="button"
     >
@@ -360,8 +360,8 @@ function LogoutButton() {
 
 function SmallStat({ helper, label, value }: { helper: string; label: string; value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50/70 p-2.5">
-      <p className="truncate text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</p>
+    <div className="maju-panel bg-slate-50/70 p-2.5">
+      <p className="maju-muted-label truncate text-[10px]">{label}</p>
       <p className="mt-1 truncate text-base font-black leading-none text-slate-950">{value}</p>
       <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{helper}</p>
     </div>
