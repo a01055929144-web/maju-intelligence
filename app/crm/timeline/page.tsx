@@ -1042,15 +1042,15 @@ export default function CrmTimelinePage() {
             </div>
 
             {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+              <div className="maju-section-card overflow-hidden">
+                <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
                     <p className="text-xs font-black uppercase tracking-wide text-blue-600">Customer Ledger</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">기본정보 / 배송정보</h3>
                   </div>
                   {isEditing ? (
                     <button
-                      className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className="maju-button-primary inline-flex h-9 items-center gap-2 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
                       disabled={!canSaveCustomer}
                       onClick={saveCustomer}
                       type="button"
@@ -1067,13 +1067,13 @@ export default function CrmTimelinePage() {
                 ) : null}
                 {isEditing && draftCustomer ? (
                   <div className="p-4">
-                    <div className="rounded-md border border-blue-100 bg-blue-50/60 p-3">
+                    <div className="maju-panel border-blue-100 bg-blue-50/60 p-3">
                       <div className="flex items-center gap-2 text-sm font-black text-slate-950">
                         <MapPin className="h-4 w-4 text-blue-700" />
                         주소 API 검색
                       </div>
                       <div className="mt-3 flex flex-col gap-2 lg:flex-row">
-                        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-3">
+                        <label className="maju-search-field flex h-10 min-w-0 flex-1 items-center gap-2 px-3">
                           <Search className="h-4 w-4 text-slate-400" />
                           <input
                             className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
@@ -1090,7 +1090,7 @@ export default function CrmTimelinePage() {
                           />
                         </label>
                         <button
-                          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          className="maju-button-secondary inline-flex h-10 items-center justify-center gap-2 px-3 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
                           disabled={isAddressSearching}
                           onClick={searchAddress}
                           type="button"
@@ -1104,7 +1104,7 @@ export default function CrmTimelinePage() {
                         <div className="mt-3 max-h-56 space-y-2 overflow-auto">
                           {addressResults.map((result) => (
                             <button
-                              className="w-full rounded-md border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                              className="maju-filter-box w-full bg-white p-3 text-left hover:border-blue-300 hover:bg-blue-50"
                               key={`${result.address}-${result.longitude}-${result.latitude}`}
                               onClick={() => selectAddress(result)}
                               type="button"
@@ -1179,8 +1179,8 @@ export default function CrmTimelinePage() {
                 )}
               </div>
 
-              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
-                <div className="border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+              <div className="maju-section-card overflow-hidden">
+                <div className="maju-card-header px-4 py-3">
                   <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
                   <h3 className="mt-1 text-base font-black text-slate-950">첨부자료 / 적재위치</h3>
                 </div>
@@ -1194,8 +1194,8 @@ export default function CrmTimelinePage() {
                     }}
                   />
                   <AttachmentChecklistPanel checklist={attachmentChecklist} />
-                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200/80 bg-white">
-                    <div className="border-b border-slate-100 bg-slate-50 px-3 py-3">
+                  <div className="maju-section-card mt-4 overflow-hidden">
+                    <div className="maju-card-header px-3 py-3">
                       <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
                       <p className="mt-1 text-sm font-black text-slate-950">적재위치, 사업자등록증, 통장사본을 같은 거래처 원장에 보관합니다.</p>
                     </div>
@@ -1204,7 +1204,7 @@ export default function CrmTimelinePage() {
                         <label className="grid gap-1.5">
                           <span className="text-xs font-black text-slate-500">자료 종류</span>
                           <select
-                            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                             onChange={(event) => {
                               setNewAttachmentType(event.target.value);
                               setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
@@ -1220,7 +1220,7 @@ export default function CrmTimelinePage() {
                         <label className="grid gap-1.5">
                           <span className="text-xs font-black text-slate-500">자료명</span>
                           <input
-                            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                             onChange={(event) => setNewAttachmentTitle(event.target.value)}
                             placeholder="예: 후문 냉장창고 앞 적재사진"
                             value={newAttachmentTitle}
@@ -1230,13 +1230,13 @@ export default function CrmTimelinePage() {
                       <label className="grid gap-1.5">
                         <span className="text-xs font-black text-slate-500">파일 링크</span>
                         <input
-                          className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                           onChange={(event) => setNewAttachmentUrl(event.target.value)}
                           placeholder="외부 URL이 있으면 붙여넣고, 없으면 아래에서 파일을 선택하세요."
                           value={newAttachmentUrl}
                         />
                       </label>
-                      <label className="flex min-h-24 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
+                      <label className="maju-panel flex min-h-24 cursor-pointer items-center gap-3 border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
                         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-700 text-white">
                           <Plus className="h-4 w-4" />
                         </span>
@@ -1252,7 +1252,7 @@ export default function CrmTimelinePage() {
                         />
                       </label>
                       <button
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-black text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="maju-button-primary inline-flex h-11 items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
                         disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFile) || isAttachmentSaving}
                         onClick={saveAttachment}
                         type="button"
@@ -1262,8 +1262,8 @@ export default function CrmTimelinePage() {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-4 overflow-hidden rounded-md border border-slate-200/80 bg-white">
-                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2">
+                  <div className="maju-section-card mt-4 overflow-hidden">
+                    <div className="maju-card-header flex items-center justify-between gap-3 px-3 py-2">
                       <p className="text-xs font-black text-slate-500">등록된 첨부자료</p>
                       <Badge className="bg-slate-100 text-slate-700">{customerAttachments.length}건</Badge>
                     </div>
@@ -1292,8 +1292,8 @@ export default function CrmTimelinePage() {
             </div> : null}
 
             {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+              <div className="maju-section-card overflow-hidden">
+                <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
                     <p className="text-xs font-black uppercase tracking-wide text-violet-600">History</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">메모 히스토리</h3>
@@ -1307,8 +1307,8 @@ export default function CrmTimelinePage() {
                     latestNote={latestNote}
                     nextActionCount={nextActionCount}
                   />
-                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200/80 bg-white">
-                    <div className="border-b border-slate-100 bg-slate-50 px-3 py-3">
+                  <div className="maju-section-card mt-3 overflow-hidden">
+                    <div className="maju-card-header px-3 py-3">
                       <p className="text-xs font-black uppercase tracking-wide text-slate-400">빠른 메모</p>
                       <p className="mt-1 text-sm font-black text-slate-950">현장에서 자주 남기는 문구를 먼저 선택하고, 필요한 내용을 이어서 보완합니다.</p>
                     </div>
@@ -1320,7 +1320,7 @@ export default function CrmTimelinePage() {
                         "다음 방문 일정 조율"
                       ].map((template) => (
                         <button
-                          className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                          className="maju-button-secondary px-2.5 py-1.5 text-xs"
                           key={template}
                           onClick={() => setNewMemo((current) => (current ? `${current}\n${template}` : template))}
                           type="button"
@@ -1333,7 +1333,7 @@ export default function CrmTimelinePage() {
                       <label className="grid gap-1.5">
                         <span className="text-xs font-black text-slate-500">상담·배송 메모</span>
                         <textarea
-                          className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                           onChange={(event) => setNewMemo(event.target.value)}
                           placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
                           value={newMemo}
@@ -1343,14 +1343,14 @@ export default function CrmTimelinePage() {
                         <label className="grid gap-1.5">
                           <span className="text-xs font-black text-slate-500">다음 액션</span>
                           <input
-                            className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                            className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                             onChange={(event) => setNewNextAction(event.target.value)}
                             placeholder="예: 견적서 발송"
                             value={newNextAction}
                           />
                         </label>
                         <button
-                          className="mt-auto h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          className="maju-button-primary mt-auto h-10 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
                           disabled={!newMemo.trim() || isNoteSaving}
                           onClick={saveNote}
                           type="button"
@@ -1374,7 +1374,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
+                    <div className="maju-empty-state m-4 p-5">
                       <p className="text-sm font-black text-slate-700">아직 DB 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
@@ -1384,8 +1384,8 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-md border border-slate-200/80 bg-white shadow-sm">
-                <div className="border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+              <div className="maju-section-card overflow-hidden">
+                <div className="maju-card-header px-4 py-3">
                   <Badge className={timelineSource === "supabase" ? "mb-2 bg-emerald-50 text-emerald-700" : "mb-2 bg-slate-100 text-slate-600"}>
                     {timelineSource === "supabase" ? "실제 기록" : "기록 대기"}
                   </Badge>
@@ -1395,7 +1395,7 @@ export default function CrmTimelinePage() {
                 <div className="max-h-[620px] space-y-3 overflow-auto bg-slate-50/60 p-3 xl:max-h-[calc(100vh-360px)]">
                   {timeline.length ? (
                     timeline.map((item) => (
-                      <div key={item.id} className="rounded-md border border-slate-200 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+                      <div key={item.id} className="maju-stat-card p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-black text-slate-950">{item.leadName}</p>
@@ -1411,7 +1411,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5">
+                    <div className="maju-empty-state m-4 p-5">
                       <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 DB에 저장된 데이터만 표시합니다.
@@ -1622,8 +1622,8 @@ function CustomerLedgerBasisPanel({
   const attentionTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50/70">
-      <div className="grid gap-2 border-b border-slate-200 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
+    <div className="maju-section-card mt-3 overflow-hidden bg-slate-50/70">
+      <div className="maju-card-header grid gap-2 px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
         <p className="font-black text-slate-950">거래처 기준값</p>
         <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 대시보드와 영업·배송 코스가 함께 사용하는 기준 데이터입니다.</p>
       </div>
@@ -1660,7 +1660,7 @@ function OperationalReadinessCard({
   const ready = completeCount === checks.length;
 
   return (
-    <div className={`mt-4 rounded-md border p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
+    <div className={`maju-section-card mt-4 p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -1673,7 +1673,7 @@ function OperationalReadinessCard({
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {checks.map((check) => (
-          <div key={check.title} className="rounded-md border border-white/80 bg-white p-3">
+          <div key={check.title} className="maju-stat-card border-white/80 bg-white p-3">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-black text-slate-900">{check.title}</p>
               {check.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
@@ -1932,7 +1932,7 @@ function HistoryInputSummary({
 }) {
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="rounded-md border border-violet-100 bg-violet-50/80 p-3">
+      <div className="maju-panel border-violet-100 bg-violet-50/80 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="bg-white text-violet-700 ring-1 ring-inset ring-violet-200">기록 요약</Badge>
           <Badge className="bg-violet-700 text-white">{historyCount}건</Badge>
@@ -1944,7 +1944,7 @@ function HistoryInputSummary({
           {latestNote ? latestNote.memo : "상담, 배송 특이사항, 대표 요청사항을 남기면 거래처별 히스토리로 누적됩니다."}
         </p>
       </div>
-      <div className="rounded-md border border-slate-200 bg-white p-3">
+      <div className="maju-stat-card bg-white p-3">
         <p className="text-xs font-black text-slate-500">다음 액션</p>
         <p className="mt-1 text-2xl font-black text-slate-950">{nextActionCount}건</p>
         <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
@@ -1967,7 +1967,7 @@ function LoadingPositionFieldCard({
   const ready = Boolean(loadingPosition && attachmentCount > 0);
 
   return (
-    <div className={`rounded-md border p-4 ${ready ? "border-blue-100 bg-blue-50/80" : "border-amber-200 bg-amber-50/80"}`}>
+    <div className={`maju-section-card p-4 ${ready ? "border-blue-100 bg-blue-50/80" : "border-amber-200 bg-amber-50/80"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1983,7 +1983,7 @@ function LoadingPositionFieldCard({
           </p>
         </div>
         <button
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-black text-white transition hover:bg-blue-800"
+          className="maju-button-primary inline-flex h-10 shrink-0 items-center justify-center gap-2 px-3 text-sm"
           onClick={onSelectUpload}
           type="button"
         >
@@ -2004,7 +2004,7 @@ function AttachmentChecklistPanel({
   const progress = checklist.length ? Math.round((readyCount / checklist.length) * 100) : 0;
 
   return (
-    <div className="mt-4 rounded-md border border-slate-200 bg-white p-3">
+    <div className="maju-section-card mt-4 p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">첨부자료 준비 상태</p>
@@ -2021,7 +2021,7 @@ function AttachmentChecklistPanel({
         {checklist.map((item) => (
           <div
             key={item.type}
-            className={`rounded-md border p-3 ${
+            className={`maju-filter-box p-3 ${
               item.type === "loading_position"
                 ? "border-blue-200 bg-blue-50/70"
                 : item.count > 0
@@ -2080,8 +2080,8 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
   const searchLinks = buildPlaceSearchLinks([customer.customerName, customer.address].filter(Boolean).join(" "));
 
   return (
-    <div className="overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="maju-section-card overflow-hidden border-teal-100">
+      <div className="maju-card-header flex flex-col gap-3 border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-teal-700">외부 매장 정보</p>
           <h4 className="mt-1 text-base font-black text-slate-950">네이버·카카오·구글 링크</h4>
@@ -2095,7 +2095,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
             {readinessLabel}
           </Badge>
           <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-3 text-xs font-black text-teal-800 transition hover:bg-teal-100"
+            className="maju-button-secondary inline-flex h-8 items-center gap-1.5 border-teal-200 px-3 text-xs text-teal-800 hover:bg-teal-100"
             onClick={onEdit}
             type="button"
           >
@@ -2111,20 +2111,20 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
               <PlaceLinkButton key={link.label} label={link.label} purpose={link.purpose} url={link.url} />
             ))}
           </div>
-          <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-4">
+          <div className="maju-filter-box grid gap-2 bg-slate-50 p-3 md:grid-cols-4">
             <PlaceInfoMetric helper={`${readinessPercent}%`} label="정보 갱신 상태" value={readinessLabel} />
             <PlaceInfoMetric label="마지막 확인" value={customer.placeLinksCheckedAt || "확인 전"} />
             <PlaceInfoMetric label="연결 플랫폼" value={`${filledCount}개`} />
             <PlaceInfoMetric label="우선 확인" value={filledCount < links.length ? "미등록 링크" : "리뷰·영업시간"} />
           </div>
-          <div className="rounded-md border border-slate-200 bg-white p-3">
+          <div className="maju-panel bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-black text-slate-500">갱신 대상 정보</p>
               <Badge className="bg-slate-100 text-slate-700">원장 보완 기준</Badge>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {updateTargets.map((target, index) => (
-                <div key={target} className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                <div key={target} className="maju-filter-box flex items-center gap-2 bg-slate-50 px-3 py-2">
                   <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-100 text-[11px] font-black text-teal-800">{index + 1}</span>
                   <span className="text-xs font-black text-slate-700">{target}</span>
                 </div>
@@ -2132,13 +2132,13 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
             </div>
           </div>
         </div>
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="maju-filter-box bg-slate-50 p-3">
           <p className="text-xs font-black text-slate-500">링크 찾기</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{nextAction}</p>
           <div className="mt-2 grid gap-2">
             {searchLinks.map((link) => (
               <a
-                className="inline-flex h-8 items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 transition hover:border-teal-200 hover:bg-teal-50"
+                className="maju-button-secondary inline-flex h-8 items-center justify-between px-2.5 text-xs hover:border-teal-200 hover:bg-teal-50"
                 href={link.href}
                 key={link.label}
                 rel="noreferrer"
@@ -2163,7 +2163,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
 
 function PlaceInfoMetric({ helper, label, value }: { helper?: string; label: string; value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+    <div className="maju-stat-card px-3 py-2">
       <p className="text-[11px] font-black text-slate-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-900">{value}</p>
       {helper ? <p className="mt-1 text-[11px] font-bold text-teal-700">{helper}</p> : null}
@@ -2176,7 +2176,7 @@ function PlaceLinkButton({ label, purpose, url = "" }: { label: string; purpose:
 
   if (!available) {
     return (
-      <div className="min-h-16 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+      <div className="maju-filter-box min-h-16 bg-slate-50 px-3 py-2 text-sm">
         <div className="flex items-center justify-between gap-2">
           <span className="font-black text-slate-600">{label}</span>
           <span className="text-xs font-black text-slate-400">미등록</span>
@@ -2238,10 +2238,10 @@ function EditableField({
   }[helperTone];
 
   return (
-    <label className={`block min-w-0 rounded-md border border-slate-200 bg-slate-50/60 p-2 ${className}`}>
+    <label className={`maju-filter-box block min-w-0 bg-slate-50/60 p-2 ${className}`}>
       <span className="mb-1.5 block text-xs font-black text-slate-500">{label}</span>
       <input
-        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
         onChange={(event) => onChange(event.target.value)}
         ref={inputRef}
         value={value}
