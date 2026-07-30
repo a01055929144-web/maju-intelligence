@@ -118,10 +118,16 @@ export function MapHomeView({
     { active: false, href: quickNav.reportHref, icon: HeartPulse, label: "AI 리포트" }
   ];
   const commandChips = [
-    { label: "기거래매장", value: stats.customerCount ? `${stats.customerCount.toLocaleString()}곳` : "등록 필요" },
-    { label: "신규리드", value: `${stats.weeklyOpportunities.toLocaleString()}곳` },
-    { label: "코스매장", value: routeStopCount ? `${routeStopCount.toLocaleString()}곳` : "대기" },
-    { label: "건강도", value: healthScore === null ? "-" : `${healthScore}점` }
+    { label: "거래처", value: stats.customerCount ? `${stats.customerCount.toLocaleString()}곳` : "등록 필요" },
+    { label: "신규", value: `${stats.weeklyOpportunities.toLocaleString()}곳` },
+    { label: "코스", value: routeStopCount ? `${routeStopCount.toLocaleString()}곳` : "대기" },
+    { label: "건강", value: healthScore === null ? "-" : `${healthScore}점` }
+  ];
+  const primaryActions = [
+    { href: quickNav.routeHref, icon: Route, label: "코스" },
+    { href: quickNav.timelineHref, icon: Building2, label: "거래처" },
+    { href: quickNav.dataRegistrationHref, icon: FileSpreadsheet, label: "등록" },
+    { href: quickNav.reportHref, icon: HeartPulse, label: "리포트" }
   ];
 
   return (
@@ -159,25 +165,25 @@ export function MapHomeView({
 
           <div className="pointer-events-auto flex items-center gap-2">
             <Link
-              className="maju-button-blue shadow-lg"
+              className="maju-button-blue h-10 shadow-lg"
               href={quickNav.assistantHref}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              AI 도우미
+              AI
             </Link>
             <Link
-              className="maju-button-secondary shadow-lg"
+              className="maju-button-secondary h-10 shadow-lg"
               href={quickNav.settingsHref}
             >
               <Settings className="h-3.5 w-3.5" />
-              {quickNav.settingsLabel}
+              설정
             </Link>
             {!isAdminPreview ? <LogoutButton /> : (
               <Link
-                className="maju-button bg-amber-900 text-white shadow-lg hover:bg-amber-950"
+                className="maju-button h-10 bg-amber-900 text-white shadow-lg hover:bg-amber-950"
                 href={quickNav.backHref}
               >
-                관리자로 돌아가기
+                어드민
               </Link>
             )}
           </div>
@@ -200,14 +206,14 @@ export function MapHomeView({
       </div>
 
       <aside
-        className={`maju-surface pointer-events-auto absolute inset-y-0 left-0 z-40 flex w-[360px] max-w-[88vw] transform flex-col rounded-r-xl border-l-0 border-y-0 transition-transform duration-150 ${
+        className={`maju-surface pointer-events-auto absolute inset-y-0 left-0 z-40 flex w-[336px] max-w-[88vw] transform flex-col rounded-r-xl border-l-0 border-y-0 transition-transform duration-150 ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
           <div className="min-w-0">
-            <p className="maju-section-title">메뉴</p>
-            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{userName}님 · {originAddress}</p>
+            <p className="maju-section-title">작업 메뉴</p>
+            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{userName} · {originAddress}</p>
           </div>
           <button aria-label="메뉴 닫기" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100" onClick={() => setDrawerOpen(false)} type="button">
             <X className="h-4 w-4" />
@@ -215,7 +221,20 @@ export function MapHomeView({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="border-b border-slate-200 p-3">
+            <p className="maju-muted-label px-2 pb-2">바로 실행</p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {primaryActions.map((item) => (
+                <Link className="maju-filter-box flex h-16 flex-col items-center justify-center gap-1 px-1 text-center hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
+                  <item.icon className="h-4 w-4 text-teal-700" />
+                  <span className="text-[11px] font-black text-slate-700">{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
           <nav className="space-y-1 border-b border-slate-200 p-3">
+            <p className="maju-muted-label px-2 pb-2">전체 메뉴</p>
             {navItems.map((item) => (
               <Link
                 className={`maju-nav-item ${
@@ -231,18 +250,18 @@ export function MapHomeView({
           </nav>
 
           <div className="border-b border-slate-200 p-4">
-            <p className="maju-muted-label">오늘 기준</p>
+            <p className="maju-muted-label">운영 기준</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <SmallStat helper="준비율" label="운영 진행" value={`${operationalProgress}%`} />
-              <SmallStat helper="외부 링크" label="네이버·카카오 연결" value={`${placeLinkRate}%`} />
+              <SmallStat helper="필수값" label="준비율" value={`${operationalProgress}%`} />
+              <SmallStat helper="외부정보" label="매장 링크" value={`${placeLinkRate}%`} />
             </div>
           </div>
 
           <div className="border-b border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="maju-section-title">추천 리드 TOP</p>
+              <p className="maju-section-title">추천 리드</p>
               <Link className="text-xs font-black text-teal-700 hover:underline" href={quickNav.pipelineHref}>
-                전체보기
+                보기
               </Link>
             </div>
             <div className="mt-2 space-y-2">
@@ -267,17 +286,17 @@ export function MapHomeView({
                   </div>
                 ))
               ) : (
-                <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-xs font-bold text-slate-500">거래처와 매출 원장이 쌓이면 추천 리드가 표시됩니다.</p>
+                <p className="maju-empty-state p-3 text-xs font-bold text-slate-500">거래처와 매출 원장이 쌓이면 추천 리드가 표시됩니다.</p>
               )}
             </div>
           </div>
 
           <div className="border-b border-slate-200 p-4">
-            <p className="maju-section-title">운영 체크리스트</p>
+            <p className="maju-section-title">운영 체크</p>
             <div className="mt-2 space-y-2">
               {operationChecklist.map((item) => (
                 <Link
-                  className={`flex items-start justify-between gap-2 rounded-md border p-2.5 transition hover:bg-slate-50 ${
+                  className={`maju-filter-box flex items-start justify-between gap-2 p-2.5 ${
                     item.done ? "border-emerald-100 bg-emerald-50/50" : "border-amber-200 bg-amber-50/70"
                   }`}
                   href={item.actionHref}
@@ -321,11 +340,11 @@ export function MapHomeView({
 
       <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
         <Link
-          className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full bg-teal-700 px-4 text-sm font-black text-white shadow-xl transition hover:bg-teal-800"
+          className="maju-button-primary pointer-events-auto h-11 rounded-full px-4 shadow-xl"
           href={quickNav.routeHref}
         >
           <Route className="h-4 w-4" />
-          코스 열기
+          코스
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
         <Link
@@ -333,7 +352,7 @@ export function MapHomeView({
           href={quickNav.timelineHref}
         >
           <Building2 className="h-3.5 w-3.5" />
-          거래처 관리
+          거래처
         </Link>
       </div>
     </div>
