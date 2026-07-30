@@ -1376,7 +1376,7 @@ function Onboarding({
           rowsWaiting={rawRows.length}
         />
 
-        <div className="rounded-xl border border-l-4 border-slate-200 border-l-blue-600 bg-white p-4 shadow-sm">
+        <div className="maju-section-card border-l-4 border-l-blue-600 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Badge className="mb-3 bg-blue-50 text-blue-700">2. 어떻게 등록하나요?</Badge>
@@ -1402,14 +1402,14 @@ function Onboarding({
           {entryMode === "excel" ? (
             <>
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-              <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center transition hover:bg-blue-50">
+              <label className="maju-panel flex min-h-56 cursor-pointer flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center transition hover:bg-blue-50">
                 <Upload className="mb-4 h-11 w-11 text-blue-700" />
                 <span className="text-lg font-black text-slate-950">엑셀 파일을 여기에 올리세요</span>
                 <span className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">ERP 양식이 달라도 괜찮습니다. 파일을 올리면 헤더를 읽고 오른쪽에서 필수 컬럼을 자동 매핑합니다.</span>
-                <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">.xlsx · .csv 지원</span>
+                <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">.xlsx · .csv 지원</span>
                 <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={onFile} />
               </label>
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <div className="maju-panel bg-slate-50 p-4">
                 <p className="text-sm font-black text-slate-950">업로드 순서</p>
                 <div className="mt-3 space-y-2">
                   {[
@@ -1417,7 +1417,7 @@ function Onboarding({
                     ["2", "ERP 엑셀의 헤더와 값을 확인한 뒤 파일을 올립니다."],
                     ["3", "컬럼 매핑 탭에서 필수 필드를 연결하고 상단에서 저장합니다."]
                   ].map(([step, text]) => (
-                    <div key={step} className="flex gap-2 rounded-md border border-slate-100 bg-white px-3 py-2">
+                    <div key={step} className="maju-stat-card flex gap-2 px-3 py-2">
                       <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-blue-700 text-[11px] font-black text-white">{step}</span>
                       <p className="text-xs font-bold leading-5 text-slate-600">{text}</p>
                     </div>
@@ -1455,7 +1455,7 @@ function Onboarding({
             />
           ) : (
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
+              <div className="maju-panel bg-slate-50/70 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
@@ -1464,7 +1464,7 @@ function Onboarding({
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
                         {lastManualCustomerHref ? (
-                          <Link className="inline-flex h-7 items-center justify-center rounded-md bg-teal-700 px-2.5 text-xs font-black text-white shadow-sm" href={lastManualCustomerHref}>
+                          <Link className="maju-button-primary inline-flex h-7 items-center justify-center px-2.5 text-xs" href={lastManualCustomerHref}>
                             히스토리에서 확인
                           </Link>
                         ) : null}
@@ -1487,7 +1487,7 @@ function Onboarding({
                 ) : null}
 
                 {isMaster ? (
-                  <div className="mt-4 rounded-md border border-blue-100 bg-white p-3">
+                    <div className="maju-panel mt-4 bg-white p-3">
                     <div className="flex items-center gap-2 text-sm font-black text-slate-950">
                       <MapPin className="h-4 w-4 text-blue-700" />
                       배송주소 API 검색
@@ -1496,7 +1496,7 @@ function Onboarding({
                       <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
-                          className="h-11 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                          className="maju-search-field h-11 w-full pl-9 pr-3"
                           onChange={(event) => setAddressQuery(event.target.value)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
@@ -1523,7 +1523,7 @@ function Onboarding({
                       <div className="mt-3 max-h-64 space-y-2 overflow-auto">
                         {addressResults.map((result) => (
                           <button
-                            className="w-full rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                            className="maju-filter-box w-full p-3 text-left hover:border-blue-200 hover:bg-blue-50"
                             key={`${result.address}-${result.longitude}-${result.latitude}`}
                             onClick={() => selectAddress(result)}
                             type="button"
@@ -1545,13 +1545,13 @@ function Onboarding({
                     const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
                     const isAddressField = field.key === "address" && isMaster;
                     return (
-                      <label key={field.key} className={`space-y-1.5 rounded-md border bg-white p-3 ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
+                      <label key={field.key} className={`space-y-1.5 rounded-md border bg-white p-3 shadow-sm ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
                         <span className="text-xs font-black text-slate-500">
                           {field.label}
                           {field.required ? <span className="ml-1 text-destructive">*</span> : null}
                         </span>
                         <input
-                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                           inputMode={manualInputMode(field.key)}
                           type={manualInputType(field.key)}
                           value={String(manualDraft[field.key] ?? "")}
@@ -1593,8 +1593,8 @@ function Onboarding({
           )}
         </div>
 
-        <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div className="maju-section-card overflow-hidden">
+          <div className="maju-card-header flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-black text-slate-950">양식 · 내보내기</p>
               <p className="mt-1 text-xs font-bold text-slate-500">처음 등록할 양식과 현재 DB 반영 데이터를 구분해서 내려받습니다.</p>
@@ -1624,7 +1624,7 @@ function Onboarding({
               value={pairedTemplateLabel}
               onClick={() => onDownloadTemplate(pairedTemplateType)}
             />
-            <Link className="rounded-md border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50/40" href={currentLedgerHref}>
+            <Link className="maju-filter-box p-3 hover:border-teal-200 hover:bg-teal-50/40" href={currentLedgerHref}>
               <span className="flex items-start gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700">
                   <Banknote size={18} />
@@ -1641,8 +1641,8 @@ function Onboarding({
       </div>
 
       <aside className="space-y-4">
-        <div className="rounded-md border border-l-4 border-slate-200 border-l-violet-600 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-violet-50/40 p-5">
+        <div className="maju-section-card border-l-4 border-l-violet-600">
+          <div className="maju-card-header bg-violet-50/40 p-5">
             <Badge className="mb-3 bg-violet-50 text-violet-700">3. 미리보기 · 매핑 · 저장</Badge>
             <h2 className="text-lg font-black text-slate-950">엑셀 전체 미리보기와 컬럼 매칭</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
@@ -1666,8 +1666,8 @@ function Onboarding({
               <PipelineStatusPanel steps={pipelineSteps} meta={pipelineMeta} />
             ) : (
               <>
-                <div className="overflow-hidden rounded-md border border-slate-200 bg-white scroll-mt-4" id="review-panel">
-                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="maju-section-card scroll-mt-4 overflow-hidden" id="review-panel">
+                  <div className="maju-card-header px-4 py-3">
                     <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <p className="text-sm font-black text-slate-950">등록 검수 작업 탭</p>
@@ -1787,7 +1787,7 @@ function Onboarding({
                   </div>
                 ) : null}
                 {!headers.length ? (
-                  <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <div className="maju-empty-state p-6 text-center">
                     <p className="font-black text-slate-950">아직 검수할 등록 데이터가 없습니다.</p>
                     <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 컬럼 매핑, 품질 검증, DB 반영 상태가 순서대로 표시됩니다.</p>
                   </div>
@@ -1898,7 +1898,7 @@ function RegistrationControlStrip({
   }[serverState.tone];
 
   return (
-    <div className={`rounded-md border p-4 shadow-sm ${toneClassName}`}>
+    <div className={`maju-section-card p-4 ${toneClassName}`}>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px_220px] xl:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1918,7 +1918,7 @@ function RegistrationControlStrip({
             </span>
           </div>
         </div>
-        <div className="grid gap-2 rounded-md border border-white/70 bg-white/75 p-3 sm:grid-cols-3 xl:grid-cols-1">
+        <div className="maju-panel grid gap-2 border-white/70 bg-white/75 p-3 sm:grid-cols-3 xl:grid-cols-1">
           <MiniStatus label="등록 방식" value={entryMode === "excel" ? "대량 등록" : entryMode === "document" ? "OCR 보조" : "수기 등록"} />
           <MiniStatus label="대기 데이터" value={rows ? `${rows.toLocaleString()}행` : "없음"} />
           <MiniStatus label="현재 파일" value={rows ? filename : "업로드 전"} />
@@ -1930,7 +1930,7 @@ function RegistrationControlStrip({
             <Progress value={progress} />
           </div>
         </div>
-        <div className="rounded-md border border-white/80 bg-white/90 p-3 shadow-sm">
+        <div className="maju-panel border-white/80 bg-white/90 p-3">
           <div className="flex items-start gap-2">
             <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md ${canAnalyze ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
               {canAnalyze ? <Database className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
@@ -1941,7 +1941,7 @@ function RegistrationControlStrip({
               <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{actionDescription}</p>
             </div>
           </div>
-          <Button className="mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
+          <Button className="maju-button-primary mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
             {isAnalyzing ? "저장 중" : canAnalyze ? "저장하고 리포트 갱신" : "저장 조건 확인 중"}
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -2036,8 +2036,8 @@ function RegistrationLiveStatusBoard({
       : blockingItem?.detail || "엑셀 업로드, 수기 등록, OCR 보조 입력 중 하나로 데이터를 준비하세요.";
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-4 border-b border-slate-100 bg-slate-50/80 p-4 xl:grid-cols-[minmax(0,1fr)_320px_300px] xl:items-center">
+    <div className="maju-section-card overflow-hidden">
+      <div className="maju-card-header grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_320px_300px] xl:items-center">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={statusClass}>{registrationStatus.actionLabel}</Badge>
@@ -2049,7 +2049,7 @@ function RegistrationLiveStatusBoard({
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{registrationStatus.description}</p>
           <p className="mt-2 text-xs font-black leading-5 text-blue-700">다음 액션: {registrationStatus.nextAction}</p>
         </div>
-        <div className="rounded-md border border-slate-200 bg-white p-3">
+        <div className="maju-panel bg-white p-3">
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-xs font-black text-slate-400">운영 반영 준비율</p>
@@ -2059,7 +2059,7 @@ function RegistrationLiveStatusBoard({
           </div>
           <Progress className="mt-3 h-2" value={readinessPercent} />
         </div>
-        <div className={`rounded-md border p-3 ${persisted ? "border-emerald-100 bg-emerald-50" : canAnalyze ? "border-blue-100 bg-blue-50" : "border-amber-100 bg-amber-50"}`}>
+        <div className={`maju-panel p-3 ${persisted ? "border-emerald-100 bg-emerald-50" : canAnalyze ? "border-blue-100 bg-blue-50" : "border-amber-100 bg-amber-50"}`}>
           <p className={`text-xs font-black ${persisted ? "text-emerald-800" : canAnalyze ? "text-blue-800" : "text-amber-800"}`}>현재 단계</p>
           <p className="mt-1 text-base font-black text-slate-950">{currentStage}</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{currentStageDetail}</p>
@@ -2078,7 +2078,7 @@ function RegistrationLiveStatusBoard({
             </Button>
           ) : primaryAction ? (
             <Link
-              className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 transition hover:bg-slate-50"
+              className="maju-button-secondary mt-3 inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm"
               href={primaryAction.href}
             >
               {primaryAction.label} 바로 확인
@@ -2099,7 +2099,7 @@ function RegistrationLiveStatusBoard({
       </div>
       <div className="grid gap-2 p-3 md:grid-cols-4">
         {readinessItems.map((item) => (
-          <div className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-emerald-50" : "border-slate-200 bg-slate-50"}`} key={item.label}>
+          <div className={`maju-filter-box px-3 py-2 ${item.ok ? "border-emerald-100 bg-emerald-50" : "border-slate-200 bg-slate-50"}`} key={item.label}>
             <div className="flex items-center justify-between gap-2">
               <p className={`text-xs font-black ${item.ok ? "text-emerald-800" : "text-slate-700"}`}>{item.label}</p>
               {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
@@ -2134,7 +2134,7 @@ function RegistrationLiveStatusBoard({
         <div className="grid gap-2 md:grid-cols-3">
           {verificationLinks.map((link, index) => (
             <Link
-              className={`rounded-md border px-3 py-2 transition ${
+              className={`maju-filter-box px-3 py-2 ${
                 persisted ? "border-emerald-100 bg-emerald-50 hover:bg-emerald-100/70" : "border-slate-200 bg-slate-50 hover:bg-white"
               }`}
               href={link.href}
@@ -3458,7 +3458,7 @@ function BulkEntryProgress({
   const doneCount = items.filter((item) => item.ok).length;
 
   return (
-    <div className={`mt-3 overflow-hidden rounded-md border ${complete ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+    <div className={`maju-section-card mt-3 overflow-hidden ${complete ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-col gap-2 border-b border-white/70 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">대량 등록 준비 상태</p>
@@ -3539,7 +3539,7 @@ function BulkNextActionPanel({
   const Icon = nextAction.icon;
 
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+    <div className="maju-section-card mt-3 overflow-hidden">
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="flex items-start gap-3 p-3">
           <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${nextAction.disabled ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>
@@ -3816,7 +3816,7 @@ function DataQualityCard({
   const visibleIssues = issuePreview.slice(0, 5);
 
   return (
-    <div className={`mb-4 overflow-hidden rounded-md border bg-white ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
+    <div className={`maju-section-card mb-4 overflow-hidden ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
       <div className={`flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-start lg:justify-between ${hasIssues ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -3845,7 +3845,7 @@ function DataQualityCard({
       </div>
       <div className="border-t border-slate-100 p-4">
         {!hasRows ? (
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
+          <div className="maju-empty-state p-4 text-center">
             <p className="text-sm font-black text-slate-950">검증할 행이 아직 없습니다.</p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">엑셀 업로드 또는 수기 등록을 완료하면 저장 가능 여부가 이곳에 표시됩니다.</p>
           </div>
@@ -4410,8 +4410,8 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
   const averageQuality = uploads.length ? Math.round(uploads.reduce((sum, upload) => sum + upload.qualityScore, 0) / uploads.length) : 0;
 
   return (
-    <div className="mb-4 overflow-hidden rounded-md border border-slate-200 bg-white">
-      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="maju-section-card mb-4 overflow-hidden">
+      <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             <History className="h-4 w-4 text-slate-500" />
@@ -4466,7 +4466,7 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
                     <Progress className="mt-1.5 h-1.5" value={upload.qualityScore} />
                   </td>
                   <td className="px-3 py-3">
-                    <Link className="inline-flex h-8 w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 hover:bg-slate-50" href={`/reports/${upload.reportId}`}>
+                    <Link className="maju-button-secondary inline-flex h-8 w-full items-center justify-center gap-1 px-2 text-xs" href={`/reports/${upload.reportId}`}>
                       확인
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
@@ -4478,7 +4478,7 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
         </div>
       ) : (
         <div className="p-4">
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
+          <div className="maju-empty-state p-4 text-center">
             <p className="text-sm font-black text-slate-900">아직 DB 등록 이력이 없습니다.</p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">엑셀 업로드 후 저장하면 파일명, 품질, 중복 후보, 리포트 링크가 이곳에 표시됩니다.</p>
           </div>
@@ -4501,8 +4501,8 @@ function DataPreview({ fields, fieldMap, rows }: { fields: readonly UploadTempla
   const previewRows = rows.slice(0, 3);
 
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+    <div className="maju-section-card mt-3 overflow-hidden">
+      <div className="maju-card-header flex items-center justify-between px-3 py-2">
         <p className="text-xs font-black text-slate-500">미리보기</p>
         <p className="text-xs font-bold text-slate-400">상위 {previewRows.length}행</p>
       </div>
@@ -4539,8 +4539,8 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
   const progress = Math.round((done / steps.length) * 100);
 
   return (
-    <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="maju-section-card overflow-hidden">
+      <div className="maju-card-header px-4 py-3">
         <div className="flex items-center gap-3 text-lg font-black">
           <Activity className="h-6 w-6 animate-pulse text-primary" />
           데이터 적재 파이프라인 실행 중
@@ -4589,7 +4589,7 @@ function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { r
 
 function PipelineMetric({ icon: Icon, label, value }: { icon: typeof FileSpreadsheet; label: string; value: string }) {
   return (
-    <div className="rounded-md border border-border bg-muted/35 p-3">
+    <div className="maju-stat-card bg-muted/35 p-3">
       <Icon className="mb-2 h-4 w-4 text-primary" />
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-black">{value}</p>
