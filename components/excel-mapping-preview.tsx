@@ -64,8 +64,8 @@ export function ExcelHeaderMappingPreview({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 bg-slate-50 p-4">
+    <div className="maju-section-card">
+      <div className="maju-card-header p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <Badge className="mb-2 bg-slate-900 text-white">3-1 헤더 매칭</Badge>
@@ -82,12 +82,12 @@ export function ExcelHeaderMappingPreview({
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 완료"}
             </Badge>
-            <Button className="h-10 bg-blue-700 px-4 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)] hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
+            <Button className="maju-button-blue h-10 bg-blue-700 px-4 text-white hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
               {missingRequiredFields.length ? "필수 매핑 보완" : "매핑 전용화면 열기"}
             </Button>
           </div>
         </div>
-        <div className={`mt-3 rounded-md border p-3 ${missingRequiredFields.length ? "border-amber-200 bg-white" : "border-emerald-200 bg-emerald-50"}`}>
+        <div className={`maju-panel mt-3 p-3 ${missingRequiredFields.length ? "border-amber-200 bg-white" : "border-emerald-200 bg-emerald-50"}`}>
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-black text-slate-950">필수 컬럼 연결 상태</p>
@@ -114,7 +114,7 @@ export function ExcelHeaderMappingPreview({
           <MappingStep label="2" title="표준 필드 지정" description="거래처명, 주소, 사업자번호, 매출 필드처럼 저장 기준이 되는 값을 연결합니다." />
           <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 DB 저장과 리포트 갱신을 진행할 수 있습니다." />
         </div>
-        <div className="mt-3 grid overflow-hidden rounded-md border border-slate-200 bg-white text-xs sm:grid-cols-4">
+        <div className="maju-panel mt-3 grid overflow-hidden text-xs sm:grid-cols-4">
           <MappingCounter label="엑셀 컬럼" value={`${headers.length.toLocaleString()}개`} />
           <MappingCounter label="연결 컬럼" value={`${mappedHeaderCount.toLocaleString()}개`} />
           <MappingCounter label="미사용 컬럼" value={`${unusedHeaderCount.toLocaleString()}개`} />
@@ -227,7 +227,7 @@ function MappingCounter({ label, value }: { label: string; value: string }) {
 
 function MappingStep({ description, label, title }: { description: string; label: string; title: string }) {
   return (
-    <div className="rounded-md border border-blue-100 bg-white px-3 py-2">
+    <div className="maju-stat-card border-blue-100 px-3 py-2">
       <div className="flex items-center gap-2">
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">{label}</span>
         <p className="text-xs font-black text-slate-950">{title}</p>
@@ -302,8 +302,8 @@ function MappingWorkspaceModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
-      <div className="mx-auto flex h-full max-w-[1720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+      <div className="maju-section-card mx-auto flex h-full max-w-[1720px] flex-col shadow-2xl">
+        <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 bg-white px-5 py-4">
           <div>
             <Badge className="mb-2 bg-blue-700 text-white">매핑 전용 화면</Badge>
             <h3 className="text-xl font-black text-slate-950">엑셀 컬럼과 MAJU 표준 필드 연결</h3>
@@ -320,7 +320,7 @@ function MappingWorkspaceModal({
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 매핑 완료"}
             </Badge>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button className="maju-button-secondary h-10" type="button" variant="outline" onClick={onClose}>
               닫기
             </Button>
           </div>
@@ -328,7 +328,7 @@ function MappingWorkspaceModal({
 
         <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_460px]">
           <section className="flex min-h-0 flex-col border-r border-slate-200 bg-slate-50/50">
-            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+            <div className="maju-card-header px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-slate-950">엑셀 원본 데이터</p>
@@ -341,12 +341,12 @@ function MappingWorkspaceModal({
             </div>
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-3">
               <input
-                className="h-10 min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-10 min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={columnQuery}
                 onChange={(event) => setColumnQuery(event.target.value)}
                 placeholder="엑셀 컬럼명 검색..."
               />
-              <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              <div className="maju-filter-box grid grid-cols-3 gap-1.5 bg-slate-50 p-1">
                 {[
                   ["all", "전체"],
                   ["unmapped", "미연결"],
@@ -368,7 +368,7 @@ function MappingWorkspaceModal({
               </div>
               <Badge className="bg-slate-100 text-slate-700">{filteredHeaders.length}/{headers.length}컬럼</Badge>
               <button
-                className="h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-black text-emerald-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:bg-emerald-100"
+                className="maju-button-secondary h-10 rounded-lg border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                 type="button"
                 onClick={() => {
                   const appliedCount = onAutoMap(filteredHeaders);
@@ -383,7 +383,7 @@ function MappingWorkspaceModal({
           </section>
 
           <aside className="flex min-h-0 flex-col bg-white">
-            <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+            <div className="maju-card-header px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-slate-950">MAJU 표준 필드</p>
@@ -416,12 +416,12 @@ function MappingWorkspaceModal({
             </div>
             <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <input
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={fieldQuery}
                 onChange={(event) => setFieldQuery(event.target.value)}
                 placeholder="표준 필드 검색..."
               />
-              <div className="grid grid-cols-4 gap-1.5 rounded-lg border border-slate-200 bg-white p-1">
+              <div className="maju-filter-box grid grid-cols-4 gap-1.5 p-1">
                 {[
                   ["all", "전체"],
                   ["required", "필수"],
@@ -454,7 +454,7 @@ function MappingWorkspaceModal({
                   <FieldMappingGroup fields={filteredOptionalFields} fieldMap={fieldMap} headers={headers} title="선택 필드" tone="optional" onFieldMap={onFieldMap} />
                 </>
               ) : (
-                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                <div className="maju-empty-state p-5">
                   <p className="text-sm font-black text-slate-800">조건에 맞는 표준 필드가 없습니다.</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
                 </div>
@@ -475,7 +475,7 @@ function MappingWorkspaceModal({
               </p>
             </div>
             <button
-              className="h-10 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="maju-button-secondary h-10 border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={readyToReview}
               type="button"
               onClick={() => setFieldFilter("required")}
@@ -483,14 +483,14 @@ function MappingWorkspaceModal({
               필수 필드만 보기
             </button>
             <button
-              className="h-10 rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="maju-button-secondary h-10 bg-slate-50 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={unmappedColumnCount === 0}
               type="button"
               onClick={() => setColumnFilter("unmapped")}
             >
               미연결 컬럼 {unmappedColumnCount}개
             </button>
-            <Button className="h-10" type="button" variant={readyToReview ? "default" : "outline"} onClick={readyToReview ? onDone : onClose}>
+            <Button className={readyToReview ? "maju-button-primary h-10" : "maju-button-secondary h-10"} type="button" variant={readyToReview ? "default" : "outline"} onClick={readyToReview ? onDone : onClose}>
               {readyToReview ? "닫고 품질 검증" : "닫기"}
             </Button>
           </div>
