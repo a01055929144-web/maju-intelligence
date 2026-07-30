@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -107,11 +107,6 @@ export function MapHomeView({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [consistencyOpen, setConsistencyOpen] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.matchMedia("(min-width: 1024px)").matches) setDrawerOpen(true);
-  }, []);
-
   const mapHomeHref = isAdminPreview && companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard";
   const navGroups: NavGroup[] = [
     {
@@ -153,7 +148,7 @@ export function MapHomeView({
   ];
 
   return (
-    <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-slate-950">
+    <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-slate-900">
       <div className="absolute inset-0">
         <KakaoAddressMap mapClassName="h-full w-full rounded-none border-0" markers={mapMarkers} showList={false} />
       </div>
@@ -169,7 +164,7 @@ export function MapHomeView({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col gap-2 p-3 sm:p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="maju-surface pointer-events-auto flex items-center gap-2 rounded-xl px-3 py-2">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/70 bg-white/92 px-3 py-2 shadow-[0_16px_40px_rgba(15,23,42,.14)] backdrop-blur">
             <button
               aria-label="메뉴 열기"
               className="grid h-8 w-8 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100"
@@ -185,7 +180,7 @@ export function MapHomeView({
             </span>
           </div>
 
-          <div className="pointer-events-auto flex items-center gap-2">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-white/70 bg-white/85 p-1 shadow-[0_16px_40px_rgba(15,23,42,.12)] backdrop-blur">
             <Link
               className="maju-button-blue h-10 shadow-lg"
               href={quickNav.assistantHref}
@@ -213,7 +208,7 @@ export function MapHomeView({
 
         <div className="pointer-events-auto flex gap-2 overflow-x-auto pb-1">
           {commandChips.map((chip) => (
-            <div key={chip.label} className="maju-surface flex shrink-0 items-center gap-2 rounded-lg px-3 py-2">
+            <div key={chip.label} className="flex shrink-0 items-center gap-2 rounded-lg border border-white/70 bg-white/88 px-3 py-2 shadow-sm backdrop-blur">
               <span className="maju-muted-label text-[10px]">{chip.label}</span>
               <span className="text-sm font-black text-slate-950">{chip.value}</span>
             </div>

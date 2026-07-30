@@ -46,7 +46,7 @@ declare global {
 let kakaoScriptPromise: Promise<void> | null = null;
 const emptyRoutePath: ReadonlyArray<KakaoRoutePoint> = [];
 const defaultMapClassName = "h-[360px]";
-const kakaoSdkTimeoutMs = 8000;
+const kakaoSdkTimeoutMs = 5000;
 const kakaoGeocodeTimeoutMs = 4500;
 
 export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, onMarkerClick, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
@@ -85,6 +85,8 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         });
         mapInstanceRef.current = map;
         window.setTimeout(() => map.relayout?.(), 0);
+        setStatus("ready");
+
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
@@ -134,7 +136,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
         if (ignore) return;
 
         if (found === 0 && !hasRoadPath) {
-          setFallbackReason("카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.");
+          setFallbackReason(`카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
           setStatus("fallback");
           return;
         }
@@ -161,10 +163,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
             map.setLevel(5);
           }
         }, 120);
-        setStatus("ready");
       } catch (error) {
         if (!ignore) {
-          setFallbackReason(error instanceof Error ? error.message : "카카오맵 로딩에 실패했습니다.");
+          const message = error instanceof Error ? error.message : "카카오맵 로딩에 실패했습니다.";
+          setFallbackReason(`${message}${getKakaoDomainHint()}`);
           setStatus("fallback");
         }
       }
@@ -312,6 +314,16 @@ function createKakaoSearchUrl(marker?: KakaoMapMarker) {
   if (!marker) return "";
   const query = `${marker.name} ${marker.address}`.trim();
   return query ? `https://map.kakao.com/link/search/${encodeURIComponent(query)}` : "";
+}
+
+function getKakaoDomainHint() {
+  if (typeof window === "undefined") return "";
+  const host = window.location.hostname;
+  if (host === "maju-intelligence.vercel.app" || host === "localhost") return "";
+  if (host.endsWith(".vercel.app")) {
+    return " 카카오 JavaScript 키에는 보통 대표 도메인(maju-intelligence.vercel.app)을 등록하므로, 개별 배포 URL에서는 지도가 제한될 수 있습니다.";
+  }
+  return "";
 }
 
 function drawRoadRoutePolylines(kakao: any, map: any, roadPathSegments: any[][]) {
