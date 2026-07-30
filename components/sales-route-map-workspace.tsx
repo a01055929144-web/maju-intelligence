@@ -645,7 +645,7 @@ function DeliveryAssignmentPanel({
       <aside className="flex min-h-0 flex-col items-center gap-3 border-r border-slate-200/80 bg-white py-3">
         <button
           aria-label="배송 담당자 패널 펼치기"
-          className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
+          className="maju-button-secondary h-9 w-9 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
@@ -669,7 +669,7 @@ function DeliveryAssignmentPanel({
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
-          className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+          className="maju-button-secondary h-8 w-8 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
@@ -1315,7 +1315,7 @@ function TodayCourseView({
           <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 매장을 계산합니다.</p>
         </div>
         <div className="border-b border-slate-200/80 p-3">
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="maju-panel bg-slate-50 p-3">
             <p className="text-xs font-black text-slate-500">실사용 순서</p>
             <div className="mt-3 grid gap-2">
               <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
@@ -1383,7 +1383,7 @@ function TodayCourseView({
           <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
             <button
               aria-label="경유 코스 패널 열기"
-              className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              className="maju-button-secondary h-10 w-10 px-0"
               onClick={() => setRoutePanelCollapsed(false)}
               type="button"
             >
@@ -1403,7 +1403,7 @@ function TodayCourseView({
               </div>
               <button
                 aria-label="경유 코스 패널 접기"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                className="maju-button-secondary h-9 w-9 shrink-0 px-0"
                 onClick={() => setRoutePanelCollapsed(true)}
                 type="button"
               >
@@ -1412,7 +1412,7 @@ function TodayCourseView({
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="border-b border-slate-200/80 p-3">
-                <div className="mb-3 rounded-md border border-slate-200 bg-white p-3">
+                <div className="maju-panel mb-3 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-black text-slate-950">출발 기준</p>
@@ -1496,13 +1496,13 @@ function TodayCourseView({
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className="h-8 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
+                  <button className="maju-button-primary h-8 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
                     기본 15곳 선택
                   </button>
-                  <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={selectAllRouteStores} type="button">
+                  <button className="maju-button-secondary h-8 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={selectAllRouteStores} type="button">
                     전체 선택
                   </button>
-                  <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={clearRouteStores} type="button">
+                  <button className="maju-button-secondary h-8 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={clearRouteStores} type="button">
                     선택 해제
                   </button>
                   <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-700">
@@ -1513,7 +1513,7 @@ function TodayCourseView({
                 {routeBatchCount > 1 ? (
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="maju-button-secondary h-8 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={activeRouteBatchIndex === 0}
                       onClick={goToPreviousRouteBatch}
                       type="button"
@@ -1521,7 +1521,7 @@ function TodayCourseView({
                       이전 15곳
                     </button>
                     <button
-                      className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="maju-button-secondary h-8 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={activeRouteBatchIndex >= routeBatchCount - 1}
                       onClick={goToNextRouteBatch}
                       type="button"
@@ -1581,7 +1581,7 @@ function TodayCourseView({
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-md border border-dashed border-slate-300 bg-white p-4 text-center">
+                  <div className="maju-empty-state bg-white p-4">
                     <p className="text-sm font-black text-slate-700">선택한 경유지가 없습니다.</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">아래 매장 목록에서 추가 버튼을 누르세요.</p>
                   </div>
@@ -1671,7 +1671,7 @@ function TodayCourseView({
                   );
                     })
                   ) : (
-                    <div className="rounded-md border border-dashed border-slate-300 bg-white p-4 text-center">
+                    <div className="maju-empty-state bg-white p-4">
                       <p className="text-sm font-black text-slate-700">{isVehicleScoped ? "조건에 맞는 매장이 없습니다." : "배송차를 먼저 선택하세요."}</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         {isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."}
@@ -1769,7 +1769,7 @@ function DeliveryProofPanel({
   };
 
   return (
-    <div className="mt-3 rounded-md border border-blue-100 bg-blue-50/70 p-3">
+      <div className="maju-panel mt-3 border-blue-100 bg-blue-50/70 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -1782,7 +1782,7 @@ function DeliveryProofPanel({
         </div>
         <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{proofs.length}건</span>
       </div>
-      <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-white px-3 py-3 text-left transition hover:border-blue-400 hover:bg-blue-50">
+        <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-white px-3 py-3 text-left transition hover:border-blue-400 hover:bg-blue-50">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
           <Plus className="h-4 w-4" />
         </span>
@@ -1842,11 +1842,11 @@ function DeliveryProofPanel({
         placeholder="추가 메모 예: 요청하신 냉장고 앞에 적재했습니다."
         value={memo}
       />
-      <div className="mt-3 rounded-md border border-blue-100 bg-white p-3">
+      <div className="maju-panel mt-3 border-blue-100 p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
           <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+            className="maju-button-secondary h-8 px-2.5"
             onClick={copyOwnerMessage}
             type="button"
           >
@@ -1858,7 +1858,7 @@ function DeliveryProofPanel({
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
       </div>
       <button
-        className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="maju-button-blue mt-2 w-full bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         disabled={isSaving}
         onClick={saveProof}
         type="button"
