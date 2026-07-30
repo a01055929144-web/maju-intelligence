@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
 import { getCompanyOriginAddress } from "@/lib/store";
-import { calculateRouteDistance } from "@/lib/tmap";
+import { calculateRouteDistance, GeoPoint, haversineDistanceKm, resolveAddressPoint } from "@/lib/tmap";
 
 type RoutePoint = {
   lat: number;
@@ -60,33 +60,57 @@ export async function POST(request: NextRequest) {
 }
 
 async function optimizeRouteLegs(originAddress: string, destinations: string[]) {
+  // Geocode every unique address exactly once up front. Previously this ran inside the
+  // nearest-neighbor loop below, re-geocoding the same addresses O(n^2) times (up to ~100+
+  // Tmap calls for 15 stops). Ordering candidates now uses a free local haversine distance
+  // over these cached points, and Tmap's paid routing API is only called once per final leg.
+  const uniqueAddresses = Array.from(new Set([originAddress, ...destinations]));
+  const geoPoints = new Map<string, GeoPoint | null>(
+    await Promise.all(uniqueAddresses.map(async (address) => [address, await resolveAddressPoint(address)] as const))
+  );
+
+  const order: string[] = [];
+  const remaining = [...destinations];
+  let currentAddress = originAddress;
+
+  while (remaining.length) {
+    const currentPoint = geoPoints.get(currentAddress) || null;
+    const next = remaining.reduce((best, candidate) => {
+      const candidatePoint = geoPoints.get(candidate) || null;
+      const candidateDistance = currentPoint && candidatePoint ? haversineDistanceKm(currentPoint, candidatePoint) : Number.POSITIVE_INFINITY;
+      const bestPoint = geoPoints.get(best) || null;
+      const bestDistance = currentPoint && bestPoint ? haversineDistanceKm(currentPoint, bestPoint) : Number.POSITIVE_INFINITY;
+      return candidateDistance < bestDistance ? candidate : best;
+    }, remaining[0]);
+
+    const nextIndex = remaining.indexOf(next);
+    if (nextIndex >= 0) remaining.splice(nextIndex, 1);
+    order.push(next);
+    currentAddress = next;
+  }
+
+  // Only the final, already-ordered legs get a real Tmap road-distance/duration call (n calls
+  // total instead of n(n+1)/2), reusing the geo points resolved above.
   const optimizedLegs: Array<{
     destinationAddress: string;
     fromAddress: string;
     order: number;
     result: RouteLegResult;
   }> = [];
-  const remaining = [...destinations];
-  let currentAddress = originAddress;
+  let fromAddress = originAddress;
 
-  while (remaining.length) {
-    const candidates = await Promise.all(
-      remaining.map(async (destinationAddress) => ({
-        destinationAddress,
-        result: await calculateRouteDistance(currentAddress, destinationAddress)
-      }))
-    );
-    const next = candidates.sort((a, b) => a.result.distanceKm - b.result.distanceKm || a.result.durationMinutes - b.result.durationMinutes)[0];
-    const nextIndex = remaining.indexOf(next.destinationAddress);
-
-    if (nextIndex >= 0) remaining.splice(nextIndex, 1);
-    optimizedLegs.push({
-      destinationAddress: next.destinationAddress,
-      fromAddress: currentAddress,
-      order: optimizedLegs.length + 1,
-      result: next.result
+  for (const destinationAddress of order) {
+    const result = await calculateRouteDistance(fromAddress, destinationAddress, {
+      originPoint: geoPoints.get(fromAddress) ?? null,
+      destinationPoint: geoPoints.get(destinationAddress) ?? null
     });
-    currentAddress = next.destinationAddress;
+    optimizedLegs.push({
+      destinationAddress,
+      fromAddress,
+      order: optimizedLegs.length + 1,
+      result
+    });
+    fromAddress = destinationAddress;
   }
 
   return optimizedLegs;

@@ -32,10 +32,12 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
     {
       actionHref: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
       actionLabel: "거래처 확인",
-      description: sales.customerCount ? "매출 거래처와 거래처 원장 연결 상태를 확인합니다." : "사업자번호 또는 거래처명으로 매출과 거래처 원장을 연결해야 합니다.",
+      description: sales.unmatchedCustomerCount
+        ? `${sales.unmatchedCustomerCount.toLocaleString()}곳이 거래처 원장과 매칭되지 않았습니다. 상호명·사업자번호를 확인하세요.`
+        : "매출 거래처가 모두 거래처 원장과 연결되어 있습니다.",
       label: "거래처 연결",
-      ready: sales.customerCount > 0,
-      value: `${sales.customerCount.toLocaleString()}곳`
+      ready: hasSalesData && sales.unmatchedCustomerCount === 0,
+      value: hasSalesData ? `매칭 ${sales.matchRate}%` : "업로드 필요"
     },
     {
       actionHref: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
@@ -117,8 +119,9 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
               {sales.topCustomers.length ? (
                 sales.topCustomers.map((customer, index) => (
                   <RankedRevenueRow
-                    key={customer.customerName}
-                    badge={`${customer.grade}등급`}
+                    key={customer.customerId || customer.customerName}
+                    badge={customer.matched ? `${customer.grade}등급` : "미매칭"}
+                    badgeTone={customer.matched ? "emerald" : "amber"}
                     index={index + 1}
                     label={customer.customerName}
                     meta={`${customer.transactionCount.toLocaleString()}건 · 최근 ${customer.latestSalesDate || "-"}`}
@@ -325,6 +328,7 @@ function SalesSignalCard({
 
 function RankedRevenueRow({
   badge,
+  badgeTone = "emerald",
   index,
   label,
   meta,
@@ -332,6 +336,7 @@ function RankedRevenueRow({
   value
 }: {
   badge?: string;
+  badgeTone?: "emerald" | "amber";
   index: number;
   label: string;
   meta: string;
@@ -345,7 +350,7 @@ function RankedRevenueRow({
           <div className="flex items-center gap-2">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-teal-700 text-xs font-black text-white">{index}</span>
             <p className="truncate text-sm font-black text-slate-950">{label}</p>
-            {badge ? <Badge className="bg-emerald-100 text-emerald-800">{badge}</Badge> : null}
+            {badge ? <Badge className={badgeTone === "amber" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>{badge}</Badge> : null}
           </div>
           <p className="mt-1 text-xs font-bold text-muted-foreground">{meta}</p>
         </div>

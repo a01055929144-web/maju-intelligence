@@ -224,6 +224,8 @@ export type RevenuePipeline = {
 export type SalesTransactionItem = {
   id: string;
   customerName: string;
+  customerId?: string;
+  matched: boolean;
   businessRegistrationNumber?: string;
   salesDate?: string;
   productName?: string;
@@ -233,11 +235,25 @@ export type SalesTransactionItem = {
 };
 export type SalesTransactionSummary = {
   averageOrderAmount: number;
-  topCustomers: Array<{ customerName: string; grade: "A" | "B" | "C"; latestSalesDate?: string; share: number; totalAmount: number; transactionCount: number }>;
+  topCustomers: Array<{
+    customerId?: string;
+    customerName: string;
+    matched: boolean;
+    grade: "A" | "B" | "C";
+    latestSalesDate?: string;
+    share: number;
+    totalAmount: number;
+    transactionCount: number;
+  }>;
   topProducts: Array<{ productName: string; share: number; totalAmount: number; transactionCount: number }>;
   totalAmount: number;
   transactionCount: number;
   customerCount: number;
+  matchedCustomerCount: number;
+  unmatchedCustomerCount: number;
+  matchedAmount: number;
+  unmatchedAmount: number;
+  matchRate: number;
   latestSalesDate?: string;
   items: SalesTransactionItem[];
 };
@@ -2868,6 +2884,8 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
   if (!isProductionStoreConfigured()) {
     const items = sampleCustomers.slice(0, 12).map((customer, index) => ({
       id: `sample-sales-${index + 1}`,
+      customerId: `sample-${index + 1}`,
+      matched: true,
       customerName: customer.customerName,
       businessRegistrationNumber: `123${String(10 + index).padStart(2, "0")}${String(10000 + index).padStart(5, "0")}`,
       salesDate: `2026-07-${String(1 + (index % 10)).padStart(2, "0")}`,
@@ -2879,48 +2897,103 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
     return summarizeSalesTransactions(items);
   }
 
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      customer_name: string;
-      business_registration_number: string | null;
-      sales_date: string | null;
-      product_name: string | null;
-      quantity: number | null;
-      sales_amount: number | null;
-      created_at: string;
-    }>
-  >(
-    `sales_transactions?select=id,customer_name,business_registration_number,sales_date,product_name,quantity,sales_amount,created_at&company_id=eq.${encodeURIComponent(
-      id
-    )}&order=sales_date.desc,created_at.desc&limit=200`
-  ).catch(() => []);
+  const [rows, customerKeyMap] = await Promise.all([
+    supabaseRequest<
+      Array<{
+        id: string;
+        customer_key: string | null;
+        customer_name: string;
+        business_registration_number: string | null;
+        sales_date: string | null;
+        product_name: string | null;
+        quantity: number | null;
+        sales_amount: number | null;
+        created_at: string;
+      }>
+    >(
+      `sales_transactions?select=id,customer_key,customer_name,business_registration_number,sales_date,product_name,quantity,sales_amount,created_at&company_id=eq.${encodeURIComponent(
+        id
+      )}&order=sales_date.desc,created_at.desc&limit=200`
+    ).catch(() => []),
+    getNormalizedCustomerKeyMap(id)
+  ]);
 
   return summarizeSalesTransactions(
-    rows.map((row) => ({
-      id: row.id,
-      customerName: row.customer_name,
-      businessRegistrationNumber: row.business_registration_number || undefined,
-      salesDate: row.sales_date || undefined,
-      productName: row.product_name || undefined,
-      quantity: Number(row.quantity || 0),
-      salesAmount: Number(row.sales_amount || 0),
-      createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
-    }))
+    rows.map((row) => {
+      const matchedCustomer = row.customer_key ? customerKeyMap.get(row.customer_key) : undefined;
+      return {
+        id: row.id,
+        customerId: matchedCustomer?.id,
+        matched: Boolean(matchedCustomer),
+        customerName: matchedCustomer?.customerName || row.customer_name,
+        businessRegistrationNumber: row.business_registration_number || undefined,
+        salesDate: row.sales_date || undefined,
+        productName: row.product_name || undefined,
+        quantity: Number(row.quantity || 0),
+        salesAmount: Number(row.sales_amount || 0),
+        createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+      };
+    })
   );
 }
 
+async function getNormalizedCustomerKeyMap(companyId: string) {
+  const map = new Map<string, { id: string; customerName: string }>();
+
+  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; normalized_key: string }>>(
+    `normalized_customers?select=id,customer_name,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&limit=1000`
+  ).catch(() => []);
+
+  for (const row of rows) {
+    if (row.normalized_key) map.set(row.normalized_key, { id: row.id, customerName: row.customer_name });
+  }
+
+  return map;
+}
+
 function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransactionSummary {
-  const customerNames = new Set(items.map((item) => item.customerName).filter(Boolean));
   const totalAmount = items.reduce((total, item) => total + item.salesAmount, 0);
-  const topCustomers = summarizeSalesGroup(items, (item) => item.customerName || "미지정 거래처").slice(0, 8).map((item) => ({
-    customerName: item.key,
-    grade: getSalesAmountGrade(item.totalAmount),
-    latestSalesDate: item.latestSalesDate,
-    share: totalAmount ? Math.round((item.totalAmount / totalAmount) * 100) : 0,
-    totalAmount: item.totalAmount,
-    transactionCount: item.transactionCount
-  }));
+  const matchedAmount = items.filter((item) => item.matched).reduce((total, item) => total + item.salesAmount, 0);
+  const unmatchedAmount = totalAmount - matchedAmount;
+  const matchedCustomerIds = new Set(items.filter((item) => item.matched && item.customerId).map((item) => item.customerId as string));
+  const unmatchedCustomerNames = new Set(items.filter((item) => !item.matched).map((item) => item.customerName || "미지정 거래처"));
+  const distinctCustomerKeys = new Set(items.map((item) => item.customerId || `name:${item.customerName || "미지정 거래처"}`));
+
+  const customerGroups = new Map<
+    string,
+    { customerId?: string; customerName: string; matched: boolean; latestSalesDate?: string; totalAmount: number; transactionCount: number }
+  >();
+
+  for (const item of items) {
+    const groupKey = item.customerId || `name:${item.customerName || "미지정 거래처"}`;
+    const current = customerGroups.get(groupKey) || {
+      customerId: item.customerId,
+      customerName: item.customerName || "미지정 거래처",
+      matched: item.matched,
+      totalAmount: 0,
+      transactionCount: 0
+    };
+    current.totalAmount += item.salesAmount;
+    current.transactionCount += 1;
+    if (!current.latestSalesDate || compareDateText(item.salesDate, current.latestSalesDate) > 0) {
+      current.latestSalesDate = item.salesDate;
+    }
+    customerGroups.set(groupKey, current);
+  }
+
+  const topCustomers = Array.from(customerGroups.values())
+    .sort((a, b) => b.totalAmount - a.totalAmount)
+    .slice(0, 8)
+    .map((group) => ({
+      customerId: group.customerId,
+      customerName: group.customerName,
+      matched: group.matched,
+      grade: getSalesAmountGrade(group.totalAmount),
+      latestSalesDate: group.latestSalesDate,
+      share: totalAmount ? Math.round((group.totalAmount / totalAmount) * 100) : 0,
+      totalAmount: group.totalAmount,
+      transactionCount: group.transactionCount
+    }));
   const topProducts = summarizeSalesGroup(items, (item) => item.productName || "미지정 품목").slice(0, 8).map((item) => ({
     productName: item.key,
     share: totalAmount ? Math.round((item.totalAmount / totalAmount) * 100) : 0,
@@ -2934,7 +3007,12 @@ function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransac
     topProducts,
     totalAmount,
     transactionCount: items.length,
-    customerCount: customerNames.size,
+    customerCount: distinctCustomerKeys.size,
+    matchedCustomerCount: matchedCustomerIds.size,
+    unmatchedCustomerCount: unmatchedCustomerNames.size,
+    matchedAmount,
+    unmatchedAmount,
+    matchRate: totalAmount ? Math.round((matchedAmount / totalAmount) * 100) : 0,
     latestSalesDate: items.find((item) => item.salesDate)?.salesDate,
     items
   };

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { getCompanyDashboardPayload, getCustomerMaster, getTodayRoutePlan, getVisitTimeline } from "@/lib/store";
+import { getCompanyDashboardPayload, getCustomerMaster, getSalesTransactions, getTodayRoutePlan, getVisitTimeline } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +24,12 @@ export async function GET(request: NextRequest) {
   }
 
   const startedAt = Date.now();
-  const [dashboard, customerMaster, routePlan, timeline] = await Promise.all([
+  const [dashboard, customerMaster, routePlan, timeline, sales] = await Promise.all([
     getCompanyDashboardPayload(scope.companyId),
     getCustomerMaster(scope.companyId),
     getTodayRoutePlan(scope.companyId),
-    getVisitTimeline(scope.companyId)
+    getVisitTimeline(scope.companyId),
+    getSalesTransactions(scope.companyId)
   ]);
 
   const masterCount = customerMaster.customers.length;
@@ -103,6 +104,12 @@ export async function GET(request: NextRequest) {
       label: "히스토리 데이터",
       ok: visitCount > 0,
       value: `${visitCount.toLocaleString()}건`
+    },
+    {
+      detail: "매출 원장의 거래처(사업자번호 또는 상호명·주소)가 거래처 원장과 같은 키로 연결되는지 확인합니다.",
+      label: "매출 원장 ↔ 거래처 매칭",
+      ok: sales.transactionCount === 0 || sales.unmatchedCustomerCount === 0,
+      value: sales.transactionCount ? `매칭 ${sales.matchRate}% (미매칭 ${sales.unmatchedCustomerCount.toLocaleString()}곳)` : "매출 원장 없음"
     }
   ];
 
@@ -114,6 +121,9 @@ export async function GET(request: NextRequest) {
     missingAddressCount,
     routeProviderCounts,
     routeWithoutMasterCount,
+    salesMatchRate: sales.matchRate,
+    salesTransactionCount: sales.transactionCount,
+    salesUnmatchedCustomerCount: sales.unmatchedCustomerCount,
     visitCount
   });
   const ok = checks.every((check) => check.ok);
@@ -142,6 +152,9 @@ export async function GET(request: NextRequest) {
         routeCalculationCoverage,
         routeProviderCounts,
         routeStops: routeCount,
+        salesMatchRate: sales.matchRate,
+        salesTransactionCount: sales.transactionCount,
+        salesUnmatchedCustomerCount: sales.unmatchedCustomerCount,
         totalChecks: checks.length
       },
       checks
@@ -158,6 +171,9 @@ function buildRecommendations({
   missingAddressCount,
   routeProviderCounts,
   routeWithoutMasterCount,
+  salesMatchRate,
+  salesTransactionCount,
+  salesUnmatchedCustomerCount,
   visitCount
 }: {
   dashboardCount: number;
@@ -167,6 +183,9 @@ function buildRecommendations({
   missingAddressCount: number;
   routeProviderCounts: Record<string, number>;
   routeWithoutMasterCount: number;
+  salesMatchRate: number;
+  salesTransactionCount: number;
+  salesUnmatchedCustomerCount: number;
   visitCount: number;
 }) {
   const items: string[] = [];
@@ -202,6 +221,14 @@ function buildRecommendations({
   }
   if (visitCount === 0) {
     items.push("방문/메모 히스토리가 없습니다. 현장 방문 기록 또는 배송완료 증빙을 먼저 쌓아야 합니다.");
+  }
+  if (salesTransactionCount > 0 && salesUnmatchedCustomerCount > 0) {
+    items.push(
+      `매출 원장에서 거래처 원장과 매칭되지 않는 거래처가 ${salesUnmatchedCustomerCount.toLocaleString()}곳 있습니다(매칭률 ${salesMatchRate}%). 사업자번호 또는 상호명·주소 표기가 거래처 원장과 같은지 확인하세요.`
+    );
+  }
+  if (salesTransactionCount > 0 && salesUnmatchedCustomerCount === 0) {
+    items.push("매출 원장의 모든 거래처가 거래처 원장과 매칭되었습니다. 등급·리포트 산정에 안전하게 반영됩니다.");
   }
 
   return items.length ? items : ["대시보드, 거래처 원장, 코스, 지도 표시 기준이 일치합니다."];

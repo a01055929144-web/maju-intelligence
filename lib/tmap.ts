@@ -38,7 +38,47 @@ type TmapRouteResponse = {
 
 const TMAP_BASE_URL = "https://apis.openapi.sk.com/tmap";
 
-export async function calculateRouteDistance(originAddress: string, destinationAddress: string): Promise<RouteDistanceResult> {
+/**
+ * Resolves a single address to a geo point, reusing the same lat/lng-in-text shortcut and
+ * Tmap geocoder used internally by calculateRouteDistance. Callers that need to resolve the
+ * same address across many pairwise legs (e.g. route sequencing) should call this once per
+ * unique address and pass the result into calculateRouteDistance to avoid re-geocoding.
+ */
+export async function resolveAddressPoint(address: string): Promise<GeoPoint | null> {
+  const normalized = address.trim();
+  if (!normalized) return null;
+
+  const fromText = parseGeoPointFromText(normalized);
+  if (fromText) return fromText;
+
+  const appKey = process.env.TMAP_API_KEY;
+  if (!appKey || appKey === "replace-with-tmap-api-key") return null;
+
+  try {
+    return await geocodeTmapAddress(normalized, appKey);
+  } catch {
+    return null;
+  }
+}
+
+/** Great-circle distance in kilometers between two geo points. Used for cheap, local pre-filtering. */
+export function haversineDistanceKm(a: GeoPoint, b: GeoPoint): number {
+  const earthRadiusKm = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+  return roundToOneDecimal(earthRadiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)));
+}
+
+export async function calculateRouteDistance(
+  originAddress: string,
+  destinationAddress: string,
+  precomputedPoints?: { originPoint?: GeoPoint | null; destinationPoint?: GeoPoint | null }
+): Promise<RouteDistanceResult> {
   const normalizedOrigin = originAddress.trim();
   const normalizedDestination = destinationAddress.trim();
   const appKey = process.env.TMAP_API_KEY;
@@ -53,8 +93,12 @@ export async function calculateRouteDistance(originAddress: string, destinationA
 
   try {
     const [originPoint, destinationPoint] = await Promise.all([
-      parseGeoPointFromText(normalizedOrigin) || geocodeTmapAddress(normalizedOrigin, appKey),
-      geocodeTmapAddress(normalizedDestination, appKey)
+      precomputedPoints?.originPoint !== undefined
+        ? precomputedPoints.originPoint
+        : parseGeoPointFromText(normalizedOrigin) || geocodeTmapAddress(normalizedOrigin, appKey),
+      precomputedPoints?.destinationPoint !== undefined
+        ? precomputedPoints.destinationPoint
+        : parseGeoPointFromText(normalizedDestination) || geocodeTmapAddress(normalizedDestination, appKey)
     ]);
 
     if (!originPoint || !destinationPoint) {
