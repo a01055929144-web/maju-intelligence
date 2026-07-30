@@ -674,7 +674,7 @@ export default function CrmTimelinePage() {
       previewCompanyId={adminCompanyId || undefined}
       rightAction={
         <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
+          className="maju-button-primary text-sm"
           href={withCompanyQuery("/routes/today")}
         >
           영업·배송 코스
@@ -685,7 +685,7 @@ export default function CrmTimelinePage() {
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
-        <div className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
+        <div className="maju-section-card">
           <SectionHeader
             eyebrow="01 · 원장 요약"
             title="DB 거래처 원장 요약"
@@ -693,8 +693,8 @@ export default function CrmTimelinePage() {
           />
           <div className="p-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[160px_repeat(4,minmax(0,1fr))]">
-            <div className="rounded-md border border-slate-200/80 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-black text-slate-400">원장 상태</p>
+            <div className="maju-stat-card bg-slate-50/70">
+              <p className="maju-muted-label">원장 상태</p>
               <Badge className={`mt-2 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
               <p className="mt-2 text-[11px] font-bold leading-4 text-slate-500">{dbSummary.label}</p>
             </div>
@@ -716,10 +716,7 @@ export default function CrmTimelinePage() {
               <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
                 데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 DB 거래처 원장 기준으로 연결됩니다.
               </p>
-              <Link
-                className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
-                href={withCompanyQuery("/?type=customer-master")}
-              >
+              <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
                 거래처 마스터 등록하기
               </Link>
             </div>
@@ -738,7 +735,7 @@ export default function CrmTimelinePage() {
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="rounded-lg border border-slate-200/80 bg-white p-4 shadow-sm">
+          <div className="maju-panel p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">거래처 운영 현황</Badge>
@@ -751,7 +748,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
           </div>
-          <Link className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-950 p-4 text-white shadow-sm transition hover:bg-slate-800" href={withCompanyQuery("/")}>
+          <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-4 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
             <span>
               <span className="block text-sm font-black">거래처 데이터 보완</span>
               <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
@@ -760,14 +757,14 @@ export default function CrmTimelinePage() {
           </Link>
         </div>
 
-        <div className="rounded-lg border border-slate-200/80 bg-white shadow-sm">
+        <div className="maju-section-card">
           <SectionHeader
             eyebrow="02 · 목록과 상세"
             title="거래처 목록과 상세 관리"
             description="왼쪽에서 거래처를 고르고 오른쪽에서 기본정보, 첨부자료, 메모 히스토리를 정리합니다."
           />
           <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
-          <aside className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
+          <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
             <div className="border-b border-slate-200/80 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -778,7 +775,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
             <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
-              <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+              <label className="maju-search-field">
                 <Search className="h-4 w-4 text-slate-400" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
@@ -787,8 +784,8 @@ export default function CrmTimelinePage() {
                   value={customerSearch}
                 />
               </label>
-              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-1.5">
-                <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">매출 등급</p>
+              <div className="maju-filter-box mt-3">
+                <p className="maju-muted-label px-2 pb-1">매출 등급</p>
                 <div className="grid grid-cols-4 gap-1.5">
                 {(["all", "A", "B", "C"] as const).map((grade) => (
                   <button
@@ -806,8 +803,8 @@ export default function CrmTimelinePage() {
                 ))}
                 </div>
               </div>
-              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-1.5">
-                <p className="px-2 pb-1 text-[11px] font-black uppercase tracking-wide text-slate-400">운영 상태</p>
+              <div className="maju-filter-box mt-3">
+                <p className="maju-muted-label px-2 pb-1">운영 상태</p>
                 <div className="grid grid-cols-2 gap-1.5">
                 <CustomerFilterButton
                   active={operationFilter === "address-missing"}
@@ -910,7 +907,7 @@ export default function CrmTimelinePage() {
                 );
               })}
               {!filteredCustomers.length ? (
-                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                <div className="maju-empty-state">
                   <p className="text-sm font-black text-slate-700">{hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}</p>
                   <p className="mt-1 text-xs font-bold text-slate-400">
                     {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처 마스터를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
@@ -921,7 +918,7 @@ export default function CrmTimelinePage() {
           </aside>
 
           <div className="min-w-0 space-y-4">
-            <div className="rounded-lg border border-slate-200/80 bg-white p-5 shadow-sm">
+            <div className="maju-section-card p-5">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>
@@ -959,14 +956,14 @@ export default function CrmTimelinePage() {
                     사업자 {selectedCustomer.businessStatus}
                   </Badge>
                   <Link
-                    className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+                    className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50"
                     href={withCompanyQuery("/routes/today")}
                   >
                     <Route className="h-3.5 w-3.5" />
                     코스 보기
                   </Link>
                   <button
-                    className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:border-blue-300 hover:bg-blue-50"
+                    className="maju-button-secondary h-8 hover:border-blue-300 hover:bg-blue-50"
                     onClick={() => setIsEditing((value) => !value)}
                     type="button"
                   >
@@ -1007,10 +1004,10 @@ export default function CrmTimelinePage() {
               />
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
-              <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="maju-section-card">
+              <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">거래처 상세 탭</p>
+                  <p className="maju-muted-label">거래처 상세 탭</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
                 <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">
@@ -1833,7 +1830,7 @@ function OperationalActionStrip({
 
 function MiniMetric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
   return (
-    <div className={`rounded-md border border-slate-200/80 bg-slate-50/70 p-3 ${wide ? "col-span-2" : ""}`}>
+    <div className={`maju-stat-card bg-slate-50/70 ${wide ? "col-span-2" : ""}`}>
       <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
     </div>
@@ -1844,7 +1841,7 @@ function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready"
   const toneClassName = tone === "ready" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800";
 
   return (
-    <div className={`min-w-32 rounded-md border px-4 py-3 ${toneClassName}`}>
+    <div className={`maju-stat-card min-w-32 px-4 py-3 ${toneClassName}`}>
       <p className="text-[11px] font-black opacity-70">{label}</p>
       <p className="mt-1 text-xl font-black leading-none">{value}</p>
     </div>
@@ -1860,8 +1857,8 @@ function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string;
   }[tone];
 
   return (
-    <div className="rounded-md border border-slate-200/80 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-black uppercase text-slate-400">{label}</p>
+    <div className="maju-stat-card p-4">
+      <p className="maju-muted-label">{label}</p>
       <p className={`mt-2 truncate text-[24px] font-black leading-none ${toneClassName}`} title={value}>
         {value}
       </p>
@@ -1874,7 +1871,7 @@ function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string
   return (
     <div className="mb-3 flex items-end justify-between gap-3 border-b border-slate-200 pb-2">
       <div>
-        <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{eyebrow}</p>
+        <p className="maju-muted-label">{eyebrow}</p>
         <p className="mt-0.5 text-sm font-black text-slate-950">{title}</p>
       </div>
       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">원장</span>
@@ -1887,7 +1884,7 @@ function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: str
     <div className="min-w-0 border-b border-r border-slate-200 bg-white p-3 last:border-r-0 xl:border-b-0">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-400" />
-        <p className="text-xs font-black text-slate-500">{label}</p>
+        <p className="maju-muted-label">{label}</p>
       </div>
       <p className="mt-2 truncate text-sm font-black text-slate-950" title={value}>
         {value}
