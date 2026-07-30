@@ -238,9 +238,10 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
       routePath
     });
   };
+  const wrapperClassName = showList ? "space-y-4" : "h-full w-full";
 
   return (
-    <div className="space-y-4">
+    <div className={wrapperClassName}>
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
         <MapControls
@@ -494,9 +495,10 @@ function FallbackAddressMap({
 }: KakaoAddressMapProps) {
   const focusedMarker = markers.find((marker) => marker.id === focusedMarkerId);
   const displayMarkers = focusedMarker?.id ? prioritizeFocusedMarker(markers, focusedMarker.id) : markers;
+  const wrapperClassName = showList ? "space-y-4" : "h-full w-full";
 
   return (
-    <div className="space-y-4">
+    <div className={wrapperClassName}>
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
         <div className="absolute right-3 top-3 z-30">
           <button
