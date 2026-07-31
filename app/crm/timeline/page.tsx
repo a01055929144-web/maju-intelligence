@@ -672,40 +672,32 @@ export default function CrmTimelinePage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      rightAction={
-        <Link
-          className="maju-button-primary text-sm"
-          href={withCompanyQuery("/routes/today")}
-        >
-          영업·배송 코스
-        </Link>
-      }
       subtitle="매장 기본정보, 사업자 상태, 배송 적재위치, 메모와 방문 기록을 거래처별로 관리합니다."
-      title="거래처 히스토리"
+      title="거래처 원장"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
         <div className="maju-section-card">
           <SectionHeader
-            eyebrow="01 · 원장 요약"
-            title="DB 거래처 원장 요약"
-            description="DB 원장 연결 상태, 전체 거래처 수, 보완 필요 항목을 먼저 확인합니다."
+            eyebrow="지도 기반 업무"
+            title="거래처 원장"
+            description="지도 홈과 영업·배송 코스가 사용하는 같은 거래처 기준값입니다."
           />
-          <div className="p-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[160px_repeat(4,minmax(0,1fr))]">
-            <div className="maju-stat-card bg-slate-50/70">
+          <div className="p-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="maju-muted-label">원장 상태</p>
-              <Badge className={`mt-2 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
-              <p className="mt-2 text-[11px] font-bold leading-4 text-slate-500">{dbSummary.label}</p>
+              <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
+              <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
             </div>
             <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
             <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
             <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
             <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
           </div>
-          <div className={`mt-3 rounded-md border px-3 py-3 ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
+          <div className={`mt-2 flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
             <p className={`text-xs font-black ${hasOperationalLedger ? "text-emerald-900" : "text-amber-900"}`}>{ledgerStatusLabel}</p>
-            <p className={`mt-1 text-xs font-bold leading-5 ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
+            <p className={`truncate text-xs font-bold ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
           </div>
           {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
           {!hasCustomers ? (
@@ -759,9 +751,9 @@ export default function CrmTimelinePage() {
 
         <div className="maju-section-card">
           <SectionHeader
-            eyebrow="02 · 목록과 상세"
-            title="거래처 목록과 상세 관리"
-            description="왼쪽에서 거래처를 고르고 오른쪽에서 기본정보, 첨부자료, 메모 히스토리를 정리합니다."
+            eyebrow="거래처 작업"
+            title="목록 · 상세"
+            description="거래처를 선택하면 기본정보, 첨부자료, 메모를 같은 원장에서 관리합니다."
           />
           <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
           <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
@@ -769,7 +761,7 @@ export default function CrmTimelinePage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">검색, 등급, 담당자 기준으로 빠르게 찾습니다.</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">검색·등급·운영 상태</p>
                 </div>
                 <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
               </div>
