@@ -91,6 +91,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
   const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
+  const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
   const scopedHref = (href: string) => {
     if (mode !== "admin-preview" || !previewCompanyId) return href;
     if (href === "/dashboard/settings") return "/admin/companies";
@@ -214,9 +215,16 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   {subtitle ? <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p> : null}
                 </div>
               ) : (
-                <div className="hidden xl:block" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
+                    <span className="text-sm font-black text-slate-900">{activeWorkspaceLabel}</span>
+                    {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{title}</p>
+                </div>
               )}
-              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
+              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
                 <Link
                   className="maju-button-secondary h-9 shrink-0 px-3 text-sm"
                   href={settingsHref}
@@ -294,6 +302,16 @@ function isCurrentNavItem(pathname: string | null, href: string) {
   const hrefPath = href.split("?")[0] || "/";
   if (hrefPath === "/") return pathname === "/";
   return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+}
+
+function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {
+  if (active === "dashboard") return "지도 홈";
+  if (active === "routes") return "영업·배송 코스";
+  if (active === "customers") return "거래처 원장";
+  if (active === "revenue") return "성장 분석";
+  if (active === "assistant") return "AI 영업 도우미";
+  if (active === "settings") return "회사 설정";
+  return "데이터 등록";
 }
 
 function SidebarQuickStep({ currentPath, href, icon: Icon, label, step }: { readonly currentPath: string | null; readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
@@ -26,14 +25,6 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
       hidePageTitle
       mode={customerSession ? "customer" : "admin-preview"}
       previewCompanyId={customerSession ? undefined : companyId}
-      rightAction={
-        <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
-          href={customerSession ? "/dashboard" : "/admin"}
-        >
-          돌아가기
-        </Link>
-      }
       subtitle="방문 관리, 배송 차량 배정, 티맵 경유 도로 계산"
       title="오늘의 영업·배송 코스"
       userName={customerSession?.name || adminSession?.email || "관리자"}
