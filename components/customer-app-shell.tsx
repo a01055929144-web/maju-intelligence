@@ -123,7 +123,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   return (
     <main className="maju-app-bg min-h-screen text-slate-950">
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-200/80 bg-white/[0.94] backdrop-blur-2xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+        <aside className="border-b border-slate-200 bg-white shadow-[8px_0_24px_rgba(15,23,42,0.04)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 p-4">
               <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
@@ -201,7 +201,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
         </aside>
 
         <section className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/88 backdrop-blur-xl">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
             <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2.5" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -216,16 +216,16 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
               ) : (
                 <div className="hidden xl:block" />
               )}
-              <div className={`flex max-w-full flex-wrap items-center gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
+              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-end" : ""}`}>
                 <Link
-                  className="maju-button-secondary text-sm"
+                  className="maju-button-secondary h-9 shrink-0 px-3 text-sm"
                   href={settingsHref}
                 >
                   <MapPinned className="h-4 w-4" />
                   {settingsLabel}
                 </Link>
                 <Link
-                  className="maju-button-blue text-sm"
+                  className="maju-button-blue h-9 shrink-0 px-3 text-sm"
                   href={scopedHref("/assistant")}
                 >
                   <MessageSquareText className="h-4 w-4" />
@@ -279,7 +279,7 @@ function CustomerAccountActions() {
 
   return (
     <button
-      className="maju-button-secondary text-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className="maju-button-secondary h-9 shrink-0 px-3 text-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
       onClick={logout}
       type="button"
     >
