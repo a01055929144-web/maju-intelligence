@@ -284,79 +284,60 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
 
   return (
     <div className="maju-section-card flex min-h-[760px] flex-col text-slate-900">
-      <header className="maju-card-header flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="maju-muted-label text-teal-700">영업·배송 운영</p>
-          <h2 className="mt-1 whitespace-nowrap text-[18px] font-black leading-tight">영업·배송 통합 작업공간</h2>
-          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">거래처 위치 확인, 원장 관리, 배송차별 티맵 경유 계산을 같은 기준으로 처리합니다.</p>
+          <p className="maju-muted-label text-teal-700">지도 기반 업무</p>
+          <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 코스</h2>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-[auto_auto_40px] xl:justify-end">
-          <div className="maju-filter-box">
-            <p className="maju-muted-label px-2 pb-1">지도 표시 기준</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { helper: "A/B/C 매출 등급", label: "매장 등급별", value: "grade" },
-                { helper: "차량 담당 구역", label: "배송차별", value: "vehicle" }
-              ].map((item) => {
-                const selected = markerViewMode === item.value;
-                return (
-                  <button
-                    className={`relative min-h-[54px] overflow-hidden rounded-md border px-3 py-2 text-left transition ${
-                      selected
-                        ? "border-blue-200 bg-blue-50 text-blue-950 shadow-[0_6px_14px_rgba(37,99,235,0.10)]"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
-                    }`}
-                    key={item.value}
-                    onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
-                    type="button"
-                  >
-                    {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-blue-600" /> : null}
-                    <span className="block text-xs font-black leading-none">{item.label}</span>
-                    <span className={`mt-1.5 block truncate text-[10px] font-bold leading-none ${selected ? "text-blue-600" : "text-slate-400"}`}>{item.helper}</span>
-                  </button>
-                );
-              })}
-            </div>
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
+            {[
+              { label: "등급", value: "grade" },
+              { label: "배송차", value: "vehicle" }
+            ].map((item) => {
+              const selected = markerViewMode === item.value;
+              return (
+                <button
+                  className={`h-8 rounded px-3 text-xs font-black transition ${
+                    selected ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  }`}
+                  key={item.value}
+                  onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
-          <nav className="maju-filter-box">
-            <p className="maju-muted-label px-2 pb-1">업무 탭</p>
-            <div className="grid grid-cols-3 gap-2">
-              {workspaceViews.map((item) => {
-                const Icon = item.icon;
-                const selected = activeView === item.value;
-                return (
-                  <button
-                    className={`group relative min-h-[64px] overflow-hidden rounded-md border px-3 py-2.5 text-left transition ${
-                      selected
-                        ? "border-teal-200 bg-teal-50 text-teal-950 shadow-[0_10px_22px_rgba(15,118,110,0.10)]"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-                    }`}
-                    key={item.value}
-                    onClick={() => changeWorkspaceView(item.value)}
-                    title={workspaceViewDescriptions[item.value]}
-                    type="button"
-                  >
-                    {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-teal-700" /> : null}
-                    <span className="flex items-center gap-1.5 text-xs font-black leading-none">
-                      <Icon className={`h-3.5 w-3.5 ${selected ? "text-teal-700" : "text-slate-400 group-hover:text-teal-700"}`} />
-                      {item.label}
-                    </span>
-                    <span className={`mt-1.5 block truncate text-[10px] font-bold leading-none ${selected ? "text-teal-700" : "text-slate-400 group-hover:text-teal-600"}`}>{item.shortLabel}</span>
-                    <span className={`mt-1.5 block truncate text-[10px] font-black leading-none ${selected ? "text-teal-600" : "text-slate-500"}`}>{item.helper}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <nav className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
+            {workspaceViews.map((item) => {
+              const Icon = item.icon;
+              const selected = activeView === item.value;
+              return (
+                <button
+                  className={`flex h-8 items-center gap-1.5 rounded px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  }`}
+                  key={item.value}
+                  onClick={() => changeWorkspaceView(item.value)}
+                  title={workspaceViewDescriptions[item.value]}
+                  type="button"
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </button>
+              );
+            })}
           </nav>
           <button
             aria-label="필터 초기화"
-            className="maju-button-secondary h-full min-h-10 w-full rounded-lg text-slate-500 xl:w-10 xl:px-0"
+            className="maju-button-secondary h-10 shrink-0 rounded-md px-3 text-slate-600"
             onClick={resetWorkspace}
             title="필터 초기화"
             type="button"
           >
             <RefreshCw className="h-4 w-4" />
-            <span className="xl:hidden">초기화</span>
           </button>
         </div>
       </header>
