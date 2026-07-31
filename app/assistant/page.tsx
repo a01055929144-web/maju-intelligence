@@ -52,22 +52,17 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      rightAction={
-        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
-          돌아가기
-        </Link>
-      }
-      subtitle="방문 결과를 바탕으로 메시지, 요약, 견적 요청 메모를 생성합니다."
-      title="영업 후속 작업 초안"
+      subtitle="방문 기록과 견적 요청을 바로 실행할 문장으로 정리합니다."
+      title="AI 영업 도우미"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div>
-              <p className="text-sm font-black text-slate-950">AI 영업 후속함</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">방문 기록, 견적 요청, 코스 데이터를 보고 바로 실행할 초안을 정리합니다.</p>
+              <p className="text-sm font-black text-slate-950">후속 작업함</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">방문 기록 · 견적 요청 기준</p>
             </div>
             <Badge className={drafts.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{drafts.length ? "초안 생성됨" : "방문 기록 필요"}</Badge>
           </div>
@@ -96,9 +91,9 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
             <div>
               <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
-                초안 목록
+                실행 초안
               </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">거래처별 후속 메시지, 견적 메모, 방문 요약을 검토합니다.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">담당자가 검토 후 사용합니다.</p>
             </div>
             <Badge className="bg-slate-900 text-white">{drafts.length.toLocaleString()}개 표시</Badge>
           </div>

@@ -51,31 +51,26 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
 
   return (
     <CustomerAppShell
-      active="revenue"
+      active="revenue-ledger"
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
       rightAction={
-        <>
-          <Link className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
-            매출 업로드
-          </Link>
-          <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
-            돌아가기
-          </Link>
-        </>
+        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
+          원장 업로드
+        </Link>
       }
-      subtitle="ERP 엑셀로 업로드된 일자·거래처·품목·금액 단위 원장입니다."
-      title="매출 거래내역서"
+      subtitle="ERP 거래원장 기준으로 거래처·품목·금액을 확인합니다."
+      title="매출 거래내역"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div>
               <p className="text-sm font-black text-slate-950">매출 원장 현황</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">ERP 거래원장 업로드 기준으로 거래처·품목·금액을 집계합니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">업로드된 거래원장 기준</p>
             </div>
             <Badge className={hasSalesData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
               {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
@@ -109,8 +104,8 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <Badge className="mb-2 bg-emerald-100 text-emerald-800">거래처 매출 집중도</Badge>
-                  <h2 className="text-lg font-black text-slate-950">거래처별 매출 TOP</h2>
-                  <p className="mt-1 text-sm font-semibold text-muted-foreground">거래원장 업로드 기준으로 매출 기여도가 높은 거래처를 자동 정리합니다.</p>
+                  <h2 className="text-lg font-black text-slate-950">거래처별 매출</h2>
+                  <p className="mt-1 text-sm font-semibold text-muted-foreground">매출 기여도가 높은 거래처 순서입니다.</p>
                 </div>
                 <MiniStat label="평균 거래액" value={`${Math.round(sales.averageOrderAmount).toLocaleString()}원`} />
               </div>
@@ -139,8 +134,8 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
                 <Badge className="mb-2 w-fit bg-blue-50 text-blue-700">품목 이탈 감지 기준</Badge>
-                <h2 className="text-lg font-black text-slate-950">품목별 매출 구조</h2>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">품목별 매출 비중을 보고 이탈·감소 품목을 추적할 수 있습니다.</p>
+                <h2 className="text-lg font-black text-slate-950">품목별 매출</h2>
+                <p className="mt-1 text-sm font-semibold text-muted-foreground">품목 비중과 감소 가능성을 봅니다.</p>
               </div>
               <div className="divide-y divide-slate-100">
                 {sales.topProducts.length ? (
@@ -176,8 +171,8 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div>
-              <h2 className="text-lg font-black text-slate-950">최근 거래내역</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">업로드된 매출 원장의 최근 행을 그대로 확인합니다.</p>
+              <h2 className="text-lg font-black text-slate-950">원장 테이블</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">최근 업로드 행</p>
             </div>
             <Badge className="bg-slate-900 text-white">{sales.items.length.toLocaleString()}행 표시</Badge>
           </div>

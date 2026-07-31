@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
 
 type CustomerAppShellProps = {
-  readonly active: "dashboard" | "customers" | "routes" | "revenue" | "assistant" | "settings" | "data";
+  readonly active: "dashboard" | "customers" | "routes" | "revenue" | "revenue-ledger" | "assistant" | "report" | "settings" | "data";
   readonly children: ReactNode;
   readonly companyName: string;
   readonly hidePageTitle?: boolean;
@@ -67,9 +67,9 @@ const navigationGroups: NavigationGroup[] = [
     label: "성장 분석",
     items: [
       { active: "revenue", href: "/revenue/pipeline", icon: BarChart3, label: "매출 성장" },
-      { active: "revenue", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
+      { active: "revenue-ledger", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
       { active: "assistant", href: "/assistant", icon: Sparkles, label: "AI 영업 도우미" },
-      { active: "assistant", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
+      { active: "report", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
     ]
   },
   {
@@ -309,7 +309,9 @@ function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {
   if (active === "routes") return "영업·배송 코스";
   if (active === "customers") return "거래처 원장";
   if (active === "revenue") return "성장 분석";
+  if (active === "revenue-ledger") return "매출 거래내역";
   if (active === "assistant") return "AI 영업 도우미";
+  if (active === "report") return "AI 리포트";
   if (active === "settings") return "회사 설정";
   return "데이터 등록";
 }

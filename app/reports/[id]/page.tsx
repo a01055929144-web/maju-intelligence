@@ -115,36 +115,29 @@ export default async function ReportDetailPage({
 
   return (
     <CustomerAppShell
-      active="dashboard"
+      active="report"
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      rightAction={
-        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
-          돌아가기
-        </Link>
-      }
-      subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 예상 추가매출 월 ${report.potentialRevenue.toLocaleString()}만원`}
-      title={`${report.companyName} 상세 리포트`}
+      subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 월 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
+      title="AI 리포트"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <Card className="border-teal-100 bg-gradient-to-br from-white to-teal-50/70 shadow-sm">
-          <CardContent className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
             <div>
-              <Badge className="mb-3 bg-teal-700 text-white">실행형 AI 리포트</Badge>
-              <h2 className="text-2xl font-black leading-tight text-slate-950">이번 리포트의 첫 작업은 {primaryAction.title}입니다.</h2>
-              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
-                가장 낮은 점수 항목부터 보완하면 리포트 수치, 거래처 히스토리, 배송 코스, 매출 분석이 같은 방향으로 개선됩니다.
-              </p>
+              <Badge className="mb-3 bg-teal-700 text-white">{report.companyName}</Badge>
+              <h2 className="text-xl font-black leading-tight text-slate-950">우선 작업: {primaryAction.title}</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">낮은 점수 항목부터 보완해 거래처 원장, 코스, 매출 분석 기준을 맞춥니다.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white transition hover:bg-teal-800" href={primaryAction.href}>
                   우선 작업 열기
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50" href={companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard"}>
-                  대시보드로 이동
+                  지도 홈
                 </Link>
               </div>
             </div>

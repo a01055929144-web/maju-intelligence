@@ -71,30 +71,25 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      rightAction={
-        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800" href={customerSession ? "/dashboard" : "/admin/companies"}>
-          돌아가기
-        </Link>
-      }
-      subtitle="견적·관심·보류 건을 금액 기준으로 봅니다."
-      title="매출 파이프라인"
+      subtitle="방문 결과와 견적 요청을 매출 후보로 정리합니다."
+      title="매출 성장"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-5 px-4 py-6 sm:px-6">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <div>
-              <p className="text-sm font-black text-slate-950">파이프라인 현황</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">방문 결과 기준</p>
+              <p className="text-sm font-black text-slate-950">성장 후보 현황</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">방문 메모 · 견적 요청 기준</p>
             </div>
             <Badge className="bg-blue-100 text-blue-800">{pipeline.items.length.toLocaleString()}건 관리 중</Badge>
           </div>
           <div className="grid md:grid-cols-4">
             <Metric icon={Banknote} label="예상 총매출" value={`${pipeline.expectedRevenue.toLocaleString()}만원`} />
             <Metric icon={CircleDollarSign} label="가중 매출" value={`${pipeline.weightedRevenue.toLocaleString()}만원`} />
-            <Metric icon={TrendingUp} label="견적 요청" value={`${pipeline.quoteRequests}건`} />
-            <Metric icon={Percent} label="전환 기대율" value={`${pipeline.conversionRate}%`} />
+            <Metric icon={TrendingUp} label="견적 대기" value={`${pipeline.quoteRequests}건`} />
+            <Metric icon={Percent} label="예상 전환율" value={`${pipeline.conversionRate}%`} />
           </div>
         </div>
 
@@ -122,8 +117,8 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
-              <h2 className="text-lg font-black text-slate-950">파이프라인 상태</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">단계별 건수</p>
+              <h2 className="text-lg font-black text-slate-950">상태 분포</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">후속 작업 단계</p>
             </div>
             <div className="space-y-4 p-5">
               <PipelineLine label="견적 요청" value={pipeline.quoteRequests} total={pipeline.items.length} />
@@ -136,8 +131,8 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div>
-                <h2 className="text-lg font-black text-slate-950">매출 후보</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">우선순위 목록</p>
+                <h2 className="text-lg font-black text-slate-950">성장 후보 목록</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500">견적·관심 거래처 우선순위</p>
               </div>
               <Badge className="bg-slate-900 text-white">가중 매출 {pipeline.weightedRevenue.toLocaleString()}만원</Badge>
             </div>
@@ -173,7 +168,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
                   {!pipeline.items.length ? (
                     <tr>
                       <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={5}>
-                        아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
+                        아직 관리 중인 성장 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
                       </td>
                     </tr>
                   ) : null}
