@@ -211,6 +211,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
   const distanceKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
   const durationKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
+  const activeFilterLabels = [
+    query.trim() ? `검색: ${query.trim()}` : "",
+    isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
+    gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
+    excludeClosedStores ? "이탈 제외" : ""
+  ].filter(Boolean);
   const dataRegistrationHref = useMemo(() => {
     if (typeof window === "undefined") return "/?type=customer-master";
     const companyId = new URLSearchParams(window.location.search).get("companyId");
@@ -433,6 +439,20 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <span className="ml-1 text-xs font-black text-slate-500">
             {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
           </span>
+        </div>
+        <div className="flex min-h-7 flex-wrap items-center gap-2 xl:col-span-2">
+          <span className="text-xs font-black text-slate-400">적용 조건</span>
+          {activeFilterLabels.length ? (
+            activeFilterLabels.map((label) => (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
+                {label}
+              </span>
+            ))
+          ) : sourceReady ? (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
+          ) : (
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 마스터 등록 후 표시</span>
+          )}
         </div>
       </section>
 
