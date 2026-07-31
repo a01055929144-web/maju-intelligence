@@ -10,7 +10,6 @@ import {
   FileSpreadsheet,
   HeartPulse,
   HelpCircle,
-  LayoutDashboard,
   LogOut,
   LucideIcon,
   MapPinned,
@@ -52,27 +51,32 @@ type NavigationGroup = {
 
 const navigationGroups: NavigationGroup[] = [
   {
-    label: "운영",
+    label: "지도 홈",
     items: [
-      { active: "dashboard", href: "/dashboard", icon: LayoutDashboard, label: "대시보드" },
-      { active: "routes", href: "/routes/today", icon: Route, label: "영업·배송 코스", badge: "실시간" },
-      { active: "customers", href: "/crm/timeline", icon: Building2, label: "거래처 히스토리" }
+      { active: "dashboard", href: "/dashboard", icon: MapPinned, label: "지도 홈", badge: "메인" }
     ]
   },
   {
-    label: "성장",
+    label: "지도 기반 업무",
     items: [
-      { active: "revenue", href: "/revenue/pipeline", icon: BarChart3, label: "매출 파이프라인" },
+      { active: "routes", href: "/routes/today", icon: Route, label: "영업·배송 코스" },
+      { active: "customers", href: "/crm/timeline", icon: Building2, label: "거래처 원장" }
+    ]
+  },
+  {
+    label: "성장 분석",
+    items: [
+      { active: "revenue", href: "/revenue/pipeline", icon: BarChart3, label: "매출 성장" },
       { active: "revenue", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
       { active: "assistant", href: "/assistant", icon: Sparkles, label: "AI 영업 도우미" },
-      { active: "data", href: "/", icon: FileSpreadsheet, label: "데이터 등록" }
+      { active: "assistant", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
     ]
   },
   {
-    label: "관리",
+    label: "데이터 / 설정",
     items: [
-      { active: "settings", href: "/dashboard/settings", icon: Settings, label: "회사 설정" },
-      { active: "dashboard", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
+      { active: "data", href: "/", icon: FileSpreadsheet, label: "데이터 등록" },
+      { active: "settings", href: "/dashboard/settings", icon: Settings, label: "회사 설정" }
     ]
   }
 ];
@@ -83,7 +87,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   const pathname = usePathname();
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
-  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "고객사 작업공간";
+  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 운영 화면";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
   const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
@@ -127,7 +131,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]">M</span>
                   {!collapsed ? (
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-black">MAJU Intelligence</span>
+                      <span className="block truncate text-sm font-black">MAJU Map OS</span>
                       <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
                     </span>
                   ) : null}
@@ -177,17 +181,18 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                 <div className="maju-panel bg-slate-50 p-3">
                   <div className="flex items-center gap-2 text-xs font-black text-slate-700">
                     <HelpCircle className="h-4 w-4 text-teal-600" />
-                    운영 체크리스트
+                    지도 기준 업무 순서
                   </div>
                   <div className="mt-3 space-y-1">
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/")} icon={FileSpreadsheet} label="기초·매출 데이터 등록" step="1" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="DB 거래처 원장 확인" step="2" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="영업·배송 코스 확정" step="3" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/dashboard")} icon={MapPinned} label="지도 홈에서 현황 확인" step="1" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 원장 관리" step="2" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="영업·배송 코스 계산" step="3" />
+                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/revenue/pipeline")} icon={BarChart3} label="성장 기회 분석" step="4" />
                   </div>
                   <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">
                     {mode === "admin-preview"
                       ? "관리자는 고객사 화면을 확인만 하고, 계정과 회사 권한 관리는 어드민에서 처리합니다."
-                      : "데이터, DB 거래처 원장, 코스가 같은 회사 기준으로 이어져야 현장 운영 화면이 정확해집니다."}
+                      : "모든 업무는 지도 홈의 거래처 위치와 출발지 기준으로 이어집니다."}
                   </p>
                 </div>
               </div>

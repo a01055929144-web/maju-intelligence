@@ -114,23 +114,23 @@ export function MapHomeView({
       items: [{ active: true, href: mapHomeHref, icon: LayoutDashboard, label: "지도 홈" }]
     },
     {
-      label: "운영",
+      label: "지도 기반 업무",
       items: [
         { active: false, href: quickNav.routeHref, icon: Route, label: "영업·배송 코스" },
-        { active: false, href: quickNav.timelineHref, icon: Building2, label: "거래처 히스토리" }
+        { active: false, href: quickNav.timelineHref, icon: Building2, label: "거래처 원장" }
       ]
     },
     {
-      label: "성장",
+      label: "성장 분석",
       items: [
-        { active: false, href: quickNav.pipelineHref, icon: TrendingUp, label: "매출 파이프라인" },
+        { active: false, href: quickNav.pipelineHref, icon: TrendingUp, label: "매출 성장" },
         { active: false, href: quickNav.transactionsHref, icon: ReceiptText, label: "매출 거래내역" },
         { active: false, href: quickNav.assistantHref, icon: Sparkles, label: "AI 영업 도우미" },
         { active: false, href: quickNav.reportHref, icon: HeartPulse, label: "AI 리포트" }
       ]
     },
     {
-      label: "관리",
+      label: "데이터 / 설정",
       items: [{ active: false, href: quickNav.dataRegistrationHref, icon: FileSpreadsheet, label: "데이터 등록" }]
     }
   ];
@@ -229,7 +229,7 @@ export function MapHomeView({
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
           <div className="min-w-0">
-            <p className="maju-section-title">작업 메뉴</p>
+            <p className="maju-section-title">MAJU Map OS</p>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{userName} · {originAddress}</p>
           </div>
           <button aria-label="메뉴 닫기" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100" onClick={() => setDrawerOpen(false)} type="button">
