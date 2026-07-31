@@ -453,15 +453,7 @@ export default function Home() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      rightAction={
-        <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
-          href={adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today"}
-        >
-          영업·배송 코스
-        </Link>
-      }
-      subtitle="거래처 마스터와 매출 거래내역을 등록하고, 업로드 양식과 현재 데이터를 내려받습니다."
+      subtitle="거래처 마스터와 매출 거래내역을 지도 홈 기준 데이터로 등록합니다."
       title="데이터 등록"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
@@ -548,33 +540,30 @@ function WorkspaceModeTabs({
   }[active as "briefing" | "onboarding" | "report"] || ["매장 기본정보 · 매출 거래내역", "거래처 마스터와 매출 데이터를 운영 자산으로 관리합니다."];
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <div className="min-w-0">
         <p className="text-sm font-black text-slate-950">{copy[0]}</p>
-        <p className="mt-1 text-xs font-bold text-slate-500">{copy[1]}</p>
+        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{copy[1]}</p>
       </div>
-      <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:w-auto sm:grid-cols-3">
+      <div className="grid w-full gap-1 rounded-md border border-slate-200 bg-slate-50 p-1 sm:w-auto sm:grid-cols-3">
         {tabs.map(([key, label]) => {
           const disabled = key === "report" && !hasReport;
           return (
           <button
             key={key}
-            className={`min-w-[112px] rounded-lg border px-3 py-2.5 text-left transition ${
+            className={`h-9 min-w-[104px] rounded px-3 text-left transition ${
               disabled
-                ? "cursor-not-allowed border-transparent bg-slate-100 text-slate-400"
+                ? "cursor-not-allowed bg-slate-100 text-slate-400"
                 : active === key
-                  ? "border-blue-700 bg-blue-700 text-white shadow-[0_8px_18px_rgba(29,78,216,0.18)]"
-                  : "border-transparent bg-white/50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
+                  ? "bg-blue-700 text-white shadow-sm"
+                  : "bg-transparent text-slate-600 hover:bg-white hover:text-slate-950"
             }`}
             disabled={disabled}
             onClick={() => onMove(key)}
             type="button"
             title={disabled ? "거래처 또는 매출 데이터를 저장한 뒤 리포트를 확인할 수 있습니다." : undefined}
           >
-            <span className="block text-sm font-black">{label}</span>
-            <span className={`mt-1 block text-[11px] font-bold ${active === key ? "text-white/75" : "text-slate-400"}`}>
-              {key === "briefing" ? "준비" : key === "onboarding" ? "입력" : disabled ? "저장 후" : "결과"}
-            </span>
+            <span className="block text-xs font-black">{label}</span>
           </button>
           );
         })}
