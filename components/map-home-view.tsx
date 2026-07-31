@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -106,6 +106,22 @@ export function MapHomeView({
 }: MapHomeViewProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [consistencyOpen, setConsistencyOpen] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(64);
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setHeaderHeight(Math.ceil(entry.contentRect.height));
+    });
+    observer.observe(header);
+    setHeaderHeight(Math.ceil(header.getBoundingClientRect().height));
+
+    return () => observer.disconnect();
+  }, []);
 
   const mapHomeHref = isAdminPreview && companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard";
   const navGroups: NavGroup[] = [
@@ -150,7 +166,12 @@ export function MapHomeView({
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-slate-900">
       <div className="absolute inset-0">
-        <KakaoAddressMap mapClassName="h-full w-full rounded-none border-0" markers={mapMarkers} showList={false} />
+        <KakaoAddressMap
+          controlsOffsetPx={headerHeight + 12}
+          mapClassName="h-full w-full rounded-none border-0"
+          markers={mapMarkers}
+          showList={false}
+        />
       </div>
 
       {drawerOpen ? (
@@ -162,7 +183,7 @@ export function MapHomeView({
         />
       ) : null}
 
-      <header className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,.08)]">
+      <header ref={headerRef} className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,.08)]">
         <div className="flex min-h-16 items-center gap-3 px-3 py-2 sm:px-4">
           <div className="flex min-w-[220px] items-center gap-2">
             <button

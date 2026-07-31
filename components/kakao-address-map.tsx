@@ -22,6 +22,7 @@ export type KakaoRoutePoint = {
 };
 
 type KakaoAddressMapProps = {
+  readonly controlsOffsetPx?: number;
   readonly fallbackReason?: string;
   readonly focusedMarkerId?: string;
   readonly mapClassName?: string;
@@ -49,7 +50,15 @@ const defaultMapClassName = "h-[360px]";
 const kakaoSdkTimeoutMs = 5000;
 const kakaoGeocodeTimeoutMs = 4500;
 
-export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClassName, markers, onMarkerClick, routePath = emptyRoutePath, showList = true }: KakaoAddressMapProps) {
+export function KakaoAddressMap({
+  controlsOffsetPx,
+  focusedMarkerId,
+  mapClassName = defaultMapClassName,
+  markers,
+  onMarkerClick,
+  routePath = emptyRoutePath,
+  showList = true
+}: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const boundsRef = useRef<any>(null);
@@ -180,7 +189,18 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
   }, [appKey, canUseKakao, focusedMarkerId, markers, onMarkerClick, routePath]);
 
   if (status === "fallback") {
-    return <FallbackAddressMap fallbackReason={fallbackReason} focusedMarkerId={focusedMarkerId} mapClassName={mapClassName} markers={markers} onMarkerClick={onMarkerClick} routePath={routePath} showList={showList} />;
+    return (
+      <FallbackAddressMap
+        controlsOffsetPx={controlsOffsetPx}
+        fallbackReason={fallbackReason}
+        focusedMarkerId={focusedMarkerId}
+        mapClassName={mapClassName}
+        markers={markers}
+        onMarkerClick={onMarkerClick}
+        routePath={routePath}
+        showList={showList}
+      />
+    );
   }
 
   const moveToCurrentLocation = () => {
@@ -247,6 +267,7 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
         <MapControls
+          offsetPx={controlsOffsetPx}
           onFitAll={fitAllMarkers}
           onLargeMap={openLargeMap}
           onLocation={moveToCurrentLocation}
@@ -264,18 +285,23 @@ export function KakaoAddressMap({ focusedMarkerId, mapClassName = defaultMapClas
 }
 
 function MapControls({
+  offsetPx,
   onFitAll,
   onLargeMap,
   onLocation,
   onRoadview
 }: {
+  readonly offsetPx?: number;
   readonly onFitAll: () => void;
   readonly onLargeMap: () => void;
   readonly onLocation: () => void;
   readonly onRoadview: () => void;
 }) {
   return (
-    <div className="absolute right-3 top-3 z-20 flex flex-wrap justify-end gap-2">
+    <div
+      className="absolute right-3 z-20 flex flex-wrap justify-end gap-2"
+      style={{ top: offsetPx !== undefined ? `${offsetPx}px` : "0.75rem" }}
+    >
       <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onLocation} type="button">
         <Crosshair className="h-3.5 w-3.5" />
         내 위치
@@ -497,6 +523,7 @@ function escapeHtml(value: string) {
 }
 
 function FallbackAddressMap({
+  controlsOffsetPx,
   fallbackReason,
   focusedMarkerId,
   mapClassName = defaultMapClassName,
@@ -512,7 +539,7 @@ function FallbackAddressMap({
   return (
     <div className={wrapperClassName}>
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
-        <div className="absolute right-3 top-3 z-30">
+        <div className="absolute right-3 z-30" style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
           <button
             className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800"
             onClick={() => openInternalLargeMap({ focusedMarkerId, markers, routePath: routePath || emptyRoutePath })}
