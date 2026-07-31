@@ -211,12 +211,6 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
   const distanceKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
   const durationKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
-  const activeFilterLabels = [
-    query.trim() ? `검색: ${query.trim()}` : "",
-    isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
-    gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
-    excludeClosedStores ? "이탈 제외" : ""
-  ].filter(Boolean);
   const dataRegistrationHref = useMemo(() => {
     if (typeof window === "undefined") return "/?type=customer-master";
     const companyId = new URLSearchParams(window.location.search).get("companyId");
@@ -439,20 +433,6 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <span className="ml-1 text-xs font-black text-slate-500">
             {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
           </span>
-        </div>
-        <div className="flex min-h-7 flex-wrap items-center gap-2 xl:col-span-2">
-          <span className="text-xs font-black text-slate-400">적용 조건</span>
-          {activeFilterLabels.length ? (
-            activeFilterLabels.map((label) => (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
-                {label}
-              </span>
-            ))
-          ) : sourceReady ? (
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
-          ) : (
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 마스터 등록 후 표시</span>
-          )}
         </div>
       </section>
 
@@ -2506,11 +2486,11 @@ function Kpi({
   }[tone];
 
   return (
-    <div className={`relative min-w-0 overflow-hidden border-r border-slate-200/80 px-4 py-3 last:border-r-0 ${backgroundClass}`}>
+    <div className={`relative min-w-0 overflow-hidden border-r border-slate-200/80 px-4 py-2.5 last:border-r-0 ${backgroundClass}`}>
       <span className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
       <p className="truncate text-[11px] font-black text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-[22px] font-black leading-none ${valueClass}`}>{value}</p>
-      {helper ? <p className="mt-2 truncate text-[11px] font-bold text-slate-400">{helper}</p> : null}
+      <p className={`mt-1 truncate text-[20px] font-black leading-none ${valueClass}`}>{value}</p>
+      {helper ? <p className="mt-1.5 truncate text-[10px] font-bold text-slate-400">{helper}</p> : null}
     </div>
   );
 }
@@ -2544,22 +2524,19 @@ function RouteBasisStrip({
   const durationValue = sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산";
 
   return (
-    <section className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(580px,auto)] xl:items-center">
-      <div className="min-w-0">
-        <p className="text-xs font-black text-slate-500">화면 기준값</p>
-        <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
-          이 화면의 숫자는 전체 거래처 원장, 현재 필터, 지도 표시 가능 매장을 구분해서 보여줍니다. 경유 최적화 값은 오늘 코스에서 티맵 계산을 실행하면 별도로 갱신됩니다.
-        </p>
+    <section className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 xl:flex-row xl:items-center">
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-xs font-black text-slate-500">기준</span>
         {!sourceReady ? (
           <Link
-            className="mt-2 inline-flex h-8 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800"
+            className="inline-flex h-7 items-center justify-center rounded-md bg-teal-700 px-2.5 text-[11px] font-black text-white shadow-sm transition hover:bg-teal-800"
             href={dataRegistrationHref}
           >
-            거래처 마스터 등록
+            마스터 등록
           </Link>
         ) : null}
       </div>
-      <div className="grid overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
+      <div className="grid min-w-0 flex-1 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
         <RouteBasisMetric label="DB 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
         <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 매장 합산" tone={sourceReady ? "default" : "warning"} />
@@ -2575,13 +2552,13 @@ function RouteBasisMetric({ helper, label, tone = "default", value }: { readonly
   const dotClass = tone === "ready" ? "bg-emerald-500" : tone === "warning" ? "bg-amber-500" : "bg-slate-300";
 
   return (
-    <div className="min-w-0 border-b border-r border-slate-100 px-3 py-2 last:border-r-0 2xl:border-b-0">
+    <div className="min-w-0 border-b border-r border-slate-100 px-3 py-1.5 last:border-r-0 2xl:border-b-0">
       <p className="flex min-w-0 items-center gap-1.5 truncate text-[11px] font-black text-slate-400">
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
         <span className="truncate">{label}</span>
       </p>
       <p className={`mt-1 truncate text-sm font-black ${valueClass}`}>{value}</p>
-      {helper ? <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{helper}</p> : null}
+      {helper ? <p className="truncate text-[10px] font-bold text-slate-500">{helper}</p> : null}
     </div>
   );
 }
