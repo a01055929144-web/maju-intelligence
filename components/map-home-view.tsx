@@ -185,7 +185,7 @@ export function MapHomeView({
 
       <header ref={headerRef} className="pointer-events-auto absolute inset-x-0 top-0 z-40 border-b border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,.08)]">
         <div className="flex min-h-16 items-center gap-3 px-3 py-2 sm:px-4">
-          <div className="flex min-w-[220px] items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 sm:min-w-[220px]">
             <button
               aria-label="메뉴 열기"
               className="grid h-8 w-8 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100"
@@ -216,14 +216,14 @@ export function MapHomeView({
               href={quickNav.assistantHref}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              AI
+              <span className="hidden sm:inline">AI</span>
             </Link>
             <Link
               className="maju-button-secondary h-9 shrink-0 px-3 shadow-sm"
               href={quickNav.settingsHref}
             >
               <Settings className="h-3.5 w-3.5" />
-              설정
+              <span className="hidden sm:inline">설정</span>
             </Link>
             {!isAdminPreview ? <LogoutButton /> : (
               <Link
@@ -253,9 +253,10 @@ export function MapHomeView({
       </header>
 
       <aside
-        className={`pointer-events-auto absolute bottom-0 left-0 top-16 z-40 flex w-[336px] max-w-[88vw] transform flex-col rounded-r-xl border border-l-0 border-slate-200 bg-white shadow-[12px_0_32px_rgba(15,23,42,.12)] transition-transform duration-150 ${
+        className={`pointer-events-auto absolute bottom-0 left-0 z-40 flex w-[336px] max-w-[88vw] transform flex-col rounded-r-xl border border-l-0 border-slate-200 bg-white shadow-[12px_0_32px_rgba(15,23,42,.12)] transition-transform duration-150 ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ top: headerHeight }}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
           <div className="min-w-0">
@@ -276,12 +277,14 @@ export function MapHomeView({
               </p>
             </div>
             <p className="maju-muted-label px-2 pb-2">지도 홈 하위 작업</p>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               {primaryActions.map((item) => (
-                <Link className="maju-filter-box flex h-[72px] flex-col items-center justify-center gap-1 px-1 text-center hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
+                <Link className="maju-filter-box flex h-[64px] items-center gap-2 px-3 text-left hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
                   <item.icon className="h-4 w-4 text-teal-700" />
-                  <span className="text-[11px] font-black text-slate-700">{item.label}</span>
-                  <span className="text-[10px] font-bold text-slate-400">{item.helper}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12px] font-black text-slate-800">{item.label}</span>
+                    <span className="block truncate text-[10px] font-bold text-slate-400">{item.helper}</span>
+                  </span>
                 </Link>
               ))}
             </div>
@@ -430,7 +433,7 @@ function LogoutButton() {
       type="button"
     >
       <LogOut className="h-3.5 w-3.5" />
-      로그아웃
+      <span className="hidden sm:inline">로그아웃</span>
     </button>
   );
 }
