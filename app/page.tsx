@@ -2928,34 +2928,32 @@ function OperationalDataSplit({
 }) {
   const cards = [
     {
-      checks: ["사업자번호/상호명", "배송주소/권역", "대표자/연락처", "첨부자료/메모"],
-      description: "거래처 히스토리, 지도 마커, 배송차 배정의 기준 데이터입니다.",
+      checks: ["사업자번호", "배송주소", "담당자", "첨부자료"],
+      description: "지도, 배송차, 거래처 히스토리의 기준값",
       icon: Building2,
       key: "customer-master" as UploadTemplateType,
       label: "거래처 마스터",
-      rhythm: "최초 1회 등록 후 수정",
-      target: "히스토리 · 지도 · 배송 코스"
+      rhythm: "최초 등록 후 수정",
+      target: "지도 · 히스토리 · 배송"
     },
     {
-      checks: ["거래처 key", "매출일자", "품목/수량", "공급가/총매출"],
-      description: "매출 등급, 품목 이탈, 리포트 수치와 영업 우선순위를 갱신합니다.",
+      checks: ["거래처 key", "매출일자", "품목", "금액"],
+      description: "등급, 이탈, 리포트 수치를 갱신하는 반복 데이터",
       icon: Banknote,
       key: "sales-analysis" as UploadTemplateType,
       label: "매출 거래내역",
-      rhythm: "일/월/분기 반복 업데이트",
-      target: "등급 · 이탈 · AI 리포트"
+      rhythm: "일·월·분기 업로드",
+      target: "등급 · 원장 · 리포트"
     }
   ];
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+    <div className="rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <Badge className="mb-3 bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200">1. 데이터 기준 선택</Badge>
-          <h2 className="text-xl font-black text-slate-950">거래처 기준값과 매출 업데이트를 구분하세요</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-            거래처 마스터는 기준값이고, 매출 거래내역은 반복 업데이트 데이터입니다. 선택에 따라 필수 컬럼과 검증 기준이 달라집니다.
-          </p>
+          <Badge className="mb-2 bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200">1. 데이터 기준 선택</Badge>
+          <h2 className="text-xl font-black text-slate-950">무엇을 등록할지 먼저 선택하세요</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처는 고정 기준값, 매출은 반복 업데이트 값입니다.</p>
         </div>
         <div className="grid gap-2 text-xs font-black text-slate-500 sm:grid-cols-2">
           <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">저장 대기 {rowsWaiting.toLocaleString()}행</span>
@@ -2963,7 +2961,7 @@ function OperationalDataSplit({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-0 lg:grid-cols-2">
         {cards.map((card) => {
           const Icon = card.icon;
           const active = activeType === card.key;
@@ -2971,33 +2969,37 @@ function OperationalDataSplit({
           return (
             <button
               key={card.key}
-              className={`rounded-md border p-4 text-left transition ${
-                active ? "border-blue-300 bg-blue-50 ring-1 ring-blue-100" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+              className={`border-b p-4 text-left transition last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0 ${
+                active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
               onClick={() => onSelect(card.key)}
               type="button"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 gap-3">
                   <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-md ${active ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                     <Icon className="h-5 w-5" />
                   </span>
                   <div className="min-w-0">
                     <p className="text-base font-black text-slate-950">{card.label}</p>
-                    <p className="mt-1 text-sm font-bold leading-6 text-slate-500">{card.description}</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{card.description}</p>
                   </div>
                 </div>
-                <Badge className={active ? "bg-white text-blue-800 ring-1 ring-inset ring-blue-100" : "bg-slate-100 text-slate-600"}>
-                  {active ? "선택됨" : "선택"}
-                </Badge>
+                {active ? <CheckCircle2 className="h-5 w-5 shrink-0 text-blue-700" /> : <Badge className="bg-slate-100 text-slate-600">선택</Badge>}
               </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                <MiniStatus label="업데이트 주기" value={card.rhythm} />
-                <MiniStatus label="반영 화면" value={card.target} />
+              <div className="mt-4 grid overflow-hidden rounded-md border border-slate-200 bg-white md:grid-cols-2">
+                <div className="border-b border-slate-200 px-3 py-2 md:border-b-0 md:border-r">
+                  <p className="text-[11px] font-black text-slate-400">주기</p>
+                  <p className="mt-1 text-xs font-black text-slate-950">{card.rhythm}</p>
+                </div>
+                <div className="px-3 py-2">
+                  <p className="text-[11px] font-black text-slate-400">반영</p>
+                  <p className="mt-1 text-xs font-black text-slate-950">{card.target}</p>
+                </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {card.checks.map((check) => (
-                  <span key={check} className="rounded-md bg-white px-2 py-1 text-xs font-black text-slate-600 ring-1 ring-inset ring-slate-200">
+                  <span key={check} className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200">
                     {check}
                   </span>
                 ))}
