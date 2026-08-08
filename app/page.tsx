@@ -3274,13 +3274,11 @@ function PlaceLinkCapturePanel({
 
   return (
     <div className="mt-4 overflow-hidden rounded-md border border-teal-100 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <Badge className="mb-2 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">운영 링크</Badge>
           <h3 className="text-base font-black text-slate-950">매장 외부 정보 링크</h3>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
-            네이버, 카카오맵, 구글맵 링크를 저장하면 리뷰·영업시간·폐업 여부 확인의 기준값으로 활용할 수 있습니다.
-          </p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">리뷰, 영업시간, 폐업 여부 확인용 선택값입니다.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {searchLinks.map((link) => (
@@ -3298,10 +3296,10 @@ function PlaceLinkCapturePanel({
           ))}
         </div>
       </div>
-      <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="grid gap-0 md:grid-cols-3">
           {fields.map((field) => (
-            <label key={field.key} className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <label key={field.key} className="space-y-1.5 border-b border-slate-200 bg-white p-3 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
               <span className="text-xs font-black text-slate-500">{field.label}</span>
               <input
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-teal-200"
@@ -3311,16 +3309,14 @@ function PlaceLinkCapturePanel({
                 type="url"
                 value={String(manualDraft[field.key] ?? "")}
               />
-              <span className="block text-xs font-bold leading-5 text-slate-500">{field.description}</span>
+              <span className="block truncate text-xs font-bold leading-5 text-slate-500">{field.description}</span>
             </label>
           ))}
         </div>
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="border-t border-slate-200 bg-slate-50 p-3 lg:border-l lg:border-t-0">
           <p className="text-xs font-black text-slate-500">등록 상태</p>
           <p className="mt-1 text-2xl font-black text-slate-950">{filledCount}/{fields.length}</p>
-          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-            링크는 선택값입니다. 우선 매장을 저장하고, 거래처 히스토리에서 나중에 보완해도 됩니다.
-          </p>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">선택값 · 나중에 보완 가능</p>
         </div>
       </div>
     </div>
