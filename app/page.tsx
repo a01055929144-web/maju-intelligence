@@ -3354,19 +3354,19 @@ function ManualEntryProgress({
   const doneCount = items.filter((item) => item.ok).length;
 
   return (
-    <div className={`mt-4 rounded-md border p-3 ${ready ? "border-emerald-200 bg-emerald-50" : "border-blue-100 bg-blue-50/60"}`}>
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className={`mt-4 overflow-hidden rounded-md border ${ready ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-col gap-2 border-b border-white/70 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">수기 등록 준비 상태</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">필수값, 배송주소, 사업자번호가 모두 맞으면 바로 저장할 수 있습니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">필수값, 주소, 사업자번호 확인 후 저장합니다.</p>
         </div>
         <Badge className={ready ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}>
           {doneCount}/3 완료
         </Badge>
       </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="grid divide-y divide-slate-100 bg-white md:grid-cols-3 md:divide-x md:divide-y-0">
         {items.map((item) => (
-          <div key={item.label} className={`rounded-md border px-3 py-2 ${item.ok ? "border-emerald-100 bg-white text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
+          <div key={item.label} className={`px-4 py-3 ${item.ok ? "bg-emerald-50/70 text-emerald-900" : "bg-white text-slate-700"}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-black">{item.label}</span>
               {item.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <Clock className="h-4 w-4 text-slate-400" />}
@@ -3424,7 +3424,7 @@ function BulkEntryProgress({
       <div className="flex flex-col gap-2 border-b border-white/70 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">대량 등록 준비 상태</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">파일 업로드, 필수 컬럼 매핑, 품질 검증이 끝나면 상단에서 바로 DB 저장을 실행합니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">파일, 매핑, 품질 검증 후 DB 저장을 실행합니다.</p>
         </div>
         <Badge className={complete ? "bg-emerald-700 text-white" : "bg-slate-900 text-white"}>
           {doneCount}/4 완료
