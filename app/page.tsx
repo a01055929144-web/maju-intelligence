@@ -1279,47 +1279,77 @@ function Onboarding({
   return (
     <section className="space-y-4">
       <div className="space-y-4">
-        <RegistrationControlStrip
+        <DataRegistrationQuickPanel
+          activeType={uploadType}
           canAnalyze={canAnalyze}
           entryMode={entryMode}
           filename={uploadedFilename}
           isAnalyzing={isAnalyzing}
-          latestUploadAt={latestUpload?.createdAt}
           onAnalyze={onAnalyze}
+          onSelectMode={(mode) => {
+            if (mode === "document") onUploadType("customer-master");
+            setEntryMode(mode);
+          }}
+          onSelectType={onUploadType}
           persisted={pipelineMeta.persisted}
-          readyCount={readyCheckCount}
           registrationStatus={registrationStatus}
-          rows={rawRows.length}
-          state={registrationControlState}
-          totalCount={saveReadinessItems.length}
-          typeLabel={template.label}
-        />
-        <RegistrationLiveStatusBoard
-          canAnalyze={canAnalyze}
-          dashboardHref={dashboardHref}
-          entryMode={entryMode}
-          filename={uploadedFilename}
-          latestUpload={latestUpload}
-          ledgerHref={currentLedgerHref}
-          ledgerLabel={currentLedgerLabel}
-          onOpenReviewTab={setReviewTab}
-          persisted={pipelineMeta.persisted}
-          readinessItems={saveReadinessItems}
-          readinessPercent={readinessPercent}
-          registrationStatus={registrationStatus}
-          routeHref={routeHref}
           rows={rawRows.length}
           typeLabel={template.label}
         />
-        <OperationalCommandStrip
-          activeType={uploadType}
-          canAnalyze={canAnalyze}
-          entryMode={entryMode}
-          latestUploadAt={latestUpload?.createdAt}
-          onSelect={onUploadType}
-          persisted={pipelineMeta.persisted}
-          rowsWaiting={rawRows.length}
-        />
+        <details className="maju-section-card overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+            <span>
+              <span className="block text-sm font-black text-slate-950">상세 등록 상태</span>
+              <span className="mt-0.5 block text-xs font-bold text-slate-500">저장 준비율, DB 반영 상태, 운영 화면 연결은 필요할 때 펼쳐서 확인합니다.</span>
+            </span>
+            <Badge className={canAnalyze ? "bg-blue-100 text-blue-800" : pipelineMeta.persisted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
+              {pipelineMeta.persisted ? "DB 반영" : canAnalyze ? "저장 가능" : "확인 필요"}
+            </Badge>
+          </summary>
+          <div className="space-y-3 border-t border-slate-200 bg-slate-50/60 p-3">
+            <RegistrationControlStrip
+              canAnalyze={canAnalyze}
+              entryMode={entryMode}
+              filename={uploadedFilename}
+              isAnalyzing={isAnalyzing}
+              latestUploadAt={latestUpload?.createdAt}
+              onAnalyze={onAnalyze}
+              persisted={pipelineMeta.persisted}
+              readyCount={readyCheckCount}
+              registrationStatus={registrationStatus}
+              rows={rawRows.length}
+              state={registrationControlState}
+              totalCount={saveReadinessItems.length}
+              typeLabel={template.label}
+            />
+            <RegistrationLiveStatusBoard
+              canAnalyze={canAnalyze}
+              dashboardHref={dashboardHref}
+              entryMode={entryMode}
+              filename={uploadedFilename}
+              latestUpload={latestUpload}
+              ledgerHref={currentLedgerHref}
+              ledgerLabel={currentLedgerLabel}
+              onOpenReviewTab={setReviewTab}
+              persisted={pipelineMeta.persisted}
+              readinessItems={saveReadinessItems}
+              readinessPercent={readinessPercent}
+              registrationStatus={registrationStatus}
+              routeHref={routeHref}
+              rows={rawRows.length}
+              typeLabel={template.label}
+            />
+            <OperationalCommandStrip
+              activeType={uploadType}
+              canAnalyze={canAnalyze}
+              entryMode={entryMode}
+              latestUploadAt={latestUpload?.createdAt}
+              onSelect={onUploadType}
+              persisted={pipelineMeta.persisted}
+              rowsWaiting={rawRows.length}
+            />
+          </div>
+        </details>
         <details className="maju-section-card overflow-hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
             <span>
@@ -1355,25 +1385,24 @@ function Onboarding({
         <div className="maju-section-card border-l-4 border-l-blue-600 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 등록 방식</Badge>
+              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 입력 화면</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">대량은 엑셀, 신규 1건은 수기 등록이 기본입니다. OCR은 선택 보조 기능입니다.</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">위에서 선택한 방식에 맞는 입력 화면만 표시합니다.</p>
             </div>
-            <RegistrationMethodCards
-              activeMode={entryMode}
-              onSelect={(mode) => {
-                if (mode === "document") onUploadType("customer-master");
-                setEntryMode(mode);
-              }}
-            />
+            <Badge className="w-fit bg-slate-100 px-3 py-1.5 text-slate-700">{entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력"}</Badge>
           </div>
-          <RegistrationPathGuide
-            activeType={uploadType}
-            canAnalyze={canAnalyze}
-            entryMode={entryMode}
-            persisted={pipelineMeta.persisted}
-            rowsWaiting={rawRows.length}
-          />
+          <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50/70">
+            <summary className="cursor-pointer list-none px-3 py-2 text-xs font-black text-slate-600">등록 기준 보기</summary>
+            <div className="border-t border-slate-200 bg-white p-3">
+              <RegistrationPathGuide
+                activeType={uploadType}
+                canAnalyze={canAnalyze}
+                entryMode={entryMode}
+                persisted={pipelineMeta.persisted}
+                rowsWaiting={rawRows.length}
+              />
+            </div>
+          </details>
 
           {entryMode === "excel" ? (
             <>
@@ -1785,6 +1814,151 @@ function Onboarding({
         </div>
       </aside>
     </section>
+  );
+}
+
+function DataRegistrationQuickPanel({
+  activeType,
+  canAnalyze,
+  entryMode,
+  filename,
+  isAnalyzing,
+  onAnalyze,
+  onSelectMode,
+  onSelectType,
+  persisted,
+  registrationStatus,
+  rows,
+  typeLabel
+}: {
+  activeType: UploadTemplateType;
+  canAnalyze: boolean;
+  entryMode: EntryMode;
+  filename: string;
+  isAnalyzing: boolean;
+  onAnalyze: () => void;
+  onSelectMode: (mode: EntryMode) => void;
+  onSelectType: (type: UploadTemplateType) => void;
+  persisted: boolean;
+  registrationStatus: RegistrationStatus;
+  rows: number;
+  typeLabel: string;
+}) {
+  const typeOptions = [
+    {
+      description: "사업자번호, 주소, 대표자, 연락처를 기준값으로 저장",
+      icon: Building2,
+      id: "customer-master" as UploadTemplateType,
+      label: "거래처 마스터"
+    },
+    {
+      description: "ERP 매출 원장을 반복 업로드해 분석값 업데이트",
+      icon: Banknote,
+      id: "sales-analysis" as UploadTemplateType,
+      label: "매출 거래내역"
+    }
+  ];
+  const modeOptions = [
+    { icon: Upload, id: "excel" as EntryMode, label: "엑셀 업로드", value: "대량 등록" },
+    { icon: Building2, id: "manual" as EntryMode, label: "수기 등록", value: "신규 1곳" },
+    { icon: FileSpreadsheet, id: "document" as EntryMode, label: "OCR 보조", value: "선택" }
+  ];
+  const statusTone = persisted ? "bg-emerald-50 text-emerald-800 ring-emerald-100" : canAnalyze ? "bg-blue-50 text-blue-800 ring-blue-100" : rows ? "bg-amber-50 text-amber-800 ring-amber-100" : "bg-slate-100 text-slate-700 ring-slate-200";
+  const nextLabel = persisted ? "반영 완료" : canAnalyze ? "저장 실행" : rows ? "검수 필요" : "등록 시작";
+  const nextDescription = persisted
+    ? "대시보드, 원장, 지도에서 같은 데이터 기준으로 확인하세요."
+    : canAnalyze
+      ? "필수 조건이 맞았습니다. 저장하고 리포트를 갱신하세요."
+      : rows
+        ? "컬럼 매핑과 품질 검증을 먼저 확인하세요."
+        : "거래처 마스터 또는 매출 거래내역을 선택하고 등록 방식을 고르세요.";
+
+  return (
+    <div className="maju-section-card overflow-hidden border-l-4 border-l-teal-700">
+      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">1. 데이터 등록</Badge>
+              <h2 className="mt-3 text-xl font-black text-slate-950">먼저 등록할 데이터와 방식을 선택하세요</h2>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">복잡한 설명은 접어두고, 실제 작업은 아래 버튼 순서대로 진행합니다.</p>
+            </div>
+            <Badge className={`w-fit px-3 py-1.5 text-xs font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-black text-slate-500">등록 데이터</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {typeOptions.map((option) => {
+                  const selected = activeType === option.id;
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      className={`min-h-[88px] rounded-lg border p-3 text-left transition ${
+                        selected ? "border-teal-300 bg-teal-50 text-teal-950 ring-2 ring-teal-100" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50/50"
+                      }`}
+                      key={option.id}
+                      onClick={() => onSelectType(option.id)}
+                      type="button"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2 text-sm font-black">
+                          <Icon className={selected ? "h-4 w-4 text-teal-700" : "h-4 w-4 text-slate-400"} />
+                          {option.label}
+                        </span>
+                        {selected ? <CheckCircle2 className="h-4 w-4 text-teal-700" /> : null}
+                      </span>
+                      <span className="mt-2 block text-xs font-bold leading-5 text-slate-500">{option.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-black text-slate-500">등록 방식</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {modeOptions.map((option) => {
+                  const selected = entryMode === option.id;
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      className={`h-[88px] rounded-lg border p-3 text-left transition ${
+                        selected ? "border-slate-950 bg-slate-950 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
+                      }`}
+                      key={option.id}
+                      onClick={() => onSelectMode(option.id)}
+                      type="button"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{option.value}</span>
+                      </span>
+                      <span className="mt-3 block text-sm font-black">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50/80 p-4 xl:border-l xl:border-t-0">
+          <p className="text-xs font-black text-slate-400">현재 작업</p>
+          <p className="mt-1 text-lg font-black text-slate-950">{typeLabel}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <MiniStatus label="대기 행" value={rows ? `${rows.toLocaleString()}행` : "없음"} />
+            <MiniStatus label="파일" value={rows ? filename : "선택 전"} />
+          </div>
+          <p className="mt-3 rounded-md bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600 ring-1 ring-inset ring-slate-200">{nextDescription}</p>
+          <Button className="maju-button-primary mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
+            {isAnalyzing ? "저장 중" : canAnalyze ? "저장하고 리포트 갱신" : registrationStatus.actionLabel}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
