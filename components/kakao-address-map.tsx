@@ -76,7 +76,7 @@ export function KakaoAddressMap({
       setFallbackReason("");
 
       if (!canUseKakao || !mapRef.current) {
-        setFallbackReason("NEXT_PUBLIC_KAKAO_MAP_APP_KEY가 없거나 기본값입니다.");
+        setFallbackReason(`카카오맵 JavaScript 키가 현재 배포 런타임에 없습니다. Vercel Production에 NEXT_PUBLIC_KAKAO_MAP_APP_KEY를 다시 등록하고 재배포하세요.${getKakaoDomainHint()}`);
         setStatus("fallback");
         return;
       }
@@ -344,10 +344,11 @@ function createKakaoSearchUrl(marker?: KakaoMapMarker) {
 
 function getKakaoDomainHint() {
   if (typeof window === "undefined") return "";
+  const origin = window.location.origin;
   const host = window.location.hostname;
   if (host === "maju-intelligence.vercel.app" || host === "localhost") return "";
   if (host.endsWith(".vercel.app")) {
-    return " 카카오 JavaScript 키에는 보통 대표 도메인(maju-intelligence.vercel.app)을 등록하므로, 개별 배포 URL에서는 지도가 제한될 수 있습니다.";
+    return ` Kakao Developers > 플랫폼 > Web 사이트 도메인에 ${origin}도 함께 등록해야 합니다.`;
   }
   return "";
 }
@@ -552,6 +553,15 @@ function FallbackAddressMap({
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
           {fallbackReason || (routePath?.length ? "카카오맵 로딩 후 티맵 도로 경로가 표시됩니다." : "지도 좌표를 불러오지 못해 마커 위치만 표시합니다.")}
         </div>
+        {fallbackReason ? (
+          <div className="absolute left-1/2 top-1/2 z-20 w-[min(520px,calc(100%-32px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-amber-200 bg-white/95 p-4 shadow-xl">
+            <p className="text-sm font-black text-slate-950">지도 연결 확인 필요</p>
+            <p className="mt-2 text-xs font-bold leading-5 text-slate-600">{fallbackReason}</p>
+            <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold leading-5 text-amber-900">
+              현재 배포 URL이 바뀌면 Vercel Production 환경변수와 Kakao Developers Web 도메인을 함께 맞춰야 실제 지도가 표시됩니다.
+            </p>
+          </div>
+        ) : null}
         {!displayMarkers.length ? (
           <div className="absolute inset-0 grid place-items-center p-6 text-center">
             <div className="rounded-md border border-slate-200 bg-white/95 p-5 shadow-sm">
