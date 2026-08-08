@@ -110,9 +110,9 @@ export function ExcelHeaderMappingPreview({
           ) : null}
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
-          <MappingStep label="1" title="엑셀 원본 확인" description={`${rows.length.toLocaleString()}개 행 전체를 기준으로 누락값과 컬럼 의미를 봅니다.`} />
-          <MappingStep label="2" title="표준 필드 지정" description="거래처명, 주소, 사업자번호, 매출 필드처럼 저장 기준이 되는 값을 연결합니다." />
-          <MappingStep label="3" title="저장 가능 여부 확인" description="필수값이 모두 연결되면 DB 저장과 리포트 갱신을 진행할 수 있습니다." />
+          <MappingStage active label="1" title="원본 확인" value={`${rows.length.toLocaleString()}행`} />
+          <MappingStage active={mappedHeaderCount > 0} label="2" title="헤더 매칭" value={`${mappedHeaderCount.toLocaleString()}개 연결`} />
+          <MappingStage active={!missingRequiredFields.length} label="3" title="저장 준비" value={missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "완료"} />
         </div>
         <div className="maju-panel mt-3 grid overflow-hidden text-xs sm:grid-cols-4">
           <MappingCounter label="엑셀 컬럼" value={`${headers.length.toLocaleString()}개`} />
@@ -225,14 +225,16 @@ function MappingCounter({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MappingStep({ description, label, title }: { description: string; label: string; title: string }) {
+function MappingStage({ active, label, title, value }: { active: boolean; label: string; title: string; value: string }) {
   return (
-    <div className="maju-stat-card border-blue-100 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">{label}</span>
-        <p className="text-xs font-black text-slate-950">{title}</p>
+    <div className={`rounded-lg border px-3 py-2.5 ${active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${active ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>{label}</span>
+          <p className="text-xs font-black text-slate-950">{title}</p>
+        </div>
+        <p className={`text-xs font-black ${active ? "text-blue-800" : "text-slate-400"}`}>{value}</p>
       </div>
-      <p className="mt-1 text-[11px] font-bold leading-4 text-slate-500">{description}</p>
     </div>
   );
 }
@@ -302,21 +304,22 @@ function MappingWorkspaceModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
-      <div className="maju-section-card mx-auto flex h-full max-w-[1720px] flex-col shadow-2xl">
-        <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 bg-white px-5 py-4">
-          <div>
-            <Badge className="mb-2 bg-blue-700 text-white">매핑 전용 화면</Badge>
-            <h3 className="text-xl font-black text-slate-950">엑셀 컬럼과 MAJU 표준 필드 연결</h3>
-            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">좌측 엑셀 원본 표를 확인하고, 컬럼별로 알맞은 표준 필드를 선택하세요.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Badge className="bg-slate-900 text-white">전체 {fields.length}개 필드 중 {mappedCount}개 연결</Badge>
-              <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
-                필수 {requiredMappedCount}/{requiredFields.length}
-              </Badge>
-              <Badge className="bg-blue-100 text-blue-800">진행률 {completionRate}%</Badge>
+      <div className="maju-section-card mx-auto flex h-full max-w-[1760px] flex-col overflow-hidden shadow-2xl">
+        <div className="maju-card-header grid gap-4 bg-white px-5 py-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-blue-700 text-white">매핑 전용 화면</Badge>
+              <Badge className="bg-slate-100 text-slate-700">{rows.length.toLocaleString()}행</Badge>
+              <Badge className="bg-slate-100 text-slate-700">{headers.length.toLocaleString()}컬럼</Badge>
+            </div>
+            <h3 className="mt-2 text-xl font-black text-slate-950">엑셀 원본을 보면서 표준 필드를 연결하세요</h3>
+            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              <MappingStage active label="1" title="원본 컬럼 확인" value={`${filteredHeaders.length}/${headers.length}`} />
+              <MappingStage active={mappedCount > 0} label="2" title="표준 필드 연결" value={`${mappedCount}/${fields.length}`} />
+              <MappingStage active={readyToReview} label="3" title="저장 가능 상태" value={readyToReview ? "완료" : `필수 ${missingRequiredFields.length}개`} />
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 매핑 완료"}
             </Badge>
@@ -326,20 +329,20 @@ function MappingWorkspaceModal({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_460px]">
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_420px]">
           <section className="flex min-h-0 flex-col border-r border-slate-200 bg-slate-50/50">
-            <div className="maju-card-header px-5 py-3">
+            <div className="maju-card-header bg-white px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-slate-950">엑셀 원본 데이터</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">
-                    {rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼을 그대로 보면서 각 컬럼의 의미를 판단합니다.
+                    실제 행 값을 보면서 ERP마다 다른 헤더를 표준 필드에 맞춥니다.
                   </p>
                 </div>
-                <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">좌측 작업</Badge>
+                <Badge className="bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-100">원본표</Badge>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
               <input
                 className="h-10 min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={columnQuery}
@@ -383,13 +386,13 @@ function MappingWorkspaceModal({
           </section>
 
           <aside className="flex min-h-0 flex-col bg-white">
-            <div className="maju-card-header px-5 py-3">
+            <div className="maju-card-header bg-white px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-black text-slate-950">MAJU 표준 필드</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">필수값부터 연결하면 저장 가능 여부가 바로 갱신됩니다.</p>
+                  <p className="text-sm font-black text-slate-950">표준 필드 매칭</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">필수값부터 연결하세요.</p>
                 </div>
-                <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">우측 결정</Badge>
+                <Badge className="bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-100">저장기준</Badge>
               </div>
             </div>
             <div className={`border-b px-4 py-3 ${missingRequiredFields.length ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
@@ -518,14 +521,14 @@ function ExcelMappingSheetTable({
       <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-left text-xs">
         <thead className="sticky top-0 z-20 bg-slate-100 text-slate-600 shadow-sm">
           <tr>
-            <th className="sticky left-0 z-30 w-16 border-b border-r border-slate-200 bg-slate-100 px-3 py-3 font-black">행</th>
+            <th className="sticky left-0 z-30 w-14 border-b border-r border-slate-200 bg-slate-100 px-3 py-2.5 font-black">행</th>
             {headers.map((header) => {
               const mappedFieldKey = mappedByHeader[header] || "";
               const mappedField = fields.find((field) => field.key === mappedFieldKey);
 
               return (
-                <th key={header} className="min-w-56 border-b border-r border-slate-200 bg-slate-100 px-3 py-3 align-top font-black">
-                  <div className="space-y-2">
+                <th key={header} className="min-w-56 border-b border-r border-slate-200 bg-slate-100 px-2.5 py-2.5 align-top font-black">
+                  <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <span className="max-w-40 truncate text-slate-950" title={header}>
                         {header}
@@ -535,7 +538,7 @@ function ExcelMappingSheetTable({
                       </Badge>
                     </div>
                     <select
-                      className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       value={mappedFieldKey}
                       onChange={(event) => onHeaderMap(header, event.target.value)}
                     >
@@ -561,7 +564,7 @@ function ExcelMappingSheetTable({
                 const value = String(row[header] ?? "").trim();
 
                 return (
-                  <td key={`${index}-${header}`} className="max-w-72 border-b border-r border-slate-100 px-3 py-2 font-semibold text-slate-700">
+                  <td key={`${index}-${header}`} className="max-w-72 border-b border-r border-slate-100 px-2.5 py-2 font-semibold text-slate-700">
                     <span className={value ? "line-clamp-2" : "text-slate-300"} title={value || "-"}>
                       {value || "-"}
                     </span>
@@ -592,7 +595,7 @@ function FieldMappingGroup({
   tone: "required" | "optional";
 }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-black text-slate-950">{title}</p>
         <Badge className={tone === "required" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}>{fields.length}개</Badge>
@@ -601,21 +604,21 @@ function FieldMappingGroup({
         {fields.map((field) => {
           const mappedHeader = fieldMap[field.key] || "";
           return (
-            <label key={field.key} className={`block rounded-md border bg-white p-3 ${field.required && !mappedHeader ? "border-amber-200" : "border-slate-200"}`}>
+            <label key={field.key} className={`block rounded-lg border bg-white p-2.5 shadow-sm ${field.required && !mappedHeader ? "border-amber-200" : "border-slate-200"}`}>
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-black text-slate-950">
                     {field.label}
                     {field.required ? <span className="ml-1 text-rose-600">*</span> : null}
                   </p>
-                  {field.description ? <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{field.description}</p> : null}
+                  {field.description ? <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{field.description}</p> : null}
                 </div>
                 <Badge className={mappedHeader ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}>
                   {mappedHeader ? "연결됨" : "미연결"}
                 </Badge>
               </div>
               <select
-                className="mt-3 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="mt-2 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 value={mappedHeader}
                 onChange={(event) => onFieldMap(field.key, event.target.value)}
               >
