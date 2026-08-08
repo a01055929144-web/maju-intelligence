@@ -3503,20 +3503,19 @@ function BulkNextActionPanel({
   return (
     <div className="maju-section-card mt-3 overflow-hidden">
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div className="flex items-start gap-3 p-3">
+        <div className="flex items-center gap-3 p-3">
           <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${nextAction.disabled ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>
             <Icon className="h-5 w-5" />
           </span>
           <div className="min-w-0">
             <Badge className={nextAction.disabled ? "bg-slate-100 text-slate-600" : "bg-blue-50 text-blue-700"}>{nextAction.badge}</Badge>
-            <p className="mt-2 text-sm font-black text-slate-950">{nextAction.title}</p>
-            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{nextAction.body}</p>
+            <p className="mt-1 text-sm font-black text-slate-950">{nextAction.title}</p>
+            <p className="mt-1 truncate text-xs font-semibold leading-5 text-slate-500" title={nextAction.body}>{nextAction.body}</p>
           </div>
         </div>
-        <div className="border-t border-slate-100 bg-slate-50 p-3 lg:border-l lg:border-t-0">
-          <p className="text-xs font-black text-slate-500">바로가기</p>
+        <div className="flex items-center border-t border-slate-100 bg-slate-50 p-3 lg:border-l lg:border-t-0">
           <Button
-            className="mt-2 h-10 w-full"
+            className="h-10 w-full"
             disabled={nextAction.disabled}
             onClick={() => onOpenTab(nextAction.tab)}
             type="button"
