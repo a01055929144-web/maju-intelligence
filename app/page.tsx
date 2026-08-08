@@ -453,7 +453,7 @@ export default function Home() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="거래처 마스터와 매출 거래내역을 지도 홈 기준 데이터로 등록합니다."
+      subtitle="거래처 마스터와 매출 거래내역을 지도 홈 기준으로 저장합니다."
       title="데이터 등록"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
@@ -534,10 +534,10 @@ function WorkspaceModeTabs({
     ["report", "AI 리포트"]
   ] as const;
   const copy = {
-    briefing: ["데이터 등록 전 확인할 것", "기초정보는 1회 저장하고, 매출 거래내역은 반복 업데이트해서 회사 현황을 갱신합니다."],
-    onboarding: ["매장 기본정보 · 매출 거래내역", "수기 등록, 엑셀 업로드, ERP별 컬럼 매핑을 같은 흐름에서 처리합니다."],
-    report: ["AI 리포트 미리보기", "저장된 거래처와 매출 업데이트를 기준으로 대표가 볼 진단 리포트를 생성합니다."]
-  }[active as "briefing" | "onboarding" | "report"] || ["매장 기본정보 · 매출 거래내역", "거래처 마스터와 매출 데이터를 운영 자산으로 관리합니다."];
+    briefing: ["등록 가이드", "기초정보는 1회 저장하고 매출 원장은 반복 업데이트합니다."],
+    onboarding: ["데이터 작업공간", "수기 등록, 엑셀 업로드, ERP 컬럼 매핑을 한 화면에서 처리합니다."],
+    report: ["AI 리포트", "저장된 거래처와 매출 기준으로 진단 리포트를 생성합니다."]
+  }[active as "briefing" | "onboarding" | "report"] || ["데이터 작업공간", "거래처와 매출 데이터를 운영 기준값으로 관리합니다."];
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
@@ -569,33 +569,6 @@ function WorkspaceModeTabs({
         })}
       </div>
     </div>
-  );
-}
-
-function TopNav({ active, onMove }: { active: string; onMove: (screen: "briefing" | "onboarding" | "report") => void }) {
-  return (
-    <header className="sticky top-0 z-20 border-b border-border bg-white/88 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-        <button className="flex items-center gap-2 text-left" onClick={() => onMove("briefing")}>
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-black text-white">M</span>
-          <span>
-            <span className="block text-sm font-black">MAJU Intelligence</span>
-            <span className="block text-xs text-muted-foreground">AI Sales Intelligence Platform</span>
-          </span>
-        </button>
-        <nav className="hidden items-center gap-2 md:flex">
-          {[
-            ["briefing", "시작"],
-            ["onboarding", "데이터 등록"],
-            ["report", "리포트"]
-          ].map(([key, label]) => (
-            <Button key={key} variant={active === key ? "default" : "ghost"} size="sm" onClick={() => onMove(key as "briefing" | "onboarding" | "report")}>
-              {label}
-            </Button>
-          ))}
-        </nav>
-      </div>
-    </header>
   );
 }
 
@@ -1368,9 +1341,9 @@ function Onboarding({
         <div className="maju-section-card border-l-4 border-l-blue-600 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 어떻게 등록하나요?</Badge>
+              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 등록 방식</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">대량 등록은 엑셀, 신규 1건은 수기 등록이 기본입니다. OCR은 사업자등록증이 있을 때 값을 빠르게 채우는 보조 방법입니다.</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">대량은 엑셀, 신규 1건은 수기 등록이 기본입니다. OCR은 선택 보조 기능입니다.</p>
             </div>
             <RegistrationMethodCards
               activeMode={entryMode}
@@ -1393,18 +1366,18 @@ function Onboarding({
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
               <label className="maju-panel flex min-h-56 cursor-pointer flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center transition hover:bg-blue-50">
                 <Upload className="mb-4 h-11 w-11 text-blue-700" />
-                <span className="text-lg font-black text-slate-950">엑셀 파일을 여기에 올리세요</span>
-                <span className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">ERP 양식이 달라도 괜찮습니다. 파일을 올리면 헤더를 읽고 오른쪽에서 필수 컬럼을 자동 매핑합니다.</span>
+                <span className="text-lg font-black text-slate-950">엑셀 파일 업로드</span>
+                <span className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">ERP 헤더를 읽고 MAJU 표준 필드에 연결합니다.</span>
                 <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">.xlsx · .csv 지원</span>
                 <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={onFile} />
               </label>
               <div className="maju-panel bg-slate-50 p-4">
-                <p className="text-sm font-black text-slate-950">업로드 순서</p>
+                <p className="text-sm font-black text-slate-950">진행 순서</p>
                 <div className="mt-3 space-y-2">
                   {[
-                    ["1", "자료 다운로드 영역에서 현재 양식을 받습니다."],
-                    ["2", "ERP 엑셀의 헤더와 값을 확인한 뒤 파일을 올립니다."],
-                    ["3", "컬럼 매핑 탭에서 필수 필드를 연결하고 상단에서 저장합니다."]
+                    ["1", "양식 또는 ERP 원장을 준비합니다."],
+                    ["2", "파일을 올려 전체 데이터를 확인합니다."],
+                    ["3", "필수 컬럼을 연결하고 저장합니다."]
                   ].map(([step, text]) => (
                     <div key={step} className="maju-stat-card flex gap-2 px-3 py-2">
                       <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-blue-700 text-[11px] font-black text-white">{step}</span>
@@ -1447,8 +1420,8 @@ function Onboarding({
               <div className="maju-panel bg-slate-50/70 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h3 className="text-base font-black text-slate-950">수기로 1건 등록</h3>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색, 필수값, 사업자번호 검증을 통과한 건만 검수 목록에 추가하고 DB 반영 상태를 확인합니다.</p>
+                    <h3 className="text-base font-black text-slate-950">수기 등록</h3>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색과 사업자번호 검증 후 바로 저장합니다.</p>
                     {manualSaveMessage ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
