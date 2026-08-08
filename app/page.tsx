@@ -3579,48 +3579,48 @@ function ManualValidationPanel({
   const doneCount = checks.filter((check) => check.ok).length;
 
   return (
-    <aside className="space-y-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4">
-      <div className="flex items-start justify-between gap-3">
+    <aside className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:sticky xl:top-4">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             <ClipboardList className="h-4 w-4 text-blue-700" />
             등록 검증
           </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 전 필요한 조건을 확인합니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 조건을 확인합니다.</p>
         </div>
         <Badge className={ready ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{ready ? "저장 가능" : "확인 필요"}</Badge>
       </div>
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="border-b border-slate-200 px-4 py-3">
         <div className="mb-1 flex items-center justify-between text-xs font-black text-slate-500">
           <span>검증 진행률</span>
           <span>{doneCount}/{checks.length}</span>
         </div>
         <Progress value={Math.round((doneCount / checks.length) * 100)} />
       </div>
-      <div className="space-y-2">
+      <div className="divide-y divide-slate-100">
         {checks.map((check) => (
-          <div key={check.label} className={`rounded-md border p-3 ${check.ok ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
-            <div className="flex items-center justify-between gap-3">
+          <div key={check.label} className={`flex gap-3 px-4 py-3 ${check.ok ? "bg-emerald-50/60" : "bg-white"}`}>
+            <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${check.ok ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+              {check.ok ? <Check className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+            </span>
+            <div className="min-w-0">
               <span className="text-sm font-black text-slate-900">{check.label}</span>
-              {check.ok ? <Check className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+              <p className="mt-0.5 text-xs font-bold leading-5 text-slate-600">{check.description}</p>
             </div>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{check.description}</p>
           </div>
         ))}
       </div>
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
         <p className="text-xs font-black text-slate-500">저장 후 흐름</p>
-        <p className="mt-1 text-sm font-bold leading-6 text-slate-800">
-          저장되면 거래처 히스토리에서 기본정보, 메모, 첨부자료, 배송 적재위치를 이어서 관리합니다.
-        </p>
+        <p className="mt-1 text-sm font-bold leading-6 text-slate-800">거래처 히스토리에서 기본정보, 메모, 첨부자료를 이어서 관리합니다.</p>
       </div>
       {manualSaveMessage ? (
-        <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+        <div className="border-t border-blue-100 bg-blue-50 px-4 py-3">
           <p className="text-xs font-black text-blue-700">최근 저장 결과</p>
           <p className="mt-1 text-sm font-bold leading-6 text-slate-800">{manualSaveMessage}</p>
         </div>
       ) : null}
-      <div className="grid gap-2">
+      <div className="grid gap-2 border-t border-slate-200 p-4">
         <Button className="h-11 w-full" onClick={onManualSave} disabled={!ready || isManualSaving}>
           <Save size={18} />
           {isManualSaving ? "저장 중" : ready ? "거래처 저장" : "검증 완료 후 저장"}
