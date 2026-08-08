@@ -3784,19 +3784,17 @@ function DataQualityCard({
       type: "사업자번호 오류"
     }))
   ].sort((a, b) => a.rowNumber - b.rowNumber);
-  const visibleIssues = issuePreview.slice(0, 5);
+  const visibleIssues = issuePreview.slice(0, 4);
 
   return (
     <div className={`maju-section-card mb-4 overflow-hidden ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
-      <div className={`flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-start lg:justify-between ${hasIssues ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
+      <div className={`flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between ${hasIssues ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             {hasIssues ? <AlertTriangle className="h-4 w-4 text-amber-700" /> : <Check className="h-4 w-4 text-emerald-700" />}
             행 데이터 품질
           </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-            {hasRows ? "필수값 누락, 사업자번호 유효성, 중복 후보를 저장 전에 확인합니다." : "엑셀을 올리면 행 단위 검증 결과가 표시됩니다."}
-          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{hasRows ? "누락, 사업자번호, 중복 후보를 확인합니다." : "업로드 후 행 단위 검증 결과가 표시됩니다."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={hasIssues ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>{hasIssues ? "보완 권장" : "정상"}</Badge>
@@ -3809,10 +3807,10 @@ function DataQualityCard({
         </div>
       </div>
       <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 md:grid-cols-4 md:divide-y-0">
-        <MiniStatus label="정상 행" value={`${summary.readyRows.toLocaleString()}개`} />
-        <MiniStatus label="보완 행" value={`${rowIssueCount.toLocaleString()}개`} />
-        <MiniStatus label="사업자 오류" value={`${summary.invalidBusinessNumbers.length.toLocaleString()}개`} />
-        <MiniStatus label="중복 후보" value={`${summary.duplicateCandidates.toLocaleString()}개`} />
+        <QualityMetric label="정상 행" value={`${summary.readyRows.toLocaleString()}개`} />
+        <QualityMetric label="보완 행" value={`${rowIssueCount.toLocaleString()}개`} />
+        <QualityMetric label="사업자 오류" value={`${summary.invalidBusinessNumbers.length.toLocaleString()}개`} />
+        <QualityMetric label="중복 후보" value={`${summary.duplicateCandidates.toLocaleString()}개`} />
       </div>
       <div className="border-t border-slate-100 p-4">
         {!hasRows ? (
@@ -3825,11 +3823,11 @@ function DataQualityCard({
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-sm font-black text-slate-950">먼저 보완할 행</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">아래 행은 DB 저장 전에 값 확인이 필요합니다.</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">DB 저장 전 값 확인이 필요합니다.</p>
               </div>
               <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={onDownloadIssues} size="sm">
                 <Download className="h-4 w-4" />
-                문제 행 엑셀 다운로드
+                문제 행 다운로드
               </Button>
             </div>
             <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
@@ -3859,24 +3857,22 @@ function DataQualityCard({
             {issuePreview.length > visibleIssues.length ? <p className="text-xs font-bold text-amber-700">외 {issuePreview.length - visibleIssues.length}개 문제 행은 다운로드 파일에서 확인하세요.</p> : null}
           </div>
         ) : (
-          <div className="rounded-md border border-emerald-100 bg-emerald-50 p-4">
+          <div className="rounded-md border border-emerald-100 bg-emerald-50 p-3">
             <p className="text-sm font-black text-emerald-900">저장 차단 오류가 없습니다.</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-emerald-700">중복 후보만 확인하면 업데이트 후 리포트 갱신을 진행할 수 있습니다.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-emerald-700">중복 후보만 확인한 뒤 저장 단계로 이동하세요.</p>
           </div>
         )}
         {summary.duplicateCandidates > 0 ? (
           <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
             <p className="text-xs font-black text-blue-900">중복 후보 {summary.duplicateCandidates.toLocaleString()}개</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-blue-700">사업자번호 또는 거래처명+주소가 같은 행입니다. 기존 거래처 업데이트인지 신규 등록인지 확인하세요.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-blue-700">기존 거래처 업데이트인지 신규 등록인지 확인하세요.</p>
           </div>
         ) : null}
         {hasRows ? (
           <div className="mt-3 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
             <div>
               <p className="text-sm font-black text-slate-950">{hasRowIssues ? "보완 후 저장 단계로 이동하세요." : "저장 단계로 이동할 수 있습니다."}</p>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                {hasRowIssues ? "문제 행을 내려받아 ERP 원본 또는 매핑 값을 수정한 뒤 다시 업로드하는 흐름이 안전합니다." : "저장 실행 점검에서 DB 반영, 운영 화면 연결, 리포트 갱신 조건을 최종 확인합니다."}
-              </p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{hasRowIssues ? "문제 행을 수정한 뒤 다시 업로드하세요." : "DB 반영과 운영 화면 연결을 최종 확인합니다."}</p>
             </div>
             <Button className="h-11" disabled={hasRowIssues} onClick={onOpenSaveReview} type="button">
               저장 단계로 이동
@@ -3885,6 +3881,15 @@ function DataQualityCard({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function QualityMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white px-4 py-3">
+      <p className="text-[11px] font-black text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }
