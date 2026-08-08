@@ -3025,67 +3025,46 @@ function DataRegistrationDecisionPanel({
 }) {
   const activeLabel = activeType === "customer-master" ? "거래처 마스터" : "매출 거래내역";
   const modeLabel = entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력";
-  const cards = [
-    {
-      icon: Building2,
-      label: "매장을 처음 등록하거나 기본정보를 고칠 때",
-      value: "거래처 마스터",
-      description: "사업자번호, 배송주소, 대표자, 연락처, 지도 링크, 첨부자료를 저장합니다."
-    },
-    {
-      icon: FileSpreadsheet,
-      label: "매출 등급과 리포트를 갱신할 때",
-      value: "매출 거래내역",
-      description: "ERP 거래원장을 업로드하고 거래처 key와 매출/품목 컬럼을 매핑합니다."
-    },
-    {
-      icon: Save,
-      label: "저장됐는지 확인할 때",
-      value: "운영 화면 확인",
-      description: "거래처는 히스토리, 매출은 매출 원장, 전체 결과는 AI 리포트에서 확인합니다."
-    }
-  ];
+  const syncTarget = activeType === "customer-master" ? "지도 · 거래처 히스토리 · 배송 코스" : "매출 원장 · 등급 · AI 리포트";
+  const modeHint =
+    entryMode === "excel"
+      ? "ERP 헤더 매핑 후 일괄 저장"
+      : entryMode === "manual"
+        ? "주소 검색과 사업자번호 검증 후 1건 저장"
+        : "OCR 후보값 확인 후 수기 보정";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <Badge className="mb-3 bg-slate-100 text-slate-700">실무 판단 기준</Badge>
-          <h2 className="text-lg font-black text-slate-950">지금 어떤 데이터를 등록 중인지 먼저 확인하세요</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-            ERP 양식이 달라도 기준은 같습니다. 거래처 기본정보는 고정값, 매출 거래내역은 반복 업데이트 값입니다.
-          </p>
+          <Badge className="mb-2 bg-slate-100 text-slate-700">현재 선택 요약</Badge>
+          <h2 className="text-lg font-black text-slate-950">{activeLabel} · {modeLabel}</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{modeHint}</p>
         </div>
-        <div className="grid gap-2 text-xs font-black text-slate-600 sm:grid-cols-3">
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">현재 유형: {activeLabel}</span>
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">등록 방식: {modeLabel}</span>
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
-            저장 대기: {rowsWaiting.toLocaleString()}행
-          </span>
+        <div className="grid gap-2 text-xs font-black text-slate-600 sm:grid-cols-2">
+          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">저장 대기 {rowsWaiting.toLocaleString()}행</span>
+          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">최근 반영 {latestUploadAt || "확인 필요"}</span>
         </div>
       </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4" key={card.value}>
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white text-teal-700 ring-1 ring-inset ring-slate-200">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-slate-500">{card.label}</p>
-                  <p className="mt-1 text-base font-black text-slate-950">{card.value}</p>
-                  <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{card.description}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid gap-0 md:grid-cols-3">
+        <MiniDecisionMetric icon={Building2} label="등록 유형" value={activeLabel} />
+        <MiniDecisionMetric icon={FileSpreadsheet} label="등록 방식" value={modeLabel} />
+        <MiniDecisionMetric icon={Save} label="반영 위치" value={syncTarget} />
       </div>
-      <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black leading-5 text-blue-800">
-        최근 DB 반영: {latestUploadAt || "아직 확인된 업로드 이력이 없습니다."}
-      </p>
+    </div>
+  );
+}
+
+function MiniDecisionMetric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
+  return (
+    <div className="flex min-h-[82px] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-black text-slate-400">{label}</p>
+        <p className="mt-1 text-sm font-black leading-5 text-slate-950">{value}</p>
+      </div>
     </div>
   );
 }
