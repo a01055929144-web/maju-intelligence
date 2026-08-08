@@ -1310,24 +1310,6 @@ function Onboarding({
           rows={rawRows.length}
           typeLabel={template.label}
         />
-        <ImplementationProgressCard items={implementationProgressItems} />
-        <DeploymentReadinessChecklist
-          canAnalyze={canAnalyze}
-          dashboardHref={dashboardHref}
-          hasRecentUpload={Boolean(latestUpload)}
-          hasRows={rawRows.length > 0}
-          ledgerHref={currentLedgerHref}
-          persisted={pipelineMeta.persisted}
-          routeHref={routeHref}
-        />
-        <CoreFlowCheckPanel
-          dashboardHref={dashboardHref}
-          dataHref="/"
-          ledgerHref={currentLedgerHref}
-          mobileHref={mobileTodayHref}
-          routeHref={routeHref}
-        />
-        <DataRegistrationFlowCard steps={flowSteps} />
         <OperationalCommandStrip
           activeType={uploadType}
           canAnalyze={canAnalyze}
@@ -1337,6 +1319,37 @@ function Onboarding({
           persisted={pipelineMeta.persisted}
           rowsWaiting={rawRows.length}
         />
+        <details className="maju-section-card overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+            <span>
+              <span className="block text-sm font-black text-slate-950">운영 점검</span>
+              <span className="mt-0.5 block text-xs font-bold text-slate-500">구현 상태, 배포 준비, 화면 연결 흐름을 필요할 때 확인합니다.</span>
+            </span>
+            <Badge className={readinessPercent >= 80 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+              준비율 {readinessPercent}%
+            </Badge>
+          </summary>
+          <div className="grid gap-3 border-t border-slate-200 bg-slate-50/60 p-3 xl:grid-cols-2">
+            <ImplementationProgressCard items={implementationProgressItems} />
+            <DeploymentReadinessChecklist
+              canAnalyze={canAnalyze}
+              dashboardHref={dashboardHref}
+              hasRecentUpload={Boolean(latestUpload)}
+              hasRows={rawRows.length > 0}
+              ledgerHref={currentLedgerHref}
+              persisted={pipelineMeta.persisted}
+              routeHref={routeHref}
+            />
+            <CoreFlowCheckPanel
+              dashboardHref={dashboardHref}
+              dataHref="/"
+              ledgerHref={currentLedgerHref}
+              mobileHref={mobileTodayHref}
+              routeHref={routeHref}
+            />
+            <DataRegistrationFlowCard steps={flowSteps} />
+          </div>
+        </details>
 
         <div className="maju-section-card border-l-4 border-l-blue-600 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
