@@ -3101,10 +3101,10 @@ function DocumentOcrRegistrationPanel({
     ["이메일", "email"]
   ] as const;
   const attachmentSlots = [
-    { accept: "image/*,.pdf", description: "사업자등록증 원본 이미지/PDF", key: "businessLicense", label: "사업자등록증", required: true },
-    { accept: "image/*,.pdf", description: "대표자 또는 담당자 확인자료 · 주민번호/주소 일부 마스킹 후 보관", key: "identity", label: "신분증", required: false },
-    { accept: "image/*,.pdf", description: "정산 계좌 확인용 통장 사본", key: "bankbook", label: "통장사본", required: false },
-    { accept: "image/*,video/*", description: "배송기사가 확인할 냉장고, 후문, 적재 위치 사진/영상", key: "loadingSpot", label: "배송 적재위치", required: false }
+    { accept: "image/*,.pdf", description: "사업자 정보 원본", key: "businessLicense", label: "사업자등록증", required: true },
+    { accept: "image/*,.pdf", description: "필요 시 마스킹 후 보관", key: "identity", label: "신분증", required: false },
+    { accept: "image/*,.pdf", description: "정산 계좌 확인", key: "bankbook", label: "통장사본", required: false },
+    { accept: "image/*,video/*", description: "후문, 냉장고, 적재 위치", key: "loadingSpot", label: "배송 적재위치", required: false }
   ];
   const [attachmentFiles, setAttachmentFiles] = useState<Record<string, string[]>>({});
   const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
@@ -3134,18 +3134,22 @@ function DocumentOcrRegistrationPanel({
   }
 
   return (
-    <div className="mt-4 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+    <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-3">
-        <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-5 text-center transition hover:bg-blue-50">
-          <FileSpreadsheet className="mb-4 h-10 w-10 text-blue-700" />
-          <span className="text-base font-black text-slate-950">OCR 보조 입력</span>
-          <span className="mt-2 text-sm font-semibold leading-6 text-slate-500">사업자등록증 이미지/PDF가 있으면 상호명, 사업자번호, 대표자명, 개업일, 주소 후보를 먼저 채웁니다.</span>
-          <span className="mt-4 rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">선택 기능 · 저장 전 검수</span>
+        <label className="flex min-h-48 cursor-pointer flex-col justify-between rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-5 transition hover:bg-blue-50">
+          <span>
+            <span className="grid h-11 w-11 place-items-center rounded-md bg-white text-blue-700 ring-1 ring-inset ring-blue-100">
+              <FileSpreadsheet className="h-5 w-5" />
+            </span>
+            <span className="mt-4 block text-base font-black text-slate-950">OCR 보조 입력</span>
+            <span className="mt-2 block text-sm font-semibold leading-6 text-slate-500">서류가 있으면 후보값을 채우고, 없으면 수기 등록으로 바로 진행합니다.</span>
+          </span>
+          <span className="mt-4 w-fit rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">파일 선택</span>
           <input className="sr-only" type="file" accept="image/*,.pdf" onChange={onDocumentFile} />
         </label>
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-          <p className="text-sm font-black text-amber-900">개인정보 보관 기준</p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-amber-800">신분증은 실명 확인용 첨부로만 다루고, 주민등록번호 뒷자리와 불필요한 주소 정보는 마스킹 후 저장하는 흐름으로 설계합니다.</p>
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
+          <p className="font-black text-amber-900">개인정보 기준</p>
+          <p className="mt-1">신분증은 필요할 때만 첨부하고 민감정보는 마스킹 후 보관합니다.</p>
         </div>
       </div>
 
@@ -3153,9 +3157,9 @@ function DocumentOcrRegistrationPanel({
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <Badge className="mb-2 bg-blue-100 text-blue-800">보조 입력값 확인</Badge>
-              <h3 className="text-lg font-black text-slate-950">{filename || "사업자등록증을 먼저 업로드하세요"}</h3>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{ocrStatus || "파일이 없으면 수기 등록으로 바로 진행해도 됩니다. 업로드 후 후보값을 확인하고 수정하세요."}</p>
+              <Badge className="mb-2 bg-blue-100 text-blue-800">보조 입력값</Badge>
+              <h3 className="text-lg font-black text-slate-950">{filename || "서류 업로드 대기"}</h3>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{ocrStatus || "OCR은 선택 기능입니다. 저장 전 후보값을 사람이 확인합니다."}</p>
             </div>
             <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete || isManualSaving}>
               <Save size={18} />
@@ -3196,8 +3200,8 @@ function DocumentOcrRegistrationPanel({
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm font-black text-slate-950">첨부자료 보관</p>
-              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">사업자등록증, 신분증, 통장사본, 배송 적재위치 자료를 매장 생성 전 한 번에 검수합니다.</p>
+              <p className="text-sm font-black text-slate-950">첨부자료</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">사업자 서류와 배송 적재위치 자료를 매장 원장에 함께 보관합니다.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge className={attachmentReady ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>
@@ -3220,7 +3224,7 @@ function DocumentOcrRegistrationPanel({
                     {slot.required ? (hasBusinessLicense ? "충족" : "필수") : "선택"}
                   </Badge>
                 </div>
-                <p className="mt-2 min-h-10 text-xs font-semibold leading-5 text-slate-500">{slot.description}</p>
+                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{slot.description}</p>
                 {slot.key === "businessLicense" && filename ? (
                   <p className="mt-3 truncate rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
                     OCR 원본: {filename}
