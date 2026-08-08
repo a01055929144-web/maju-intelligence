@@ -3660,7 +3660,7 @@ function UploadStatusCard({
 
   return (
     <div className="h-full overflow-hidden rounded-md border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div className="min-w-0">
           <p className="text-xs font-black text-slate-400">{hasRows ? "업로드됨" : "대기 중"}</p>
           <p className="mt-1 truncate text-sm font-black text-slate-950">{hasRows ? filename : "아직 등록할 데이터가 없습니다."}</p>
@@ -3670,11 +3670,20 @@ function UploadStatusCard({
         </Badge>
       </div>
       <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100">
-        <MiniStatus label="행" value={`${rows.length}개`} />
-        <MiniStatus label="컬럼" value={`${headers.length}개`} />
-        <MiniStatus label="필수" value={`${mappedRequiredCount}/${requiredCount}`} />
+        <div className="px-4 py-3">
+          <p className="text-[11px] font-black text-slate-400">행</p>
+          <p className="mt-1 text-sm font-black text-slate-950">{rows.length}개</p>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-[11px] font-black text-slate-400">컬럼</p>
+          <p className="mt-1 text-sm font-black text-slate-950">{headers.length}개</p>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-[11px] font-black text-slate-400">필수</p>
+          <p className="mt-1 text-sm font-black text-slate-950">{mappedRequiredCount}/{requiredCount}</p>
+        </div>
       </div>
-      <div className="p-4">
+      <div className="px-4 py-3">
         <div className="mb-1 flex justify-between text-xs font-black text-slate-500">
           <span>필수 매핑</span>
           <span>{mappingProgress}%</span>
