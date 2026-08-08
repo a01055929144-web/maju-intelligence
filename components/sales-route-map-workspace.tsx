@@ -286,13 +286,13 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     <div className="maju-section-card flex min-h-[760px] flex-col text-slate-900">
       <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="maju-muted-label text-teal-700">지도 기반 업무</p>
-          <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 코스</h2>
+          <p className="maju-muted-label text-teal-700">지도 작업공간</p>
+          <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 운영</h2>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
             {[
-              { label: "등급", value: "grade" },
+              { label: "매장 등급", value: "grade" },
               { label: "배송차", value: "vehicle" }
             ].map((item) => {
               const selected = markerViewMode === item.value;
@@ -387,32 +387,33 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         visibleStoreCount={visibleStores.length}
       />
 
-      <section className="grid gap-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
-        <label className="maju-search-field relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="거래처명·지역·주소 검색..."
-            value={query}
-          />
-        </label>
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
-          {gradeFilters.map((filter) => (
-            <button
-              className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
-                gradeFilter === filter.value
-                  ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
-                  : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-              }`}
-              key={filter.value}
-              onClick={() => setGradeFilter(filter.value)}
-              type="button"
-            >
-              {filter.label}
-            </button>
-          ))}
+      <section className="space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3">
+        <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
+          <label className="maju-search-field relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="거래처명·지역·주소 검색..."
+              value={query}
+            />
+          </label>
+          <div className="flex flex-wrap items-center justify-start gap-1.5 xl:justify-end">
+            <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
+            {gradeFilters.map((filter) => (
+              <button
+                className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
+                  gradeFilter === filter.value
+                    ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                }`}
+                key={filter.value}
+                onClick={() => setGradeFilter(filter.value)}
+                type="button"
+              >
+                {filter.label}
+              </button>
+            ))}
           <button
             aria-pressed={excludeClosedStores}
             className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
@@ -439,9 +440,10 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           <span className="ml-1 text-xs font-black text-slate-500">
             {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
           </span>
+          </div>
         </div>
-        <div className="flex min-h-7 flex-wrap items-center gap-2 xl:col-span-2">
-          <span className="text-xs font-black text-slate-400">적용 조건</span>
+        <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <span className="text-xs font-black text-slate-400">현재 조건</span>
           {activeFilterLabels.length ? (
             activeFilterLabels.map((label) => (
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
