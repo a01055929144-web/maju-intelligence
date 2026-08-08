@@ -12,6 +12,7 @@ import {
   BarChart3,
   Building2,
   Check,
+  CheckCircle2,
   ClipboardList,
   Clock,
   Database,
@@ -2564,41 +2565,41 @@ function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMo
   const methods = [
     {
       badge: "기본",
-      description: "거래처 마스터나 매출 거래내역을 한 번에 많이 등록할 때 사용합니다.",
+      description: "ERP 엑셀을 올리고 헤더를 표준 필드에 맞춥니다.",
       icon: Upload,
       id: "excel" as EntryMode,
-      label: "대량 등록",
-      meta: "엑셀 업로드",
-      next: "파일 업로드 → 전체 미리보기 → 컬럼 매핑",
-      output: "원장 일괄 반영",
-      recommendedFor: "ERP 자료가 있을 때"
+      label: "엑셀 대량",
+      meta: "거래처·매출 원장",
+      next: "업로드 · 미리보기 · 매핑",
+      output: "여러 행 저장",
+      recommendedFor: "ERP 자료"
     },
     {
       badge: "자주 사용",
-      description: "신규 매장 1곳을 바로 추가하거나 현장에서 정보를 보완할 때 사용합니다.",
+      description: "신규 매장 1곳을 주소 검색과 사업자번호 검증으로 저장합니다.",
       icon: Building2,
       id: "manual" as EntryMode,
-      label: "수기 등록",
+      label: "수기 1건",
       meta: "신규 1곳",
-      next: "주소 검색 → 사업자번호 확인 → 저장",
-      output: "거래처 히스토리 생성",
-      recommendedFor: "신규 매장 추가"
+      next: "주소 검색 · 번호 검증 · 저장",
+      output: "거래처 원장 생성",
+      recommendedFor: "현장 추가"
     },
     {
       badge: "선택",
-      description: "사업자등록증 파일이 있을 때 수기 입력값을 빠르게 채우는 보조 기능입니다.",
+      description: "사업자등록증·서류에서 후보값을 읽고 사람이 확인합니다.",
       icon: FileSpreadsheet,
       id: "document" as EntryMode,
       label: "OCR 보조",
-      meta: "필수 아님",
-      next: "파일 업로드 → 후보값 확인 → 수기 보정",
-      output: "기본정보 후보값",
-      recommendedFor: "서류가 먼저 있을 때"
+      meta: "선택 기능",
+      next: "서류 업로드 · 후보 확인 · 보정",
+      output: "기본정보 보조 입력",
+      recommendedFor: "서류 보유"
     }
   ];
 
   return (
-    <div className="grid w-full gap-2 lg:grid-cols-3 xl:w-[760px]">
+    <div className="grid w-full gap-2 lg:grid-cols-3 xl:w-[780px]">
       {methods.map((method) => {
         const selected = activeMode === method.id;
         const Icon = method.icon;
@@ -2606,32 +2607,37 @@ function RegistrationMethodCards({ activeMode, onSelect }: { activeMode: EntryMo
         return (
           <button
             key={method.id}
-            className={`group rounded-xl border p-3 text-left transition ${
+            className={`group min-h-[176px] rounded-xl border p-3 text-left transition ${
               selected
-                ? "border-blue-700 bg-blue-700 text-white shadow-[0_12px_26px_rgba(29,78,216,0.2)]"
+                ? "border-slate-950 bg-slate-950 text-white shadow-[0_12px_26px_rgba(15,23,42,0.18)]"
                 : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
             }`}
             onClick={() => onSelect(method.id)}
             type="button"
           >
-            <span className="flex items-start justify-between gap-3">
-              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-blue-700 group-hover:bg-white"}`}>
+            <span className="flex items-center justify-between gap-3">
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-teal-700 group-hover:bg-white"}`}>
                 <Icon className="h-4 w-4" />
               </span>
               <span className={`rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{method.badge}</span>
             </span>
-            <span className="mt-3 block text-sm font-black">{method.label}</span>
-            <span className={`mt-1 block text-[11px] font-black ${selected ? "text-white/75" : "text-slate-400"}`}>{method.meta}</span>
-            <span className={`mt-2 block text-xs font-semibold leading-5 ${selected ? "text-white/80" : "text-slate-500"}`}>{method.description}</span>
-            <span className="mt-3 grid gap-1.5">
+            <span className="mt-3 flex items-end justify-between gap-3">
+              <span>
+                <span className="block text-base font-black">{method.label}</span>
+                <span className={`mt-1 block text-[11px] font-black ${selected ? "text-white/70" : "text-slate-400"}`}>{method.meta}</span>
+              </span>
+              {selected ? <CheckCircle2 className="h-5 w-5 text-emerald-300" /> : null}
+            </span>
+            <span className={`mt-3 block min-h-[40px] text-xs font-semibold leading-5 ${selected ? "text-white/80" : "text-slate-500"}`}>{method.description}</span>
+            <span className="mt-3 grid grid-cols-2 gap-1.5">
               <span className={`rounded-md px-2.5 py-2 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-50 text-slate-700"}`}>
-                추천: {method.recommendedFor}
+                {method.recommendedFor}
               </span>
               <span className={`rounded-md px-2.5 py-2 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-emerald-50 text-emerald-700"}`}>
-                결과: {method.output}
+                {method.output}
               </span>
             </span>
-            <span className={`mt-3 block rounded-md px-2.5 py-2 text-xs font-black ${selected ? "bg-white/15 text-white" : "bg-slate-50 text-slate-600"}`}>{method.next}</span>
+            <span className={`mt-2 block rounded-md px-2.5 py-2 text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-50 text-slate-600"}`}>{method.next}</span>
           </button>
         );
       })}
@@ -2799,9 +2805,9 @@ function RegistrationPathGuide({
       ];
 
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="rounded-md border border-white bg-white p-4">
+    <div className="mt-4 rounded-lg border border-slate-200 bg-white">
+      <div className="grid gap-0 border-b border-slate-200 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="p-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-black text-slate-400">현재 등록 경로</p>
@@ -2822,19 +2828,17 @@ function RegistrationPathGuide({
             ))}
           </div>
         </div>
-        <div className="rounded-md border border-white bg-white p-4">
+        <div className="border-t border-slate-200 bg-slate-50 p-4 xl:border-l xl:border-t-0">
           <p className="text-xs font-black text-slate-400">저장 후 확인 위치</p>
           <p className="mt-1 text-base font-black text-slate-950">{targetLabel}</p>
-          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-            저장이 완료되면 같은 기준값이 운영 화면 전체에 반영되어야 합니다. 화면별 숫자가 다르면 DB 저장 또는 필터 기준을 먼저 확인합니다.
-          </p>
-          <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
-            <p className="text-xs font-black text-blue-900">현재 다음 행동</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-blue-700">{nextActionLabel}</p>
+          <p className="mt-2 text-xs font-bold leading-5 text-slate-500">저장 후 대시보드, 지도, 거래처 원장의 숫자가 같은 기준으로 맞아야 합니다.</p>
+          <div className="mt-3 rounded-md border border-teal-100 bg-teal-50 px-3 py-2">
+            <p className="text-xs font-black text-teal-900">다음 행동</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-teal-700">{nextActionLabel}</p>
           </div>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+      <div className="grid gap-2 p-3 lg:grid-cols-2">
         {dataRules.map(([label, description]) => (
           <div key={label} className="rounded-md border border-slate-200 bg-white px-3 py-2">
             <p className="text-xs font-black text-slate-950">{label}</p>
