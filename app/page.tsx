@@ -3729,19 +3729,20 @@ function RegistrationStatusCard({ status }: { status: RegistrationStatus }) {
   }[status.status];
 
   return (
-    <div className={`h-full rounded-md border p-4 ${tone.border}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white shadow-sm">{tone.icon}</span>
+    <div className={`h-full overflow-hidden rounded-md border ${tone.border}`}>
+      <div className="flex items-center justify-between gap-3 border-b border-white/70 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white shadow-sm">{tone.icon}</span>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-slate-950">{status.title}</p>
-              <Badge className={tone.badge}>{status.actionLabel}</Badge>
-            </div>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{status.description}</p>
-            <p className="mt-2 rounded-md bg-white/80 px-3 py-2 text-xs font-black leading-5 text-slate-800">다음 액션: {status.nextAction}</p>
+            <p className="truncate text-sm font-black text-slate-950">{status.title}</p>
+            <p className="mt-0.5 truncate text-xs font-bold text-slate-600">{status.description}</p>
           </div>
         </div>
+        <Badge className={`shrink-0 ${tone.badge}`}>{status.actionLabel}</Badge>
+      </div>
+      <div className="bg-white/80 px-4 py-3">
+        <p className="text-[11px] font-black text-slate-400">다음 액션</p>
+        <p className="mt-1 text-sm font-black leading-5 text-slate-900">{status.nextAction}</p>
       </div>
     </div>
   );
