@@ -672,57 +672,57 @@ export default function CrmTimelinePage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="매장 기본정보, 사업자 상태, 배송 적재위치, 메모와 방문 기록을 거래처별로 관리합니다."
+      subtitle="매장 기본정보, 사업자 상태, 적재위치, 메모를 한 원장에서 관리합니다."
       title="거래처 원장"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px] space-y-4">
         <div className="maju-section-card">
           <SectionHeader
-            eyebrow="지도 기반 업무"
+            eyebrow="지도 작업공간"
             title="거래처 원장"
-            description="지도 홈과 영업·배송 코스가 사용하는 같은 거래처 기준값입니다."
+            description="지도 홈, 영업·배송 코스가 함께 사용하는 거래처 기준값입니다."
           />
           <div className="p-3">
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="maju-muted-label">원장 상태</p>
-              <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
-              <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="maju-muted-label">원장 상태</p>
+                <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
+                <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
+              </div>
+              <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
+              <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
+              <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
+              <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
             </div>
-            <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
-            <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
-            <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
-            <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
-          </div>
-          <div className={`mt-2 flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
-            <p className={`text-xs font-black ${hasOperationalLedger ? "text-emerald-900" : "text-amber-900"}`}>{ledgerStatusLabel}</p>
-            <p className={`truncate text-xs font-bold ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
-          </div>
-          {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
-          {!hasCustomers ? (
-            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-black text-amber-900">
-                {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
-              </p>
-              <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                데이터 등록에서 거래처 마스터를 저장하면 대시보드, 영업·배송 코스, 거래처 히스토리가 같은 DB 거래처 원장 기준으로 연결됩니다.
-              </p>
-              <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
-                거래처 마스터 등록하기
-              </Link>
+            <div className={`mt-2 flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
+              <p className={`text-xs font-black ${hasOperationalLedger ? "text-emerald-900" : "text-amber-900"}`}>{ledgerStatusLabel}</p>
+              <p className={`truncate text-xs font-bold ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
             </div>
-          ) : null}
-          <CustomerLedgerBasisPanel
-            addressMissingCount={addressMissingCount}
-            businessNumberMissingCount={businessNumberMissingCount}
-            customerCount={customers.length}
-            filteredCount={filteredCustomers.length}
-            loadingReadyCount={customers.filter((customer) => Boolean(customer.loadingPosition)).length}
-            managerMissingCount={managerMissingCount}
-            managerCount={new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size}
-            memoCount={customers.reduce((sum, customer) => sum + customer.memoCount, 0)}
-          />
+            {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+            {!hasCustomers ? (
+              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm font-black text-amber-900">
+                  {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
+                </p>
+                <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
+                  데이터 등록에서 거래처 마스터를 저장하면 지도 홈, 영업·배송 코스, 거래처 원장이 같은 DB 기준으로 연결됩니다.
+                </p>
+                <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
+                  거래처 마스터 등록하기
+                </Link>
+              </div>
+            ) : null}
+            <CustomerLedgerBasisPanel
+              addressMissingCount={addressMissingCount}
+              businessNumberMissingCount={businessNumberMissingCount}
+              customerCount={customers.length}
+              filteredCount={filteredCustomers.length}
+              loadingReadyCount={customers.filter((customer) => Boolean(customer.loadingPosition)).length}
+              managerMissingCount={managerMissingCount}
+              managerCount={new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size}
+              memoCount={customers.reduce((sum, customer) => sum + customer.memoCount, 0)}
+            />
           </div>
         </div>
 
@@ -752,100 +752,100 @@ export default function CrmTimelinePage() {
         <div className="maju-section-card">
           <SectionHeader
             eyebrow="거래처 작업"
-            title="목록 · 상세"
-            description="거래처를 선택하면 기본정보, 첨부자료, 메모를 같은 원장에서 관리합니다."
+            title="거래처 목록"
+            description="검색과 필터로 거래처를 찾고, 선택한 거래처의 원장을 오른쪽에서 관리합니다."
           />
           <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
-          <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
-            <div className="border-b border-slate-200/80 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-black text-slate-950">거래처 목록</h2>
-                  <p className="mt-1 text-xs font-bold text-slate-500">검색·등급·운영 상태</p>
-                </div>
-                <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
-              </div>
-            </div>
-            <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
-              <label className="maju-search-field">
-                <Search className="h-4 w-4 text-slate-400" />
-                <input
-                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
-                  onChange={(event) => setCustomerSearch(event.target.value)}
-                  placeholder="상호명, 주소, 사업자번호 검색"
-                  value={customerSearch}
-                />
-              </label>
-              <div className="maju-filter-box mt-3">
-                <p className="maju-muted-label px-2 pb-1">매출 등급</p>
-                <div className="grid grid-cols-4 gap-1.5">
-                {(["all", "A", "B", "C"] as const).map((grade) => (
-                  <button
-                    className={`h-9 rounded-md border text-xs font-black transition ${
-                      gradeFilter === grade
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
-                        : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
-                    }`}
-                    key={grade}
-                    onClick={() => setGradeFilter(grade)}
-                    type="button"
-                  >
-                    {grade === "all" ? "전체" : `${grade}등급`}
-                  </button>
-                ))}
+            <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
+              <div className="border-b border-slate-200/80 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-black text-slate-950">목록 필터</h2>
+                    <p className="mt-1 text-xs font-bold text-slate-500">검색 · 등급 · 보완 필요 항목</p>
+                  </div>
+                  <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
                 </div>
               </div>
-              <div className="maju-filter-box mt-3">
-                <p className="maju-muted-label px-2 pb-1">운영 상태</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                <CustomerFilterButton
-                  active={operationFilter === "address-missing"}
-                  count={addressMissingCount}
-                  label="주소 미등록"
-                  onClick={() => applyOperationFilter("address-missing")}
-                  tone="danger"
-                />
-                <CustomerFilterButton
-                  active={operationFilter === "business-number-missing"}
-                  count={businessNumberMissingCount}
-                  label="사업자번호 미등록"
-                  onClick={() => applyOperationFilter("business-number-missing")}
-                  tone="warning"
-                />
-                <CustomerFilterButton
-                  active={operationFilter === "business-check"}
-                  count={businessCheckCount}
-                  label="사업자 확인"
-                  onClick={() => applyOperationFilter("business-check")}
-                  tone="danger"
-                />
-                <CustomerFilterButton
-                  active={operationFilter === "loading-missing"}
-                  count={loadingMissingCount}
-                  label="적재위치 미등록"
-                  onClick={() => applyOperationFilter("loading-missing")}
-                  tone="warning"
-                />
-                <CustomerFilterButton
-                  active={operationFilter === "contact-missing"}
-                  count={contactMissingCount}
-                  label="연락처 미등록"
-                  onClick={() => applyOperationFilter("contact-missing")}
-                />
-                <CustomerFilterButton
-                  active={operationFilter === "manager-missing"}
-                  count={managerMissingCount}
-                  label="담당자 미지정"
-                  onClick={() => applyOperationFilter("manager-missing")}
-                />
-                <CustomerFilterButton
-                  active={operationFilter === "all"}
-                  count={customers.length}
-                  label="운영 전체"
-                  onClick={clearOperationFilter}
-                />
+              <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
+                <label className="maju-search-field">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <input
+                    className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
+                    onChange={(event) => setCustomerSearch(event.target.value)}
+                    placeholder="상호명, 주소, 사업자번호 검색"
+                    value={customerSearch}
+                  />
+                </label>
+                <div className="maju-filter-box mt-3">
+                  <p className="maju-muted-label px-2 pb-1">매출 등급</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(["all", "A", "B", "C"] as const).map((grade) => (
+                      <button
+                        className={`h-9 rounded-md border text-xs font-black transition ${
+                          gradeFilter === grade
+                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                            : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                        }`}
+                        key={grade}
+                        onClick={() => setGradeFilter(grade)}
+                        type="button"
+                      >
+                        {grade === "all" ? "전체" : `${grade}등급`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                <div className="maju-filter-box mt-3">
+                  <p className="maju-muted-label px-2 pb-1">운영 상태</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <CustomerFilterButton
+                      active={operationFilter === "address-missing"}
+                      count={addressMissingCount}
+                      label="주소 미등록"
+                      onClick={() => applyOperationFilter("address-missing")}
+                      tone="danger"
+                    />
+                    <CustomerFilterButton
+                      active={operationFilter === "business-number-missing"}
+                      count={businessNumberMissingCount}
+                      label="사업자번호 미등록"
+                      onClick={() => applyOperationFilter("business-number-missing")}
+                      tone="warning"
+                    />
+                    <CustomerFilterButton
+                      active={operationFilter === "business-check"}
+                      count={businessCheckCount}
+                      label="사업자 확인"
+                      onClick={() => applyOperationFilter("business-check")}
+                      tone="danger"
+                    />
+                    <CustomerFilterButton
+                      active={operationFilter === "loading-missing"}
+                      count={loadingMissingCount}
+                      label="적재위치 미등록"
+                      onClick={() => applyOperationFilter("loading-missing")}
+                      tone="warning"
+                    />
+                    <CustomerFilterButton
+                      active={operationFilter === "contact-missing"}
+                      count={contactMissingCount}
+                      label="연락처 미등록"
+                      onClick={() => applyOperationFilter("contact-missing")}
+                    />
+                    <CustomerFilterButton
+                      active={operationFilter === "manager-missing"}
+                      count={managerMissingCount}
+                      label="담당자 미지정"
+                      onClick={() => applyOperationFilter("manager-missing")}
+                    />
+                    <CustomerFilterButton
+                      active={operationFilter === "all"}
+                      count={customers.length}
+                      label="운영 전체"
+                      onClick={clearOperationFilter}
+                    />
+                  </div>
+                </div>
               <CleanupWorkStatus
                 filterLabel={activeCleanupLabel}
                 filteredCount={filteredCustomers.length}
