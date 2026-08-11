@@ -14,8 +14,7 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
-  const routePlan = await getTodayRoutePlan(companyId);
-  const originAddress = await getCompanyOriginAddress(companyId);
+  const [routePlan, originAddress] = await Promise.all([getTodayRoutePlan(companyId), getCompanyOriginAddress(companyId)]);
   const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (

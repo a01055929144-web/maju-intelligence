@@ -11,8 +11,10 @@ export default async function CompanySettingsPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
 
-  const company = await getCompanySettings(session.companyId, session.companyName);
-  const staff = await getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false }));
+  const [company, staff] = await Promise.all([
+    getCompanySettings(session.companyId, session.companyName),
+    getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false }))
+  ]);
 
   return (
     <CustomerAppShell

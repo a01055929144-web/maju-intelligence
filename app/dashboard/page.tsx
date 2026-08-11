@@ -14,17 +14,21 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const company = await getCompanySettings(companyId, customerSession?.companyName || "선택 고객사");
   const withCompanyQuery = (href: string) => {
     if (!isAdminPreview || !companyId) return href;
     if (href === "/dashboard/settings") return "/admin/companies";
     return `${href}${href.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
   };
 
-  const { briefing, report, leads: leadPayload, uploadHistory } = await getCompanyDashboardPayload(companyId);
-  const routePlan = await getTodayRoutePlan(companyId);
-  const customerMaster = await getCustomerMaster(companyId);
-  const originAddress = await getCompanyOriginAddress(companyId);
+  // These five reads are all keyed only on companyId with no dependency on each other's
+  // results, so they run in parallel instead of five sequential Supabase round-trips.
+  const [company, { briefing, report, leads: leadPayload, uploadHistory }, routePlan, customerMaster, originAddress] = await Promise.all([
+    getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
+    getCompanyDashboardPayload(companyId),
+    getTodayRoutePlan(companyId),
+    getCustomerMaster(companyId),
+    getCompanyOriginAddress(companyId)
+  ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   const customerDataCount = hasOperationalCustomerMaster ? customerMaster.customers.length : 0;
   const hasOperationalReport = hasOperationalCustomerMaster && report.health.total > 0;

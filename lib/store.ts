@@ -285,7 +285,7 @@ export type SystemStatus = {
   readinessScore: number;
   readyForOperations: boolean;
   warningIssues: string[];
-  requiredEnvironment: Array<{ key: string; present: boolean; scope: "server" | "client" }>;
+  requiredEnvironment: Array<{ key: string; present: boolean; required: boolean; scope: "server" | "client" }>;
   services: Array<{ name: string; status: "ready" | "fallback" | "missing"; description: string }>;
   databaseChecks: DatabaseCheck[];
   storageChecks: DatabaseCheck[];
@@ -1531,6 +1531,10 @@ export function getSystemStatus(): SystemStatus {
   const adminConfigured = Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET);
   const customerConfigured = Boolean(process.env.CUSTOMER_EMAIL && process.env.CUSTOMER_PASSWORD);
   const ocrConfigured = Boolean(process.env.CLOVA_OCR_INVOKE_URL && process.env.CLOVA_OCR_SECRET) || Boolean(process.env.UPSTAGE_API_KEY) || Boolean(process.env.OPENAI_API_KEY);
+  const kakaoRestConfigured = Boolean(process.env.KAKAO_REST_KEY);
+  const kakaoMapConfigured = Boolean(process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY);
+  const kakaoConfigured = kakaoRestConfigured && kakaoMapConfigured;
+  const opinetConfigured = Boolean(process.env.OPINET_API_KEY);
   const routeConfigured = Boolean(process.env.COMPANY_ORIGIN_ADDRESS && process.env.TMAP_API_KEY);
   const blockingIssues = [
     !supabaseConfigured && "Supabase URL과 Service Role Key가 없어 거래처/매출/첨부자료 서버 저장을 확인할 수 없습니다.",
@@ -1538,6 +1542,7 @@ export function getSystemStatus(): SystemStatus {
     !customerConfigured && "고객사 로그인 이메일과 비밀번호 환경변수를 설정해야 합니다."
   ].filter((issue): issue is string => Boolean(issue));
   const warningIssues = [
+    !kakaoConfigured && "카카오 REST 키 또는 JavaScript 키가 없어 주소검색/지도 표시가 제한될 수 있습니다.",
     !routeConfigured && "회사 출발지 또는 TMAP API 키가 없어 실도로 경로 계산이 제한됩니다.",
     !ocrConfigured && "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 보조 검증 모드로 동작합니다.",
     !appUrlConfigured && "NEXT_PUBLIC_APP_URL이 없어 배포 URL 기반 링크와 리다이렉트 확인이 제한될 수 있습니다."
@@ -1554,19 +1559,22 @@ export function getSystemStatus(): SystemStatus {
     readyForOperations: blockingIssues.length === 0,
     warningIssues,
     requiredEnvironment: [
-      { key: "NEXT_PUBLIC_APP_URL", present: appUrlConfigured, scope: "client" },
-      { key: "NEXT_PUBLIC_SUPABASE_URL", present: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL), scope: "client" },
-      { key: "SUPABASE_URL", present: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL), scope: "server" },
-      { key: "SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY", present: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY), scope: "server" },
-      { key: "ADMIN_EMAIL", present: Boolean(process.env.ADMIN_EMAIL), scope: "server" },
-      { key: "ADMIN_PASSWORD", present: Boolean(process.env.ADMIN_PASSWORD), scope: "server" },
-      { key: "ADMIN_SESSION_SECRET", present: Boolean(process.env.ADMIN_SESSION_SECRET), scope: "server" },
-      { key: "CUSTOMER_EMAIL", present: Boolean(process.env.CUSTOMER_EMAIL), scope: "server" },
-      { key: "CUSTOMER_PASSWORD", present: Boolean(process.env.CUSTOMER_PASSWORD), scope: "server" },
-      { key: "CUSTOMER_COMPANY_ID", present: Boolean(process.env.CUSTOMER_COMPANY_ID), scope: "server" },
-      { key: "COMPANY_ORIGIN_ADDRESS", present: Boolean(process.env.COMPANY_ORIGIN_ADDRESS), scope: "server" },
-      { key: "TMAP_API_KEY", present: Boolean(process.env.TMAP_API_KEY), scope: "server" },
-      { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, scope: "server" }
+      { key: "NEXT_PUBLIC_APP_URL", present: appUrlConfigured, required: true, scope: "client" },
+      { key: "NEXT_PUBLIC_SUPABASE_URL", present: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL), required: true, scope: "client" },
+      { key: "SUPABASE_URL", present: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL), required: true, scope: "server" },
+      { key: "SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_SECRET_KEY", present: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY), required: true, scope: "server" },
+      { key: "ADMIN_EMAIL", present: Boolean(process.env.ADMIN_EMAIL), required: true, scope: "server" },
+      { key: "ADMIN_PASSWORD", present: Boolean(process.env.ADMIN_PASSWORD), required: true, scope: "server" },
+      { key: "ADMIN_SESSION_SECRET", present: Boolean(process.env.ADMIN_SESSION_SECRET), required: true, scope: "server" },
+      { key: "CUSTOMER_EMAIL", present: Boolean(process.env.CUSTOMER_EMAIL), required: true, scope: "server" },
+      { key: "CUSTOMER_PASSWORD", present: Boolean(process.env.CUSTOMER_PASSWORD), required: true, scope: "server" },
+      { key: "CUSTOMER_COMPANY_ID", present: Boolean(process.env.CUSTOMER_COMPANY_ID), required: true, scope: "server" },
+      { key: "COMPANY_ORIGIN_ADDRESS", present: Boolean(process.env.COMPANY_ORIGIN_ADDRESS), required: true, scope: "server" },
+      { key: "TMAP_API_KEY", present: Boolean(process.env.TMAP_API_KEY), required: true, scope: "server" },
+      { key: "KAKAO_REST_KEY", present: kakaoRestConfigured, required: true, scope: "server" },
+      { key: "NEXT_PUBLIC_KAKAO_MAP_APP_KEY", present: kakaoMapConfigured, required: true, scope: "client" },
+      { key: "OPINET_API_KEY", present: opinetConfigured, required: false, scope: "server" },
+      { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" }
     ],
     services: [
       {
@@ -1600,6 +1608,20 @@ export function getSystemStatus(): SystemStatus {
         description: routeConfigured
           ? "회사 출발지와 Tmap API 키가 설정되어 거리/시간/경로 계산을 붙일 수 있습니다."
           : "회사 출발지 또는 Tmap API 키가 없어 주소 텍스트/기존 캐시 기준으로 동작합니다."
+      },
+      {
+        name: "Kakao Map",
+        status: kakaoConfigured ? "ready" : "fallback",
+        description: kakaoConfigured
+          ? "주소검색 REST API와 카카오맵 JavaScript SDK가 모두 설정되어 있습니다."
+          : "카카오 REST 키 또는 JavaScript 키가 없어 주소검색/지도 표시가 제한될 수 있습니다."
+      },
+      {
+        name: "Fuel Price Intelligence",
+        status: opinetConfigured ? "ready" : "fallback",
+        description: opinetConfigured
+          ? "OPINET 무료 API Key로 전국 평균 유가를 조회하고 30분 캐시해 예상 유류비에 반영합니다."
+          : "OPINET 키가 없어 기본 유가 단가로 예상 유류비를 계산합니다."
       },
       {
         name: "Document OCR",

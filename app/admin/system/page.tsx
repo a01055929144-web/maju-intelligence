@@ -18,8 +18,7 @@ export default async function AdminSystemPage() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const system = await getSystemDiagnostics();
-  const auditLogs = await getAdminAuditLogs().catch(() => []);
+  const [system, auditLogs] = await Promise.all([getSystemDiagnostics(), getAdminAuditLogs().catch(() => [])]);
   const sensitiveAuditCount = auditLogs.filter((log) => auditHasSensitiveChange(log.metadata)).length;
   const dataAuditCount = auditLogs.filter((log) => auditActionTone(log.action) === "data").length;
   const accountAuditCount = auditLogs.filter((log) => auditActionTone(log.action) === "account").length;
@@ -403,15 +402,18 @@ export default async function AdminSystemPage() {
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>필수 환경변수</CardTitle>
+              <CardTitle>운영 환경변수</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {system.requiredEnvironment.map((item) => (
-                <div key={item.key} className="grid grid-cols-[1fr_80px_90px] items-center gap-3 rounded-md border border-border p-3">
-                  <code className="text-sm font-bold">{item.key}</code>
+                <div key={item.key} className="grid grid-cols-2 items-center gap-3 rounded-md border border-border p-3 sm:grid-cols-[minmax(0,1fr)_72px_72px_90px]">
+                  <code className="col-span-2 min-w-0 truncate text-sm font-bold sm:col-span-1">{item.key}</code>
+                  <Badge className={item.required ? "justify-center bg-slate-100 text-slate-700" : "justify-center bg-blue-50 text-blue-700"}>
+                    {item.required ? "필수" : "선택"}
+                  </Badge>
                   <Badge className={item.scope === "server" ? "justify-center" : "justify-center bg-accent/20 text-foreground"}>{item.scope}</Badge>
-                  <Badge className={item.present ? "justify-center bg-primary/10 text-primary" : "justify-center bg-destructive/10 text-destructive"}>
-                    {item.present ? "OK" : "누락"}
+                  <Badge className={item.present ? "justify-center bg-primary/10 text-primary" : item.required ? "justify-center bg-destructive/10 text-destructive" : "justify-center bg-slate-100 text-slate-600"}>
+                    {item.present ? "OK" : item.required ? "누락" : "기본값"}
                   </Badge>
                 </div>
               ))}
