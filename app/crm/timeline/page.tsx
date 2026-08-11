@@ -143,6 +143,18 @@ function withCompanyQuery(path: string) {
   return `${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
 }
 
+function syncOperationFilterUrl(filter: OperationFilter) {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  if (filter === "all") {
+    url.searchParams.delete("operationFilter");
+  } else {
+    url.searchParams.set("operationFilter", filter);
+  }
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export default function CrmTimelinePage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
@@ -451,6 +463,7 @@ export default function CrmTimelinePage() {
     }
 
     setOperationFilter(resolvedFilter);
+    syncOperationFilterUrl(resolvedFilter);
 
     const nextIndex = customers.findIndex((customer) => customerMatchesOperationFilter(customer, resolvedFilter));
     if (nextIndex >= 0) setSelectedIndex(nextIndex);
@@ -458,6 +471,7 @@ export default function CrmTimelinePage() {
 
   function clearOperationFilter() {
     setOperationFilter("all");
+    syncOperationFilterUrl("all");
     setSelectedIndex(0);
     setIsEditing(false);
     setSaveMessage("");
@@ -566,6 +580,7 @@ export default function CrmTimelinePage() {
       if (movedToNext) setSelectedIndex(nextIndex);
       if (completedCleanupFilter) {
         setOperationFilter("all");
+        syncOperationFilterUrl("all");
         setSelectedIndex(0);
       }
       setDraftCustomer(movedToNext ? nextCustomers[nextIndex] : saved);
@@ -1712,7 +1727,7 @@ function CleanupWorkStatus({
   if (!isActive) {
     return (
       <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-500">
-        운영 상태 필터를 선택하면 보완 대상만 모아보고 저장 후 다음 대상으로 이동합니다.
+        운영 상태 필터를 선택하면 보완 대상만 모아보고, 저장 후 다음 대상으로 이동합니다.
       </div>
     );
   }
@@ -1727,6 +1742,7 @@ function CleanupWorkStatus({
           <p className="mt-1 text-sm font-black text-slate-950">
             {filterLabel} · {progressLabel}건
           </p>
+          <p className="mt-1 text-[11px] font-bold text-teal-700">이 필터는 URL에 반영되어 새로고침하거나 공유해도 같은 작업 목록으로 열립니다.</p>
         </div>
         <button
           className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-teal-200 bg-white px-3 text-xs font-black text-teal-800 hover:bg-teal-50"
