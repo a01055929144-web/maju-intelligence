@@ -19,8 +19,12 @@ const NTS_BUSINESS_STATUS_URL = "https://api.odcloud.kr/api/nts-businessman/v1/s
 // The API accepts up to 100 business numbers per call; batching at 90 leaves headroom.
 const BATCH_SIZE = 90;
 
+function getBusinessStatusApiKey() {
+  return (process.env.NTS_BUSINESS_API_KEY || process.env.NTS_BUSINESS_SERVICE_KEY || "").trim();
+}
+
 export function isBusinessStatusApiConfigured() {
-  const key = process.env.NTS_BUSINESS_API_KEY;
+  const key = getBusinessStatusApiKey();
   return Boolean(key && key !== "replace-with-data-go-kr-service-key");
 }
 
@@ -42,8 +46,16 @@ type NtsStatusRow = {
   end_dt?: string;
 };
 
+type NtsStatusPayload = {
+  data?: NtsStatusRow[];
+  match_cnt?: number;
+  request_cnt?: number;
+  status_code?: string;
+};
+
 async function fetchStatusBatch(businessNumbers: string[]): Promise<NtsStatusRow[]> {
-  const serviceKey = process.env.NTS_BUSINESS_API_KEY || "";
+  const serviceKey = getBusinessStatusApiKey();
+  if (!serviceKey) return [];
 
   try {
     const response = await fetch(`${NTS_BUSINESS_STATUS_URL}?serviceKey=${encodeURIComponent(serviceKey)}`, {
@@ -57,9 +69,10 @@ async function fetchStatusBatch(businessNumbers: string[]): Promise<NtsStatusRow
     });
 
     if (!response.ok) return [];
-    const payload = (await response.json()) as { status_code?: string; data?: NtsStatusRow[] };
-    if (payload.status_code !== "OK") return [];
-    return payload.data || [];
+    const payload = (await response.json()) as NtsStatusPayload;
+    const statusCode = String(payload.status_code || "").toUpperCase();
+    if (statusCode && statusCode !== "OK" && statusCode !== "200") return [];
+    return Array.isArray(payload.data) ? payload.data : [];
   } catch {
     return [];
   }
