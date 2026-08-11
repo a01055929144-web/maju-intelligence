@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { CustomerMasterInput, getCustomerMaster, upsertCustomerMaster } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
 
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  if (!scopeHasCapability(scope, "manage_customers")) {
+    return NextResponse.json({ message: "거래처 정보를 등록·수정할 권한이 없습니다." }, { status: 403 });
   }
 
   if (!body?.customerName) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerSession } from "@/lib/auth";
+import { customerHasCapability, getCustomerSession } from "@/lib/auth";
 import {
   createStaffInvitation,
   getCompanyStaffInvitations,
@@ -26,6 +26,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const { response, session } = await requireMemberManager();
   if (response || !session) return response;
+  if (!customerHasCapability(session, "manage_members")) {
+    return NextResponse.json({ message: "직원을 추가할 권한이 없습니다. 대표/관리자에게 요청하세요." }, { status: 403 });
+  }
 
   const body = (await request.json().catch(() => null)) as Omit<StaffInvitationInput, "companyId"> | null;
   if (!body?.employeeName) {
@@ -52,6 +55,9 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const { response, session } = await requireMemberManager();
   if (response || !session) return response;
+  if (!customerHasCapability(session, "manage_members")) {
+    return NextResponse.json({ message: "직원 정보를 변경할 권한이 없습니다. 대표/관리자에게 요청하세요." }, { status: 403 });
+  }
 
   const body = (await request.json().catch(() => null)) as Omit<StaffInvitationUpdateInput, "companyId"> | null;
   if (!body?.invitationId) {

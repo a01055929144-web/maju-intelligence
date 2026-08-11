@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { getCustomerSession } from "@/lib/auth";
+import { customerHasCapability, getCustomerSession } from "@/lib/auth";
 import { updateCompanySettings } from "@/lib/store";
 
 export async function PATCH(request: Request) {
   const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!customerHasCapability(session, "manage_company")) {
+    return NextResponse.json({ error: "회사 설정을 변경할 권한이 없습니다. 대표/소유자에게 요청하세요." }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);

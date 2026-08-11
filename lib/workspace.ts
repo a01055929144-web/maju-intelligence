@@ -24,6 +24,9 @@ export const workspaceTypeLabels: Record<WorkspaceType, string> = {
   personal: "개인 워크스페이스"
 };
 
+// Roles are currently used for display, filtering, and manager-side organization only.
+// The product direction is not to block day-to-day work by role yet, so every role keeps
+// the same operational capabilities until the customer explicitly enables permission limits.
 const roleCapabilities: Record<WorkspaceRole, WorkspaceCapability[]> = {
   owner: allWorkspaceCapabilities(),
   manager: allWorkspaceCapabilities(),

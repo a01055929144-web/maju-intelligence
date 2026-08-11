@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { CustomerRow } from "@/lib/sample-data";
 import { ColumnMapping, RawUploadRow, saveAnalysis } from "@/lib/store";
 
@@ -17,6 +17,10 @@ export async function POST(request: NextRequest) {
   const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  const requiredCapability = body?.uploadType === "sales-analysis" ? "manage_sales" : "manage_customers";
+  if (!scopeHasCapability(scope, requiredCapability)) {
+    return NextResponse.json({ message: "이 데이터를 등록할 권한이 없습니다." }, { status: 403 });
   }
 
   const rows = body?.rows || [];

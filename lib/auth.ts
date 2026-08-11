@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { getAuthCredentials, getCustomerLoginCredentials } from "./store";
-import { AppUserRole, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
+import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
 export type AdminSession = {
   email: string;
@@ -139,6 +139,22 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
     ok: true as const,
     role: "admin" as const
   };
+}
+
+/** Checks a customer session against the workspace capability matrix. */
+export function customerHasCapability(session: CustomerSession | null, capability: WorkspaceCapability) {
+  if (!session) return false;
+  return canUseWorkspaceFeature(session.workspaceRole, capability);
+}
+
+/**
+ * Same check for the combined admin/customer scope. MAJU admins always keep full access,
+ * while customer capability rules remain centralized in lib/workspace.ts.
+ */
+export function scopeHasCapability(scope: Awaited<ReturnType<typeof getRequestAuthScope>>, capability: WorkspaceCapability) {
+  if (!scope.ok) return false;
+  if (scope.role === "admin") return true;
+  return customerHasCapability(scope.customerSession, capability);
 }
 
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {
