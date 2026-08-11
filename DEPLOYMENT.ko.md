@@ -57,6 +57,7 @@ CUSTOMER_COMPANY_ID=00000000-0000-4000-8000-000000000001
 
 COMPANY_ORIGIN_ADDRESS=경기도 하남시 초이로 133 1층
 TMAP_API_KEY=replace-with-tmap-api-key
+OPINET_API_KEY=replace-with-opinet-api-key
 NEXT_PUBLIC_KAKAO_MAP_APP_KEY=your-kakao-javascript-key
 
 KAKAO_REST_KEY=your-kakao-rest-api-key
@@ -66,6 +67,8 @@ KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
 ```
 
 주의: `SUPABASE_SERVICE_ROLE_KEY`는 절대 브라우저나 공개 문서에 노출하면 안 됩니다.
+
+`OPINET_API_KEY`는 선택값입니다. 등록하면 영업·배송 코스 화면에서 OPINET 전국 평균 경유 단가를 기준으로 예상 유류비를 계산합니다. 무료 Key는 호출 한도가 있으므로 상업 운영 전 호출건수 확대 신청을 검토하세요.
 
 카카오맵을 실제로 표시하려면 Kakao Developers에서 JavaScript 키를 발급하고, 앱 설정 > 플랫폼 > Web에 아래 도메인을 등록합니다.
 

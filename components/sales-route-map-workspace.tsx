@@ -125,6 +125,14 @@ type CourseSummary = {
   selectedCount: number;
 };
 
+type FuelPriceSummary = {
+  basis: "opinet" | "fallback";
+  checkedAt: string;
+  estimatedFuelCostWon: number;
+  pricePerLiter: number;
+  sourceLabel: string;
+};
+
 const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "전체", value: "all" },
   { label: "A등급", value: "A" },
@@ -168,6 +176,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
+  const [fuelPriceSummary, setFuelPriceSummary] = useState<FuelPriceSummary | null>(null);
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const sourceReady = routePlan.source === "supabase";
   const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
@@ -209,8 +218,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
+  const activeDistanceKm = kpiSummary?.distanceKm ?? routeTotals.distanceKm;
   const distanceKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
   const durationKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
+  const fuelKpiHelper = !sourceReady
+    ? "거래처 마스터 등록 후 계산"
+    : fuelPriceSummary
+      ? `${fuelPriceSummary.sourceLabel} · ${fuelPriceSummary.pricePerLiter.toLocaleString()}원/L`
+      : "OPINET 유가 확인 중";
   const activeFilterLabels = [
     query.trim() ? `검색: ${query.trim()}` : "",
     isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
@@ -264,6 +279,34 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
+
+  useEffect(() => {
+    if (!sourceReady || activeDistanceKm <= 0) {
+      setFuelPriceSummary(null);
+      return;
+    }
+
+    let active = true;
+    const params = new URLSearchParams({
+      distanceKm: String(activeDistanceKm),
+      fuelType: "diesel",
+      mileageKmPerLiter: "7.5"
+    });
+
+    fetch(`/api/fuel/opinet?${params.toString()}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!active || !payload) return;
+        setFuelPriceSummary(payload);
+      })
+      .catch(() => {
+        if (active) setFuelPriceSummary(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeDistanceKm, sourceReady]);
 
   async function updateStore(storeId: string, edit: StoreEdit) {
     const currentStore = allStores.find((store) => store.id === storeId);
@@ -342,7 +385,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         </div>
       </header>
 
-      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-5">
+      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
@@ -363,6 +406,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         />
         <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지-매장 거리합"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
+        <Kpi helper={fuelKpiHelper} label={fuelPriceSummary?.basis === "opinet" ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${(fuelPriceSummary?.estimatedFuelCostWon || 0).toLocaleString()}원` : "-"} />
       </section>
 
       <RouteBasisStrip

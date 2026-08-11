@@ -21,6 +21,7 @@ const required = [
   "KAKAO_REST_KEY",
   "NEXT_PUBLIC_KAKAO_MAP_APP_KEY"
 ];
+const optional = ["OPINET_API_KEY"];
 
 const env = {
   ...envFiles.reduce((values, filePath) => ({ ...values, ...readEnvFile(filePath) }), {}),
@@ -30,12 +31,22 @@ const rows = required.map((key) => {
   const value = envValue(key);
   return {
     key,
+    required: true,
+    present: Boolean(value),
+    length: value.length
+  };
+});
+const optionalRows = optional.map((key) => {
+  const value = envValue(key);
+  return {
+    key,
+    required: false,
     present: Boolean(value),
     length: value.length
   };
 });
 
-console.table(rows);
+console.table([...rows, ...optionalRows]);
 
 if (!rows.some((row) => row.key.startsWith("POSTGRES_URL") && row.present)) {
   process.exitCode = 1;
