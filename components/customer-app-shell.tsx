@@ -5,16 +5,11 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
-  BarChart3,
-  Building2,
-  HelpCircle,
   LogOut,
-  LucideIcon,
   MapPinned,
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
-  Route,
   Settings
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +53,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
+  const activeNavigationItem = visibleNavigationGroups.flatMap((group) => group.items).find((item) => item.active === active);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -132,22 +128,12 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
             </nav>
 
             {!collapsed ? (
-              <div className="border-t border-slate-200/80 p-3">
-                <div className="maju-panel bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-xs font-black text-slate-700">
-                    <HelpCircle className="h-4 w-4 text-teal-600" />
-                    지도 기준 업무 순서
-                  </div>
-                  <div className="mt-3 space-y-1">
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/dashboard")} icon={MapPinned} label="지도 홈에서 현황 확인" step="1" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/crm/timeline")} icon={Building2} label="거래처 원장 관리" step="2" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/routes/today")} icon={Route} label="영업·배송 코스 계산" step="3" />
-                    <SidebarQuickStep currentPath={pathname} href={scopedHref("/revenue/pipeline")} icon={BarChart3} label="성장 기회 분석" step="4" />
-                  </div>
-                  <p className="mt-3 text-[11px] font-bold leading-5 text-slate-500">
-                    {mode === "admin-preview"
-                      ? "관리자는 고객사 화면을 확인만 하고, 계정과 회사 권한 관리는 어드민에서 처리합니다."
-                      : "모든 업무는 지도 홈의 거래처 위치와 출발지 기준으로 이어집니다."}
+              <div className="border-t border-slate-200/80 bg-white p-3">
+                <div className="rounded-lg border border-teal-100 bg-teal-50 p-3">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">현재 작업</p>
+                  <p className="mt-1 truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
+                  <p className="mt-1 line-clamp-2 text-[11px] font-bold leading-5 text-slate-600">
+                    {activeNavigationItem?.description || "지도 홈의 거래처 위치와 출발지 기준으로 업무를 이어갑니다."}
                   </p>
                 </div>
               </div>
@@ -260,21 +246,4 @@ function isCurrentNavItem(pathname: string | null, href: string) {
 
 function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {
   return getCustomerWorkspaceLabel(active);
-}
-
-function SidebarQuickStep({ currentPath, href, icon: Icon, label, step }: { readonly currentPath: string | null; readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {
-  const selected = isCurrentNavItem(currentPath, href);
-
-  return (
-    <Link
-      className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-black ring-1 ring-inset transition ${
-        selected ? "bg-teal-50 text-teal-900 ring-teal-200" : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-100 hover:text-slate-950 hover:ring-slate-300"
-      }`}
-      href={href}
-    >
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600"}`}>{step}</span>
-      <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
-      <span className="min-w-0 truncate">{label}</span>
-    </Link>
-  );
 }

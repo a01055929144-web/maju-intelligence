@@ -39,12 +39,12 @@ export type CustomerNavigationGroup = {
 
 export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "지도 홈",
+    label: "메인",
     items: [
       {
         active: "dashboard",
         badge: "메인",
-        description: "거래처 위치와 회사 현황을 지도에서 먼저 확인",
+        description: "거래처 위치, 현황, 다음 업무를 지도에서 확인",
         href: "/dashboard",
         icon: MapPinned,
         label: "지도 홈"
@@ -52,18 +52,18 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "지도 기반 업무",
+    label: "현장 운영",
     items: [
       {
         active: "routes",
-        description: "배송차별 매장, 경유 순서, 출발지 기준 거리 확인",
+        description: "배송차, 경유 순서, 출발지 기준 거리",
         href: "/routes/today",
         icon: Route,
         label: "영업·배송 코스"
       },
       {
         active: "customers",
-        description: "거래처 기본정보, 첨부자료, 메모 히스토리 관리",
+        description: "기본정보, 첨부자료, 메모 히스토리",
         href: "/crm/timeline",
         icon: Building2,
         label: "거래처 원장"
@@ -71,32 +71,32 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "성장 분석",
+    label: "성장",
     items: [
       {
         active: "revenue",
-        description: "매출 기회, 이탈 징후, 업셀링 후보 확인",
+        description: "매출 기회, 이탈 징후, 업셀링 후보",
         href: "/revenue/pipeline",
         icon: BarChart3,
         label: "매출 성장"
       },
       {
         active: "revenue-ledger",
-        description: "ERP 거래원장 업로드와 거래처별 매출 내역 확인",
+        description: "ERP 거래원장과 거래처별 매출 내역",
         href: "/revenue/transactions",
         icon: ReceiptText,
         label: "매출 거래내역"
       },
       {
         active: "assistant",
-        description: "견적, 방문 메모, 후속 액션 초안 작성",
+        description: "견적, 방문 메모, 후속 액션 초안",
         href: "/assistant",
         icon: Sparkles,
         label: "AI 영업 도우미"
       },
       {
         active: "report",
-        description: "Company Health Score와 회사 진단 리포트 확인",
+        description: "회사 건강도와 AI 진단 리포트",
         href: "/reports/latest",
         icon: HeartPulse,
         label: "AI 리포트"
@@ -104,7 +104,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "데이터 / 설정",
+    label: "관리",
     items: [
       {
         active: "data",
@@ -115,7 +115,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       },
       {
         active: "settings",
-        description: "회사 정보, 출발지, 운영 기준값 관리",
+        description: "회사 정보, 출발지, 운영 기준값",
         href: "/dashboard/settings",
         icon: Settings,
         label: "회사 설정"

@@ -231,7 +231,7 @@ export function MapHomeView({
       <ChurnRiskAlert companyId={isAdminPreview ? companyId : undefined} offsetTop={headerHeight + 12} timelineHref={quickNav.timelineHref} />
 
       <aside
-        className={`pointer-events-auto absolute bottom-0 left-0 z-40 flex w-[336px] max-w-[88vw] transform flex-col rounded-r-xl border border-l-0 border-slate-200 bg-white shadow-[12px_0_32px_rgba(15,23,42,.12)] transition-transform duration-150 ${
+        className={`pointer-events-auto absolute bottom-0 left-0 z-40 flex w-[336px] max-w-[88vw] transform flex-col rounded-r-xl border border-l-0 border-slate-200 bg-white shadow-[12px_0_32px_rgba(15,23,42,.12)] transition-transform duration-100 ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{ top: headerHeight }}
@@ -250,15 +250,15 @@ export function MapHomeView({
           <div className="border-b border-slate-200 p-3">
             <div className="mb-3 rounded-lg border border-teal-100 bg-teal-50 p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-black text-teal-950">지도 홈 기준</p>
+                <p className="text-xs font-black text-teal-950">지도에서 시작</p>
                 <Badge className="bg-white text-teal-700 ring-1 ring-inset ring-teal-200">OS</Badge>
               </div>
-              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">위치 확인 후 코스, 원장, 매출 작업으로 이동합니다.</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">지도 홈에서 위치를 보고 코스, 원장, 성장 업무로 이동합니다.</p>
             </div>
-            <p className="maju-muted-label px-2 pb-2">빠른 작업</p>
+            <p className="maju-muted-label px-2 pb-2">핵심 업무</p>
             <div className="grid grid-cols-2 gap-2">
               {primaryActions.map((item) => (
-                <Link className="flex h-[64px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left transition hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
+                <Link className="flex h-[60px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left transition hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-50 text-teal-700 ring-1 ring-inset ring-slate-100">
                     <item.icon className="h-4 w-4" />
                   </span>
@@ -271,7 +271,7 @@ export function MapHomeView({
             </div>
           </div>
 
-          <nav className="space-y-3 border-b border-slate-200 p-3">
+          <nav className="space-y-3 border-b border-slate-200 bg-white p-3">
             {navGroups.map((group) => (
               <div className="space-y-1.5" key={group.label}>
                 <p className="maju-muted-label px-2">{group.label}</p>
