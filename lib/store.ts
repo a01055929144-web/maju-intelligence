@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { RouteDistanceResult } from "./tmap";
 
@@ -1732,6 +1733,17 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
 export async function upsertCustomerMaster(input: CustomerMasterInput, companyId?: string, auditContext: CustomerMasterAuditContext = {}) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
+  const resolvedPlaceLinks = await resolvePlaceLinks(
+    {
+      address: input.address || "",
+      customerName
+    },
+    {
+      googleMapUrl: input.googleMapUrl,
+      kakaoPlaceUrl: input.kakaoPlaceUrl,
+      naverPlaceUrl: input.naverPlaceUrl
+    }
+  );
 
   const fallbackItem = toCustomerMasterItem(
     {
@@ -1760,14 +1772,14 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
       industry: input.industry || "미분류",
-      kakao_place_url: input.kakaoPlaceUrl || null,
+      kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
       last_order_days: input.lastOrderDays || 0,
-      google_map_url: input.googleMapUrl || null,
+      google_map_url: resolvedPlaceLinks.googleMapUrl || null,
       monthly_revenue: input.monthlyRevenue || 0,
-      naver_place_url: input.naverPlaceUrl || null,
+      naver_place_url: resolvedPlaceLinks.naverPlaceUrl || null,
       opening_date: input.openingDate || null,
       phone: input.phone || null,
-      place_links_checked_at: input.naverPlaceUrl || input.kakaoPlaceUrl || input.googleMapUrl ? new Date().toISOString() : null,
+      place_links_checked_at: resolvedPlaceLinks.checkedAt,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
       visit_count: input.visitCount || 0,
@@ -1792,10 +1804,10 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
   ).catch(() => []);
   const placeLinks = {
-    google_map_url: input.googleMapUrl || null,
-    kakao_place_url: input.kakaoPlaceUrl || null,
-    naver_place_url: input.naverPlaceUrl || null,
-    place_links_checked_at: input.naverPlaceUrl || input.kakaoPlaceUrl || input.googleMapUrl ? new Date().toISOString() : null
+    google_map_url: resolvedPlaceLinks.googleMapUrl || null,
+    kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
+    naver_place_url: resolvedPlaceLinks.naverPlaceUrl || null,
+    place_links_checked_at: resolvedPlaceLinks.checkedAt
   };
   const customerPayload = {
     address: input.address || null,
