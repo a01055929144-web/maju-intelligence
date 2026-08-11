@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
@@ -242,6 +242,10 @@ export default function CrmTimelinePage() {
   const [saveMessage, setSaveMessage] = useState("");
   const [isAddressSearching, setIsAddressSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBusinessStatusChecking, setIsBusinessStatusChecking] = useState(false);
+  const [businessStatusMessage, setBusinessStatusMessage] = useState("");
+  const [isBulkBusinessStatusChecking, setIsBulkBusinessStatusChecking] = useState(false);
+  const [bulkBusinessStatusMessage, setBulkBusinessStatusMessage] = useState("");
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
@@ -580,6 +584,85 @@ export default function CrmTimelinePage() {
     }
   }
 
+  async function refreshSelectedCustomerBusinessStatus() {
+    if (!selectedCustomer?.id) return;
+    setIsBusinessStatusChecking(true);
+    setBusinessStatusMessage("");
+
+    try {
+      const response = await fetch("/api/customer/business-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds: [selectedCustomer.id] })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "사업자 상태 조회에 실패했습니다.");
+
+      if (payload?.configured === false) {
+        setBusinessStatusMessage("사업자 상태 자동조회 API 키가 아직 설정되지 않았습니다.");
+        return;
+      }
+      if (!payload?.updated) {
+        setBusinessStatusMessage("사업자번호가 없어 상태를 조회할 수 없습니다.");
+        return;
+      }
+
+      const refreshed = await fetch(withCompanyQuery("/api/customers"), { cache: "no-store" });
+      const refreshedPayload = await refreshed.json().catch(() => null);
+      const nextCustomer = Array.isArray(refreshedPayload?.customers)
+        ? refreshedPayload.customers.find((customer: CustomerView) => customer.id === selectedCustomer.id)
+        : null;
+
+      if (nextCustomer) {
+        setCustomers((current) => current.map((customer) => (customer.id === selectedCustomer.id ? nextCustomer : customer)));
+        setBusinessStatusMessage(`최신 사업자 상태: ${nextCustomer.businessStatus || "확인 필요"}`);
+      } else {
+        setBusinessStatusMessage("사업자 상태를 갱신했습니다. 목록을 새로고침하세요.");
+      }
+    } catch (error) {
+      setBusinessStatusMessage(error instanceof Error ? error.message : "사업자 상태 조회 중 오류가 발생했습니다.");
+    } finally {
+      setIsBusinessStatusChecking(false);
+    }
+  }
+
+  async function refreshAllBusinessStatuses() {
+    setIsBulkBusinessStatusChecking(true);
+    setBulkBusinessStatusMessage("");
+
+    try {
+      const response = await fetch("/api/customer/business-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl() })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "사업자 상태 일괄 조회에 실패했습니다.");
+
+      if (payload?.configured === false) {
+        setBulkBusinessStatusMessage("사업자 상태 자동조회 API 키가 아직 설정되지 않았습니다.");
+        return;
+      }
+
+      const closedCount = Array.isArray(payload?.closed) ? payload.closed.length : 0;
+      setBulkBusinessStatusMessage(
+        `${payload?.checked || 0}곳 조회, ${payload?.updated || 0}곳 갱신${closedCount ? ` · 폐업 확인 ${closedCount}곳` : ""}${
+          payload?.skippedNoBusinessNumber ? ` · 사업자번호 없음 ${payload.skippedNoBusinessNumber}곳 제외` : ""
+        }`
+      );
+
+      const refreshed = await fetch(withCompanyQuery("/api/customers"), { cache: "no-store" });
+      const refreshedPayload = await refreshed.json().catch(() => null);
+      if (Array.isArray(refreshedPayload?.customers)) {
+        setCustomers(refreshedPayload.customers);
+      }
+    } catch (error) {
+      setBulkBusinessStatusMessage(error instanceof Error ? error.message : "사업자 상태 일괄 조회 중 오류가 발생했습니다.");
+    } finally {
+      setIsBulkBusinessStatusChecking(false);
+    }
+  }
+
   async function saveNote() {
     if (!selectedCustomer?.id || !newMemo.trim()) return;
     setIsNoteSaving(true);
@@ -861,6 +944,31 @@ export default function CrmTimelinePage() {
                     />
                   </div>
                 </div>
+                <div className="maju-filter-box mt-3">
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <p className="maju-muted-label">사업자 휴폐업 상태</p>
+                    <button
+                      className="maju-button-secondary h-8 shrink-0 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isBulkBusinessStatusChecking}
+                      onClick={refreshAllBusinessStatuses}
+                      type="button"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isBulkBusinessStatusChecking ? "animate-spin" : ""}`} />
+                      {isBulkBusinessStatusChecking ? "조회 중" : "전체 재조회"}
+                    </button>
+                  </div>
+                  {bulkBusinessStatusMessage ? (
+                    <p
+                      className={`mx-1 mt-2 rounded-md p-2 text-xs font-bold ${
+                        bulkBusinessStatusMessage.includes("실패") || bulkBusinessStatusMessage.includes("오류")
+                          ? "bg-rose-50 text-rose-700"
+                          : "bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {bulkBusinessStatusMessage}
+                    </p>
+                  ) : null}
+                </div>
               <CleanupWorkStatus
                 filterLabel={activeCleanupLabel}
                 filteredCount={filteredCustomers.length}
@@ -962,6 +1070,16 @@ export default function CrmTimelinePage() {
                   <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
                     사업자 {selectedCustomer.businessStatus || "미확인"}
                   </Badge>
+                  <button
+                    className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isBusinessStatusChecking || !selectedCustomer.businessNumber}
+                    onClick={refreshSelectedCustomerBusinessStatus}
+                    title={selectedCustomer.businessNumber ? "국세청 휴폐업 상태 재조회" : "사업자번호 등록 후 조회 가능"}
+                    type="button"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isBusinessStatusChecking ? "animate-spin" : ""}`} />
+                    {isBusinessStatusChecking ? "조회 중" : "상태 재조회"}
+                  </button>
                   <Link
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50"
                     href={withCompanyQuery("/routes/today")}
@@ -979,6 +1097,15 @@ export default function CrmTimelinePage() {
                   </button>
                 </div>
               </div>
+              {businessStatusMessage ? (
+                <p
+                  className={`mt-2 rounded-md p-2 text-xs font-bold ${
+                    businessStatusMessage.includes("실패") || businessStatusMessage.includes("오류") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {businessStatusMessage}
+                </p>
+              ) : null}
 
               <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
                 <div className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4">

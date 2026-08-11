@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
 import { enrichLeadRecommendations } from "./leads";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
@@ -3072,7 +3073,7 @@ export type ChurnRiskCustomer = {
  * each customer's normalized_key against the latest matching sales_transactions.sales_date and
  * reports how many days have actually passed since that real transaction. Customers with no
  * sales history at all are skipped (not enough data to call it "churn" vs. "never ordered yet"),
- * and customers already marked business_status "closed" are skipped since that is a separate,
+ * and customers already marked business_status "폐업" are skipped since that is a separate,
  * permanent signal already surfaced elsewhere.
  */
 export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 21): Promise<ChurnRiskCustomer[]> {
@@ -3110,7 +3111,7 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   const today = Date.now();
   const results: ChurnRiskCustomer[] = [];
   for (const customer of customers) {
-    if (customer.business_status === "closed") continue;
+    if (customer.business_status === "폐업") continue;
     if (!customer.normalized_key) continue;
     const lastOrderDate = latestByKey.get(customer.normalized_key);
     if (!lastOrderDate) continue;
@@ -3132,6 +3133,83 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   }
 
   return results.sort((a, b) => b.daysSinceLastOrder - a.daysSinceLastOrder).slice(0, 30);
+}
+
+export type BusinessStatusRefreshResult = {
+  configured: boolean;
+  checked: number;
+  updated: number;
+  skippedNoBusinessNumber: number;
+  closed: Array<{ customerId: string; customerName: string; closedDate: string | null }>;
+};
+
+// Caps how many customers a single on-demand refresh processes, so the action stays responsive
+// even for a large customer master. The NTS API itself allows up to 100 numbers per call.
+const BUSINESS_STATUS_REFRESH_LIMIT = 300;
+
+/**
+ * Refreshes normalized_customers.business_status/business_status_checked_at against the National
+ * Tax Service's real-time 휴업/폐업 status API. Runs on-demand (no cron infrastructure exists in
+ * this app yet), scoped to a company and optionally a specific set of customer ids. Customers
+ * without a saved 사업자등록번호 can't be checked and are counted separately. Returns
+ * configured: false (no-op) when NTS_BUSINESS_API_KEY isn't set, so callers can show a clear
+ * "API 키 필요" message instead of a silent failure.
+ */
+export async function refreshCustomerBusinessStatuses(companyId: string, customerIds?: string[]): Promise<BusinessStatusRefreshResult> {
+  const emptyResult: BusinessStatusRefreshResult = {
+    configured: isBusinessStatusApiConfigured(),
+    checked: 0,
+    updated: 0,
+    skippedNoBusinessNumber: 0,
+    closed: []
+  };
+  if (!emptyResult.configured) return emptyResult;
+  if (!isProductionStoreConfigured()) return emptyResult;
+
+  const idFilter = customerIds && customerIds.length ? `&id=in.(${customerIds.map(encodeURIComponent).join(",")})` : "";
+  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null }>>(
+    `normalized_customers?select=id,customer_name,business_registration_number&company_id=eq.${encodeURIComponent(
+      companyId
+    )}${idFilter}&order=business_status_checked_at.asc.nullsfirst&limit=${BUSINESS_STATUS_REFRESH_LIMIT}`
+  ).catch(() => []);
+
+  const checkable = rows.filter((row) => normalizeBusinessNumber(row.business_registration_number || "").length === 10);
+  const skippedNoBusinessNumber = rows.length - checkable.length;
+  if (!checkable.length) {
+    return { ...emptyResult, skippedNoBusinessNumber };
+  }
+
+  const statusByNumber = await checkBusinessRegistrationStatuses(checkable.map((row) => row.business_registration_number || ""));
+  const checkedAt = new Date().toISOString();
+  const closed: BusinessStatusRefreshResult["closed"] = [];
+
+  const updates = await Promise.all(
+    checkable.map(async (row) => {
+      const number = normalizeBusinessNumber(row.business_registration_number || "");
+      const status: BusinessStatusResult | undefined = statusByNumber.get(number);
+      const label = status?.label || "확인 필요";
+      if (label === "폐업") {
+        closed.push({ customerId: row.id, customerName: row.customer_name, closedDate: status?.closedDate || null });
+      }
+
+      const updated = await supabaseRequest(`normalized_customers?id=eq.${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ business_status: label, business_status_checked_at: checkedAt })
+      })
+        .then(() => true)
+        .catch(() => false);
+      return updated;
+    })
+  );
+
+  return {
+    configured: true,
+    checked: checkable.length,
+    updated: updates.filter(Boolean).length,
+    skippedNoBusinessNumber,
+    closed
+  };
 }
 
 export async function matchSalesTransactionsToCustomer(
