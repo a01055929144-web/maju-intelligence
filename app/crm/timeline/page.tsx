@@ -348,6 +348,8 @@ export default function CrmTimelinePage() {
   const addressMissingCount = customers.filter((customer) => !customer.address).length;
   const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
   const businessNumberMissingCount = customers.filter((customer) => !customer.businessNumber).length;
+  const businessStatusCheckableCount = Math.max(0, customers.length - businessNumberMissingCount);
+  const businessStatusReadyCount = customers.filter((customer) => customer.businessStatus === "정상").length;
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
   const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
@@ -944,31 +946,15 @@ export default function CrmTimelinePage() {
                     />
                   </div>
                 </div>
-                <div className="maju-filter-box mt-3">
-                  <div className="flex items-center justify-between gap-2 px-1">
-                    <p className="maju-muted-label">사업자 휴폐업 상태</p>
-                    <button
-                      className="maju-button-secondary h-8 shrink-0 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isBulkBusinessStatusChecking}
-                      onClick={refreshAllBusinessStatuses}
-                      type="button"
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${isBulkBusinessStatusChecking ? "animate-spin" : ""}`} />
-                      {isBulkBusinessStatusChecking ? "조회 중" : "전체 재조회"}
-                    </button>
-                  </div>
-                  {bulkBusinessStatusMessage ? (
-                    <p
-                      className={`mx-1 mt-2 rounded-md p-2 text-xs font-bold ${
-                        bulkBusinessStatusMessage.includes("실패") || bulkBusinessStatusMessage.includes("오류")
-                          ? "bg-rose-50 text-rose-700"
-                          : "bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {bulkBusinessStatusMessage}
-                    </p>
-                  ) : null}
-                </div>
+                <BusinessStatusControlPanel
+                  checkableCount={businessStatusCheckableCount}
+                  isChecking={isBulkBusinessStatusChecking}
+                  message={bulkBusinessStatusMessage}
+                  missingNumberCount={businessNumberMissingCount}
+                  needsCheckCount={businessCheckCount}
+                  onRefresh={refreshAllBusinessStatuses}
+                  readyCount={businessStatusReadyCount}
+                />
               <CleanupWorkStatus
                 filterLabel={activeCleanupLabel}
                 filteredCount={filteredCustomers.length}
@@ -1629,6 +1615,84 @@ function CustomerFilterButton({
       <span className="truncate">{label}</span>
       <span className={`ml-2 rounded-full px-1.5 py-0.5 ${active ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{count}</span>
     </button>
+  );
+}
+
+function BusinessStatusControlPanel({
+  checkableCount,
+  isChecking,
+  message,
+  missingNumberCount,
+  needsCheckCount,
+  onRefresh,
+  readyCount
+}: {
+  checkableCount: number;
+  isChecking: boolean;
+  message: string;
+  missingNumberCount: number;
+  needsCheckCount: number;
+  onRefresh: () => void;
+  readyCount: number;
+}) {
+  const hasIssue = needsCheckCount > 0 || missingNumberCount > 0;
+  const messageIsError = message.includes("실패") || message.includes("오류") || message.includes("설정되지");
+
+  return (
+    <div className={`mt-3 overflow-hidden rounded-lg border ${hasIssue ? "border-amber-200 bg-amber-50/70" : "border-emerald-100 bg-emerald-50/70"}`}>
+      <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={hasIssue ? "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200" : "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200"}>
+              국세청 상태조회
+            </Badge>
+            <span className="text-xs font-black text-slate-500">사업자번호가 있는 거래처만 조회됩니다.</span>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <BusinessStatusMiniMetric label="정상" tone="emerald" value={`${readyCount.toLocaleString()}곳`} />
+            <BusinessStatusMiniMetric label="확인 필요" tone={needsCheckCount ? "amber" : "slate"} value={`${needsCheckCount.toLocaleString()}곳`} />
+            <BusinessStatusMiniMetric label="조회 대상" tone="blue" value={`${checkableCount.toLocaleString()}곳`} />
+          </div>
+          {missingNumberCount ? (
+            <p className="mt-2 text-[11px] font-bold leading-5 text-amber-800">
+              사업자번호 미등록 {missingNumberCount.toLocaleString()}곳은 자동조회에서 제외됩니다.
+            </p>
+          ) : null}
+        </div>
+        <button
+          className="maju-button-primary h-10 w-full shrink-0 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60 xl:w-auto"
+          disabled={isChecking || checkableCount === 0}
+          onClick={onRefresh}
+          type="button"
+        >
+          <RefreshCw className={`h-4 w-4 ${isChecking ? "animate-spin" : ""}`} />
+          {isChecking ? "조회 중" : "국세청 전체 재조회"}
+        </button>
+      </div>
+      {message ? (
+        <div className={`border-t px-3 py-2 text-xs font-bold ${messageIsError ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-white/70 text-emerald-700"}`}>
+          {message}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BusinessStatusMiniMetric({ label, tone, value }: { label: string; tone: "amber" | "blue" | "emerald" | "slate"; value: string }) {
+  const className =
+    tone === "emerald"
+      ? "border-emerald-100 bg-white text-emerald-800"
+      : tone === "amber"
+        ? "border-amber-200 bg-white text-amber-900"
+        : tone === "blue"
+          ? "border-blue-100 bg-white text-blue-800"
+          : "border-slate-200 bg-white text-slate-700";
+
+  return (
+    <div className={`rounded-md border px-3 py-2 ${className}`}>
+      <p className="text-[10px] font-black uppercase tracking-wide opacity-60">{label}</p>
+      <p className="mt-1 text-sm font-black">{value}</p>
+    </div>
   );
 }
 
