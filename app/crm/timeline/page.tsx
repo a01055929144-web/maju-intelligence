@@ -155,6 +155,18 @@ function syncOperationFilterUrl(filter: OperationFilter) {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function syncSelectedCustomerUrl(customerId: string | undefined) {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  if (customerId) {
+    url.searchParams.set("customerId", customerId);
+  } else {
+    url.searchParams.delete("customerId");
+  }
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export default function CrmTimelinePage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
@@ -300,6 +312,7 @@ export default function CrmTimelinePage() {
 
   useEffect(() => {
     if (!selectedCustomer?.id) return;
+    syncSelectedCustomerUrl(selectedCustomer.id);
     let active = true;
 
     fetch(withCompanyQuery(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`), { cache: "no-store" })
@@ -1742,7 +1755,7 @@ function CleanupWorkStatus({
           <p className="mt-1 text-sm font-black text-slate-950">
             {filterLabel} · {progressLabel}건
           </p>
-          <p className="mt-1 text-[11px] font-bold text-teal-700">이 필터는 URL에 반영되어 새로고침하거나 공유해도 같은 작업 목록으로 열립니다.</p>
+          <p className="mt-1 text-[11px] font-bold text-teal-700">필터와 선택 거래처가 URL에 반영되어 새로고침해도 같은 작업 위치로 열립니다.</p>
         </div>
         <button
           className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-teal-200 bg-white px-3 text-xs font-black text-teal-800 hover:bg-teal-50"
