@@ -3026,6 +3026,85 @@ export async function findDuplicateCustomerCandidates(companyId?: string): Promi
     .sort((a, b) => b.count - a.count);
 }
 
+export type ChurnRiskCustomer = {
+  customerId: string;
+  customerName: string;
+  address?: string;
+  daysSinceLastOrder: number;
+  lastOrderDate: string;
+  monthlyRevenue: number;
+  region?: string;
+};
+
+/**
+ * Computes churn risk from real sales_transactions history instead of the last_order_days
+ * column on normalized_customers — that column is only as fresh as the last customer-master
+ * upload and is never recalculated as new sales come in, so it silently goes stale. This joins
+ * each customer's normalized_key against the latest matching sales_transactions.sales_date and
+ * reports how many days have actually passed since that real transaction. Customers with no
+ * sales history at all are skipped (not enough data to call it "churn" vs. "never ordered yet"),
+ * and customers already marked business_status "closed" are skipped since that is a separate,
+ * permanent signal already surfaced elsewhere.
+ */
+export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 21): Promise<ChurnRiskCustomer[]> {
+  const id = companyId || getDefaultCompanyId();
+  if (!isProductionStoreConfigured()) return [];
+
+  const [customers, transactions] = await Promise.all([
+    supabaseRequest<
+      Array<{
+        id: string;
+        customer_name: string;
+        region: string | null;
+        address: string | null;
+        monthly_revenue: number | string | null;
+        normalized_key: string | null;
+        business_status: string | null;
+      }>
+    >(
+      `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status&company_id=eq.${encodeURIComponent(
+        id
+      )}&limit=2000`
+    ).catch(() => []),
+    supabaseRequest<Array<{ customer_key: string | null; sales_date: string | null }>>(
+      `sales_transactions?select=customer_key,sales_date&company_id=eq.${encodeURIComponent(id)}&sales_date=not.is.null&limit=10000`
+    ).catch(() => [])
+  ]);
+
+  const latestByKey = new Map<string, string>();
+  for (const transaction of transactions) {
+    if (!transaction.customer_key || !transaction.sales_date) continue;
+    const current = latestByKey.get(transaction.customer_key);
+    if (!current || transaction.sales_date > current) latestByKey.set(transaction.customer_key, transaction.sales_date);
+  }
+
+  const today = Date.now();
+  const results: ChurnRiskCustomer[] = [];
+  for (const customer of customers) {
+    if (customer.business_status === "closed") continue;
+    if (!customer.normalized_key) continue;
+    const lastOrderDate = latestByKey.get(customer.normalized_key);
+    if (!lastOrderDate) continue;
+
+    const parsed = new Date(lastOrderDate);
+    if (Number.isNaN(parsed.getTime())) continue;
+    const daysSinceLastOrder = Math.floor((today - parsed.getTime()) / 86_400_000);
+    if (daysSinceLastOrder < thresholdDays) continue;
+
+    results.push({
+      customerId: customer.id,
+      customerName: customer.customer_name,
+      address: customer.address || undefined,
+      daysSinceLastOrder,
+      lastOrderDate,
+      monthlyRevenue: Number(customer.monthly_revenue || 0),
+      region: customer.region || undefined
+    });
+  }
+
+  return results.sort((a, b) => b.daysSinceLastOrder - a.daysSinceLastOrder).slice(0, 30);
+}
+
 export async function matchSalesTransactionsToCustomer(
   companyId: string,
   customerKey: string,
@@ -3549,12 +3628,50 @@ async function writeAdminAuditLog({
   });
 }
 
+/**
+ * Sales-analysis uploads (ERP 매출 거래내역서) very often only carry a 거래처명 column, with no
+ * address and no business registration number. Building the customer_key from name + empty
+ * address in that case produces a key that can never equal the customer master's
+ * name + real-address key, so the transaction silently lands in unmatchedGroups even though a
+ * matching customer clearly exists. This resolves that common case up front: for rows with
+ * neither a business number nor an address, look up the existing customer master by normalized
+ * name and reuse its normalized_key directly when the name is unambiguous (exactly one
+ * customer). Ambiguous or unknown names fall back to the previous behavior (unmatched, visible
+ * in the manual matching UI).
+ */
+async function buildNameOnlyCustomerKeyLookup(companyId: string) {
+  const lookup = new Map<string, string>();
+  if (!isProductionStoreConfigured()) return lookup;
+
+  const rows = await supabaseRequest<Array<{ customer_name: string; normalized_key: string }>>(
+    `normalized_customers?select=customer_name,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
+  ).catch(() => []);
+
+  const seenKeys = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!row.customer_name?.trim() || !row.normalized_key) continue;
+    const nameKey = normalizeNameForDuplicateCheck(row.customer_name);
+    if (!nameKey) continue;
+    const keys = seenKeys.get(nameKey) || new Set<string>();
+    keys.add(row.normalized_key);
+    seenKeys.set(nameKey, keys);
+  }
+  for (const [nameKey, keys] of Array.from(seenKeys)) {
+    if (keys.size === 1) lookup.set(nameKey, Array.from(keys)[0]);
+  }
+
+  return lookup;
+}
+
 async function saveSalesTransactions(companyId: string, importId: string, rawRows: RawUploadRow[], columnMapping: ColumnMapping) {
+  const nameOnlyLookup = await buildNameOnlyCustomerKeyLookup(companyId).catch(() => new Map<string, string>());
   const salesRows = rawRows
     .map((row) => {
       const customerName = getRawCell(row, columnMapping.customerName);
       const businessRegistrationNumber = normalizeBusinessNumber(getRawCell(row, columnMapping.businessRegistrationNumber));
-      const customerKey = businessRegistrationNumber || makeCustomerKey(customerName, getRawCell(row, columnMapping.address));
+      const address = getRawCell(row, columnMapping.address);
+      const nameOnlyMatch = !businessRegistrationNumber && !address ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) : undefined;
+      const customerKey = businessRegistrationNumber || nameOnlyMatch || makeCustomerKey(customerName, address);
 
       return {
         company_id: companyId,

@@ -22,6 +22,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { KakaoAddressMap, type KakaoMapMarker } from "@/components/kakao-address-map";
 import { LeadStatusSelect } from "@/components/lead-status-select";
@@ -251,6 +252,8 @@ export function MapHomeView({
           </div>
         ) : null}
       </header>
+
+      <ChurnRiskAlert companyId={isAdminPreview ? companyId : undefined} offsetTop={headerHeight + 12} timelineHref={quickNav.timelineHref} />
 
       <aside
         className={`pointer-events-auto absolute bottom-0 left-0 z-40 flex w-[336px] max-w-[88vw] transform flex-col rounded-r-xl border border-l-0 border-slate-200 bg-white shadow-[12px_0_32px_rgba(15,23,42,.12)] transition-transform duration-150 ${
