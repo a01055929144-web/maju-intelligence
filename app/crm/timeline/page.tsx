@@ -5,6 +5,7 @@ import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 
 type TimelineItem = {
   id: string;
@@ -677,8 +678,21 @@ export default function CrmTimelinePage() {
       title="거래처 원장"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4">
-        <div className="maju-section-card">
+      <section className="mx-auto grid max-w-[1560px] gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="xl:sticky xl:top-24 xl:self-start">
+          <WorkspaceSectionNav
+            items={[
+              { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "원장 현황" },
+              { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "목록 필터" },
+              { description: "선택 거래처의 사업자정보와 배송 기준값을 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "상세 편집" },
+              { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
+            ]}
+            title="거래처 원장"
+          />
+        </div>
+
+        <div className="min-w-0 space-y-4">
+        <div className="maju-section-card scroll-mt-28" id="customer-ledger-summary">
           <SectionHeader
             eyebrow="지도 작업공간"
             title="거래처 원장"
@@ -750,7 +764,7 @@ export default function CrmTimelinePage() {
           </Link>
         </div>
 
-        <div className="maju-section-card">
+        <div className="maju-section-card scroll-mt-28" id="customer-ledger-list">
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
@@ -911,7 +925,7 @@ export default function CrmTimelinePage() {
           </aside>
 
           <div className="min-w-0 space-y-4">
-            <div className="maju-section-card p-5">
+            <div className="maju-section-card scroll-mt-28 p-5" id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>
@@ -997,7 +1011,7 @@ export default function CrmTimelinePage() {
               />
             </div>
 
-            <div className="maju-section-card">
+            <div className="maju-section-card scroll-mt-28" id="customer-ledger-history">
               <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="maju-muted-label">거래처 상세 탭</p>
@@ -1416,6 +1430,7 @@ export default function CrmTimelinePage() {
             </div> : null}
           </div>
           </div>
+        </div>
         </div>
       </section>
     </CustomerAppShell>

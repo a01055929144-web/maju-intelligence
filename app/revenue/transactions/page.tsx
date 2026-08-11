@@ -4,6 +4,7 @@ import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store,
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesTransactionMatcher } from "@/components/sales-transaction-matcher";
+import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions } from "@/lib/store";
 
@@ -66,8 +67,21 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
-        <div className="maju-section-card">
+      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="xl:sticky xl:top-24 xl:self-start">
+          <WorkspaceSectionNav
+            items={[
+              { active: true, badge: hasSalesData ? "연결" : "필요", description: "매출액, 행 수, 거래처 수를 먼저 확인합니다.", href: "#ledger-summary", icon: ReceiptText, label: "원장 현황" },
+              { description: "거래처 원장과 매출 거래내역 매칭 상태를 봅니다.", href: "#ledger-basis", icon: Store, label: "매칭·기준" },
+              { description: "거래처별, 품목별 매출 집중도를 확인합니다.", href: "#ledger-analysis", icon: BarChart3, label: "매출 분석" },
+              { description: "최근 업로드된 원장 행을 ERP 테이블처럼 검토합니다.", href: "#ledger-table", icon: FileSpreadsheet, label: "원장 테이블" }
+            ]}
+            title="매출 거래내역"
+          />
+        </div>
+
+        <div className="min-w-0 space-y-4">
+        <div className="maju-section-card scroll-mt-28" id="ledger-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="maju-section-title">매출 원장 현황</p>
@@ -91,17 +105,19 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           ))}
         </div>
 
-        <RevenueDataBasisPanel
+        <div className="scroll-mt-28" id="ledger-basis">
+          <RevenueDataBasisPanel
           customerCount={sales.customerCount}
           latestSalesDate={sales.latestSalesDate || "업로드 후 확인"}
           productCount={sales.topProducts.length}
           transactionCount={sales.transactionCount}
           totalAmount={sales.totalAmount}
-        />
+          />
+        </div>
 
         <SalesTransactionMatcher companyId={companyId} unmatchedGroups={sales.unmatchedGroups} />
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
+        <div className="grid scroll-mt-28 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]" id="ledger-analysis">
           <section className="maju-section-card">
             <div className="maju-card-header">
               <div className="flex items-start justify-between gap-3">
@@ -171,7 +187,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </div>
         </div>
 
-        <section className="maju-section-card">
+        <section className="maju-section-card scroll-mt-28" id="ledger-table">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-black text-slate-950">원장 테이블</h2>
@@ -217,6 +233,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
             </table>
           </div>
         </section>
+        </div>
       </section>
     </CustomerAppShell>
   );

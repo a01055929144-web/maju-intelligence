@@ -4,6 +4,7 @@ import { ArrowRight, Banknote, CircleDollarSign, FileText, Percent, ReceiptText,
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
+import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getRevenuePipeline, type RevenuePipeline } from "@/lib/store";
 
@@ -76,8 +77,21 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
-        <div className="maju-section-card">
+      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="xl:sticky xl:top-24 xl:self-start">
+          <WorkspaceSectionNav
+            items={[
+              { active: true, badge: `${pipeline.items.length}건`, description: "예상매출, 가중매출, 전환율을 먼저 봅니다.", href: "#pipeline-summary", icon: TrendingUp, label: "성장 현황" },
+              { description: "방문 기록과 매출 원장 연결 기준을 확인합니다.", href: "#pipeline-basis", icon: FileText, label: "실행 기준" },
+              { description: "견적 요청, 관심 있음, 보류 상태를 나눠 봅니다.", href: "#pipeline-status", icon: Percent, label: "상태 분포" },
+              { description: "실제 후속 영업을 해야 할 후보 목록입니다.", href: "#pipeline-table", icon: ReceiptText, label: "후보 목록" }
+            ]}
+            title="매출 성장"
+          />
+        </div>
+
+        <div className="min-w-0 space-y-4">
+        <div className="maju-section-card scroll-mt-28" id="pipeline-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="maju-section-title">성장 후보 현황</p>
@@ -105,17 +119,19 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           ))}
         </div>
 
-        <PipelineBasisPanel
+        <div className="scroll-mt-28" id="pipeline-basis">
+          <PipelineBasisPanel
           companyId={isAdminPreview ? companyId || "" : ""}
           conversionRate={pipeline.conversionRate}
           expectedRevenue={pipeline.expectedRevenue}
           itemCount={pipeline.items.length}
           quoteRequests={pipeline.quoteRequests}
           weightedRevenue={pipeline.weightedRevenue}
-        />
+          />
+        </div>
 
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <section className="maju-section-card">
+          <section className="maju-section-card scroll-mt-28" id="pipeline-status">
             <div className="maju-card-header">
               <h2 className="text-lg font-black text-slate-950">상태 분포</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">후속 작업 단계</p>
@@ -128,7 +144,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             </div>
           </section>
 
-          <section className="maju-section-card">
+          <section className="maju-section-card scroll-mt-28" id="pipeline-table">
             <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-black text-slate-950">성장 후보 목록</h2>
@@ -176,6 +192,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
               </table>
             </div>
           </section>
+        </div>
         </div>
       </section>
     </CustomerAppShell>
