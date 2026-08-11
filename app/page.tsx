@@ -2148,6 +2148,28 @@ function RegistrationControlStrip({
     ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
     warning: "border-amber-200 bg-amber-50 text-amber-800"
   }[serverState.tone];
+  const operationSteps = [
+    {
+      detail: rows ? `${rows.toLocaleString()}행` : entryMode === "excel" ? "엑셀 대기" : "입력 대기",
+      done: rows > 0,
+      label: "데이터 준비"
+    },
+    {
+      detail: `${readyCount}/${totalCount} 조건`,
+      done: canAnalyze,
+      label: "검증 완료"
+    },
+    {
+      detail: registrationStatus.actionLabel,
+      done: persisted,
+      label: "DB 저장"
+    },
+    {
+      detail: persisted ? "대시보드·원장·코스" : "저장 후 확인",
+      done: persisted,
+      label: "운영 반영"
+    }
+  ];
 
   return (
     <div className={`maju-section-card p-4 ${toneClassName}`}>
@@ -2204,6 +2226,27 @@ function RegistrationControlStrip({
               <span className="rounded-md bg-blue-50 px-2 py-1 text-center">AI 갱신</span>
             </div>
           ) : null}
+        </div>
+      </div>
+      <div className="mt-3 rounded-lg border border-white/80 bg-white/80 p-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          {operationSteps.map((step, index) => (
+            <div
+              className={`relative min-h-[72px] rounded-md border px-3 py-2.5 ${
+                step.done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"
+              }`}
+              key={step.label}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={`grid h-6 w-6 place-items-center rounded-full text-[11px] font-black ${step.done ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                  {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                </span>
+                <span className="text-[10px] font-black opacity-60">{step.done ? "완료" : "대기"}</span>
+              </div>
+              <p className="mt-2 truncate text-sm font-black">{step.label}</p>
+              <p className="mt-0.5 truncate text-[11px] font-bold opacity-70">{step.detail}</p>
+            </div>
+          ))}
         </div>
       </div>
       <div className={`mt-3 rounded-md border px-3 py-3 ${serverStateClassName}`}>
