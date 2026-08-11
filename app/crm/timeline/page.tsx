@@ -27,25 +27,25 @@ type DbSummary = {
 type CustomerView = {
   id?: string;
   address: string;
-  businessNumber: string;
-  businessStatus: string;
+  businessNumber?: string;
+  businessStatus?: string;
   customerName: string;
   deliveryKm: number;
-  deliveryManager: string;
-  email: string;
+  deliveryManager?: string;
+  email?: string;
   grade: "A" | "B" | "C";
   industry: string;
   lastOrderDays: number;
-  loadingPosition: string;
+  loadingPosition?: string;
   naverPlaceUrl?: string;
   kakaoPlaceUrl?: string;
   googleMapUrl?: string;
   placeLinksCheckedAt?: string;
   memoCount: number;
   monthlyRevenue: number;
-  phone: string;
+  phone?: string;
   region: string;
-  representativeName: string;
+  representativeName?: string;
   visitCount: number;
 };
 type CustomerNoteView = {
@@ -430,9 +430,10 @@ export default function CrmTimelinePage() {
     visitCount: selectedCustomer.visitCount
   };
   const draftBusinessNumberChanged = Boolean(
-    draftCustomer && normalizeBusinessRegistrationNumber(draftCustomer.businessNumber) !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber)
+    draftCustomer &&
+      normalizeBusinessRegistrationNumber(draftCustomer.businessNumber || "") !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber || "")
   );
-  const draftBusinessNumberValid = !draftCustomer?.businessNumber || isValidBusinessRegistrationNumber(draftCustomer.businessNumber);
+  const draftBusinessNumberValid = !draftCustomer?.businessNumber || isValidBusinessRegistrationNumber(draftCustomer.businessNumber || "");
   const canSaveCustomer = !isSaving && (!draftBusinessNumberChanged || draftBusinessNumberValid);
 
   function applyOperationFilter(nextFilter: OperationFilter) {
@@ -522,7 +523,7 @@ export default function CrmTimelinePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: draftCustomer.address,
-          businessNumber: formatBusinessRegistrationNumber(draftCustomer.businessNumber),
+          businessNumber: formatBusinessRegistrationNumber(draftCustomer.businessNumber || ""),
           businessStatus: draftCustomer.businessStatus,
           customerName: draftCustomer.customerName,
           deliveryKm: draftCustomer.deliveryKm,
@@ -944,8 +945,8 @@ export default function CrmTimelinePage() {
                     </button>
                   </div>
                   <Badge className={gradeClassName(selectedCustomer.grade)}>매출 {selectedCustomer.grade}등급</Badge>
-                  <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}>
-                    사업자 {selectedCustomer.businessStatus}
+                  <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                    사업자 {selectedCustomer.businessStatus || "미확인"}
                   </Badge>
                   <Link
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50"
@@ -1117,28 +1118,28 @@ export default function CrmTimelinePage() {
                         helper={
                           draftBusinessNumberChanged
                             ? draftBusinessNumberValid
-                              ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber)} 검증 완료`
+                              ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber || "")} 검증 완료`
                               : "유효하지 않은 사업자번호입니다."
                             : "기존 번호 유지"
                         }
                         helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
                         label="사업자번호"
-                        value={draftCustomer.businessNumber}
+                        value={draftCustomer.businessNumber || ""}
                         inputRef={businessNumberInputRef}
                         onChange={(value) => updateDraft("businessNumber", value)}
                       />
-                      <EditableField label="대표자명" value={draftCustomer.representativeName} onChange={(value) => updateDraft("representativeName", value)} />
-                      <EditableField label="연락처" value={draftCustomer.phone} inputRef={phoneInputRef} onChange={(value) => updateDraft("phone", value)} />
-                      <EditableField label="이메일" value={draftCustomer.email} onChange={(value) => updateDraft("email", value)} />
+                      <EditableField label="대표자명" value={draftCustomer.representativeName || ""} onChange={(value) => updateDraft("representativeName", value)} />
+                      <EditableField label="연락처" value={draftCustomer.phone || ""} inputRef={phoneInputRef} onChange={(value) => updateDraft("phone", value)} />
+                      <EditableField label="이메일" value={draftCustomer.email || ""} onChange={(value) => updateDraft("email", value)} />
                       <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
                       <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
                       <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
-                      <EditableField label="배송담당자" value={draftCustomer.deliveryManager} inputRef={deliveryManagerInputRef} onChange={(value) => updateDraft("deliveryManager", value)} />
+                      <EditableField label="배송담당자" value={draftCustomer.deliveryManager || ""} inputRef={deliveryManagerInputRef} onChange={(value) => updateDraft("deliveryManager", value)} />
                       <EditableField label="출발지 거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition} inputRef={loadingPositionInputRef} onChange={(value) => updateDraft("loadingPosition", value)} />
+                      <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition || ""} inputRef={loadingPositionInputRef} onChange={(value) => updateDraft("loadingPosition", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" helper="네이버 리뷰, 영업시간, 업체 상태 추적에 활용합니다." label="네이버 플레이스 링크" value={draftCustomer.naverPlaceUrl || ""} onChange={(value) => updateDraft("naverPlaceUrl", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" helper="카카오맵 장소 상세와 로드뷰 확인에 활용합니다." label="카카오맵 링크" value={draftCustomer.kakaoPlaceUrl || ""} onChange={(value) => updateDraft("kakaoPlaceUrl", value)} />
                       <EditableField className="md:col-span-2 xl:col-span-3" helper="구글 리뷰와 지도 정보를 함께 확인할 때 활용합니다." label="구글맵 링크" value={draftCustomer.googleMapUrl || ""} onChange={(value) => updateDraft("googleMapUrl", value)} />
@@ -1953,7 +1954,7 @@ function LoadingPositionFieldCard({
   onSelectUpload
 }: {
   attachmentCount: number;
-  loadingPosition: string;
+  loadingPosition?: string;
   onSelectUpload: () => void;
 }) {
   const ready = Boolean(loadingPosition && attachmentCount > 0);
@@ -2040,7 +2041,7 @@ function AttachmentChecklistPanel({
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value }: { label: string; value?: string }) {
   return (
     <div className="grid min-h-11 grid-cols-[132px_minmax(0,1fr)] items-stretch overflow-hidden border-b border-slate-100 text-sm last:border-b-0">
       <p className="flex items-center bg-slate-50 px-3 py-2.5 font-black text-slate-500">{label}</p>

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store, TrendingUp, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { SalesTransactionMatcher } from "@/components/sales-transaction-matcher";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions } from "@/lib/store";
 
@@ -56,7 +57,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
       rightAction={
-        <Link className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
+        <Link className="maju-button-primary" href={companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/"}>
           원장 업로드
         </Link>
       }
@@ -66,11 +67,11 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="maju-section-card">
+          <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black text-slate-950">매출 원장 현황</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">업로드된 거래원장 기준</p>
+              <p className="maju-section-title">매출 원장 현황</p>
+              <p className="mt-1 maju-muted-label">업로드된 거래원장 기준</p>
             </div>
             <Badge className={hasSalesData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
               {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
@@ -84,7 +85,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </div>
         </div>
 
-        <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-3">
+        <div className="grid maju-section-card lg:grid-cols-3">
           {salesSignals.map((signal) => (
             <SalesSignalCard key={signal.label} {...signal} />
           ))}
@@ -98,9 +99,11 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           totalAmount={sales.totalAmount}
         />
 
+        <SalesTransactionMatcher companyId={companyId} unmatchedGroups={sales.unmatchedGroups} />
+
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <section className="maju-section-card">
+            <div className="maju-card-header">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <Badge className="mb-2 bg-emerald-100 text-emerald-800">거래처 매출 집중도</Badge>
@@ -131,8 +134,8 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </section>
 
           <div className="space-y-4">
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <section className="maju-section-card">
+              <div className="maju-card-header">
                 <Badge className="mb-2 w-fit bg-blue-50 text-blue-700">품목 이탈 감지 기준</Badge>
                 <h2 className="text-lg font-black text-slate-950">품목별 매출</h2>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">품목 비중과 감소 가능성을 봅니다.</p>
@@ -155,8 +158,8 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <section className="maju-section-card">
+              <div className="maju-card-header">
                 <h2 className="text-lg font-black text-slate-950">운영 체크포인트</h2>
               </div>
               <div className="grid gap-2 p-4">
@@ -168,8 +171,8 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </div>
         </div>
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <section className="maju-section-card">
+          <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-black text-slate-950">원장 테이블</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">최근 업로드 행</p>
@@ -241,11 +244,11 @@ function RevenueDataBasisPanel({
   ];
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+    <div className="maju-section-card">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
         <div>
-          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">매출 원장이 대시보드와 AI 리포트에 반영되는 기준값입니다.</p>
+          <p className="maju-section-title">운영 기준 데이터</p>
+          <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 대시보드와 AI 리포트에 반영되는 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
           거래처 마스터와 매출 거래내역의 사업자번호 또는 상호명·주소가 맞아야 거래처별 매출, 등급, 품목 이탈 분석이 정확해집니다.
@@ -254,7 +257,7 @@ function RevenueDataBasisPanel({
       <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
         {items.map((item) => (
           <div className="min-w-0 px-4 py-3" key={item.label}>
-            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="maju-muted-label">{item.label}</p>
             <p className="mt-1 truncate text-sm font-black text-slate-950" title={item.value}>
               {item.value}
             </p>
@@ -268,20 +271,20 @@ function RevenueDataBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
-    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+    <div className="border-b border-slate-200/80 p-5 md:border-b-0 md:border-r last:md:border-r-0">
       <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
         <Icon className="h-5 w-5" />
       </div>
-      <p className="text-xs font-bold text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-black">{value}</p>
+      <p className="maju-muted-label">{label}</p>
+      <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
     </div>
   );
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-[150px] rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+    <div className="maju-stat-card min-w-[150px] text-right">
+      <p className="maju-muted-label">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
     </div>
   );
@@ -303,10 +306,10 @@ function SalesSignalCard({
   value: string;
 }) {
   return (
-    <div className={`border-b border-slate-200 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${ready ? "bg-emerald-50/40" : "bg-amber-50/60"}`}>
+    <div className={`border-b border-slate-200/80 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${ready ? "bg-emerald-50/40" : "bg-amber-50/60"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase text-slate-500">{label}</p>
+          <p className="maju-muted-label">{label}</p>
           <p className="mt-1 truncate text-xl font-black text-slate-950">{value}</p>
         </div>
         <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
@@ -314,7 +317,7 @@ function SalesSignalCard({
         </Badge>
       </div>
       <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <Link className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-white px-3 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50" href={actionHref}>
+      <Link className="maju-button-secondary mt-4" href={actionHref}>
         {actionLabel}
       </Link>
     </div>
@@ -363,10 +366,10 @@ function RankedRevenueRow({
 
 function InsightRow({ icon: Icon, label, value }: { icon: typeof BarChart3; label: string; value: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="maju-stat-card flex items-start gap-3">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
       <div>
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
+        <p className="maju-muted-label">{label}</p>
         <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
       </div>
     </div>
@@ -374,5 +377,5 @@ function InsightRow({ icon: Icon, label, value }: { icon: typeof BarChart3; labe
 }
 
 function EmptyPanel({ message }: { message: string }) {
-  return <div className="m-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">{message}</div>;
+  return <div className="maju-empty-state m-4 text-sm font-bold text-slate-500">{message}</div>;
 }

@@ -58,8 +58,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="maju-section-card">
+          <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-black text-slate-950">후속 작업함</p>
               <p className="mt-1 text-xs font-bold text-slate-500">방문 기록 · 견적 요청 기준</p>
@@ -73,7 +73,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           </div>
         </div>
 
-        <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-3">
+        <div className="grid maju-section-card lg:grid-cols-3">
           {assistantActions.map((action) => (
             <AssistantActionCard key={action.label} {...action} />
           ))}
@@ -86,8 +86,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           companyId={isAdminPreview ? companyId || "" : ""}
         />
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <section className="maju-section-card">
+          <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
@@ -157,10 +157,10 @@ function AssistantBasisPanel({
   ];
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+    <div className="maju-section-card">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
         <div>
-          <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
+          <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 초안은 방문 결과와 영업 메모를 실행 문장으로 바꾸는 보조 기능입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
@@ -170,7 +170,7 @@ function AssistantBasisPanel({
           {actionLinks.map((item) => {
             const Icon = item.icon;
             return (
-              <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50" href={item.href} key={item.label}>
+              <Link className="maju-button-secondary" href={item.href} key={item.label}>
                 <Icon className="h-3.5 w-3.5" />
                 {item.label}
                 <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
@@ -182,7 +182,7 @@ function AssistantBasisPanel({
       <div className="grid divide-y divide-slate-100 md:grid-cols-4 md:divide-x md:divide-y-0">
         {items.map((item) => (
           <div className="min-w-0 px-4 py-3" key={item.label}>
-            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
+            <p className="maju-muted-label">{item.label}</p>
             <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
             <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
           </div>

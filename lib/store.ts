@@ -79,19 +79,19 @@ export type CustomerMasterItem = {
   bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
-  businessNumber: string;
-  businessStatus: string;
+  businessNumber?: string;
+  businessStatus?: string;
   businessStatusCheckedAt?: string;
   customerName: string;
   deliveryKm: number;
-  deliveryManager: string;
+  deliveryManager?: string;
   deliveryMinutes?: number;
   deliveryZone?: string;
-  email: string;
+  email?: string;
   grade: "A" | "B" | "C";
   industry: string;
   lastOrderDays: number;
-  loadingPosition: string;
+  loadingPosition?: string;
   naverPlaceUrl?: string;
   kakaoPlaceUrl?: string;
   googleMapUrl?: string;
@@ -99,9 +99,9 @@ export type CustomerMasterItem = {
   memoCount: number;
   monthlyRevenue: number;
   openingDate?: string;
-  phone: string;
+  phone?: string;
   region: string;
-  representativeName: string;
+  representativeName?: string;
   visitCount: number;
 };
 export type CustomerMasterInput = {
@@ -225,6 +225,7 @@ export type SalesTransactionItem = {
   id: string;
   customerName: string;
   customerId?: string;
+  customerKey: string;
   matched: boolean;
   businessRegistrationNumber?: string;
   salesDate?: string;
@@ -246,6 +247,13 @@ export type SalesTransactionSummary = {
     transactionCount: number;
   }>;
   topProducts: Array<{ productName: string; share: number; totalAmount: number; transactionCount: number }>;
+  unmatchedGroups: Array<{
+    customerKey: string;
+    customerName: string;
+    latestSalesDate?: string;
+    totalAmount: number;
+    transactionCount: number;
+  }>;
   totalAmount: number;
   transactionCount: number;
   customerCount: number;
@@ -2885,6 +2893,7 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
     const items = sampleCustomers.slice(0, 12).map((customer, index) => ({
       id: `sample-sales-${index + 1}`,
       customerId: `sample-${index + 1}`,
+      customerKey: `sample-${index + 1}`,
       matched: true,
       customerName: customer.customerName,
       businessRegistrationNumber: `123${String(10 + index).padStart(2, "0")}${String(10000 + index).padStart(5, "0")}`,
@@ -2924,6 +2933,7 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
       return {
         id: row.id,
         customerId: matchedCustomer?.id,
+        customerKey: row.customer_key || "",
         matched: Boolean(matchedCustomer),
         customerName: matchedCustomer?.customerName || row.customer_name,
         businessRegistrationNumber: row.business_registration_number || undefined,
@@ -2949,6 +2959,34 @@ async function getNormalizedCustomerKeyMap(companyId: string) {
   }
 
   return map;
+}
+
+export async function matchSalesTransactionsToCustomer(
+  companyId: string,
+  customerKey: string,
+  targetCustomerId: string
+): Promise<{ matchedTransactionCount: number; customerName: string }> {
+  if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
+  if (!customerKey.trim()) throw new Error("연결할 거래처 key가 없습니다.");
+
+  const targetRows = await supabaseRequest<Array<{ id: string; customer_name: string; normalized_key: string }>>(
+    `normalized_customers?select=id,customer_name,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(
+      targetCustomerId
+    )}&limit=1`
+  );
+  const targetCustomer = targetRows[0];
+  if (!targetCustomer) throw new Error("연결할 거래처를 찾을 수 없습니다.");
+  if (!targetCustomer.normalized_key) throw new Error("대상 거래처에 기준 key가 없어 연결할 수 없습니다.");
+
+  const updatedRows = await supabaseRequest<Array<{ id: string }>>(
+    `sales_transactions?company_id=eq.${encodeURIComponent(companyId)}&customer_key=eq.${encodeURIComponent(customerKey)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ customer_key: targetCustomer.normalized_key })
+    }
+  );
+
+  return { matchedTransactionCount: updatedRows.length, customerName: targetCustomer.customer_name };
 }
 
 function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransactionSummary {
@@ -3001,10 +3039,32 @@ function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransac
     transactionCount: item.transactionCount
   }));
 
+  const unmatchedGroupMap = new Map<
+    string,
+    { customerKey: string; customerName: string; latestSalesDate?: string; totalAmount: number; transactionCount: number }
+  >();
+  for (const item of items) {
+    if (item.matched || !item.customerKey) continue;
+    const current = unmatchedGroupMap.get(item.customerKey) || {
+      customerKey: item.customerKey,
+      customerName: item.customerName || "미지정 거래처",
+      totalAmount: 0,
+      transactionCount: 0
+    };
+    current.totalAmount += item.salesAmount;
+    current.transactionCount += 1;
+    if (!current.latestSalesDate || compareDateText(item.salesDate, current.latestSalesDate) > 0) {
+      current.latestSalesDate = item.salesDate;
+    }
+    unmatchedGroupMap.set(item.customerKey, current);
+  }
+  const unmatchedGroups = Array.from(unmatchedGroupMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+
   return {
     averageOrderAmount: items.length ? Math.round(totalAmount / items.length) : 0,
     topCustomers,
     topProducts,
+    unmatchedGroups,
     totalAmount,
     transactionCount: items.length,
     customerCount: distinctCustomerKeys.size,
@@ -3676,29 +3736,29 @@ function toCustomerMasterItem(
     bankAccountFileUrl: row.bank_account_file_url || undefined,
     birthDate: row.birth_date || undefined,
     businessLicenseFileUrl: row.business_license_file_url || undefined,
-    businessNumber: row.business_registration_number || `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
-    businessStatus: row.business_status || (index % 7 === 0 ? "확인 필요" : "정상"),
+    businessNumber: row.business_registration_number || undefined,
+    businessStatus: row.business_status || undefined,
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
     deliveryKm: Number(row.delivery_km || 0),
-    deliveryManager: row.delivery_manager || ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저"][index % 4],
+    deliveryManager: row.delivery_manager || undefined,
     deliveryMinutes: row.delivery_minutes || undefined,
     deliveryZone: row.delivery_zone || undefined,
-    email: row.email || `${row.customer_name.replace(/\s/g, "").toLowerCase()}@example.com`,
+    email: row.email || undefined,
     grade: getRevenueGrade(monthlyRevenue),
     industry: row.industry || "미분류",
     lastOrderDays: Number(row.last_order_days || 0),
-    loadingPosition: row.loading_position || (index % 3 === 0 ? "후문 냉장창고 앞" : index % 3 === 1 ? "1층 주방 입구" : "건물 우측 적재 구역"),
+    loadingPosition: row.loading_position || undefined,
     googleMapUrl: row.google_map_url || undefined,
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),
     monthlyRevenue,
     naverPlaceUrl: row.naver_place_url || undefined,
     openingDate: row.opening_date || undefined,
-    phone: row.phone || `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
+    phone: row.phone || undefined,
     placeLinksCheckedAt: row.place_links_checked_at || undefined,
     region: row.region || "미분류",
-    representativeName: row.representative_name || (index % 2 === 0 ? "김민준" : "이서연"),
+    representativeName: row.representative_name || undefined,
     visitCount: Number(row.visit_count || 0)
   };
 }
