@@ -45,7 +45,7 @@ export default async function AdminPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">

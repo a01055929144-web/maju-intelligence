@@ -35,7 +35,7 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+    <main className="flex min-h-screen items-center justify-center maju-app-bg px-4 py-10">
       <Card className="w-full max-w-md">
         <CardHeader>
           <Badge className="mb-3 w-fit bg-primary/10 text-primary">

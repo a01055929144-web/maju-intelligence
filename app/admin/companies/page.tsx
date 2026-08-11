@@ -13,7 +13,7 @@ export default async function AdminCompaniesPage() {
   const payload = await getManagedCompanyAccounts();
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="companies" badge="Company Control" session={session} subtitle="회사별 로그인 계정과 거래처 데이터를 분리해서 운영합니다" title="고객사 관리" />
 
       <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">

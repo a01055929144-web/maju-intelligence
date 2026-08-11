@@ -89,7 +89,7 @@ export default async function AdminSystemPage() {
   ] as const;
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="system" badge="System Check" session={session} subtitle="실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다" title="운영 설정 점검" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
