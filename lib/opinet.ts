@@ -22,9 +22,16 @@ type OpinetAveragePriceResponse = {
 const OPINET_BASE_URL = "https://www.opinet.co.kr/api";
 const FALLBACK_DIESEL_PRICE = 1650;
 const FALLBACK_GASOLINE_PRICE = 1720;
+const FUEL_PRICE_CACHE_MS = 1000 * 60 * 30;
+const fuelPriceCache = new Map<string, { expiresAt: number; value: OpinetFuelPrice }>();
 
 export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" = "diesel"): Promise<OpinetFuelPrice> {
   const apiKey = process.env.OPINET_API_KEY?.trim();
+  const cached = fuelPriceCache.get(fuelType);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
 
   if (!apiKey || apiKey === "replace-with-opinet-api-key") {
     return fallbackFuelPrice(fuelType);
@@ -47,13 +54,13 @@ export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" 
 
     if (!Number.isFinite(price) || price <= 0) return fallbackFuelPrice(fuelType);
 
-    return {
+    return cacheFuelPrice(fuelType, {
       basis: "opinet",
       checkedAt: row?.TRADE_DT || new Date().toISOString(),
       fuelType,
       pricePerLiter: Math.round(price),
       sourceLabel: `OPINET 전국 평균 ${targetName}`
-    };
+    });
   } catch {
     return fallbackFuelPrice(fuelType);
   }
@@ -70,13 +77,21 @@ export function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, m
 function fallbackFuelPrice(fuelType: "gasoline" | "diesel"): OpinetFuelPrice {
   const isDiesel = fuelType === "diesel";
 
-  return {
+  return cacheFuelPrice(fuelType, {
     basis: "fallback",
     checkedAt: new Date().toISOString(),
     fuelType,
     pricePerLiter: isDiesel ? FALLBACK_DIESEL_PRICE : FALLBACK_GASOLINE_PRICE,
     sourceLabel: isDiesel ? "기본 경유 단가" : "기본 휘발유 단가"
-  };
+  });
+}
+
+function cacheFuelPrice(fuelType: "gasoline" | "diesel", value: OpinetFuelPrice) {
+  fuelPriceCache.set(fuelType, {
+    expiresAt: Date.now() + FUEL_PRICE_CACHE_MS,
+    value
+  });
+  return value;
 }
 
 function normalizeRows(rows: OpinetAveragePriceRow[] | OpinetAveragePriceRow | undefined) {

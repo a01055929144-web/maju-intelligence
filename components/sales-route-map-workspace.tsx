@@ -128,7 +128,6 @@ type CourseSummary = {
 type FuelPriceSummary = {
   basis: "opinet" | "fallback";
   checkedAt: string;
-  estimatedFuelCostWon: number;
   pricePerLiter: number;
   sourceLabel: string;
 };
@@ -221,6 +220,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   const activeDistanceKm = kpiSummary?.distanceKm ?? routeTotals.distanceKm;
   const distanceKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 거리 합";
   const durationKpiHelper = !sourceReady ? "거래처 마스터 등록 후 계산" : kpiSummary ? "선택 경유지를 실제 도로 순서로 계산" : "출발지와 각 매장 사이의 단건 시간 합";
+  const estimatedFuelCostWon = fuelPriceSummary ? estimateFuelCostWon(activeDistanceKm, fuelPriceSummary.pricePerLiter) : 0;
   const fuelKpiHelper = !sourceReady
     ? "거래처 마스터 등록 후 계산"
     : fuelPriceSummary
@@ -281,16 +281,14 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
 
   useEffect(() => {
-    if (!sourceReady || activeDistanceKm <= 0) {
+    if (!sourceReady) {
       setFuelPriceSummary(null);
       return;
     }
 
     let active = true;
     const params = new URLSearchParams({
-      distanceKm: String(activeDistanceKm),
-      fuelType: "diesel",
-      mileageKmPerLiter: "7.5"
+      fuelType: "diesel"
     });
 
     fetch(`/api/fuel/opinet?${params.toString()}`, { cache: "no-store" })
@@ -306,7 +304,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
     return () => {
       active = false;
     };
-  }, [activeDistanceKm, sourceReady]);
+  }, [sourceReady]);
 
   async function updateStore(storeId: string, edit: StoreEdit) {
     const currentStore = allStores.find((store) => store.id === storeId);
@@ -406,7 +404,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
         />
         <Kpi helper={distanceKpiHelper} label={kpiSummary ? "티맵 경유 거리" : "출발지-매장 거리합"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "티맵 경유 시간" : "출발지 기준 시간합"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
-        <Kpi helper={fuelKpiHelper} label={fuelPriceSummary?.basis === "opinet" ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${(fuelPriceSummary?.estimatedFuelCostWon || 0).toLocaleString()}원` : "-"} />
+        <Kpi helper={fuelKpiHelper} label={fuelPriceSummary?.basis === "opinet" ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
       </section>
 
       <RouteBasisStrip
@@ -2994,6 +2992,14 @@ function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0) return 0;
+  if (!Number.isFinite(pricePerLiter) || pricePerLiter <= 0) return 0;
+  if (!Number.isFinite(mileageKmPerLiter) || mileageKmPerLiter <= 0) return 0;
+
+  return Math.round((distanceKm / mileageKmPerLiter) * pricePerLiter);
 }
 
 function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
