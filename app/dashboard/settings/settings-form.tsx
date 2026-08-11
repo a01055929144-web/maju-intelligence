@@ -39,11 +39,11 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   return (
     <form className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={handleSubmit}>
       <div className="space-y-5">
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <section className="maju-section-card">
+          <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black text-slate-950">운영 기준값 상태</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">지도, 배송코스, 거래처 히스토리에서 공통으로 사용하는 회사 기준입니다.</p>
+              <p className="maju-section-title">운영 기준값 상태</p>
+              <p className="mt-1 maju-muted-label normal-case tracking-normal">지도, 배송코스, 거래처 히스토리에서 공통으로 사용하는 회사 기준입니다.</p>
             </div>
             <Badge className={completedItems >= 3 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
               {completedItems}/3 완료
@@ -89,8 +89,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           />
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+        <section className="maju-section-card">
+          <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
               <Building2 className="mr-1 h-3.5 w-3.5" />
               회사 설정
@@ -151,8 +151,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         </section>
       </div>
 
-      <aside className="h-fit overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+      <aside className="h-fit maju-section-card">
+        <div className="maju-card-header space-y-3">
           <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
             <MapPin className="h-5 w-5 text-primary" />
             운영 기준값
@@ -200,7 +200,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
 
 function BasisCard({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="maju-stat-card p-4">
       <div className="flex items-center gap-2 text-sm font-black text-slate-950">
         <span className="text-teal-700">{icon}</span>
         {title}

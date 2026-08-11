@@ -82,8 +82,8 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+    <section className="maju-section-card">
+      <div className="maju-card-header flex flex-wrap items-start justify-between gap-3">
         <div>
           <Badge className="mb-3 w-fit bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-100">
             <Users className="mr-1 h-3.5 w-3.5" />
