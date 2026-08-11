@@ -63,6 +63,9 @@ export async function GET(request: NextRequest) {
   const mappableRouteCount = Math.min(routeCount, mappableMasterCount);
   const routeWithoutMasterCount = Math.max(routeCount - operationalMasterCount, 0);
   const masterWithoutRouteCount = Math.max(operationalMasterCount - routeCount, 0);
+  const businessStatusReadyCount = isSupabaseSource ? customerMaster.customers.filter((customer) => customer.businessStatus === "정상").length : 0;
+  const businessStatusNeedsCheckCount = isSupabaseSource ? customerMaster.customers.filter((customer) => customer.businessStatus !== "정상").length : 0;
+  const businessNumberMissingCount = isSupabaseSource ? customerMaster.customers.filter((customer) => !customer.businessNumber?.trim()).length : 0;
   const visitCount = timeline.length;
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
   const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
@@ -107,6 +110,12 @@ export async function GET(request: NextRequest) {
       value: `${visitCount.toLocaleString()}건`
     },
     {
+      detail: "국세청 사업자 상태조회 결과가 거래처 원장에 반영되어 있는지 확인합니다.",
+      label: "사업자 상태 기준",
+      ok: isSupabaseSource && businessStatusNeedsCheckCount === 0 && businessNumberMissingCount === 0,
+      value: `정상 ${businessStatusReadyCount.toLocaleString()} / 확인 ${businessStatusNeedsCheckCount.toLocaleString()}곳`
+    },
+    {
       detail: "매출 원장의 거래처(사업자번호 또는 상호명·주소)가 거래처 원장과 같은 키로 연결되는지 확인합니다.",
       label: "매출 원장 ↔ 거래처 매칭",
       ok: sales.transactionCount === 0 || sales.unmatchedCustomerCount === 0,
@@ -133,10 +142,12 @@ export async function GET(request: NextRequest) {
   ];
 
   const recommendations = buildRecommendations({
-      dashboardCount,
-      duplicateGroupCount: duplicateGroups.length,
-      isSupabaseSource,
-      masterCount: operationalMasterCount,
+    businessNumberMissingCount,
+    businessStatusNeedsCheckCount,
+    dashboardCount,
+    duplicateGroupCount: duplicateGroups.length,
+    isSupabaseSource,
+    masterCount: operationalMasterCount,
     masterWithoutRouteCount,
     missingAddressCount,
     routeProviderCounts,
@@ -167,6 +178,9 @@ export async function GET(request: NextRequest) {
         historyItems: visitCount,
         masterCustomers: operationalMasterCount,
         mappableRouteStops: mappableRouteCount,
+        businessNumberMissingCustomers: businessNumberMissingCount,
+        businessStatusNeedsCheckCustomers: businessStatusNeedsCheckCount,
+        businessStatusReadyCustomers: businessStatusReadyCount,
         missingAddressCustomers: missingAddressCount,
         missingAddressExamples: missingAddressCustomers,
         passedChecks: passedCheckCount,
@@ -188,6 +202,8 @@ export async function GET(request: NextRequest) {
 }
 
 function buildRecommendations({
+  businessNumberMissingCount,
+  businessStatusNeedsCheckCount,
   dashboardCount,
   duplicateGroupCount,
   isSupabaseSource,
@@ -202,6 +218,8 @@ function buildRecommendations({
   salesUnmatchedCustomerCount,
   visitCount
 }: {
+  businessNumberMissingCount: number;
+  businessStatusNeedsCheckCount: number;
   dashboardCount: number;
   duplicateGroupCount: number;
   isSupabaseSource: boolean;
@@ -237,6 +255,12 @@ function buildRecommendations({
   }
   if (missingAddressCount > 0) {
     items.push(`주소가 없어 지도에 표시되지 않는 매장이 ${missingAddressCount.toLocaleString()}곳 있습니다. 거래처 히스토리에서 주소를 보완하세요.`);
+  }
+  if (businessNumberMissingCount > 0) {
+    items.push(`사업자번호가 없어 국세청 상태조회에서 제외되는 거래처가 ${businessNumberMissingCount.toLocaleString()}곳 있습니다. 거래처 원장에서 사업자번호를 보완하세요.`);
+  }
+  if (businessStatusNeedsCheckCount > 0) {
+    items.push(`국세청 사업자 상태 확인이 필요한 거래처가 ${businessStatusNeedsCheckCount.toLocaleString()}곳 있습니다. 거래처 원장에서 전체 재조회를 실행하세요.`);
   }
   if (masterCount > 0 && masterWithoutRouteCount === 0 && routeWithoutMasterCount === 0) {
     items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 코스 거리 계산 기준을 확인하세요.");

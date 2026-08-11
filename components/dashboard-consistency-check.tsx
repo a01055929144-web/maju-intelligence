@@ -32,6 +32,9 @@ type ConsistencyPayload = {
     historyItems?: number;
     mappableRouteStops?: number;
     masterCustomers?: number;
+    businessNumberMissingCustomers?: number;
+    businessStatusNeedsCheckCustomers?: number;
+    businessStatusReadyCustomers?: number;
     missingAddressCustomers?: number;
     missingAddressExamples?: Array<{
       customerId?: string;
@@ -112,6 +115,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const fixItems = hasPayload
     ? buildFixItems({
         consistencyScore,
+        businessNumberMissingCustomers: payload?.summary?.businessNumberMissingCustomers || 0,
+        businessStatusNeedsCheckCustomers: payload?.summary?.businessStatusNeedsCheckCustomers || 0,
         dashboardCustomers: payload?.summary?.dashboardCustomers || 0,
         dataRegistrationHref,
         isSupabase,
@@ -151,11 +156,12 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
       </div>
 
       <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
           <StatusTile label="DB 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
           <StatusTile label="대시보드" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
           <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
           <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
+          <StatusTile label="사업자 확인" value={formatCount(payload?.summary?.businessStatusNeedsCheckCustomers, "곳")} />
           <StatusTile label="실도로 계산" value={formatCount(payload ? cachedRouteCount : undefined, "곳")} />
           <StatusTile label="도로 미계산" value={formatCount(payload ? roadPendingRouteCount : undefined, "곳")} />
         </div>
@@ -290,6 +296,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
 }
 
 function buildFixItems({
+  businessNumberMissingCustomers,
+  businessStatusNeedsCheckCustomers,
   consistencyScore,
   dataRegistrationHref,
   dashboardCustomers,
@@ -302,6 +310,8 @@ function buildFixItems({
   salesTruncated,
   timelineHref
 }: {
+  readonly businessNumberMissingCustomers: number;
+  readonly businessStatusNeedsCheckCustomers: number;
   readonly consistencyScore: number;
   readonly dataRegistrationHref: string;
   readonly dashboardCustomers: number;
@@ -347,6 +357,19 @@ function buildFixItems({
   });
 
   items.push({
+    href: businessNumberMissingCustomers > 0 ? buildTimelineHrefFromBase(timelineHref, "business-number-missing") : buildTimelineHrefFromBase(timelineHref, "business-check"),
+    label:
+      businessNumberMissingCustomers > 0
+        ? `사업자번호 미등록 ${businessNumberMissingCustomers.toLocaleString()}곳은 국세청 조회 대상에서 제외됩니다.`
+        : businessStatusNeedsCheckCustomers > 0
+          ? `사업자 상태 확인 필요 ${businessStatusNeedsCheckCustomers.toLocaleString()}곳을 원장에서 재조회하세요.`
+          : "사업자 상태 기준이 원장에 반영되어 있습니다.",
+    status: businessNumberMissingCustomers || businessStatusNeedsCheckCustomers ? "보완" : "정상",
+    title: "국세청 사업자 상태",
+    tone: businessNumberMissingCustomers || businessStatusNeedsCheckCustomers ? "warn" : "good"
+  });
+
+  items.push({
     href: routeHref,
     label:
       routeCoverage >= 80
@@ -376,6 +399,14 @@ function buildTimelineHref(companyId: string | undefined, missingAddressCount: n
   if (missingAddressCount > 0) params.set("operationFilter", "address-missing");
   const query = params.toString();
   return query ? `/crm/timeline?${query}` : "/crm/timeline";
+}
+
+function buildTimelineHrefFromBase(baseHref: string, operationFilter: string) {
+  const [path, query = ""] = baseHref.split("?");
+  const params = new URLSearchParams(query);
+  params.set("operationFilter", operationFilter);
+  const nextQuery = params.toString();
+  return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
 }
 
 function getFixBadgeClass(tone: FixItem["tone"]) {
