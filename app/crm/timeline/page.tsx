@@ -1003,12 +1003,24 @@ export default function CrmTimelinePage() {
                 }}
                 totalCount={operationalChecks.length}
               />
-              <OperationalReadinessCard checks={operationalChecks} completeCount={operationalReadyCount} />
-              <FieldRecordTracePanel
-                summary={fieldRecordSummary}
-                onOpenHistory={() => setDetailTab("history")}
-                onOpenLedger={() => setDetailTab("ledger")}
-              />
+              <details className="maju-section-card mt-4 overflow-hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">현장 기록 상세</span>
+                    <span className="mt-0.5 block text-xs font-bold text-slate-500">첨부자료, 배송완료 증빙 등 모바일 현장 기록 건수는 필요할 때 펼쳐서 확인합니다.</span>
+                  </span>
+                  <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
+                    메모 {fieldRecordSummary.memoCount.toLocaleString()} · 첨부 {fieldRecordSummary.attachmentCount.toLocaleString()}
+                  </Badge>
+                </summary>
+                <div className="border-t border-slate-200 bg-slate-50/60 p-3">
+                  <FieldRecordTracePanel
+                    summary={fieldRecordSummary}
+                    onOpenHistory={() => setDetailTab("history")}
+                    onOpenLedger={() => setDetailTab("ledger")}
+                  />
+                </div>
+              </details>
             </div>
 
             <div className="maju-section-card scroll-mt-28" id="customer-ledger-history">
@@ -1658,42 +1670,6 @@ function CustomerLedgerBasisPanel({
   );
 }
 
-function OperationalReadinessCard({
-  checks,
-  completeCount
-}: {
-  checks: Array<{ description: string; ok: boolean; title: string }>;
-  completeCount: number;
-}) {
-  const ready = completeCount === checks.length;
-
-  return (
-    <div className={`maju-section-card mt-4 p-4 ${ready ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/70"}`}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
-            {ready ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
-            거래처 운영 준비 상태
-          </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">사업자정보, 연락처, 배송주소, 적재위치, 첨부자료, 메모 이력을 기준으로 확인합니다.</p>
-        </div>
-        <Badge className={ready ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>{completeCount}/{checks.length} 완료</Badge>
-      </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {checks.map((check) => (
-          <div key={check.title} className="maju-stat-card border-white/80 bg-white p-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-black text-slate-900">{check.title}</p>
-              {check.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
-            </div>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{check.description}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function FieldRecordTracePanel({
   onOpenHistory,
   onOpenLedger,
@@ -1742,7 +1718,7 @@ function FieldRecordTracePanel({
   ];
 
   return (
-    <div className="mt-4 overflow-hidden rounded-lg border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-blue-50">
+    <div className="overflow-hidden rounded-lg border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-blue-50">
       <div className="flex flex-col gap-3 border-b border-teal-100/80 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-teal-700">Field Record Trace</p>
