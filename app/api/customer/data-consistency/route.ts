@@ -117,6 +117,18 @@ export async function GET(request: NextRequest) {
       label: "거래처 중복 후보",
       ok: duplicateGroups.length === 0,
       value: duplicateGroups.length ? `${duplicateGroups.length.toLocaleString()}건 의심` : "중복 없음"
+    },
+    {
+      detail: "거래처 원장은 한 번에 최대 3,000건까지 불러옵니다. 이 이상이면 최신순으로 잘려서 일부만 보일 수 있습니다.",
+      label: "거래처 원장 전체 로드",
+      ok: !customerMaster.truncated,
+      value: customerMaster.truncated ? "일부만 표시됨" : "전체 표시"
+    },
+    {
+      detail: "매출 원장은 최근 거래 기준으로 한 번에 최대 1,000건까지 불러옵니다. 한도에 도달하면 기간 필터나 페이지네이션 보강이 필요합니다.",
+      label: "매출 원장 전체 로드",
+      ok: !sales.truncated,
+      value: sales.truncated ? "최근 1,000건 표시" : "전체 표시"
     }
   ];
 
@@ -131,6 +143,7 @@ export async function GET(request: NextRequest) {
     routeWithoutMasterCount,
     salesMatchRate: sales.matchRate,
     salesTransactionCount: sales.transactionCount,
+    salesTruncated: sales.truncated,
     salesUnmatchedCustomerCount: sales.unmatchedCustomerCount,
     visitCount
   });
@@ -162,6 +175,7 @@ export async function GET(request: NextRequest) {
         routeStops: routeCount,
         salesMatchRate: sales.matchRate,
         salesTransactionCount: sales.transactionCount,
+        salesTruncated: sales.truncated,
         salesUnmatchedCustomerCount: sales.unmatchedCustomerCount,
         duplicateCustomerGroups: duplicateGroups.length,
         duplicateCustomerExamples: duplicateGroups.slice(0, 5),
@@ -184,6 +198,7 @@ function buildRecommendations({
   routeWithoutMasterCount,
   salesMatchRate,
   salesTransactionCount,
+  salesTruncated,
   salesUnmatchedCustomerCount,
   visitCount
 }: {
@@ -197,6 +212,7 @@ function buildRecommendations({
   routeWithoutMasterCount: number;
   salesMatchRate: number;
   salesTransactionCount: number;
+  salesTruncated: boolean;
   salesUnmatchedCustomerCount: number;
   visitCount: number;
 }) {
@@ -241,6 +257,9 @@ function buildRecommendations({
   }
   if (salesTransactionCount > 0 && salesUnmatchedCustomerCount === 0) {
     items.push("매출 원장의 모든 거래처가 거래처 원장과 매칭되었습니다. 등급·리포트 산정에 안전하게 반영됩니다.");
+  }
+  if (salesTruncated) {
+    items.push("매출 원장이 최근 1,000건 기준으로 표시되고 있습니다. 실운영에서는 기간 필터 또는 페이지네이션을 추가해 전체 거래내역을 나눠 확인해야 합니다.");
   }
   if (duplicateGroupCount > 0) {
     items.push(`같은 상호명이 서로 다른 레코드로 쪼개진 것으로 보이는 거래처가 ${duplicateGroupCount.toLocaleString()}건 있습니다. 거래처 히스토리에서 주소 표기를 확인하고 하나로 정리하세요.`);

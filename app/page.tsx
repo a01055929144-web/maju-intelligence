@@ -2,8 +2,6 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { readSheet } from "read-excel-file/browser";
-import writeXlsxFile from "write-excel-file/browser";
 import {
   Activity,
   AlertTriangle,
@@ -5289,6 +5287,10 @@ async function parseUploadRows(file: File): Promise<RawRow[]> {
     return rowsToRawRows(parseCsvRows(await file.text()));
   }
 
+  // Loaded on demand instead of at the top of the file: this Excel-parsing library is only ever
+  // needed once a user actually uploads a file, so keeping it out of the static import graph
+  // keeps it out of the initial JS bundle for this (very large) page.
+  const { readSheet } = await import("read-excel-file/browser");
   const rows = await readSheet(file, 1);
   return rowsToRawRows(rows);
 }
@@ -5363,12 +5365,15 @@ function normalizeUploadCell(value: unknown): RawRow[string] {
 }
 
 async function downloadWorkbook(filename: string, sheets: { name: string; rows: RawRow[] }[]) {
+  // Same reasoning as parseUploadRows: only load the Excel-writing library once the user
+  // actually clicks a download button, not on every visit to this page.
+  const writeXlsxFileModule = await import("write-excel-file/browser");
   const workbookSheets = sheets.map((sheet) => ({
     data: rawRowsToSheetData(sheet.rows),
     sheet: sheet.name.slice(0, 31)
   }));
 
-  await writeXlsxFile(workbookSheets).toFile(filename);
+  await writeXlsxFileModule.default(workbookSheets).toFile(filename);
 }
 
 function rawRowsToSheetData(rows: RawRow[]) {

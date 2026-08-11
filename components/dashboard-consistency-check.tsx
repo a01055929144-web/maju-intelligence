@@ -43,6 +43,7 @@ type ConsistencyPayload = {
     routeCalculationCoverage?: number;
     routeProviderCounts?: Record<string, number>;
     routeStops?: number;
+    salesTruncated?: boolean;
     totalChecks?: number;
   };
 };
@@ -118,6 +119,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         missingAddressCustomers: payload?.summary?.missingAddressCustomers || 0,
         routeCoverage,
         routeStops: payload?.summary?.routeStops || 0,
+        salesTruncated: Boolean(payload?.summary?.salesTruncated),
         timelineHref,
         routeHref
       })
@@ -297,6 +299,7 @@ function buildFixItems({
   routeCoverage,
   routeHref,
   routeStops,
+  salesTruncated,
   timelineHref
 }: {
   readonly consistencyScore: number;
@@ -308,6 +311,7 @@ function buildFixItems({
   readonly routeCoverage: number;
   readonly routeHref: string;
   readonly routeStops: number;
+  readonly salesTruncated: boolean;
   readonly timelineHref: string;
 }): FixItem[] {
   const items: FixItem[] = [];
@@ -352,6 +356,16 @@ function buildFixItems({
     title: "티맵 도로거리",
     tone: routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"
   });
+
+  if (salesTruncated) {
+    items.push({
+      href: dataRegistrationHref,
+      label: "매출 원장이 최근 1,000건 기준으로 표시 중입니다. 기간 필터나 페이지네이션 보강이 필요합니다.",
+      status: "일부",
+      title: "매출 원장 표시 범위",
+      tone: "warn"
+    });
+  }
 
   return items.sort((a, b) => getFixPriority(a.tone) - getFixPriority(b.tone)).slice(0, consistencyScore >= 90 ? 3 : 4);
 }

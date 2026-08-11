@@ -266,6 +266,7 @@ export type SalesTransactionSummary = {
   matchRate: number;
   latestSalesDate?: string;
   items: SalesTransactionItem[];
+  truncated: boolean;
 };
 export type SalesAssistantDraft = {
   id: string;
@@ -402,6 +403,9 @@ const AUTH_CREDENTIALS_ID = "maju-default";
 const CUSTOMER_MASTER_SELECT =
   "id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url";
 const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS = `${CUSTOMER_MASTER_SELECT},naver_place_url,kakao_place_url,google_map_url,place_links_checked_at`;
+// Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
+const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
+const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
 const STAFF_INVITATIONS_MIGRATION_MESSAGE =
   "직원 초대 저장소가 아직 준비되지 않았습니다. Supabase SQL Editor에서 직원 초대 스키마를 적용한 뒤 다시 시도해주세요.";
 const SUPABASE_CONNECTION_KEY_MESSAGE =
@@ -1695,13 +1699,14 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
   };
 }
 
-export async function getCustomerMaster(companyId?: string): Promise<{ customers: CustomerMasterItem[]; source: "sample" | "supabase" }> {
+export async function getCustomerMaster(companyId?: string): Promise<{ customers: CustomerMasterItem[]; source: "sample" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
 
   if (!isProductionStoreConfigured()) {
     return {
       customers: [],
-      source: "sample"
+      source: "sample",
+      truncated: false
     };
   }
 
@@ -1738,18 +1743,19 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
 
   try {
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=1000`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
   } catch (error) {
     if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=1000`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
   }
 
   return {
     customers: rows.map((row, index) => toCustomerMasterItem(row, index)),
-    source: "supabase"
+    source: "supabase",
+    truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT
   };
 }
 
@@ -2945,7 +2951,7 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
       salesAmount: customer.monthlyRevenue * 10000,
       createdAt: "기준 데이터"
     }));
-    return summarizeSalesTransactions(items);
+    return summarizeSalesTransactions(items, false);
   }
 
   const [rows, customerKeyMap] = await Promise.all([
@@ -2964,7 +2970,7 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
     >(
       `sales_transactions?select=id,customer_key,customer_name,business_registration_number,sales_date,product_name,quantity,sales_amount,created_at&company_id=eq.${encodeURIComponent(
         id
-      )}&order=sales_date.desc,created_at.desc&limit=200`
+      )}&order=sales_date.desc,created_at.desc&limit=${SALES_TRANSACTIONS_FETCH_LIMIT}`
     ).catch(() => []),
     getNormalizedCustomerKeyMap(id)
   ]);
@@ -2985,7 +2991,8 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
         salesAmount: Number(row.sales_amount || 0),
         createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
       };
-    })
+    }),
+    rows.length >= SALES_TRANSACTIONS_FETCH_LIMIT
   );
 }
 
@@ -2993,7 +3000,7 @@ async function getNormalizedCustomerKeyMap(companyId: string) {
   const map = new Map<string, { id: string; customerName: string }>();
 
   const rows = await supabaseRequest<Array<{ id: string; customer_name: string; normalized_key: string }>>(
-    `normalized_customers?select=id,customer_name,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&limit=1000`
+    `normalized_customers?select=id,customer_name,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
   ).catch(() => []);
 
   for (const row of rows) {
@@ -3155,7 +3162,7 @@ export async function matchSalesTransactionsToCustomer(
   return { matchedTransactionCount: updatedRows.length, customerName: targetCustomer.customer_name };
 }
 
-function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransactionSummary {
+function summarizeSalesTransactions(items: SalesTransactionItem[], truncated = false): SalesTransactionSummary {
   const totalAmount = items.reduce((total, item) => total + item.salesAmount, 0);
   const matchedAmount = items.filter((item) => item.matched).reduce((total, item) => total + item.salesAmount, 0);
   const unmatchedAmount = totalAmount - matchedAmount;
@@ -3240,7 +3247,8 @@ function summarizeSalesTransactions(items: SalesTransactionItem[]): SalesTransac
     unmatchedAmount,
     matchRate: totalAmount ? Math.round((matchedAmount / totalAmount) * 100) : 0,
     latestSalesDate: items.find((item) => item.salesDate)?.salesDate,
-    items
+    items,
+    truncated
   };
 }
 
