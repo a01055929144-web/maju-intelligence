@@ -15,6 +15,8 @@ export type LeadRecommendation = {
   region: string;
   score: number;
   reasons: string[];
+  /** Industry used to build this synthetic candidate. Not persisted; used only to enrich with real place data. */
+  industry?: string;
 };
 
 export type AnalysisResult = {
@@ -149,13 +151,15 @@ function buildLeadRecommendations(regions: AnalysisResult["regionDistribution"],
         name: `${region.region} ${industry} A`,
         region: region.region,
         score: clamp(94 - index * 4 + Math.min(region.count, 8)),
-        reasons: ["배송반경", "예상매출", "업종 적합"]
+        reasons: ["배송반경", "예상매출", "업종 적합"],
+        industry
       },
       {
         name: `${region.region} 신규오픈 B`,
         region: region.region,
         score: clamp(89 - index * 3 + Math.min(region.whitespace / 90, 6)),
-        reasons: ["신규오픈", "White Space", "경쟁사 미확인"]
+        reasons: ["신규오픈", "White Space", "경쟁사 미확인"],
+        industry
       }
     ])
     .sort((a, b) => b.score - a.score)

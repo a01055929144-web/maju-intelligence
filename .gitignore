@@ -30,3 +30,4 @@ Thumbs.db
 
 # typescript
 *.tsbuildinfo
+tsconfig.check.json

@@ -22,6 +22,12 @@ type ConsistencyPayload = {
   summary?: {
     consistencyScore?: number;
     dashboardCustomers?: number;
+    duplicateCustomerGroups?: number;
+    duplicateCustomerExamples?: Array<{
+      customerName: string;
+      count: number;
+      customers: Array<{ id: string; address: string; normalizedKey: string }>;
+    }>;
     estimatedRouteStops?: number;
     historyItems?: number;
     mappableRouteStops?: number;
@@ -93,6 +99,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const dataRegistrationHref = `/${query}`;
   const missingAddressExamples = payload?.summary?.missingAddressExamples || [];
+  const duplicateCustomerExamples = payload?.summary?.duplicateCustomerExamples || [];
   const routeProviderCounts = payload?.summary?.routeProviderCounts || {};
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
   const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
@@ -243,6 +250,18 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
                   {missingAddressExamples.slice(0, 4).map((customer) => (
                     <p key={customer.customerId || customer.customerName} className="truncate text-xs font-bold text-amber-900">
                       {customer.customerName} · {customer.deliveryZone || "권역 미지정"} · {customer.deliveryManager || "담당자 미지정"}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {duplicateCustomerExamples.length ? (
+              <div className="maju-filter-box mt-3 border-rose-200 bg-rose-50 p-3">
+                <p className="text-xs font-black text-rose-900">거래처 중복 의심</p>
+                <div className="mt-2 space-y-1">
+                  {duplicateCustomerExamples.slice(0, 4).map((group) => (
+                    <p key={group.customerName} className="truncate text-xs font-bold text-rose-900">
+                      {group.customerName} · {group.count}개 레코드로 분리됨
                     </p>
                   ))}
                 </div>

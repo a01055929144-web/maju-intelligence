@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { enrichLeadRecommendations } from "./leads";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { RouteDistanceResult } from "./tmap";
@@ -2397,6 +2398,13 @@ export async function saveAnalysis(
 
   const masterRows = await getNormalizedCustomersForAnalysis(companyId);
   report = analyzeCompany(masterRows.length ? masterRows : rows);
+  report = {
+    ...report,
+    leadRecommendations: await enrichLeadRecommendations(
+      report.leadRecommendations,
+      (masterRows.length ? masterRows : rows).map((row) => row.customerName)
+    ).catch(() => report.leadRecommendations)
+  };
 
   const legacyCustomerRows = rows.map((row) => ({
     company_id: companyId,
@@ -2973,6 +2981,51 @@ async function getNormalizedCustomerKeyMap(companyId: string) {
   return map;
 }
 
+export function normalizeNameForDuplicateCheck(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replace(/[^0-9a-z가-힣]/g, "");
+}
+
+export type DuplicateCustomerGroup = {
+  customerName: string;
+  count: number;
+  customers: Array<{ id: string; address: string; normalizedKey: string }>;
+};
+
+/**
+ * Finds customer-master rows that share the same (normalized) name but were stored under
+ * different normalized_key values — the signature of the same real-world business getting
+ * split into multiple records because address text drifted between uploads (extra spaces,
+ * floor/unit suffixes, "서울" vs "서울시", etc). This never merges anything automatically;
+ * it only surfaces candidates for a human to confirm and clean up manually.
+ */
+export async function findDuplicateCustomerCandidates(companyId?: string): Promise<DuplicateCustomerGroup[]> {
+  const id = companyId || getDefaultCompanyId();
+  if (!isProductionStoreConfigured()) return [];
+
+  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; normalized_key: string; address: string | null }>>(
+    `normalized_customers?select=id,customer_name,normalized_key,address&company_id=eq.${encodeURIComponent(id)}&limit=1000`
+  ).catch(() => []);
+
+  const groups = new Map<string, { customerName: string; customers: Array<{ id: string; address: string; normalizedKey: string }> }>();
+  for (const row of rows) {
+    if (!row.customer_name?.trim()) continue;
+    const nameKey = normalizeNameForDuplicateCheck(row.customer_name);
+    if (!nameKey) continue;
+
+    const current = groups.get(nameKey) || { customerName: row.customer_name, customers: [] };
+    current.customers.push({ id: row.id, address: row.address || "", normalizedKey: row.normalized_key });
+    groups.set(nameKey, current);
+  }
+
+  return Array.from(groups.values())
+    .filter((group) => new Set(group.customers.map((customer) => customer.normalizedKey)).size > 1)
+    .map((group) => ({ customerName: group.customerName, count: group.customers.length, customers: group.customers }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export async function matchSalesTransactionsToCustomer(
   companyId: string,
   customerKey: string,
@@ -3543,11 +3596,11 @@ function getRawCell(row: RawUploadRow, key?: string) {
   return key ? String(row[key] || "").trim() : "";
 }
 
-function normalizeBusinessNumber(value: string) {
+export function normalizeBusinessNumber(value: string) {
   return value.replace(/[^0-9]/g, "");
 }
 
-function makeCustomerKey(customerName: string, address: string) {
+export function makeCustomerKey(customerName: string, address: string) {
   return `${customerName}-${address}`
     .toLowerCase()
     .replace(/\s/g, "")

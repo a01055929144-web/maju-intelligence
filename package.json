@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "check:production-env": "node scripts/check-production-env.mjs",
     "ops:check-env": "node scripts/check-production-env.mjs",
     "ops:migrate": "node scripts/apply-supabase-migrations.mjs",
@@ -30,8 +31,12 @@
     "typescript": "^5.5.3",
     "write-excel-file": "^4.1.1"
   },
+  "devDependencies": {
+    "magic-string": "^0.30.21",
+    "vitest": "^2.1.9"
+  },
   "overrides": {
-    "postcss": "$postcss",
+    "postcss": "^8.5.23",
     "sharp": "0.35.3"
   }
 }

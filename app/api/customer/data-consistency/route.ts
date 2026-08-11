@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { getCompanyDashboardPayload, getCustomerMaster, getSalesTransactions, getTodayRoutePlan, getVisitTimeline } from "@/lib/store";
+import { findDuplicateCustomerCandidates, getCompanyDashboardPayload, getCustomerMaster, getSalesTransactions, getTodayRoutePlan, getVisitTimeline } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +24,13 @@ export async function GET(request: NextRequest) {
   }
 
   const startedAt = Date.now();
-  const [dashboard, customerMaster, routePlan, timeline, sales] = await Promise.all([
+  const [dashboard, customerMaster, routePlan, timeline, sales, duplicateGroups] = await Promise.all([
     getCompanyDashboardPayload(scope.companyId),
     getCustomerMaster(scope.companyId),
     getTodayRoutePlan(scope.companyId),
     getVisitTimeline(scope.companyId),
-    getSalesTransactions(scope.companyId)
+    getSalesTransactions(scope.companyId),
+    findDuplicateCustomerCandidates(scope.companyId).catch(() => [])
   ]);
 
   const masterCount = customerMaster.customers.length;
@@ -110,11 +111,18 @@ export async function GET(request: NextRequest) {
       label: "매출 원장 ↔ 거래처 매칭",
       ok: sales.transactionCount === 0 || sales.unmatchedCustomerCount === 0,
       value: sales.transactionCount ? `매칭 ${sales.matchRate}% (미매칭 ${sales.unmatchedCustomerCount.toLocaleString()}곳)` : "매출 원장 없음"
+    },
+    {
+      detail: "같은 상호명이 주소 표기 차이 등으로 서로 다른 거래처 레코드로 쪼개져 있는지 확인합니다.",
+      label: "거래처 중복 후보",
+      ok: duplicateGroups.length === 0,
+      value: duplicateGroups.length ? `${duplicateGroups.length.toLocaleString()}건 의심` : "중복 없음"
     }
   ];
 
   const recommendations = buildRecommendations({
       dashboardCount,
+      duplicateGroupCount: duplicateGroups.length,
       isSupabaseSource,
       masterCount: operationalMasterCount,
     masterWithoutRouteCount,
@@ -155,6 +163,8 @@ export async function GET(request: NextRequest) {
         salesMatchRate: sales.matchRate,
         salesTransactionCount: sales.transactionCount,
         salesUnmatchedCustomerCount: sales.unmatchedCustomerCount,
+        duplicateCustomerGroups: duplicateGroups.length,
+        duplicateCustomerExamples: duplicateGroups.slice(0, 5),
         totalChecks: checks.length
       },
       checks
@@ -165,6 +175,7 @@ export async function GET(request: NextRequest) {
 
 function buildRecommendations({
   dashboardCount,
+  duplicateGroupCount,
   isSupabaseSource,
   masterCount,
   masterWithoutRouteCount,
@@ -177,6 +188,7 @@ function buildRecommendations({
   visitCount
 }: {
   dashboardCount: number;
+  duplicateGroupCount: number;
   isSupabaseSource: boolean;
   masterCount: number;
   masterWithoutRouteCount: number;
@@ -229,6 +241,9 @@ function buildRecommendations({
   }
   if (salesTransactionCount > 0 && salesUnmatchedCustomerCount === 0) {
     items.push("매출 원장의 모든 거래처가 거래처 원장과 매칭되었습니다. 등급·리포트 산정에 안전하게 반영됩니다.");
+  }
+  if (duplicateGroupCount > 0) {
+    items.push(`같은 상호명이 서로 다른 레코드로 쪼개진 것으로 보이는 거래처가 ${duplicateGroupCount.toLocaleString()}건 있습니다. 거래처 히스토리에서 주소 표기를 확인하고 하나로 정리하세요.`);
   }
 
   return items.length ? items : ["대시보드, 거래처 원장, 코스, 지도 표시 기준이 일치합니다."];
