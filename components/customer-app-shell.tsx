@@ -7,8 +7,6 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Building2,
-  FileSpreadsheet,
-  HeartPulse,
   HelpCircle,
   LogOut,
   LucideIcon,
@@ -16,16 +14,15 @@ import {
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
-  ReceiptText,
   Route,
-  Settings,
-  Sparkles
+  Settings
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
+import { customerNavigationGroups, CustomerWorkspaceKey, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 
 type CustomerAppShellProps = {
-  readonly active: "dashboard" | "customers" | "routes" | "revenue" | "revenue-ledger" | "assistant" | "report" | "settings" | "data";
+  readonly active: CustomerWorkspaceKey;
   readonly children: ReactNode;
   readonly companyName: string;
   readonly hidePageTitle?: boolean;
@@ -37,49 +34,6 @@ type CustomerAppShellProps = {
   readonly userName?: string;
   readonly workspaceRole?: string;
 };
-
-type NavigationGroup = {
-  label: string;
-  items: Array<{
-    active: CustomerAppShellProps["active"];
-    badge?: string;
-    href: string;
-    icon: LucideIcon;
-    label: string;
-  }>;
-};
-
-const navigationGroups: NavigationGroup[] = [
-  {
-    label: "지도 홈",
-    items: [
-      { active: "dashboard", href: "/dashboard", icon: MapPinned, label: "지도 홈", badge: "메인" }
-    ]
-  },
-  {
-    label: "지도 기반 업무",
-    items: [
-      { active: "routes", href: "/routes/today", icon: Route, label: "영업·배송 코스" },
-      { active: "customers", href: "/crm/timeline", icon: Building2, label: "거래처 원장" }
-    ]
-  },
-  {
-    label: "성장 분석",
-    items: [
-      { active: "revenue", href: "/revenue/pipeline", icon: BarChart3, label: "매출 성장" },
-      { active: "revenue-ledger", href: "/revenue/transactions", icon: ReceiptText, label: "매출 거래내역" },
-      { active: "assistant", href: "/assistant", icon: Sparkles, label: "AI 영업 도우미" },
-      { active: "report", href: "/reports/latest", icon: HeartPulse, label: "AI 리포트" }
-    ]
-  },
-  {
-    label: "데이터 / 설정",
-    items: [
-      { active: "data", href: "/", icon: FileSpreadsheet, label: "데이터 등록" },
-      { active: "settings", href: "/dashboard/settings", icon: Settings, label: "회사 설정" }
-    ]
-  }
-];
 
 export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -103,7 +57,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
 
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
-  const visibleNavigationGroups = navigationGroups;
+  const visibleNavigationGroups = customerNavigationGroups;
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -305,15 +259,7 @@ function isCurrentNavItem(pathname: string | null, href: string) {
 }
 
 function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {
-  if (active === "dashboard") return "지도 홈";
-  if (active === "routes") return "영업·배송 코스";
-  if (active === "customers") return "거래처 원장";
-  if (active === "revenue") return "성장 분석";
-  if (active === "revenue-ledger") return "매출 거래내역";
-  if (active === "assistant") return "AI 영업 도우미";
-  if (active === "report") return "AI 리포트";
-  if (active === "settings") return "회사 설정";
-  return "데이터 등록";
+  return getCustomerWorkspaceLabel(active);
 }
 
 function SidebarQuickStep({ currentPath, href, icon: Icon, label, step }: { readonly currentPath: string | null; readonly href: string; readonly icon: LucideIcon; readonly label: string; readonly step: string }) {

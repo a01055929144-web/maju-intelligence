@@ -8,16 +8,11 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
-  FileSpreadsheet,
-  HeartPulse,
-  LayoutDashboard,
   LogOut,
   Menu,
-  ReceiptText,
   Route,
   Settings,
   Sparkles,
-  TrendingUp,
   X,
   type LucideIcon
 } from "lucide-react";
@@ -26,6 +21,7 @@ import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { KakaoAddressMap, type KakaoMapMarker } from "@/components/kakao-address-map";
 import { LeadStatusSelect } from "@/components/lead-status-select";
+import { customerNavigationGroups, getCustomerQuickActions } from "@/lib/customer-navigation";
 
 type TopLead = {
   expectedRevenue: number;
@@ -43,18 +39,6 @@ type ChecklistItem = {
   done: boolean;
   label: string;
   value: string;
-};
-
-type NavItem = {
-  active: boolean;
-  href: string;
-  icon: LucideIcon;
-  label: string;
-};
-
-type NavGroup = {
-  items: NavItem[];
-  label: string;
 };
 
 export type MapHomeViewProps = {
@@ -125,44 +109,35 @@ export function MapHomeView({
   }, []);
 
   const mapHomeHref = isAdminPreview && companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard";
-  const navGroups: NavGroup[] = [
-    {
-      label: "지도 홈",
-      items: [{ active: true, href: mapHomeHref, icon: LayoutDashboard, label: "지도 홈" }]
-    },
-    {
-      label: "지도 기반 업무",
-      items: [
-        { active: false, href: quickNav.routeHref, icon: Route, label: "영업·배송 코스" },
-        { active: false, href: quickNav.timelineHref, icon: Building2, label: "거래처 원장" }
-      ]
-    },
-    {
-      label: "성장 분석",
-      items: [
-        { active: false, href: quickNav.pipelineHref, icon: TrendingUp, label: "매출 성장" },
-        { active: false, href: quickNav.transactionsHref, icon: ReceiptText, label: "매출 거래내역" },
-        { active: false, href: quickNav.assistantHref, icon: Sparkles, label: "AI 영업 도우미" },
-        { active: false, href: quickNav.reportHref, icon: HeartPulse, label: "AI 리포트" }
-      ]
-    },
-    {
-      label: "데이터 / 설정",
-      items: [{ active: false, href: quickNav.dataRegistrationHref, icon: FileSpreadsheet, label: "데이터 등록" }]
-    }
-  ];
+  const hrefByActive = {
+    assistant: quickNav.assistantHref,
+    customers: quickNav.timelineHref,
+    dashboard: mapHomeHref,
+    data: quickNav.dataRegistrationHref,
+    report: quickNav.reportHref,
+    revenue: quickNav.pipelineHref,
+    "revenue-ledger": quickNav.transactionsHref,
+    routes: quickNav.routeHref,
+    settings: quickNav.settingsHref
+  };
+  const navGroups = customerNavigationGroups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({
+      ...item,
+      active: item.active === "dashboard",
+      href: hrefByActive[item.active]
+    }))
+  }));
   const commandChips = [
     { label: "거래처", value: stats.customerCount ? `${stats.customerCount.toLocaleString()}곳` : "등록 필요" },
     { label: "신규", value: `${stats.weeklyOpportunities.toLocaleString()}곳` },
     { label: "코스", value: routeStopCount ? `${routeStopCount.toLocaleString()}곳` : "대기" },
     { label: "건강", value: healthScore === null ? "-" : `${healthScore}점` }
   ];
-  const primaryActions = [
-    { helper: "KPI", href: mapHomeHref, icon: LayoutDashboard, label: "대시보드" },
-    { helper: "코스", href: quickNav.routeHref, icon: Route, label: "영업배송" },
-    { helper: "원장", href: quickNav.timelineHref, icon: Building2, label: "거래처" },
-    { helper: "성장", href: quickNav.pipelineHref, icon: TrendingUp, label: "매출" }
-  ];
+  const primaryActions = getCustomerQuickActions().map((item) => ({
+    ...item,
+    href: hrefByActive[item.active]
+  }));
 
   return (
     <div className="fixed inset-0 h-screen w-screen overflow-hidden bg-slate-900">
