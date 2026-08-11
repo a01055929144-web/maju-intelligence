@@ -21,7 +21,7 @@ const required = [
   "KAKAO_REST_KEY",
   "NEXT_PUBLIC_KAKAO_MAP_APP_KEY"
 ];
-const optional = ["OPINET_API_KEY"];
+const optional = ["OPINET_API_KEY", "NTS_BUSINESS_API_KEY"];
 
 const env = {
   ...envFiles.reduce((values, filePath) => ({ ...values, ...readEnvFile(filePath) }), {}),
@@ -81,6 +81,10 @@ if (!env.COMPANY_ORIGIN_ADDRESS || !env.TMAP_API_KEY) {
 if (!env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY) {
   process.exitCode = 1;
   console.error("NEXT_PUBLIC_KAKAO_MAP_APP_KEY가 필요합니다.");
+}
+
+if (!env.NTS_BUSINESS_API_KEY) {
+  console.warn("NTS_BUSINESS_API_KEY가 없으면 국세청 사업자 휴폐업 상태조회가 제한됩니다.");
 }
 
 function envValue(key) {

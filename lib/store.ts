@@ -1540,6 +1540,7 @@ export function getSystemStatus(): SystemStatus {
   const kakaoMapConfigured = Boolean(process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY);
   const kakaoConfigured = kakaoRestConfigured && kakaoMapConfigured;
   const opinetConfigured = Boolean(process.env.OPINET_API_KEY);
+  const ntsBusinessConfigured = isBusinessStatusApiConfigured();
   const routeConfigured = Boolean(process.env.COMPANY_ORIGIN_ADDRESS && process.env.TMAP_API_KEY);
   const blockingIssues = [
     !supabaseConfigured && "Supabase URL과 Service Role Key가 없어 거래처/매출/첨부자료 서버 저장을 확인할 수 없습니다.",
@@ -1549,6 +1550,7 @@ export function getSystemStatus(): SystemStatus {
   const warningIssues = [
     !kakaoConfigured && "카카오 REST 키 또는 JavaScript 키가 없어 주소검색/지도 표시가 제한될 수 있습니다.",
     !routeConfigured && "회사 출발지 또는 TMAP API 키가 없어 실도로 경로 계산이 제한됩니다.",
+    !ntsBusinessConfigured && "NTS_BUSINESS_API_KEY가 없어 국세청 사업자 휴폐업 상태조회가 제한됩니다.",
     !ocrConfigured && "OCR 공급자 환경변수가 없어 사업자등록증 자동입력은 보조 검증 모드로 동작합니다.",
     !appUrlConfigured && "NEXT_PUBLIC_APP_URL이 없어 배포 URL 기반 링크와 리다이렉트 확인이 제한될 수 있습니다."
   ].filter((issue): issue is string => Boolean(issue));
@@ -1579,6 +1581,7 @@ export function getSystemStatus(): SystemStatus {
       { key: "KAKAO_REST_KEY", present: kakaoRestConfigured, required: true, scope: "server" },
       { key: "NEXT_PUBLIC_KAKAO_MAP_APP_KEY", present: kakaoMapConfigured, required: true, scope: "client" },
       { key: "OPINET_API_KEY", present: opinetConfigured, required: false, scope: "server" },
+      { key: "NTS_BUSINESS_API_KEY", present: ntsBusinessConfigured, required: false, scope: "server" },
       { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" }
     ],
     services: [
@@ -1627,6 +1630,13 @@ export function getSystemStatus(): SystemStatus {
         description: opinetConfigured
           ? "OPINET 무료 API Key로 전국 평균 유가를 조회하고 30분 캐시해 예상 유류비에 반영합니다."
           : "OPINET 키가 없어 기본 유가 단가로 예상 유류비를 계산합니다."
+      },
+      {
+        name: "Business Status Intelligence",
+        status: ntsBusinessConfigured ? "ready" : "fallback",
+        description: ntsBusinessConfigured
+          ? "국세청 사업자등록정보 상태조회 API로 거래처 휴폐업 상태를 갱신할 수 있습니다."
+          : "NTS_BUSINESS_API_KEY가 없어 사업자 상태조회는 수동 확인 기준으로 동작합니다."
       },
       {
         name: "Document OCR",
