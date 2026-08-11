@@ -21,7 +21,7 @@ import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { KakaoAddressMap, type KakaoMapMarker } from "@/components/kakao-address-map";
 import { LeadStatusSelect } from "@/components/lead-status-select";
-import { customerNavigationGroups, getCustomerQuickActions } from "@/lib/customer-navigation";
+import { customerNavigationGroups, customerUtilityActions, getCustomerQuickActions } from "@/lib/customer-navigation";
 
 type TopLead = {
   expectedRevenue: number;
@@ -177,7 +177,7 @@ export function MapHomeView({
             </span>
           </div>
 
-          <div className="hidden min-w-0 flex-1 items-center gap-1.5 overflow-x-auto md:flex">
+          <div className="hidden min-w-0 flex-1 items-center gap-1.5 overflow-x-auto lg:flex">
             {commandChips.map((chip) => (
               <div key={chip.label} className="flex h-9 shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3">
                 <span className="maju-muted-label text-[10px]">{chip.label}</span>
@@ -186,24 +186,24 @@ export function MapHomeView({
             ))}
           </div>
 
-          <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+          <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-sm sm:gap-2">
             <Link
-              className="maju-button-blue h-9 shrink-0 px-3 shadow-sm"
+              className="maju-button-blue h-8 shrink-0 rounded-md px-2.5 text-xs shadow-none sm:h-9 sm:px-3 sm:text-sm"
               href={quickNav.assistantHref}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">AI</span>
+              <span className="hidden md:inline">{customerUtilityActions.assistant.label}</span>
             </Link>
             <Link
-              className="maju-button-secondary h-9 shrink-0 px-3 shadow-sm"
+              className="maju-button-secondary h-8 shrink-0 rounded-md px-2.5 text-xs shadow-none sm:h-9 sm:px-3 sm:text-sm"
               href={quickNav.settingsHref}
             >
               <Settings className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">설정</span>
+              <span className="hidden md:inline">{quickNav.settingsLabel || customerUtilityActions.settings.label}</span>
             </Link>
             {!isAdminPreview ? <LogoutButton /> : (
               <Link
-                className="maju-button h-9 shrink-0 bg-amber-900 px-3 text-white shadow-sm hover:bg-amber-950"
+                className="maju-button h-8 shrink-0 rounded-md bg-amber-900 px-2.5 text-xs text-white shadow-none hover:bg-amber-950 sm:h-9 sm:px-3 sm:text-sm"
                 href={quickNav.backHref}
               >
                 어드민
@@ -212,7 +212,7 @@ export function MapHomeView({
           </div>
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto border-t border-slate-100 px-3 py-2 md:hidden">
+        <div className="flex gap-1.5 overflow-x-auto border-t border-slate-100 px-3 py-2 lg:hidden">
           {commandChips.map((chip) => (
             <div key={chip.label} className="flex h-9 shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3">
               <span className="maju-muted-label text-[10px]">{chip.label}</span>
@@ -251,7 +251,7 @@ export function MapHomeView({
             <div className="mb-3 rounded-lg border border-teal-100 bg-teal-50/80 p-3">
               <p className="text-xs font-black text-teal-900">지도에서 시작</p>
               <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">
-                거래처 위치를 먼저 보고 대시보드, 영업·배송, 거래처 관리, 성장 작업으로 이동합니다.
+                거래처 위치를 먼저 보고 코스, 원장, 매출 작업으로 이동합니다.
               </p>
             </div>
             <p className="maju-muted-label px-2 pb-2">지도 홈 하위 작업</p>
@@ -379,7 +379,7 @@ export function MapHomeView({
 
       <div className="pointer-events-none absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2">
         <Link
-          className="maju-button-primary pointer-events-auto h-11 rounded-full px-4 shadow-xl"
+          className="maju-button-primary pointer-events-auto h-10 rounded-full px-4 text-sm shadow-xl"
           href={quickNav.routeHref}
         >
           <Route className="h-4 w-4" />
@@ -387,7 +387,7 @@ export function MapHomeView({
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
         <Link
-          className="maju-button-secondary pointer-events-auto h-10 rounded-full px-4 shadow-xl"
+          className="maju-button-secondary pointer-events-auto h-9 rounded-full px-4 text-sm shadow-xl"
           href={quickNav.timelineHref}
         >
           <Building2 className="h-3.5 w-3.5" />
@@ -406,12 +406,12 @@ function LogoutButton() {
 
   return (
     <button
-      className="maju-button-secondary h-9 shrink-0 px-3 shadow-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className="maju-button-secondary h-8 shrink-0 rounded-md px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 sm:h-9 sm:px-3 sm:text-sm"
       onClick={logout}
       type="button"
     >
       <LogOut className="h-3.5 w-3.5" />
-      <span className="hidden sm:inline">로그아웃</span>
+      <span className="hidden md:inline">로그아웃</span>
     </button>
   );
 }
