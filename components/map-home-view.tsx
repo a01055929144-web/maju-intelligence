@@ -236,7 +236,7 @@ export function MapHomeView({
         }`}
         style={{ top: headerHeight }}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-4">
           <div className="min-w-0">
             <p className="maju-section-title">MAJU Map OS</p>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{userName} · {originAddress}</p>
@@ -248,17 +248,20 @@ export function MapHomeView({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="border-b border-slate-200 p-3">
-            <div className="mb-3 rounded-lg border border-teal-100 bg-teal-50/80 p-3">
-              <p className="text-xs font-black text-teal-900">지도에서 시작</p>
-              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">
-                거래처 위치를 먼저 보고 코스, 원장, 매출 작업으로 이동합니다.
-              </p>
+            <div className="mb-3 rounded-lg border border-teal-100 bg-teal-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black text-teal-950">지도 홈 기준</p>
+                <Badge className="bg-white text-teal-700 ring-1 ring-inset ring-teal-200">OS</Badge>
+              </div>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">위치 확인 후 코스, 원장, 매출 작업으로 이동합니다.</p>
             </div>
-            <p className="maju-muted-label px-2 pb-2">지도 홈 하위 작업</p>
+            <p className="maju-muted-label px-2 pb-2">빠른 작업</p>
             <div className="grid grid-cols-2 gap-2">
               {primaryActions.map((item) => (
-                <Link className="maju-filter-box flex h-[64px] items-center gap-2 px-3 text-left hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
-                  <item.icon className="h-4 w-4 text-teal-700" />
+                <Link className="flex h-[64px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left transition hover:border-teal-200 hover:bg-teal-50" href={item.href} key={item.label}>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-50 text-teal-700 ring-1 ring-inset ring-slate-100">
+                    <item.icon className="h-4 w-4" />
+                  </span>
                   <span className="min-w-0">
                     <span className="block truncate text-[12px] font-black text-slate-800">{item.label}</span>
                     <span className="block truncate text-[10px] font-bold text-slate-400">{item.helper}</span>
@@ -268,20 +271,30 @@ export function MapHomeView({
             </div>
           </div>
 
-          <nav className="space-y-1 border-b border-slate-200 p-3">
+          <nav className="space-y-3 border-b border-slate-200 p-3">
             {navGroups.map((group) => (
-              <div className="space-y-1" key={group.label}>
-                <p className="maju-muted-label px-2 pb-1 pt-2 first:pt-0">{group.label}</p>
+              <div className="space-y-1.5" key={group.label}>
+                <p className="maju-muted-label px-2">{group.label}</p>
                 {group.items.map((item) => (
                   <Link
-                    className={`maju-nav-item ${
-                      item.active ? "maju-nav-item-active" : "maju-nav-item-idle"
+                    className={`relative flex min-h-[58px] items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
+                      item.active
+                        ? "border-teal-200 bg-teal-50 text-teal-950"
+                        : "border-transparent bg-white text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"
                     }`}
                     href={item.href}
                     key={item.label}
                   >
-                    <item.icon className={`h-4 w-4 ${item.active ? "text-teal-700" : "text-slate-400"}`} />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.active ? <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-teal-600" /> : null}
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md ring-1 ring-inset ${
+                      item.active ? "bg-white text-teal-700 ring-teal-100" : "bg-slate-50 text-slate-400 ring-slate-100"
+                    }`}>
+                      <item.icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-black">{item.label}</span>
+                      <span className="mt-0.5 line-clamp-1 block text-[11px] font-bold leading-5 text-slate-500">{item.description}</span>
+                    </span>
                   </Link>
                 ))}
               </div>
