@@ -20,6 +20,7 @@ import {
   FileSpreadsheet,
   HeartPulse,
   History,
+  LucideIcon,
   MapPin,
   Save,
   Search,
@@ -802,6 +803,74 @@ function AddressMapPanel({
   );
 }
 
+type DataRegistrationSection = "customer" | "sales" | "history";
+
+function DataRegistrationSidePanel({
+  activeSection,
+  customerRows,
+  onSelect,
+  persisted,
+  salesRows
+}: {
+  activeSection: DataRegistrationSection;
+  customerRows: number;
+  onSelect: (section: DataRegistrationSection) => void;
+  persisted: boolean;
+  salesRows: number;
+}) {
+  const items: Array<{ badge?: string; description: string; icon: LucideIcon; key: DataRegistrationSection; label: string }> = [
+    {
+      badge: customerRows ? `${customerRows.toLocaleString()}행` : undefined,
+      description: "사업자정보·주소·연락처 등록",
+      icon: Building2,
+      key: "customer",
+      label: "거래처 등록"
+    },
+    {
+      badge: salesRows ? `${salesRows.toLocaleString()}행` : undefined,
+      description: "매출 거래내역 업로드",
+      icon: FileSpreadsheet,
+      key: "sales",
+      label: "매출 등록"
+    },
+    {
+      badge: persisted ? "반영완료" : undefined,
+      description: "저장 준비율, 업로드 이력 확인",
+      icon: Save,
+      key: "history",
+      label: "저장·이력"
+    }
+  ];
+
+  return (
+    <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20">
+      <p className="px-2 pb-1 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-400">데이터 등록 메뉴</p>
+      {items.map((item) => {
+        const selected = activeSection === item.key;
+        return (
+          <button
+            key={item.key}
+            className={`maju-nav-item w-full text-left ${selected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
+            onClick={() => onSelect(item.key)}
+            type="button"
+          >
+            <item.icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-black">{item.label}</span>
+              <span className={`block truncate text-[11px] font-bold ${selected ? "text-teal-700" : "text-slate-400"}`}>{item.description}</span>
+            </span>
+            {item.badge ? (
+              <Badge className={selected ? "shrink-0 bg-white px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-200" : "shrink-0 bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>
+                {item.badge}
+              </Badge>
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function Onboarding({
   headers,
   fieldMap,
@@ -855,6 +924,23 @@ function Onboarding({
 }) {
   const [entryMode, setEntryMode] = useState<EntryMode>("excel");
   const [reviewTab, setReviewTab] = useState<"mapping" | "quality" | "save">("mapping");
+  const sidebarSection: DataRegistrationSection = reviewTab === "save" ? "history" : uploadType === "customer-master" ? "customer" : "sales";
+  function scrollToPanel(id: string) {
+    if (typeof document === "undefined") return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+  function selectDataRegistrationSection(section: DataRegistrationSection) {
+    if (section === "history") {
+      setReviewTab("save");
+      scrollToPanel("save-panel");
+      return;
+    }
+    onUploadType(section === "customer" ? "customer-master" : "sales-analysis");
+    if (reviewTab === "save") setReviewTab("mapping");
+    scrollToPanel("entry-panel");
+  }
   const [addressQuery, setAddressQuery] = useState("");
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
@@ -1277,7 +1363,15 @@ function Onboarding({
   }
 
   return (
-    <section className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-[212px_minmax(0,1fr)]">
+      <DataRegistrationSidePanel
+        activeSection={sidebarSection}
+        customerRows={uploadType === "customer-master" ? rawRows.length : 0}
+        onSelect={selectDataRegistrationSection}
+        persisted={pipelineMeta.persisted}
+        salesRows={uploadType === "sales-analysis" ? rawRows.length : 0}
+      />
+      <section className="min-w-0 space-y-4">
       <div className="space-y-4">
         <DataRegistrationQuickPanel
           activeType={uploadType}
@@ -1382,7 +1476,7 @@ function Onboarding({
           </div>
         </details>
 
-        <div className="maju-section-card border-l-4 border-l-blue-600 p-4">
+        <div className="maju-section-card scroll-mt-4 border-l-4 border-l-blue-600 p-4" id="entry-panel">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Badge className="mb-3 bg-blue-50 text-blue-700">2. 입력 화면</Badge>
@@ -1813,7 +1907,8 @@ function Onboarding({
           </div>
         </div>
       </aside>
-    </section>
+      </section>
+    </div>
   );
 }
 
