@@ -20,7 +20,8 @@ export async function PATCH(request: Request) {
     businessType: body.businessType,
     name: body.name,
     originAddress: body.originAddress,
-    ownerName: body.ownerName
+    ownerName: body.ownerName,
+    telegramChatId: body.telegramChatId
   });
 
   return NextResponse.json(result);

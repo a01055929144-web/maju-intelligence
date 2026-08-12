@@ -3,6 +3,7 @@ import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStat
 import { enrichLeadRecommendations } from "./leads";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
+import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
 import { RouteDistanceResult } from "./tmap";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
@@ -68,6 +69,7 @@ export type CompanySettings = {
   ownerName: string;
   originAddress: string;
   status: string;
+  telegramChatId?: string;
   updatedAt: string;
 };
 export type CompanySettingsInput = {
@@ -75,6 +77,7 @@ export type CompanySettingsInput = {
   name: string;
   originAddress?: string;
   ownerName?: string;
+  telegramChatId?: string;
 };
 export type CustomerMasterItem = {
   id: string;
@@ -458,6 +461,11 @@ function isInvalidSupabaseApiKeyError(error: unknown) {
 function isMissingCustomerPlaceLinksColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return ["naver_place_url", "kakao_place_url", "google_map_url", "place_links_checked_at"].some((column) => message.includes(column));
+}
+
+function isMissingTelegramChatIdColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("telegram_chat_id");
 }
 
 function normalizeStaffStoreError(error: unknown): never {
@@ -3269,6 +3277,71 @@ export async function refreshAllCompaniesBusinessStatuses(): Promise<BusinessSta
   );
 }
 
+export type ChurnRiskDigestResult = {
+  configured: boolean;
+  companiesNotified: number;
+  companiesSkippedNoRisk: number;
+  companiesFailed: Array<{ companyId: string; companyName: string; error: string }>;
+};
+
+/**
+ * Daily digest: for every company that has a Telegram group chat_id configured in
+ * 회사 설정, posts a summary of its 21일+ 매출 없음 거래처 to that group. Companies without a
+ * chat_id configured are silently skipped — this is opt-in per company.
+ */
+export async function sendDailyChurnRiskDigests(): Promise<ChurnRiskDigestResult> {
+  const empty: ChurnRiskDigestResult = { configured: isTelegramConfigured(), companiesNotified: 0, companiesSkippedNoRisk: 0, companiesFailed: [] };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string; name: string; telegram_chat_id: string | null }>>(
+    "companies?select=id,name,telegram_chat_id"
+  ).catch(() => []);
+  const targets = companies.filter((company) => company.telegram_chat_id?.trim());
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
+
+  const results = await Promise.all(
+    targets.map(async (company) => {
+      try {
+        const riskCustomers = await getChurnRiskCustomers(company.id);
+        if (!riskCustomers.length) return { skipped: true as const };
+
+        const timelineUrl = appUrl ? `${appUrl}/crm/timeline?companyId=${encodeURIComponent(company.id)}` : "";
+        const lines = riskCustomers
+          .slice(0, 10)
+          .map((customer) => `- ${customer.customerName} (${customer.region || "지역 미확인"}) · ${customer.daysSinceLastOrder}일 경과`);
+        const more = riskCustomers.length > 10 ? `\n…외 ${(riskCustomers.length - 10).toLocaleString()}곳` : "";
+        const text = [
+          `⚠️ <b>${company.name} 이탈 위험 거래처 ${riskCustomers.length}곳</b>`,
+          "21일 이상 매출 없는 거래처입니다.",
+          "",
+          lines.join("\n") + more,
+          timelineUrl ? `\n거래처 원장: ${timelineUrl}` : ""
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const sendResult = await sendTelegramMessage(company.telegram_chat_id as string, text);
+        if (!sendResult.ok) throw new Error(sendResult.error || "발송 실패");
+        return { skipped: false as const };
+      } catch (error) {
+        return { skipped: false as const, error: error instanceof Error ? error.message : String(error), companyId: company.id, companyName: company.name };
+      }
+    })
+  );
+
+  return results.reduce<ChurnRiskDigestResult>(
+    (total, result) => {
+      if ("error" in result && result.error) {
+        return { ...total, companiesFailed: [...total.companiesFailed, { companyId: result.companyId as string, companyName: result.companyName as string, error: result.error }] };
+      }
+      if (result.skipped) return { ...total, companiesSkippedNoRisk: total.companiesSkippedNoRisk + 1 };
+      return { ...total, companiesNotified: total.companiesNotified + 1 };
+    },
+    { ...empty }
+  );
+}
+
 export async function matchSalesTransactionsToCustomer(
   companyId: string,
   customerKey: string,
@@ -3492,17 +3565,28 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     return fallback;
   }
 
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      name: string;
-      business_type: string | null;
-      owner_name: string | null;
-      origin_address: string | null;
-      status: string;
-      updated_at: string;
-    }>
-  >(`companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`).catch(() => []);
+  type CompanyRow = {
+    id: string;
+    name: string;
+    business_type: string | null;
+    owner_name: string | null;
+    origin_address: string | null;
+    status: string;
+    telegram_chat_id?: string | null;
+    updated_at: string;
+  };
+  let rows: CompanyRow[];
+
+  try {
+    rows = await supabaseRequest<Array<CompanyRow>>(
+      `companies?select=id,name,business_type,owner_name,origin_address,status,telegram_chat_id,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+    );
+  } catch (error) {
+    if (!isMissingTelegramChatIdColumnError(error)) throw error;
+    rows = await supabaseRequest<Array<CompanyRow>>(
+      `companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+    ).catch(() => []);
+  }
 
   const row = rows[0];
   if (!row) {
@@ -3520,17 +3604,19 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     ownerName: row.owner_name || "",
     originAddress: row.origin_address || "",
     status: row.status,
+    telegramChatId: row.telegram_chat_id || undefined,
     updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
   };
 }
 
 export async function updateCompanySettings(companyId: string, input: CompanySettingsInput) {
-  const payload = {
+  const payload: Record<string, unknown> = {
     id: companyId,
     name: input.name.trim(),
     business_type: input.businessType?.trim() || null,
     owner_name: input.ownerName?.trim() || null,
     origin_address: input.originAddress?.trim() || null,
+    telegram_chat_id: input.telegramChatId?.trim() || null,
     status: "active",
     updated_at: new Date().toISOString()
   };
@@ -3542,33 +3628,48 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       persisted: false,
       company: {
         id: companyId,
-        name: payload.name,
-        businessType: payload.business_type || "",
-        ownerName: payload.owner_name || "",
-        originAddress: payload.origin_address || "",
+        name: payload.name as string,
+        businessType: (payload.business_type as string) || "",
+        ownerName: (payload.owner_name as string) || "",
+        originAddress: (payload.origin_address as string) || "",
+        telegramChatId: (payload.telegram_chat_id as string) || undefined,
         status: "active",
         updatedAt: "서버 저장 미확인"
       }
     };
   }
 
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      name: string;
-      business_type: string | null;
-      owner_name: string | null;
-      origin_address: string | null;
-      status: string;
-      updated_at: string;
-    }>
-  >("companies?on_conflict=id", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify([payload])
-  });
+  type CompanyRow = {
+    id: string;
+    name: string;
+    business_type: string | null;
+    owner_name: string | null;
+    origin_address: string | null;
+    telegram_chat_id?: string | null;
+    status: string;
+    updated_at: string;
+  };
+  let rows: CompanyRow[];
+
+  try {
+    rows = await supabaseRequest<Array<CompanyRow>>("companies?on_conflict=id", {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation"
+      },
+      body: JSON.stringify([payload])
+    });
+  } catch (error) {
+    if (!isMissingTelegramChatIdColumnError(error)) throw error;
+    const { telegram_chat_id: _telegramChatId, ...payloadWithoutTelegram } = payload;
+    rows = await supabaseRequest<Array<CompanyRow>>("companies?on_conflict=id", {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation"
+      },
+      body: JSON.stringify([payloadWithoutTelegram])
+    });
+  }
 
   const row = rows[0];
   return {
@@ -3579,6 +3680,7 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       businessType: row.business_type || "",
       ownerName: row.owner_name || "",
       originAddress: row.origin_address || "",
+      telegramChatId: row.telegram_chat_id || undefined,
       status: row.status,
       updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }

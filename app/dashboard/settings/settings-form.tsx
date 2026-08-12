@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { FormEvent, useState } from "react";
-import { Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapPin, Route, Save, Truck, Upload } from "lucide-react";
+import { Bell, Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanySettings } from "@/lib/store";
@@ -13,10 +13,13 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     businessType: initial.businessType,
     name: initial.name,
     originAddress: initial.originAddress,
-    ownerName: initial.ownerName
+    ownerName: initial.ownerName,
+    telegramChatId: initial.telegramChatId || ""
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [telegramTestMessage, setTelegramTestMessage] = useState("");
+  const [telegramTesting, setTelegramTesting] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
   const hasCompanyName = Boolean(form.name.trim());
   const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim())].filter(Boolean).length;
@@ -34,6 +37,17 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
 
     setLoading(false);
     setMessage(response.ok ? "회사 설정이 저장됐습니다." : "저장에 실패했습니다. 값을 다시 확인해주세요.");
+  }
+
+  async function handleTelegramTest() {
+    setTelegramTesting(true);
+    setTelegramTestMessage("");
+
+    const response = await fetch("/api/customer/telegram-test", { method: "POST" });
+    const payload = await response.json().catch(() => null);
+
+    setTelegramTesting(false);
+    setTelegramTestMessage(response.ok ? "테스트 메시지를 보냈습니다. 텔레그램 그룹을 확인하세요." : payload?.message || "테스트 발송에 실패했습니다.");
   }
 
   return (
@@ -136,6 +150,38 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 onChange={(event) => setForm({ ...form, originAddress: event.target.value })}
                 placeholder="예: 경기도 하남시 초이로 133 1층"
               />
+            </label>
+            <label className="space-y-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                <Bell className="h-3.5 w-3.5" />
+                이탈 위험 알림 · 텔레그램 그룹 chat_id
+              </span>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  value={form.telegramChatId}
+                  onChange={(event) => setForm({ ...form, telegramChatId: event.target.value })}
+                  placeholder="예: -1001234567890"
+                />
+                <Button
+                  className="shrink-0"
+                  disabled={!form.telegramChatId.trim() || telegramTesting}
+                  onClick={handleTelegramTest}
+                  type="button"
+                  variant="outline"
+                >
+                  <SendHorizonal className="h-4 w-4" />
+                  {telegramTesting ? "발송 중..." : "테스트 발송"}
+                </Button>
+              </div>
+              <p className="text-xs font-semibold leading-5 text-slate-400">
+                21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다. 봇을 그룹에 초대한 뒤 chat_id를 저장하고 테스트 발송으로 확인하세요.
+              </p>
+              {telegramTestMessage ? (
+                <p className={`text-xs font-bold ${telegramTestMessage.includes("실패") || telegramTestMessage.includes("먼저") ? "text-rose-600" : "text-emerald-700"}`}>
+                  {telegramTestMessage}
+                </p>
+              ) : null}
             </label>
             {message ? (
               <p className={`rounded-md px-3 py-2 text-sm font-bold ${message.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</p>
