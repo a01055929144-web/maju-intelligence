@@ -8,7 +8,6 @@ import {
   MapPinned,
   MessageSquareText,
   ReceiptText,
-  Route,
   Settings,
   Sparkles
 } from "lucide-react";
@@ -47,7 +46,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       {
         active: "dashboard",
         badge: "메인",
-        description: "거래처 위치와 오늘 업무를 지도에서 확인",
+        description: "지도에서 거래처, 배송차, 경유 코스 관리",
         href: "/dashboard",
         icon: MapPinned,
         label: "지도 홈"
@@ -57,13 +56,6 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
     label: "현장 운영",
     items: [
-      {
-        active: "routes",
-        description: "배송차, 담당자, 경유 순서, 출발지 기준 거리",
-        href: "/routes/today",
-        icon: Route,
-        label: "영업·배송 코스"
-      },
       {
         active: "customers",
         description: "거래처 등록, 원장, 저장 이력을 같은 기준으로 관리",
@@ -155,7 +147,6 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 export function getCustomerQuickActions() {
   return [
     { active: "dashboard" as const, helper: "홈", icon: MapPinned, label: "지도" },
-    { active: "routes" as const, helper: "코스", icon: Route, label: "영업·배송" },
     { active: "customers" as const, helper: "원장", icon: Building2, label: "거래처" },
     { active: "revenue" as const, helper: "성장", icon: BarChart3, label: "매출" }
   ];
