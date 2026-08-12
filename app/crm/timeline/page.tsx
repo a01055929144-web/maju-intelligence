@@ -64,6 +64,7 @@ type CustomerAttachmentView = {
   createdAt: string;
   fileUrl: string;
   mimeType: string;
+  storagePath?: string;
   title: string;
 };
 type AddressSearchResult = {
@@ -1482,8 +1483,9 @@ export default function CrmTimelinePage() {
                             key={attachment.id}
                             icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
                             label={attachmentLabel(attachment.attachmentType, attachment.title)}
+                            storagePath={attachment.storagePath}
                             url={attachment.fileUrl}
-                            value={attachment.fileUrl ? `등록 완료 · ${attachment.createdAt}` : `파일 연결 대기 · ${attachment.createdAt}`}
+                            value={attachment.createdAt}
                           />
                         ))
                       ) : (
@@ -2503,15 +2505,25 @@ function EditableField({
   );
 }
 
-function AttachmentRow({ icon: Icon, label, url = "", value }: { icon: typeof PackageCheck; label: string; url?: string; value: string }) {
+function AttachmentRow({ icon: Icon, label, storagePath = "", url = "", value }: { icon: typeof PackageCheck; label: string; storagePath?: string; url?: string; value: string }) {
+  const statusLabel = storagePath ? "Storage 저장" : url ? "외부 링크" : "파일 대기";
+  const statusClassName = storagePath
+    ? "bg-emerald-50 text-emerald-800 ring-emerald-100"
+    : url
+      ? "bg-blue-50 text-blue-800 ring-blue-100"
+      : "bg-slate-100 text-slate-600 ring-slate-200";
+
   return (
     <div className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
       <span className="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-slate-500">
         <Icon className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-black text-slate-800">{label}</p>
-        <p className="text-xs font-bold text-slate-500">{value}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-black text-slate-800">{label}</p>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ${statusClassName}`}>{statusLabel}</span>
+        </div>
+        <p className="mt-1 text-xs font-bold text-slate-500">{value}</p>
       </div>
       {url ? (
         <a
