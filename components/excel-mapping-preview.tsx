@@ -68,10 +68,10 @@ export function ExcelHeaderMappingPreview({
       <div className="maju-card-header p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <Badge className="mb-2 bg-slate-900 text-white">3-1 헤더 매칭</Badge>
+            <Badge className="mb-2 bg-slate-900 text-white">1. 필드 매칭</Badge>
             <p className="flex items-center gap-2 text-base font-black text-slate-950">
               <FileSpreadsheet className="h-4 w-4 text-blue-700" />
-              ERP 컬럼 매핑 작업표
+              ERP 엑셀 필드 매칭
             </p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
               실제 엑셀 컬럼과 행 미리보기 값을 확인한 뒤 MAJU 표준 필드를 지정합니다.
@@ -92,7 +92,7 @@ export function ExcelHeaderMappingPreview({
             <div>
               <p className="text-sm font-black text-slate-950">필수 컬럼 연결 상태</p>
               <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                {missingRequiredFields.length ? "아래 필수 필드를 먼저 연결하면 저장 가능 상태로 바뀝니다." : "필수 표준 필드가 모두 연결됐습니다. 품질 검증 탭에서 이상값을 확인하세요."}
+                {missingRequiredFields.length ? "아래 필수 필드를 먼저 연결하면 저장 가능 상태로 바뀝니다." : "필수 표준 필드가 모두 연결됐습니다. 데이터 검수 탭에서 이상값을 확인하세요."}
               </p>
             </div>
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
@@ -469,11 +469,11 @@ function MappingWorkspaceModal({
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px_220px] lg:items-center">
             <div className="min-w-0">
               <p className="text-sm font-black text-slate-950">
-                {readyToReview ? "필수 컬럼 매핑이 완료됐습니다." : "필수 컬럼을 먼저 연결하세요."}
+                {readyToReview ? "필수 필드 매칭이 완료됐습니다." : "필수 필드를 먼저 연결하세요."}
               </p>
               <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                 {readyToReview
-                  ? "닫은 뒤 품질 검증에서 사업자번호, 누락값, 중복 후보를 확인하면 저장 단계로 넘어갈 수 있습니다."
+                  ? "닫은 뒤 데이터 검수에서 사업자번호, 누락값, 중복 후보를 확인하면 저장 단계로 넘어갈 수 있습니다."
                   : `${missingRequiredFields.map((field) => field.label).join(", ")} 필드가 아직 비어 있습니다.`}
               </p>
             </div>
@@ -494,7 +494,7 @@ function MappingWorkspaceModal({
               미연결 컬럼 {unmappedColumnCount}개
             </button>
             <Button className={readyToReview ? "maju-button-primary h-10" : "maju-button-secondary h-10"} type="button" variant={readyToReview ? "default" : "outline"} onClick={readyToReview ? onDone : onClose}>
-              {readyToReview ? "닫고 품질 검증" : "닫기"}
+              {readyToReview ? "닫고 데이터 검수" : "닫기"}
             </Button>
           </div>
         </div>
@@ -644,7 +644,7 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
     <div className="border-t-8 border-slate-100 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4">
         <div>
-          <Badge className="mb-2 bg-slate-900 text-white">3-2 전체 데이터 검수</Badge>
+          <Badge className="mb-2 bg-slate-900 text-white">2. 전체 데이터 검수</Badge>
           <p className="text-sm font-black text-slate-950">업로드 데이터 전체 보기</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
             엑셀의 전체 행을 그대로 보여줍니다. 세로·가로 스크롤로 누락값과 이상값을 확인하세요.

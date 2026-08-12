@@ -103,7 +103,7 @@ const emptyMap: FieldMap = {};
 const mappingPresetStorageKey = "maju:data-registration:mapping-presets";
 const initialPipelineSteps: PipelineStep[] = [
   { key: "file", label: "파일 수신", description: "엑셀 파일과 시트 정보를 확인합니다.", status: "pending" },
-  { key: "mapping", label: "컬럼 매핑", description: "필수 컬럼과 업로드 컬럼을 연결합니다.", status: "pending" },
+  { key: "mapping", label: "필드 매칭", description: "필수 필드와 업로드 컬럼을 연결합니다.", status: "pending" },
   { key: "raw", label: "Raw 데이터 적재", description: "원본 행 데이터를 재분석 가능하게 보존합니다.", status: "pending" },
   { key: "normalize", label: "거래처 정제", description: "거래처명, 주소, 업종, 매출 정보를 표준화합니다.", status: "pending" },
   { key: "score", label: "Health Score 계산", description: "영업력, 배송효율, 리스크 점수를 계산합니다.", status: "pending" },
@@ -201,7 +201,7 @@ export default function Home() {
       setRegistrationStatus({
         actionLabel: "등록 데이터 필요",
         description: "운영 리포트는 샘플이 아니라 DB에 저장된 거래처 또는 매출 거래내역을 기준으로 생성합니다.",
-        nextAction: "거래처 마스터를 수기 등록하거나 엑셀로 업로드한 뒤 저장·이력을 확인하세요.",
+        nextAction: "거래처 마스터를 수기 등록하거나 엑셀로 업로드한 뒤 DB 저장 상태를 확인하세요.",
         status: "warning",
         title: "아직 리포트로 만들 DB 데이터가 없습니다."
       });
@@ -257,10 +257,10 @@ export default function Home() {
       setUploadedFilename(file.name);
       setRegistrationStatus({
         actionLabel: "파일 수신 완료",
-        description: `${json.length.toLocaleString()}개 행과 ${nextHeaders.length.toLocaleString()}개 컬럼을 확인했습니다. 필수 매핑 ${mappedCount}/${requiredCount}개가 자동 연결됐습니다.`,
-        nextAction: mappedCount === requiredCount ? "우측에서 품질을 확인한 뒤 업데이트 후 리포트 갱신을 누르세요." : "우측 컬럼 매핑에서 필수 컬럼을 연결하세요.",
+        description: `${json.length.toLocaleString()}개 행과 ${nextHeaders.length.toLocaleString()}개 컬럼을 확인했습니다. 필수 필드 ${mappedCount}/${requiredCount}개가 자동 연결됐습니다.`,
+        nextAction: mappedCount === requiredCount ? "데이터 검수 후 저장하고 리포트를 갱신하세요." : "필드 매칭에서 필수 필드를 연결하세요.",
         status: mappedCount === requiredCount ? "ready" : "warning",
-        title: mappedCount === requiredCount ? "저장 준비가 거의 완료됐습니다." : "필수 컬럼 매핑이 더 필요합니다."
+        title: mappedCount === requiredCount ? "저장 준비가 거의 완료됐습니다." : "필수 필드 매칭이 더 필요합니다."
       });
     } catch (error) {
       setRegistrationStatus({
@@ -368,7 +368,7 @@ export default function Home() {
       setRegistrationStatus({
         actionLabel: "정제 결과 없음",
         description: "업로드 행은 있지만 거래처명, 주소, 매출 등 DB 표준 필드로 변환된 데이터가 없습니다.",
-        nextAction: "컬럼 매핑과 품질 검증을 다시 확인한 뒤 저장을 실행하세요.",
+        nextAction: "필드 매칭과 데이터 검수를 다시 확인한 뒤 저장을 실행하세요.",
         status: "warning",
         title: "리포트를 생성할 거래처 데이터가 없습니다."
       });
@@ -546,7 +546,7 @@ function WorkspaceModeTabs({
   ] as const;
   const copy = {
     briefing: ["등록 가이드", "기초정보는 1회 저장하고 매출 원장은 반복 업데이트합니다."],
-    onboarding: ["데이터 작업공간", "수기 등록, 엑셀 업로드, ERP 컬럼 매핑을 한 화면에서 처리합니다."],
+    onboarding: ["데이터 작업공간", "수기 등록, 엑셀 업로드, ERP 필드 매칭을 한 화면에서 처리합니다."],
     report: ["AI 리포트", "저장된 거래처와 매출 기준으로 진단 리포트를 생성합니다."]
   }[active as "briefing" | "onboarding" | "report"] || ["데이터 작업공간", "거래처와 매출 데이터를 운영 기준값으로 관리합니다."];
 
@@ -1163,32 +1163,32 @@ function Onboarding({
   ];
   const reviewTabs = [
     {
-      actionHint: !hasDataRows ? "파일 업로드 또는 수기 등록을 먼저 진행하세요." : complete ? "품질 검증으로 넘어가세요." : "필수 컬럼을 모두 연결하세요.",
-      description: "ERP 헤더와 MAJU 표준 필드를 연결합니다.",
+      actionHint: !hasDataRows ? "파일 업로드 또는 수기 등록" : complete ? "다음: 데이터 검수" : "필수 필드 연결",
+      description: "엑셀 헤더와 표준 필드 연결",
       key: "mapping" as const,
-      label: "컬럼 매핑",
+      label: "필드 매칭",
       statusLabel: !hasDataRows ? "대기" : complete ? "연결 완료" : "필수 연결 필요",
-      step: "3-1",
+      step: "1",
       tone: !hasDataRows ? "idle" as const : complete ? "ready" as const : "warning" as const,
       value: rawRows.length ? `${mappedRequiredCount}/${requiredFields.length}` : "대기"
     },
     {
-      actionHint: !hasDataRows ? "등록 데이터를 먼저 준비하세요." : !complete ? "컬럼 매핑을 완료하세요." : hasBlockingQualityIssues ? "문제 행을 보완하세요." : "저장·이력으로 넘어가세요.",
-      description: "누락값, 사업자번호 오류, 중복 후보를 확인합니다.",
+      actionHint: !hasDataRows ? "등록 데이터 준비" : !complete ? "필드 매칭 완료" : hasBlockingQualityIssues ? "문제 행 보완" : "다음: DB 저장",
+      description: "누락값, 사업자번호, 중복 확인",
       key: "quality" as const,
-      label: "품질 검증",
+      label: "데이터 검수",
       statusLabel: !hasDataRows ? "대기" : !complete ? "매핑 먼저" : hasBlockingQualityIssues ? "보완 필요" : "검증 완료",
-      step: "3-2",
+      step: "2",
       tone: !hasDataRows ? "idle" as const : !complete || hasBlockingQualityIssues ? "warning" as const : "ready" as const,
       value: hasBlockingQualityIssues ? "보완 필요" : hasDataRows ? "정상" : "대기"
     },
     {
-      actionHint: pipelineMeta.persisted ? "운영 화면에서 반영 결과를 확인하세요." : canAnalyze ? "저장하고 리포트를 갱신하세요." : "앞 단계를 먼저 완료하세요.",
-      description: "DB 저장 조건과 최근 등록 이력을 확인합니다.",
+      actionHint: pipelineMeta.persisted ? "운영 화면 확인" : canAnalyze ? "저장 실행" : "앞 단계 완료",
+      description: "DB 반영과 최근 이력 확인",
       key: "save" as const,
-      label: "저장·이력",
+      label: "DB 저장",
       statusLabel: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "저장 가능" : "대기",
-      step: "3-3",
+      step: "3",
       tone: pipelineMeta.persisted ? "ready" as const : canAnalyze ? "action" as const : "idle" as const,
       value: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "실행 가능" : "대기"
     }
@@ -1776,17 +1776,22 @@ function Onboarding({
               <>
                 <div className="maju-section-card scroll-mt-4 overflow-hidden" id="review-panel">
                   <div className="maju-card-header px-4 py-3">
-                    <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="text-sm font-black text-slate-950">등록 검수 작업 탭</p>
-                        <p className="mt-1 text-xs font-bold text-slate-500">엑셀 확인, 품질 검증, 저장 반영을 한 줄 흐름으로 처리합니다.</p>
+                        <p className="text-sm font-black text-slate-950">등록 처리 순서</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">필드 매칭, 데이터 검수, DB 저장만 확인하면 됩니다.</p>
                       </div>
-                      <Badge className="w-fit bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
-                        현재 {activeReviewTab.step} · {activeReviewTab.statusLabel}
-                      </Badge>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
+                          {rawRows.length.toLocaleString()}행
+                        </Badge>
+                        <Badge className={canAnalyze ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                          {canAnalyze ? "저장 가능" : "확인 필요"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                  <div className="grid divide-y divide-slate-100 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+                  <div className="grid gap-2 bg-slate-50 p-3 lg:grid-cols-3">
                     {reviewTabs.map((tab) => {
                       const selected = reviewTab === tab.key;
                       const toneClass =
@@ -1808,26 +1813,26 @@ function Onboarding({
                       return (
                         <button
                           key={tab.key}
-                          className={`min-w-0 p-4 text-left transition ${
+                          className={`min-w-0 rounded-md border p-3 text-left transition ${
                             selected
-                              ? "bg-blue-50 text-blue-950 shadow-[inset_0_-3px_0_#2563eb]"
-                              : "bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                              ? "border-blue-300 bg-white text-blue-950 shadow-sm ring-2 ring-blue-100"
+                              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
                           }`}
                           onClick={() => setReviewTab(tab.key)}
                           type="button"
                         >
                           <span className="flex items-start justify-between gap-3">
                             <span className="min-w-0">
-                              <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-black ${selected ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                              <span className={`inline-flex h-7 w-7 items-center justify-center rounded-md text-xs font-black ${selected ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                                 {tab.step}
                               </span>
-                              <span className="mt-2 block text-sm font-black">{tab.label}</span>
-                              <span className={`mt-1 block truncate text-xs font-bold ${selected ? "text-blue-700" : "text-slate-500"}`}>{tab.description}</span>
+                              <span className="ml-2 align-middle text-sm font-black">{tab.label}</span>
+                              <span className={`mt-2 block truncate text-xs font-bold ${selected ? "text-blue-700" : "text-slate-500"}`}>{tab.description}</span>
                               <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-black ${toneClass}`}>
                                 {tab.statusLabel}
                               </span>
-                              <span className={`mt-2 block truncate text-[11px] font-black ${selected ? "text-slate-800" : "text-slate-400"}`}>
-                                다음: {tab.actionHint}
+                              <span className={`ml-2 mt-2 inline-flex text-[11px] font-black ${selected ? "text-slate-800" : "text-slate-400"}`}>
+                                {tab.actionHint}
                               </span>
                             </span>
                             <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${selected ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-500"}`}>
@@ -1839,7 +1844,7 @@ function Onboarding({
                     })}
                   </div>
                   <div className="border-t border-slate-200 bg-white px-4 py-2 text-xs font-bold leading-5 text-slate-600">
-                    <span className="font-black text-slate-950">{activeReviewTab.label}</span>
+                    <span className="font-black text-slate-950">현재 단계: {activeReviewTab.label}</span>
                     <span className="mx-2 text-slate-300">|</span>
                     {activeReviewTab.actionHint}
                   </div>
@@ -1897,7 +1902,7 @@ function Onboarding({
                 {!headers.length ? (
                   <div className="maju-empty-state p-6 text-center">
                     <p className="font-black text-slate-950">아직 검수할 등록 데이터가 없습니다.</p>
-                    <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 컬럼 매핑, 품질 검증, DB 반영 상태가 순서대로 표시됩니다.</p>
+                    <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 필드 매칭, 데이터 검수, DB 저장 상태가 순서대로 표시됩니다.</p>
                   </div>
                 ) : null}
                 <SaveResultSummary
@@ -1974,7 +1979,7 @@ function DataRegistrationQuickPanel({
     : canAnalyze
       ? "필수 조건이 맞았습니다. 저장하고 리포트를 갱신하세요."
       : rows
-        ? "컬럼 매핑과 품질 검증을 먼저 확인하세요."
+        ? "필드 매칭과 데이터 검수를 먼저 확인하세요."
         : "거래처 마스터 또는 매출 거래내역을 선택하고 등록 방식을 고르세요.";
 
   return (
@@ -3792,19 +3797,19 @@ function BulkNextActionPanel({
       }
     : missingRequiredFields.length
       ? {
-          badge: "매핑 필요",
-          body: `${missingRequiredFields.map((field) => field.label).join(", ")} 필수 컬럼을 연결하면 저장 조건이 열립니다.`,
-          buttonLabel: "컬럼 매핑 열기",
+          badge: "매칭 필요",
+          body: `${missingRequiredFields.map((field) => field.label).join(", ")} 필수 필드를 연결하면 저장 조건이 열립니다.`,
+          buttonLabel: "필드 매칭 열기",
           disabled: false,
           icon: FileSpreadsheet,
           tab: "mapping" as const,
-          title: "필수 컬럼 연결이 남아 있습니다."
+          title: "필수 필드 연결이 남아 있습니다."
         }
       : hasBlockingQualityIssues
         ? {
-            badge: "품질 확인",
+            badge: "검수 필요",
             body: "중복 후보, 누락값, 사업자번호 오류를 확인한 뒤 저장하는 것이 안전합니다.",
-            buttonLabel: "품질 검증 열기",
+            buttonLabel: "데이터 검수 열기",
             disabled: false,
             icon: AlertTriangle,
             tab: "quality" as const,
@@ -3813,7 +3818,7 @@ function BulkNextActionPanel({
         : {
             badge: canAnalyze ? "저장 가능" : "저장 확인",
             body: "DB 저장, 거래처 원장 반영, AI 리포트 갱신을 실행할 준비가 됐습니다.",
-            buttonLabel: "저장·이력 열기",
+            buttonLabel: "DB 저장 열기",
             disabled: false,
             icon: Check,
             tab: "save" as const,
