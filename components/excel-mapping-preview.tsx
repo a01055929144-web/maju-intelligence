@@ -638,7 +638,13 @@ function FieldMappingGroup({
 }
 
 function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawRow[] }) {
+  const [showAllRows, setShowAllRows] = useState(false);
+
   if (!headers.length || !rows.length) return null;
+
+  const previewLimit = 120;
+  const visibleRows = showAllRows ? rows : rows.slice(0, previewLimit);
+  const hiddenRows = Math.max(0, rows.length - visibleRows.length);
 
   return (
     <div className="border-t-8 border-slate-100 bg-white">
@@ -647,10 +653,31 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
           <Badge className="mb-2 bg-slate-900 text-white">2. 전체 데이터 검수</Badge>
           <p className="text-sm font-black text-slate-950">업로드 데이터 전체 보기</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-            엑셀의 전체 행을 그대로 보여줍니다. 세로·가로 스크롤로 누락값과 이상값을 확인하세요.
+            빠른 검수를 위해 먼저 일부 행을 보여주고, 필요하면 전체 행을 펼쳐 누락값과 이상값을 확인하세요.
           </p>
         </div>
-        <Badge className="bg-slate-100 text-slate-700">{rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="bg-slate-100 text-slate-700">
+            {visibleRows.length.toLocaleString()}/{rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼
+          </Badge>
+          {hiddenRows > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllRows(true)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              전체 {rows.length.toLocaleString()}행 보기
+            </button>
+          ) : rows.length > previewLimit ? (
+            <button
+              type="button"
+              onClick={() => setShowAllRows(false)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              빠른 검수로 접기
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="max-h-[680px] overflow-auto bg-white">
         <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-xs">
@@ -665,7 +692,7 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {visibleRows.map((row, index) => (
               <tr key={index} className="odd:bg-white even:bg-slate-50/70 hover:bg-blue-50/40">
                 <td className="sticky left-0 z-0 border-r border-slate-100 bg-inherit px-3 py-2 font-black text-slate-400">{index + 2}</td>
                 {headers.map((header) => {

@@ -440,7 +440,7 @@ export default function Home() {
     window.setTimeout(() => {
       setIsAnalyzing(false);
       setScreen("report");
-    }, 450);
+    }, 120);
   }
 
   async function refreshUploadHistory() {
@@ -452,9 +452,9 @@ export default function Home() {
 
   async function completePipelineStep(key: string) {
     setPipelineSteps((steps) => steps.map((step) => (step.key === key ? { ...step, status: "running" } : step)));
-    await wait(40);
+    await wait(12);
     setPipelineSteps((steps) => steps.map((step) => (step.key === key ? { ...step, status: "done" } : step)));
-    await wait(20);
+    await wait(4);
   }
 
   return (
