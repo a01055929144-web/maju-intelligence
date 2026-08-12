@@ -832,7 +832,7 @@ export default function CrmTimelinePage() {
           <SectionHeader
             eyebrow="지도 작업공간"
             title="거래처 원장"
-            description="지도 홈, 영업·배송 코스가 함께 사용하는 거래처 기준값입니다."
+            description="지도 홈이 사용하는 거래처 기준값입니다."
           />
           <div className="p-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
@@ -857,7 +857,7 @@ export default function CrmTimelinePage() {
                   {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
                 </p>
                 <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                  데이터 등록에서 거래처 마스터를 저장하면 지도 홈, 영업·배송 코스, 거래처 원장이 같은 DB 기준으로 연결됩니다.
+                  데이터 등록에서 거래처 마스터를 저장하면 지도 홈과 거래처 원장이 같은 DB 기준으로 연결됩니다.
                 </p>
                 <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
                   거래처 마스터 등록하기
@@ -1119,7 +1119,7 @@ export default function CrmTimelinePage() {
                   </button>
                   <Link
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50"
-                    href={withCompanyQuery("/routes/today")}
+                    href={withCompanyQuery("/dashboard")}
                   >
                     <Route className="h-3.5 w-3.5" />
                     코스 보기
@@ -1900,7 +1900,7 @@ function CustomerLedgerBasisPanel({
   const items = [
     { label: "전체 DB 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
     { label: "현재 필터", value: `${filteredCount.toLocaleString()}곳`, helper: "목록·상세 표시 기준" },
-    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "영업·배송 코스 필터" },
+    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "지도 홈 필터" },
     { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
     { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
   ];
@@ -1915,7 +1915,7 @@ function CustomerLedgerBasisPanel({
     <div className="maju-section-card mt-3 overflow-hidden bg-slate-50/70">
       <div className="maju-card-header grid gap-2 px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
         <p className="font-black text-slate-950">거래처 기준값</p>
-        <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 대시보드와 영업·배송 코스가 함께 사용하는 기준 데이터입니다.</p>
+        <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 지도 홈이 함께 사용하는 기준 데이터입니다.</p>
       </div>
       <div className="grid divide-y divide-slate-200 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
         {items.map((item) => (

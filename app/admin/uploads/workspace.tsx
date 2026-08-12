@@ -264,8 +264,8 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
           매출
         </Link>
-        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/routes/today?${companyQuery}`}>
-          코스
+        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/dashboard?${companyQuery}`}>
+          지도
         </Link>
         <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/admin/companies`}>
           고객사

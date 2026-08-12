@@ -71,7 +71,7 @@ export default async function ReportDetailPage({
       description: "사업자 상태, 연락처, 배송주소, 적재위치, 메모 이력을 정리합니다."
     },
     {
-      href: companyId ? `/routes/today?companyId=${encodeURIComponent(companyId)}` : "/routes/today",
+      href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
       label: "배송효율",
       score: report.health.deliveryEfficiency,
       title: "경유 코스 계산",
@@ -101,7 +101,7 @@ export default async function ReportDetailPage({
     },
     {
       description: "White Space 지역과 오늘 방문 매장을 코스로 연결합니다.",
-      href: companyId ? `/routes/today?companyId=${encodeURIComponent(companyId)}` : "/routes/today",
+      href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
       label: "방문·배송 코스 계산"
     },
     {
@@ -362,7 +362,7 @@ function ReportBasisPanel({
   ];
   const actions = [
     { href: withCompanyQuery("/crm/timeline"), label: "거래처 원장 보완" },
-    { href: withCompanyQuery("/routes/today"), label: "코스 계산" },
+    { href: withCompanyQuery("/dashboard"), label: "지도 홈" },
     { href: withCompanyQuery("/revenue/transactions"), label: "매출 원장 확인" }
   ];
 

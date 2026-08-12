@@ -40,7 +40,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
     },
     {
       description: "오늘 방문할 거래처를 정하고 차량별 코스와 경유 순서를 확인합니다.",
-      href: companyId ? `/routes/today?companyId=${encodeURIComponent(companyId)}` : "/routes/today",
+      href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
       label: "방문 코스 연결",
       value: "코스 확인"
     }
@@ -153,7 +153,7 @@ function AssistantBasisPanel({
   const actionLinks = [
     { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "방문 기록 보완" },
     { href: withCompanyQuery("/revenue/pipeline"), icon: TrendingUp, label: "매출 후보 확인" },
-    { href: withCompanyQuery("/routes/today"), icon: Route, label: "오늘 코스 확인" }
+    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈에서 코스 확인" }
   ];
 
   return (

@@ -74,7 +74,7 @@ export function Report({
                 className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
                 href={routeHref}
               >
-                영업·배송 코스 보기
+                지도 홈 보기
               </Link>
               <Button variant="outline" onClick={onReset}>데이터 다시 등록</Button>
             </div>
@@ -269,7 +269,7 @@ function ReportDataBasisCard({
     {
       description: "거래처 주소와 담당자 배정값이 지도와 배송차 코스에 이어졌는지 확인합니다.",
       href: routeHref,
-      label: "영업·배송 코스",
+      label: "지도 홈",
       value: "코스 확인"
     },
     {

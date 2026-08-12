@@ -156,7 +156,7 @@ export default function Home() {
     : uploadType === "customer-master"
       ? "/crm/timeline"
       : "/revenue/transactions";
-  const routeHref = adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today";
+  const routeHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
   const mobileTodayHref = adminCompanyId ? `/mobile/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/mobile/today";
 
   useEffect(() => {
@@ -1106,7 +1106,7 @@ function Onboarding({
       label: "현장 기록 추적"
     },
     {
-      description: "영업·배송 코스 탭의 지도, 목록, 오늘코스 영역이 잘리지 않도록 스크롤 기준을 정리했습니다.",
+      description: "지도 홈의 지도, 목록, 오늘 코스 영역이 잘리지 않도록 스크롤 기준을 정리했습니다.",
       done: true,
       label: "운영 QA 정리"
     },
@@ -1116,7 +1116,7 @@ function Onboarding({
       label: "운영 문구 정리"
     },
     {
-      description: "DB 반영, 업로드 이력, 대시보드, 원장, 영업·배송 코스 확인 경로를 등록 화면에 고정했습니다.",
+      description: "DB 반영, 업로드 이력, 지도 홈, 원장 확인 경로를 등록 화면에 고정했습니다.",
       done: true,
       label: "배포 전 체크리스트"
     },
@@ -1203,7 +1203,7 @@ function Onboarding({
   const currentLedgerHref = adminCompanyId ? `${currentLedgerPath}?companyId=${encodeURIComponent(adminCompanyId)}` : currentLedgerPath;
   const currentLedgerLabel = uploadType === "customer-master" ? "거래처 히스토리 보기" : "매출 원장 보기";
   const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
-  const routeHref = adminCompanyId ? `/routes/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/routes/today";
+  const routeHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
   const mobileTodayHref = adminCompanyId ? `/mobile/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/mobile/today";
 
   useEffect(() => {
@@ -2342,7 +2342,7 @@ function RegistrationLiveStatusBoard({
   const verificationLinks = [
     { href: dashboardHref, label: "대시보드", value: "회사 KPI 확인" },
     { href: ledgerHref, label: ledgerLabel.replace(" 보기", ""), value: "원장 반영 확인" },
-    { href: routeHref, label: "영업·배송 코스", value: "지도/코스 확인" }
+    { href: routeHref, label: "지도 홈", value: "지도/코스 확인" }
   ];
   const diagnosticLinks = getRegistrationDiagnosticLinks(registrationStatus.status, canAnalyze, persisted, rows);
   const blockingItem = readinessItems.find((item) => !item.ok);
@@ -2682,7 +2682,7 @@ function DeploymentReadinessChecklist({
               { href: "/admin/system", label: "관리자 시스템 점검" },
               { href: dashboardHref, label: "고객사 대시보드" },
               { href: ledgerHref, label: "거래처 히스토리" },
-              { href: routeHref, label: "영업·배송 코스" }
+              { href: routeHref, label: "지도 홈" }
             ].map((link) => (
               <Link
                 className="flex h-10 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
@@ -2745,7 +2745,7 @@ function CoreFlowCheckPanel({
     {
       href: routeHref,
       icon: Route,
-      label: "영업·배송 코스",
+      label: "지도 홈",
       steps: ["지도", "차량 필터", "티맵 경유"],
       summary: "출발지-매장 거리와 경유 코스 확인"
     },
@@ -2896,7 +2896,7 @@ function OperationalCommandStrip({
             <MiniStatus label="최근 반영" value={latestUploadAt || "확인 필요"} />
           </div>
           <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black leading-5 text-blue-800">
-            숫자가 대시보드, 거래처 히스토리, 영업·배송 코스에서 다르면 먼저 DB 반영과 필터 기준을 확인하세요.
+            숫자가 지도 홈과 거래처 히스토리에서 다르면 먼저 DB 반영과 필터 기준을 확인하세요.
           </p>
         </div>
       </div>
@@ -4319,7 +4319,7 @@ function SaveReadinessPanel({
           {[
             { href: dashboardHref, label: "대시보드", value: "회사 현황 숫자 갱신" },
             { href: ledgerHref, label: ledgerLabel.replace(" 보기", ""), value: "등록 원장·히스토리 확인" },
-            { href: routeHref, label: "영업·배송 코스", value: "거래처 위치·코스 기준 확인" }
+            { href: routeHref, label: "지도 홈", value: "거래처 위치·코스 기준 확인" }
           ].map((item, index) => (
             <Link
               className={`rounded-md border px-3 py-3 transition ${persisted ? "border-emerald-100 bg-emerald-50 hover:bg-emerald-100/70" : "border-slate-200 bg-slate-50 hover:bg-white"}`}
@@ -4338,7 +4338,7 @@ function SaveReadinessPanel({
       </div>
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
         <p className="text-xs font-black text-slate-500">반영 확인 위치</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-slate-700">거래처 마스터는 거래처 히스토리와 영업·배송 코스에, 매출 거래내역은 매출 원장과 AI 리포트에 반영됩니다.</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-700">거래처 마스터는 지도 홈과 거래처 히스토리에, 매출 거래내역은 매출 원장과 AI 리포트에 반영됩니다.</p>
       </div>
       <div className="border-t border-slate-100 bg-white px-4 py-4">
         <div className="grid gap-2 lg:grid-cols-3">
@@ -4554,7 +4554,7 @@ function OperationalHandoffPanel({
       description: "거래처 주소와 배송 담당자 기준으로 지도, 거리, 코스 반영 상태를 확인합니다.",
       href: routeHref,
       icon: Route,
-      label: "영업·배송 코스",
+      label: "지도 홈",
       step: "3"
     }
   ];
@@ -4567,7 +4567,7 @@ function OperationalHandoffPanel({
     : [
         ["대시보드", "전체 거래처 수, 등급별 매장 수, 최근 등록 시간"],
         ["거래처 히스토리", "사업자번호, 주소, 담당자, 첨부자료"],
-        ["영업·배송 코스", "지도 마커, 배송차 배정, 출발지-매장 거리"]
+        ["지도 홈", "지도 마커, 배송차 배정, 출발지-매장 거리"]
       ];
 
   return (
@@ -4584,7 +4584,7 @@ function OperationalHandoffPanel({
       </div>
       <div className="grid border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-xs font-bold leading-5 text-slate-600 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
         <span className="font-black text-slate-950">확인 원칙</span>
-        <span>등록된 데이터는 대시보드, 원장, 영업·배송 코스에서 같은 고객사와 같은 DB 기준으로 보여야 합니다. 숫자가 다르면 최근 등록 이력과 DB 연결 상태를 먼저 확인합니다.</span>
+        <span>등록된 데이터는 지도 홈과 원장에서 같은 고객사와 같은 DB 기준으로 보여야 합니다. 숫자가 다르면 최근 등록 이력과 DB 연결 상태를 먼저 확인합니다.</span>
       </div>
       <div className="border-b border-slate-100 bg-white px-4 py-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">

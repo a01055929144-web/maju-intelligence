@@ -85,7 +85,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           <BasisCard
             icon={<Truck className="h-4 w-4" />}
             title="3. 현장 화면 반영"
-            description="대시보드, 거래처 히스토리, 영업·배송 코스에서 동일한 기준값을 사용합니다."
+            description="지도 홈과 거래처 원장에서 동일한 기준값을 사용합니다."
           />
         </section>
 
@@ -141,7 +141,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <p className={`rounded-md px-3 py-2 text-sm font-bold ${message.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</p>
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-bold leading-5 text-slate-500">저장 후 대시보드, 영업·배송 코스, 거래처 히스토리에서 같은 출발지 기준으로 계산됩니다.</p>
+              <p className="text-xs font-bold leading-5 text-slate-500">저장 후 지도 홈과 거래처 원장에서 같은 출발지 기준으로 계산됩니다.</p>
               <Button className="shrink-0" disabled={loading}>
                 {loading ? <Check className="h-4 w-4 animate-pulse" /> : <Save className="h-4 w-4" />}
                 설정 저장
@@ -179,7 +179,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             description="물류 출발지는 모든 거래처 거리, 차량별 경유 코스, 티맵 계산의 기준점입니다."
           />
           <div className="grid gap-2 pt-1">
-            <QuickLink href="/routes/today" label="영업·배송 코스 보기" />
+            <QuickLink href="/dashboard" label="지도 홈 보기" />
             <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" />
             <QuickLink href="/" label="거래처 관리 · 등록으로 이동" />
           </div>
@@ -188,7 +188,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <ol className="mt-2 space-y-2 text-xs font-bold leading-5 text-blue-900">
               <li>1. 출발지 주소 저장 상태 확인</li>
               <li>2. 거래처 등록 화면에서 배송주소 데이터 확인</li>
-              <li>3. 영업·배송 코스에서 출발지-매장 거리 확인</li>
+              <li>3. 지도 홈에서 출발지-매장 거리 확인</li>
             </ol>
           </div>
           <p className="text-xs">마지막 수정: {initial.updatedAt}</p>

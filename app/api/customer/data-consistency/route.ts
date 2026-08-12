@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       value: `${dashboardCount.toLocaleString()} / ${operationalMasterCount.toLocaleString()}곳`
     },
     {
-      detail: "영업·배송 코스가 거래처 원장 기준으로 생성되는지 확인합니다.",
+      detail: "지도 홈의 코스가 거래처 원장 기준으로 생성되는지 확인합니다.",
       label: "거래처 원장 ↔ 코스",
       ok: isSupabaseSource && operationalMasterCount === routeCount,
       value: `${operationalMasterCount.toLocaleString()} / ${routeCount.toLocaleString()}곳`
@@ -266,7 +266,7 @@ function buildRecommendations({
     items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 코스 거리 계산 기준을 확인하세요.");
   }
   if (estimatedRouteCount > 0) {
-    items.push(`티맵 도로 계산 전 매장이 ${estimatedRouteCount.toLocaleString()}곳 있습니다. 영업·배송 코스에서 배송 거리 전체 계산을 실행하세요.`);
+    items.push(`티맵 도로 계산 전 매장이 ${estimatedRouteCount.toLocaleString()}곳 있습니다. 지도 홈에서 배송 거리 전체 계산을 실행하세요.`);
   }
   if (cachedRouteCount > 0 && estimatedRouteCount === 0) {
     items.push("코스 거리 기준이 티맵 실제 도로값으로 정리되어 있습니다. 담당자/배송차 필터별 거리합만 추가 점검하면 됩니다.");

@@ -278,7 +278,7 @@ export default async function AdminSystemPage() {
                   고객사 데이터 기준 진단
                 </CardTitle>
                 <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  대시보드, 거래처 원장, 영업·배송 코스, 지도 표시 가능 매장 수가 같은 companyId 기준으로 맞는지 확인합니다.
+                  지도 홈, 거래처 원장, 지도 표시 가능 매장 수가 같은 companyId 기준으로 맞는지 확인합니다.
                 </p>
               </div>
               <Link className="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted" href="/admin/companies">

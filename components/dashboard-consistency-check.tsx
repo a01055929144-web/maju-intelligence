@@ -108,7 +108,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
   const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
-  const routeHref = `/routes/today${query}`;
+  const routeHref = `/dashboard${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
   const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;
   const hasPayload = Boolean(payload);
@@ -374,7 +374,7 @@ function buildFixItems({
     label:
       routeCoverage >= 80
         ? `코스 ${routeStops.toLocaleString()}곳의 티맵 도로거리 반영률이 안정적입니다.`
-        : "영업·배송 코스에서 티맵 거리 계산을 실행해 도로 미계산 매장을 줄이세요.",
+        : "지도 홈에서 티맵 거리 계산을 실행해 도로 미계산 매장을 줄이세요.",
     status: `${routeCoverage}%`,
     title: "티맵 도로거리",
     tone: routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"
