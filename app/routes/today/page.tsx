@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
-import { createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getCompanyOriginAddress, getTodayRoutePlan } from "@/lib/store";
+import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
+import { getCompanyOriginAddress, getCustomerMaster, getTodayRoutePlan } from "@/lib/store";
 
 export default async function TodayRoutePage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   const resolvedSearchParams = await searchParams;
@@ -14,8 +14,15 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
-  const [routePlan, originAddress] = await Promise.all([getTodayRoutePlan(companyId), getCompanyOriginAddress(companyId)]);
-  const mapMarkers = createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const [routePlan, originAddress, customerMaster] = await Promise.all([
+    getTodayRoutePlan(companyId),
+    getCompanyOriginAddress(companyId),
+    getCustomerMaster(companyId)
+  ]);
+  const mapMarkers =
+    customerMaster.source === "supabase"
+      ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
+      : createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
 
   return (
     <CustomerAppShell
