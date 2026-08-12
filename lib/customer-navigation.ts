@@ -42,12 +42,12 @@ export type CustomerNavigationGroup = {
 
 export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "메인",
+    label: "지도 OS",
     items: [
       {
         active: "dashboard",
         badge: "메인",
-        description: "거래처 위치, 현황, 다음 업무를 지도에서 확인",
+        description: "거래처 위치와 오늘 업무를 지도에서 확인",
         href: "/dashboard",
         icon: MapPinned,
         label: "지도 홈"
@@ -59,38 +59,38 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "routes",
-        description: "배송차, 경유 순서, 출발지 기준 거리",
+        description: "배송차, 담당자, 경유 순서, 출발지 기준 거리",
         href: "/routes/today",
         icon: Route,
         label: "영업·배송 코스"
       },
       {
         active: "customers",
-        description: "거래처와 매출 데이터를 등록하고, 기존 거래처 정보를 조회·수정하며 데이터 상태를 관리",
+        description: "거래처 등록, 원장, 저장 이력을 같은 기준으로 관리",
         href: "/",
         icon: Building2,
-        label: "거래처 관리",
+        label: "거래처 데이터",
         children: [
           {
             active: "data",
-            description: "아직 없는 거래처 또는 매출 데이터를 새로 등록",
+            description: "거래처 기본정보와 매출 거래내역 입력",
             href: "/",
             icon: FileSpreadsheet,
-            label: "등록"
+            label: "데이터 등록"
           },
           {
             active: "customers",
-            description: "등록된 거래처를 검색·조회하고 상세 정보와 운영 상태를 수정",
+            description: "거래처 상세, 메모, 첨부자료 관리",
             href: "/crm/timeline",
             icon: Building2,
             label: "거래처 원장"
           },
           {
             active: "data-management",
-            description: "데이터 등록 이력과 누락·미매칭·정합성 문제를 확인하고 관리",
+            description: "업로드 이력, DB 반영, 누락 상태 확인",
             href: "/customers/data",
             icon: Database,
-            label: "데이터 관리"
+            label: "저장 이력"
           }
         ]
       }
@@ -101,14 +101,14 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "revenue",
-        description: "거래처별 매출 변화를 분석해 성장 기회, 이탈 징후, 업셀링 후보와 다음 액션을 찾음",
+        description: "성장 기회, 이탈 징후, 업셀링 후보 확인",
         href: "/revenue/pipeline",
         icon: BarChart3,
         label: "매출 인사이트"
       },
       {
         active: "revenue-ledger",
-        description: "ERP 또는 업로드로 수집된 거래처별 실제 매출 원본 데이터를 조회",
+        description: "ERP 업로드 매출 원본 데이터 조회",
         href: "/revenue/transactions",
         icon: ReceiptText,
         label: "매출 내역"
@@ -154,7 +154,7 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 
 export function getCustomerQuickActions() {
   return [
-    { active: "dashboard" as const, helper: "현황", icon: MapPinned, label: "지도 홈" },
+    { active: "dashboard" as const, helper: "홈", icon: MapPinned, label: "지도" },
     { active: "routes" as const, helper: "코스", icon: Route, label: "영업·배송" },
     { active: "customers" as const, helper: "원장", icon: Building2, label: "거래처" },
     { active: "revenue" as const, helper: "성장", icon: BarChart3, label: "매출" }
