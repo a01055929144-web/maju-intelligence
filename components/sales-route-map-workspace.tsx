@@ -477,7 +477,7 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
             출발지 보기
           </button>
           <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
-            {sourceReady ? selectedVehicleLabel : "DB 원장 미연결"}
+            {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
           </span>
           <span className="ml-1 text-xs font-black text-slate-500">
             {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
@@ -2583,8 +2583,8 @@ function RouteBasisStrip({
   readonly visibleMapReadyStoreCount: number;
 }) {
   const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 매장 주소 정상";
-  const sourceLabel = routePlan.source === "supabase" ? "DB 원장 연결" : "DB 원장 미연결";
-  const sourceHelper = routePlan.source === "supabase" ? "거래처 마스터 DB 기준" : "DB 연결 또는 거래처 등록 필요";
+  const sourceLabel = routePlan.source === "supabase" ? "거래처 연결됨" : "거래처 연결 대기";
+  const sourceHelper = routePlan.source === "supabase" ? "저장된 거래처 기준" : "거래처 등록 또는 연결 확인 필요";
   const sourceReady = routePlan.source === "supabase";
   const distanceValue = sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산";
   const durationValue = sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산";
