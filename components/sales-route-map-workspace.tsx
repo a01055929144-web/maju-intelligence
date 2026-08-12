@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { CalendarDays, Camera, Check, CheckCircle2, ChevronDown, Clock, Copy, Edit3, FileImage, MapPin, MessageSquareText, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
+import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -114,8 +115,10 @@ type BusinessOcrSuggestion = {
 };
 
 type SalesRouteMapWorkspaceProps = {
+  readonly churnRiskCompanyId?: string;
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
+  readonly timelineHref?: string;
 };
 
 type CourseSummary = {
@@ -160,7 +163,7 @@ const localStoreKeys = {
   vehicleEdits: "maju:sales-route:vehicle-edits"
 };
 
-export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref }: SalesRouteMapWorkspaceProps) {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -382,6 +385,12 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
           </button>
         </div>
       </header>
+
+      {timelineHref ? (
+        <div className="px-5 pt-3 empty:hidden">
+          <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
+        </div>
+      ) : null}
 
       <section className="grid grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
         <Kpi

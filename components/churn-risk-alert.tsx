@@ -14,7 +14,7 @@ type ChurnRiskCustomer = {
   region?: string;
 };
 
-export function ChurnRiskAlert({ companyId, offsetTop, timelineHref }: { companyId?: string; offsetTop: number; timelineHref: string }) {
+export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string; timelineHref: string }) {
   const [customers, setCustomers] = useState<ChurnRiskCustomer[]>([]);
   const [dismissed, setDismissed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -43,7 +43,7 @@ export function ChurnRiskAlert({ companyId, offsetTop, timelineHref }: { company
   const topCustomers = customers.slice(0, 3);
 
   return (
-    <div className="pointer-events-auto absolute left-3 z-30 w-[300px] max-w-[85vw]" style={{ top: offsetTop }}>
+    <div className="w-full max-w-[360px]">
       <div className="overflow-hidden rounded-xl border border-rose-200 bg-white shadow-[0_12px_28px_rgba(190,18,60,0.16)]">
         <div className="flex items-start justify-between gap-2 bg-rose-50 px-3 py-2.5">
           <div className="flex items-start gap-2">

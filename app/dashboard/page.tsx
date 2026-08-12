@@ -25,6 +25,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const mapMarkers = hasOperationalCustomerMaster
     ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
     : createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const timelineHref = isAdminPreview && companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline";
 
   return (
     <CustomerAppShell
@@ -39,7 +40,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1760px]">
-        <SalesRouteMapWorkspace mapMarkers={mapMarkers} routePlan={routePlan} />
+        <SalesRouteMapWorkspace
+          churnRiskCompanyId={isAdminPreview ? companyId : undefined}
+          mapMarkers={mapMarkers}
+          routePlan={routePlan}
+          timelineHref={timelineHref}
+        />
       </section>
     </CustomerAppShell>
   );
