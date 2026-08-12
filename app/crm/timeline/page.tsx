@@ -450,6 +450,8 @@ export default function CrmTimelinePage() {
   const selectedFilteredPosition = selectedFilteredArrayIndex + 1;
   const previousFilteredCustomer = selectedFilteredArrayIndex > 0 ? filteredCustomers[selectedFilteredArrayIndex - 1] : null;
   const nextFilteredCustomer = selectedFilteredArrayIndex >= 0 && selectedFilteredArrayIndex < filteredCustomers.length - 1 ? filteredCustomers[selectedFilteredArrayIndex + 1] : null;
+  const [mergingCustomerId, setMergingCustomerId] = useState("");
+  const [mergeMessage, setMergeMessage] = useState("");
   const duplicateCandidates = useMemo(() => {
     if (!selectedCustomer.customerName?.trim()) return [];
     const key = selectedCustomer.customerName.trim().replace(/\s+/g, "").toLowerCase();
@@ -462,6 +464,39 @@ export default function CrmTimelinePage() {
     if (!customerId) return;
     const targetIndex = customers.findIndex((customer) => customer.id === customerId);
     if (targetIndex >= 0) setSelectedIndex(targetIndex);
+  }
+
+  async function mergeDuplicateIntoSelected(duplicateId: string, duplicateLabel: string) {
+    if (!selectedCustomer.id || mergingCustomerId) return;
+    const confirmed = window.confirm(
+      `"${duplicateLabel}" 레코드를 "${selectedCustomer.customerName}"(으)로 병합합니다.\n매출 이력·메모·첨부는 이 거래처로 옮겨지고, "${duplicateLabel}" 레코드는 완전히 삭제됩니다. 되돌릴 수 없습니다. 계속할까요?`
+    );
+    if (!confirmed) return;
+
+    setMergingCustomerId(duplicateId);
+    setMergeMessage("");
+    try {
+      const response = await fetch("/api/customers/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), primaryCustomerId: selectedCustomer.id, duplicateCustomerIds: [duplicateId] })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "병합에 실패했습니다.");
+
+      const primaryId = selectedCustomer.id;
+      setCustomers((previous) => {
+        const next = previous.filter((customer) => customer.id !== duplicateId);
+        const nextSelectedIndex = next.findIndex((customer) => customer.id === primaryId);
+        if (nextSelectedIndex >= 0) setSelectedIndex(nextSelectedIndex);
+        return next;
+      });
+      setMergeMessage(`병합 완료: 매출 ${payload.movedTransactions}건, 메모 ${payload.movedNotes}건, 첨부 ${payload.movedAttachments}건을 옮기고 중복 레코드를 삭제했습니다.`);
+    } catch (error) {
+      setMergeMessage(error instanceof Error ? error.message : "병합에 실패했습니다.");
+    } finally {
+      setMergingCustomerId("");
+    }
   }
   const activeCleanupLabel = operationFilterLabel(operationFilter);
   const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
@@ -1205,20 +1240,32 @@ export default function CrmTimelinePage() {
                   {duplicateCandidates.length ? (
                     <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
                       <p className="text-xs font-black text-rose-900">
-                        같은 상호명의 다른 레코드가 {duplicateCandidates.length}개 있습니다. 중복이면 하나로 정리하세요.
+                        같은 상호명의 다른 레코드가 {duplicateCandidates.length}개 있습니다. 중복이면 이 거래처로 병합하거나 이동해서 비교하세요.
                       </p>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {duplicateCandidates.map((customer) => (
-                          <button
-                            className="rounded border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-bold text-rose-800 hover:bg-rose-100"
-                            key={customer.id}
-                            onClick={() => jumpToCustomer(customer.id)}
-                            type="button"
-                          >
-                            {customer.address || "주소 없음"} 보기
-                          </button>
+                          <div className="flex items-center gap-1" key={customer.id}>
+                            <button
+                              className="rounded border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-bold text-rose-800 hover:bg-rose-100"
+                              onClick={() => jumpToCustomer(customer.id)}
+                              type="button"
+                            >
+                              {customer.address || "주소 없음"} 보기
+                            </button>
+                            {customer.id ? (
+                              <button
+                                className="rounded border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={mergingCustomerId === customer.id}
+                                onClick={() => void mergeDuplicateIntoSelected(customer.id as string, customer.address || customer.customerName)}
+                                type="button"
+                              >
+                                {mergingCustomerId === customer.id ? "병합 중..." : "이 거래처로 병합"}
+                              </button>
+                            ) : null}
+                          </div>
                         ))}
                       </div>
+                      {mergeMessage ? <p className="mt-1.5 text-[11px] font-bold text-rose-900">{mergeMessage}</p> : null}
                     </div>
                   ) : null}
                 </div>

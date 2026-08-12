@@ -3098,6 +3098,90 @@ export async function findDuplicateCustomerCandidates(companyId?: string): Promi
     .sort((a, b) => b.count - a.count);
 }
 
+export type MergeDuplicateCustomersResult = {
+  primaryCustomerId: string;
+  mergedCustomerIds: string[];
+  movedTransactions: number;
+  movedNotes: number;
+  movedAttachments: number;
+};
+
+/**
+ * Merges duplicateIds into primaryId: reassigns their sales history (by normalized_key),
+ * notes, and attachments to the primary record, then hard-deletes the duplicate rows. This is
+ * destructive and irreversible by design (confirmed product decision) — callers must confirm
+ * with the user before invoking this.
+ */
+export async function mergeDuplicateCustomers(companyId: string, primaryId: string, duplicateIds: string[]): Promise<MergeDuplicateCustomersResult> {
+  const cleanDuplicateIds = Array.from(new Set(duplicateIds.filter((id) => id && id !== primaryId)));
+  const empty: MergeDuplicateCustomersResult = { primaryCustomerId: primaryId, mergedCustomerIds: [], movedTransactions: 0, movedNotes: 0, movedAttachments: 0 };
+  if (!cleanDuplicateIds.length) return empty;
+  if (!isProductionStoreConfigured()) return { ...empty, mergedCustomerIds: cleanDuplicateIds };
+
+  const rows = await supabaseRequest<Array<{ id: string; normalized_key: string }>>(
+    `normalized_customers?select=id,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${[primaryId, ...cleanDuplicateIds]
+      .map((id) => encodeURIComponent(id))
+      .join(",")})`
+  );
+  const primaryRow = rows.find((row) => row.id === primaryId);
+  if (!primaryRow) throw new Error("병합 대상 거래처(기준 레코드)를 찾을 수 없습니다.");
+  const duplicateRows = rows.filter((row) => cleanDuplicateIds.includes(row.id));
+
+  let movedTransactions = 0;
+  let movedNotes = 0;
+  let movedAttachments = 0;
+
+  for (const duplicate of duplicateRows) {
+    if (duplicate.normalized_key && duplicate.normalized_key !== primaryRow.normalized_key) {
+      const updated = await supabaseRequest<Array<{ id: string }>>(
+        `sales_transactions?company_id=eq.${encodeURIComponent(companyId)}&customer_key=eq.${encodeURIComponent(duplicate.normalized_key)}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify({ customer_key: primaryRow.normalized_key })
+        }
+      ).catch(() => []);
+      movedTransactions += updated.length;
+    }
+
+    const movedNoteRows = await supabaseRequest<Array<{ id: string }>>(
+      `customer_notes?company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(duplicate.id)}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ customer_id: primaryId })
+      }
+    ).catch(() => []);
+    movedNotes += movedNoteRows.length;
+
+    const movedAttachmentRows = await supabaseRequest<Array<{ id: string }>>(
+      `customer_attachments?company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(duplicate.id)}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ customer_id: primaryId })
+      }
+    ).catch(() => []);
+    movedAttachments += movedAttachmentRows.length;
+  }
+
+  await supabaseRequest(
+    `normalized_customers?company_id=eq.${encodeURIComponent(companyId)}&id=in.(${duplicateRows.map((row) => encodeURIComponent(row.id)).join(",")})`,
+    {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" }
+    }
+  );
+
+  return {
+    primaryCustomerId: primaryId,
+    mergedCustomerIds: duplicateRows.map((row) => row.id),
+    movedTransactions,
+    movedNotes,
+    movedAttachments
+  };
+}
+
 export type ChurnRiskCustomer = {
   customerId: string;
   customerName: string;
