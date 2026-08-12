@@ -9,7 +9,7 @@ export type OpinetFuelPrice = {
 type OpinetAveragePriceRow = {
   PRICE?: number | string;
   PRODCD?: string;
-  PROD_NM?: string;
+  PRODNM?: string;
   TRADE_DT?: string;
 };
 
@@ -40,7 +40,7 @@ export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" 
   try {
     const url = new URL(`${OPINET_BASE_URL}/avgAllPrice.do`);
     url.searchParams.set("out", "json");
-    url.searchParams.set("code", apiKey);
+    url.searchParams.set("certkey", apiKey);
 
     const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) return fallbackFuelPrice(fuelType);
@@ -49,7 +49,7 @@ export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" 
     const rows = normalizeRows(payload.RESULT?.OIL);
     const targetCode = fuelType === "diesel" ? "D047" : "B027";
     const targetName = fuelType === "diesel" ? "경유" : "휘발유";
-    const row = rows.find((item) => item.PRODCD === targetCode) || rows.find((item) => item.PROD_NM?.includes(targetName));
+    const row = rows.find((item) => item.PRODCD === targetCode) || rows.find((item) => item.PRODNM?.includes(targetName));
     const price = Number(row?.PRICE || 0);
 
     if (!Number.isFinite(price) || price <= 0) return fallbackFuelPrice(fuelType);
