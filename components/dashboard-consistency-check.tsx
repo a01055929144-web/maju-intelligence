@@ -46,7 +46,10 @@ type ConsistencyPayload = {
     routeCalculationCoverage?: number;
     routeProviderCounts?: Record<string, number>;
     routeStops?: number;
+    salesMatchRate?: number;
+    salesTransactionCount?: number;
     salesTruncated?: boolean;
+    salesUnmatchedCustomerCount?: number;
     totalChecks?: number;
   };
 };
@@ -109,6 +112,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
   const routeHref = `/dashboard${query}`;
+  const revenueHref = `/revenue/transactions${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
   const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;
   const hasPayload = Boolean(payload);
@@ -124,7 +128,11 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         missingAddressCustomers: payload?.summary?.missingAddressCustomers || 0,
         routeCoverage,
         routeStops: payload?.summary?.routeStops || 0,
+        revenueHref,
+        salesMatchRate: payload?.summary?.salesMatchRate ?? 100,
+        salesTransactionCount: payload?.summary?.salesTransactionCount || 0,
         salesTruncated: Boolean(payload?.summary?.salesTruncated),
+        salesUnmatchedCustomerCount: payload?.summary?.salesUnmatchedCustomerCount || 0,
         timelineHref,
         routeHref
       })
@@ -329,10 +337,14 @@ function buildFixItems({
   isSupabase,
   masterCustomers,
   missingAddressCustomers,
+  revenueHref,
   routeCoverage,
   routeHref,
   routeStops,
+  salesMatchRate,
+  salesTransactionCount,
   salesTruncated,
+  salesUnmatchedCustomerCount,
   timelineHref
 }: {
   readonly businessNumberMissingCustomers: number;
@@ -343,10 +355,14 @@ function buildFixItems({
   readonly isSupabase: boolean;
   readonly masterCustomers: number;
   readonly missingAddressCustomers: number;
+  readonly revenueHref: string;
   readonly routeCoverage: number;
   readonly routeHref: string;
   readonly routeStops: number;
+  readonly salesMatchRate: number;
+  readonly salesTransactionCount: number;
   readonly salesTruncated: boolean;
+  readonly salesUnmatchedCustomerCount: number;
   readonly timelineHref: string;
 }): FixItem[] {
   const items: FixItem[] = [];
@@ -405,10 +421,20 @@ function buildFixItems({
     tone: routeCoverage >= 80 ? "good" : routeCoverage >= 40 ? "warn" : "bad"
   });
 
+  if (salesTransactionCount > 0 && salesUnmatchedCustomerCount > 0) {
+    items.push({
+      href: revenueHref,
+      label: `매출-거래처 매칭 ${salesMatchRate}%, 미매칭 ${salesUnmatchedCustomerCount.toLocaleString()}곳입니다. 매출 거래내역에서 거래처를 직접 연결하세요.`,
+      status: `${salesMatchRate}%`,
+      title: "매출-거래처 매칭",
+      tone: salesMatchRate >= 90 ? "warn" : "bad"
+    });
+  }
+
   if (salesTruncated) {
     items.push({
-      href: dataRegistrationHref,
-      label: "매출 원장이 최근 1,000건 기준으로 표시 중입니다. 기간 필터나 페이지네이션 보강이 필요합니다.",
+      href: revenueHref,
+      label: "매출 원장이 최근 1,000건 기준으로 표시 중입니다. 매출 거래내역 원장 테이블의 '더 불러오기'로 나머지를 이어서 확인하세요.",
       status: "일부",
       title: "매출 원장 표시 범위",
       tone: "warn"
