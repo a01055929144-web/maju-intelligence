@@ -37,20 +37,24 @@ export default function CustomerDataManagementPage() {
   const isAdminPreview = Boolean(adminCompanyId);
   const [uploads, setUploads] = useState<UploadHistoryItem[]>([]);
   const [uploadsLoaded, setUploadsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let active = true;
     const endpoint = adminCompanyId ? `/api/upload-history?companyId=${encodeURIComponent(adminCompanyId)}` : "/api/upload-history";
 
+    setLoadError(false);
     fetch(endpoint, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
       .then((payload) => {
         if (!active) return;
         setUploads(Array.isArray(payload?.uploads) ? payload.uploads : []);
         setUploadsLoaded(true);
       })
       .catch(() => {
-        if (active) setUploadsLoaded(true);
+        if (!active) return;
+        setLoadError(true);
+        setUploadsLoaded(true);
       });
 
     return () => {
@@ -85,6 +89,8 @@ export default function CustomerDataManagementPage() {
           <div className="overflow-x-auto">
             {!uploadsLoaded ? (
               <p className="p-6 text-sm font-bold text-slate-400">불러오는 중…</p>
+            ) : loadError ? (
+              <p className="p-6 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
             ) : uploads.length === 0 ? (
               <p className="p-6 text-sm font-bold text-slate-400">업로드 이력이 아직 없습니다. 거래처 관리 &gt; 등록에서 엑셀을 업로드해보세요.</p>
             ) : (

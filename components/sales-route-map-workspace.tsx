@@ -188,6 +188,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     [routeSeedStores, vehicleFuelTypes]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
+  const fuelTypeConfiguredByVehicleId = useMemo(() => {
+    const map = new Map<string, boolean>();
+    baseDeliveryVehicles.forEach((vehicle) => map.set(vehicle.id, Boolean(vehicleFuelTypes?.[vehicle.driver])));
+    return map;
+  }, [baseDeliveryVehicles, vehicleFuelTypes]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
   const gradeBaseStores = useMemo(
     () =>
@@ -565,6 +570,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         <section className={`grid min-h-[620px] grid-cols-1 overflow-hidden rounded-b-xl xl:h-[calc(100vh-280px)] xl:min-h-[620px] ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_340px]" : "xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
+            fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
             onSelectVehicle={selectVehicle}
             onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
             onUpdateVehicle={updateVehicle}
@@ -709,6 +715,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 
 function DeliveryAssignmentPanel({
   collapsed,
+  fuelTypeConfiguredByVehicleId,
   onSelectVehicle,
   onToggleCollapsed,
   onUpdateVehicle,
@@ -717,6 +724,7 @@ function DeliveryAssignmentPanel({
   vehicles
 }: {
   readonly collapsed: boolean;
+  readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
@@ -790,6 +798,7 @@ function DeliveryAssignmentPanel({
             >
               {editing ? (
                 <VehicleEditForm
+                  fuelTypeConfigured={fuelTypeConfiguredByVehicleId.get(vehicle.id) ?? false}
                   onCancel={() => setEditingVehicleId(null)}
                   onSave={async (edit) => {
                     const result = await onUpdateVehicle(vehicle.id, edit);
@@ -805,6 +814,7 @@ function DeliveryAssignmentPanel({
                     <div className="flex items-center gap-1">
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
                         {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
+                        {fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : " (기본값)"}
                       </span>
                       <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
                         {vehicle.stops.length}곳
@@ -968,10 +978,12 @@ function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; r
 }
 
 function VehicleEditForm({
+  fuelTypeConfigured,
   onCancel,
   onSave,
   vehicle
 }: {
+  readonly fuelTypeConfigured: boolean;
   readonly onCancel: () => void;
   readonly onSave: (edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly vehicle: DeliveryVehicle;
@@ -995,6 +1007,14 @@ function VehicleEditForm({
       <p className="text-sm font-black text-slate-950">{vehicle.name} 편집</p>
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      <p className="text-[11px] font-bold leading-4 text-slate-400">
+        담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 원장의 담당자 일괄 변경을 사용하세요.
+      </p>
+      {!fuelTypeConfigured ? (
+        <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] font-bold leading-4 text-amber-800">
+          연료 타입이 아직 설정되지 않아 기본값(경유)이 적용 중입니다. 저장하면 이 담당자 전용 값으로 저장됩니다.
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-1.5">
         {[
           { label: "경유", value: "diesel" as const },
