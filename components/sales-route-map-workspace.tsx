@@ -6,9 +6,8 @@ import type { ReactNode } from "react";
 import { CalendarDays, Camera, Check, CheckCircle2, ChevronDown, Clock, Copy, Edit3, FileImage, MapPin, MessageSquareText, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
-import { DeliveryVehicle } from "@/components/route-plan-workspace";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
-import { RoutePlan, RoutePlanStop } from "@/lib/store";
+import { DeliveryVehicle, RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;

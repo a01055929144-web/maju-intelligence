@@ -206,6 +206,17 @@ export type RoutePlan = {
   totalExpectedRevenue: number;
   totalStops: number;
 };
+export type DeliveryVehicle = {
+  id: string;
+  name: string;
+  driver: string;
+  area: string;
+  addresses: readonly string[];
+  stops: RoutePlanStop[];
+  totalDistanceKm: number;
+  totalDurationMinutes: number;
+  expectedRevenue: number;
+};
 export type VisitResult = "visited" | "interested" | "quote-requested" | "pending" | "failed";
 export type VisitTimelineItem = {
   id: string;
