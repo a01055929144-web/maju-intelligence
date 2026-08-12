@@ -13,9 +13,9 @@ type WorkspaceTab = {
 };
 
 const WORKSPACE_TABS: readonly WorkspaceTab[] = [
-  { description: "새 거래처·매출 데이터 등록", href: "/", icon: FileSpreadsheet, label: "등록" },
-  { description: "거래처 검색·조회·수정", href: "/crm/timeline", icon: Building2, label: "거래처 원장" },
-  { description: "등록 이력과 데이터 품질 관리", href: "/customers/data", icon: Database, label: "데이터 관리" }
+  { description: "거래처·매출 입력", href: "/", icon: FileSpreadsheet, label: "기본정보 등록" },
+  { description: "검색·조회·수정", href: "/crm/timeline", icon: Building2, label: "원장 조회" },
+  { description: "업로드 결과·품질", href: "/customers/data", icon: Database, label: "저장 이력" }
 ];
 
 /**

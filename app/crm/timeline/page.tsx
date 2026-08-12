@@ -273,6 +273,7 @@ export default function CrmTimelinePage() {
   const [bulkBusinessStatusMessage, setBulkBusinessStatusMessage] = useState("");
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
+  const [attachmentMessage, setAttachmentMessage] = useState("");
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const businessNumberInputRef = useRef<HTMLInputElement | null>(null);
@@ -290,6 +291,7 @@ export default function CrmTimelinePage() {
     setNewAttachmentType("loading_position");
     setNewAttachmentUrl("");
     setNewAttachmentFile(null);
+    setAttachmentMessage("");
     setAddressQuery(selectedCustomer?.address || "");
     setAddressResults([]);
     setAddressSearchMessage("");
@@ -740,6 +742,7 @@ export default function CrmTimelinePage() {
   async function saveAttachment() {
     if (!selectedCustomer?.id || !newAttachmentTitle.trim()) return;
     setIsAttachmentSaving(true);
+    setAttachmentMessage("");
 
     try {
       let response: Response;
@@ -774,9 +777,16 @@ export default function CrmTimelinePage() {
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
       if (payload?.attachment) setCustomerAttachments((current) => [payload.attachment, ...current]);
+      setAttachmentMessage(
+        payload?.uploaded === false || payload?.persisted === false
+          ? "첨부자료가 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다."
+          : "첨부자료가 거래처 원장에 저장됐습니다."
+      );
       setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
       setNewAttachmentUrl("");
       setNewAttachmentFile(null);
+    } catch (error) {
+      setAttachmentMessage(error instanceof Error ? error.message : "첨부자료 저장 중 오류가 발생했습니다.");
     } finally {
       setIsAttachmentSaving(false);
     }
@@ -1422,6 +1432,17 @@ export default function CrmTimelinePage() {
                         <Plus className="h-4 w-4" />
                         {isAttachmentSaving ? "등록 중" : "첨부자료 등록"}
                       </button>
+                      {attachmentMessage ? (
+                        <p className={`rounded-md border px-3 py-2 text-xs font-bold leading-5 ${
+                          attachmentMessage.includes("저장됐습니다")
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : attachmentMessage.includes("임시")
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : "border-rose-200 bg-rose-50 text-rose-800"
+                        }`}>
+                          {attachmentMessage}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="maju-section-card mt-4 overflow-hidden">

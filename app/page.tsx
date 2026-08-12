@@ -452,9 +452,9 @@ export default function Home() {
 
   async function completePipelineStep(key: string) {
     setPipelineSteps((steps) => steps.map((step) => (step.key === key ? { ...step, status: "running" } : step)));
-    await wait(230);
+    await wait(40);
     setPipelineSteps((steps) => steps.map((step) => (step.key === key ? { ...step, status: "done" } : step)));
-    await wait(120);
+    await wait(20);
   }
 
   return (
@@ -830,30 +830,30 @@ function DataRegistrationSidePanel({
   const items: Array<{ badge?: string; description: string; icon: LucideIcon; key: DataRegistrationSection; label: string }> = [
     {
       badge: customerRows ? `${customerRows.toLocaleString()}행` : undefined,
-      description: "사업자정보·주소·연락처 등록",
+      description: "사업자번호·주소·연락처",
       icon: Building2,
       key: "customer",
-      label: "거래처 등록"
+      label: "거래처 기본정보"
     },
     {
       badge: salesRows ? `${salesRows.toLocaleString()}행` : undefined,
-      description: "매출 거래내역 업로드",
+      description: "ERP 거래원장 반복 업데이트",
       icon: FileSpreadsheet,
       key: "sales",
-      label: "매출 엑셀 업로드"
+      label: "매출 거래내역"
     },
     {
       badge: persisted ? "반영완료" : undefined,
-      description: "저장 준비율, 업로드 이력 확인",
+      description: "DB 반영·업로드 결과",
       icon: Save,
       key: "history",
-      label: "저장·이력"
+      label: "등록 이력"
     }
   ];
 
   return (
     <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20">
-      <p className="px-2 pb-1 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-400">등록 메뉴</p>
+      <p className="px-2 pb-1 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-400">등록 유형</p>
       {items.map((item) => {
         const selected = activeSection === item.key;
         return (
