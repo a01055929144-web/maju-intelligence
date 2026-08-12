@@ -337,6 +337,7 @@ export default function CrmTimelinePage() {
   const [isBulkBusinessStatusChecking, setIsBulkBusinessStatusChecking] = useState(false);
   const [bulkBusinessStatusMessage, setBulkBusinessStatusMessage] = useState("");
   const [isNoteSaving, setIsNoteSaving] = useState(false);
+  const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
@@ -812,6 +813,7 @@ export default function CrmTimelinePage() {
   async function saveNote() {
     if (!selectedCustomer?.id || !newMemo.trim()) return;
     setIsNoteSaving(true);
+    setNoteMessage("");
 
     try {
       const response = await fetch("/api/customer-operations", {
@@ -847,6 +849,8 @@ export default function CrmTimelinePage() {
       }
       setNewMemo("");
       setNewNextAction("");
+    } catch (error) {
+      setNoteMessage(error instanceof Error ? error.message : "메모 저장 중 오류가 발생했습니다.");
     } finally {
       setIsNoteSaving(false);
     }
@@ -1758,6 +1762,7 @@ export default function CrmTimelinePage() {
                           {isNoteSaving ? "저장 중" : "메모 저장"}
                         </button>
                       </div>
+                      {noteMessage ? <p className="text-xs font-bold text-rose-600">{noteMessage}</p> : null}
                     </div>
                   </div>
                 </div>
