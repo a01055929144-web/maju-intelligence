@@ -59,7 +59,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         <div className="min-w-0">
           <span className="mb-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">3. 히스토리 기록</span>
           <p className="font-black text-slate-950">방문 메모 남기기</p>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{customerName} 현장 기록을 거래처 히스토리에 저장합니다.</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{customerName} 현장 기록을 거래처 원장에 저장합니다.</p>
         </div>
       </div>
 
@@ -102,7 +102,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           value={nextAction}
           onChange={(event) => setNextAction(event.target.value)}
         />
-        <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">메모와 다음 액션은 거래처 히스토리에서 담당자별 기록으로 확인합니다.</p>
+        <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">메모와 다음 액션은 거래처 원장에서 담당자별 기록으로 확인합니다.</p>
 
         <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!memo.trim() || saving} onClick={submit}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -110,7 +110,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         </Button>
 
         {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 DB 연결을 확인해주세요.</p> : null}
-        {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장되었습니다. 거래처 히스토리에서 같은 기록을 확인할 수 있습니다.</p> : null}
+        {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장되었습니다. 거래처 원장에서 같은 기록을 확인할 수 있습니다.</p> : null}
       </div>
     </section>
   );

@@ -134,7 +134,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "settings",
-        description: "회사 정보, 출발지, 운영 기준값",
+        description: "회사 정보와 물류 출발지 관리",
         href: "/dashboard/settings",
         icon: Settings,
         label: "회사 설정"

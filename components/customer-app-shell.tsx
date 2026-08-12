@@ -174,7 +174,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">현재 작업</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
                   <p className="mt-1 line-clamp-2 text-[11px] font-bold leading-5 text-slate-600">
-                    {activeNavigationItem?.description || "지도 홈의 거래처 위치와 출발지 기준으로 업무를 이어갑니다."}
+                    {activeNavigationItem?.description || "지도에서 거래처 위치와 출발지 기준 업무를 이어갑니다."}
                   </p>
                 </div>
               </div>

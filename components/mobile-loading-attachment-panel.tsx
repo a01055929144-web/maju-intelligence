@@ -104,7 +104,7 @@ export function MobileLoadingAttachmentPanel({
       {saveState === "saved" ? (
         <p className="mt-2 flex items-center gap-1 text-xs font-bold text-teal-700">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          업로드되었습니다. 거래처 히스토리 첨부자료에도 반영됩니다.
+          업로드되었습니다. 거래처 원장 첨부자료에도 반영됩니다.
         </p>
       ) : null}
       {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.</p> : null}

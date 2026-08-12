@@ -191,7 +191,7 @@ export function MobileDeliveryProofPanel({
         <p className="mt-2 whitespace-pre-line rounded-lg bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
       </div>
-      <p className="mt-2 text-xs font-bold leading-5 text-blue-800">저장하면 배송 메모와 증빙 파일이 거래처 히스토리에 함께 누적됩니다.</p>
+      <p className="mt-2 text-xs font-bold leading-5 text-blue-800">저장하면 배송 메모와 증빙 파일이 거래처 원장에 함께 누적됩니다.</p>
 
       <Button className="mt-3 h-11 w-full bg-blue-700 font-black hover:bg-blue-800" disabled={saving} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
@@ -199,7 +199,7 @@ export function MobileDeliveryProofPanel({
       </Button>
 
       {status === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요.</p> : null}
-      {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">거래처 히스토리에 배송완료 기록이 저장되었습니다.</p> : null}
+      {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">거래처 원장에 배송완료 기록이 저장되었습니다.</p> : null}
 
       <div className="mt-4 grid gap-2">
         <div className="flex items-center justify-between gap-2">
