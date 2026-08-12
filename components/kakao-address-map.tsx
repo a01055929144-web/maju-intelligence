@@ -299,24 +299,24 @@ function MapControls({
 }) {
   return (
     <div
-      className="absolute right-3 z-20 flex flex-wrap justify-end gap-2"
+      className="absolute right-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
       style={{ top: offsetPx !== undefined ? `${offsetPx}px` : "0.75rem" }}
     >
-      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onLocation} type="button">
+      <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
         <Crosshair className="h-3.5 w-3.5" />
-        내 위치
+        <span className="hidden sm:inline">내 위치</span>
       </button>
-      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onFitAll} type="button">
+      <button aria-label="전체 보기" title="전체 보기" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onFitAll} type="button">
         <RotateCcw className="h-3.5 w-3.5" />
-        전체 보기
+        <span className="hidden sm:inline">전체 보기</span>
       </button>
-      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-xs font-black text-slate-700 shadow-md ring-1 ring-slate-200 hover:bg-slate-50" onClick={onRoadview} type="button">
+      <button aria-label="로드뷰" title="로드뷰" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onRoadview} type="button">
         <MapPin className="h-3.5 w-3.5" />
-        로드뷰
+        <span className="hidden sm:inline">로드뷰</span>
       </button>
-      <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800" onClick={onLargeMap} type="button">
+      <button aria-label="큰 지도" title="큰 지도" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800" onClick={onLargeMap} type="button">
         <ExternalLink className="h-3.5 w-3.5" />
-        큰 지도
+        <span className="hidden sm:inline">큰 지도</span>
       </button>
     </div>
   );
@@ -540,14 +540,16 @@ function FallbackAddressMap({
   return (
     <div className={wrapperClassName}>
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
-        <div className="absolute right-3 z-30" style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
+        <div className="absolute right-3 z-30 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur" style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
           <button
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm hover:bg-teal-800"
+            aria-label="큰 지도"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800"
             onClick={() => openInternalLargeMap({ focusedMarkerId, markers, routePath: routePath || emptyRoutePath })}
+            title="큰 지도"
             type="button"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            큰 지도
+            <span className="hidden sm:inline">큰 지도</span>
           </button>
         </div>
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
