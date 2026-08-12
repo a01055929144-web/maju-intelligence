@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { MapHomeView } from "@/components/map-home-view";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
-import { createCustomerLedgerMapMarkers } from "@/lib/route-map-markers";
+import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getCompanyDashboardPayload, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getTodayRoutePlan } from "@/lib/store";
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
@@ -34,8 +34,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const hasOperationalReport = hasOperationalCustomerMaster && report.health.total > 0;
   const mapMarkers = hasOperationalCustomerMaster
     ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
-    : createCustomerLedgerMapMarkers(originAddress, []);
-  const routeStopCount = hasOperationalCustomerMaster ? routePlan.totalStops : 0;
+    : createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const routeStopCount = routePlan.totalStops;
   const topLeads = leadPayload.leads.slice(0, 6);
   const latestUpload = uploadHistory[0];
   const placeLinkedCustomers = hasOperationalCustomerMaster

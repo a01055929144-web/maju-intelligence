@@ -130,8 +130,14 @@ export function MapHomeView({
       href: hrefByActive[item.active]
     }))
   }));
+  const visibleCustomerMarkerCount = mapMarkers.filter((marker) => marker.tone !== "origin").length;
+  const customerChipValue = stats.customerCount
+    ? `${stats.customerCount.toLocaleString()}곳`
+    : visibleCustomerMarkerCount
+      ? `${visibleCustomerMarkerCount.toLocaleString()}곳 표시`
+      : "등록 필요";
   const commandChips = [
-    { label: "거래처", value: stats.customerCount ? `${stats.customerCount.toLocaleString()}곳` : "등록 필요" },
+    { label: "거래처", value: customerChipValue },
     { label: "신규", value: `${stats.weeklyOpportunities.toLocaleString()}곳` },
     { label: "코스", value: routeStopCount ? `${routeStopCount.toLocaleString()}곳` : "대기" },
     { label: "건강", value: healthScore === null ? "-" : `${healthScore}점` }
