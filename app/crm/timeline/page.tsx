@@ -1224,7 +1224,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+            {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(440px,0.42fr)]">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -1302,7 +1302,7 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-4 grid gap-x-3 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="mt-4 grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
@@ -1336,7 +1336,7 @@ export default function CrmTimelinePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid divide-y divide-slate-100 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:divide-x xl:divide-y-0">
+                  <div className="grid divide-y divide-slate-100 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
                     <div className="p-4">
                       <LedgerSectionLabel eyebrow="Business" title="사업자 정보" />
                       <DetailRow label="상호명" value={selectedCustomer.customerName} />
@@ -1501,7 +1501,7 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+            {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(440px,0.42fr)]">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
