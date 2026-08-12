@@ -3,7 +3,9 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getTodayRoutePlan } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getTodayRoutePlan } from "@/lib/store";
+
+const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   const resolvedSearchParams = await searchParams;
@@ -15,16 +17,23 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const [company, routePlan, customerMaster, originAddress] = await Promise.all([
+  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId),
     getCustomerMaster(companyId),
-    getCompanyOriginAddress(companyId)
+    getCompanyOriginAddress(companyId),
+    getChurnRiskCustomers(companyId).catch(() => [])
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
-  const mapMarkers = hasOperationalCustomerMaster
+  const churnRiskCustomerIds = new Set(churnRiskCustomers.map((customer) => customer.customerId));
+  const baseMapMarkers = hasOperationalCustomerMaster
     ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
     : createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+  const mapMarkers = baseMapMarkers.map((marker) =>
+    marker.id && churnRiskCustomerIds.has(marker.id)
+      ? { ...marker, markerColor: CHURN_RISK_MARKER_COLOR, name: `이탈 위험 · ${marker.name}` }
+      : marker
+  );
   const timelineHref = isAdminPreview && companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline";
 
   return (
