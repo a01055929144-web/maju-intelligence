@@ -16,7 +16,7 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
   const query = buildPlaceSearchQuery(input);
   const fallbackLinks = buildPlaceSearchLinks(query);
   const kakaoPlaceUrl = existing.kakaoPlaceUrl?.trim() || (await resolveKakaoPlaceUrl(query)) || fallbackLinks.kakaoPlaceUrl;
-  const naverPlaceUrl = existing.naverPlaceUrl?.trim() || fallbackLinks.naverPlaceUrl;
+  const naverPlaceUrl = existing.naverPlaceUrl?.trim() || (await resolveNaverPlaceUrl(query)) || fallbackLinks.naverPlaceUrl;
   const googleMapUrl = existing.googleMapUrl?.trim() || fallbackLinks.googleMapUrl;
   const checkedAt = naverPlaceUrl || kakaoPlaceUrl || googleMapUrl ? new Date().toISOString() : null;
 
@@ -57,6 +57,29 @@ async function resolveKakaoPlaceUrl(query: string) {
     const payload = (await response.json()) as { documents?: Array<{ id?: string; place_url?: string }> };
     const place = payload.documents?.[0];
     return place?.place_url || (place?.id ? `https://place.map.kakao.com/${place.id}` : "");
+  } catch {
+    return "";
+  }
+}
+
+async function resolveNaverPlaceUrl(query: string) {
+  const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
+  const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
+  if (!clientId || !clientSecret || clientId === "replace-with-naver-client-id" || !query.trim()) return "";
+
+  try {
+    const response = await fetch(`https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=1`, {
+      headers: {
+        "X-Naver-Client-Id": clientId,
+        "X-Naver-Client-Secret": clientSecret
+      },
+      cache: "no-store"
+    });
+
+    if (!response.ok) return "";
+    const payload = (await response.json()) as { items?: Array<{ link?: string }> };
+    const link = payload.items?.[0]?.link?.trim();
+    return link && /^https?:\/\//.test(link) ? link : "";
   } catch {
     return "";
   }

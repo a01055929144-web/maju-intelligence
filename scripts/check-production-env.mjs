@@ -21,7 +21,7 @@ const required = [
   "KAKAO_REST_KEY",
   "NEXT_PUBLIC_KAKAO_MAP_APP_KEY"
 ];
-const optional = ["OPINET_API_KEY", "NTS_BUSINESS_API_KEY"];
+const optional = ["OPINET_API_KEY", "NTS_BUSINESS_API_KEY", "NAVER_SEARCH_CLIENT_ID", "NAVER_SEARCH_CLIENT_SECRET"];
 
 const env = {
   ...envFiles.reduce((values, filePath) => ({ ...values, ...readEnvFile(filePath) }), {}),

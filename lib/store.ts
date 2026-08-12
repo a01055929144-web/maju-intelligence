@@ -1560,6 +1560,7 @@ export function getSystemStatus(): SystemStatus {
   const kakaoMapConfigured = Boolean(process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY);
   const kakaoConfigured = kakaoRestConfigured && kakaoMapConfigured;
   const opinetConfigured = Boolean(process.env.OPINET_API_KEY);
+  const naverSearchConfigured = Boolean(process.env.NAVER_SEARCH_CLIENT_ID && process.env.NAVER_SEARCH_CLIENT_SECRET);
   const ntsBusinessConfigured = isBusinessStatusApiConfigured();
   const routeConfigured = Boolean(process.env.COMPANY_ORIGIN_ADDRESS && process.env.TMAP_API_KEY);
   const blockingIssues = [
@@ -1601,6 +1602,7 @@ export function getSystemStatus(): SystemStatus {
       { key: "KAKAO_REST_KEY", present: kakaoRestConfigured, required: true, scope: "server" },
       { key: "NEXT_PUBLIC_KAKAO_MAP_APP_KEY", present: kakaoMapConfigured, required: true, scope: "client" },
       { key: "OPINET_API_KEY", present: opinetConfigured, required: false, scope: "server" },
+      { key: "NAVER_SEARCH_CLIENT_ID + NAVER_SEARCH_CLIENT_SECRET", present: naverSearchConfigured, required: false, scope: "server" },
       { key: "NTS_BUSINESS_API_KEY", present: ntsBusinessConfigured, required: false, scope: "server" },
       { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" }
     ],
@@ -1650,6 +1652,13 @@ export function getSystemStatus(): SystemStatus {
         description: opinetConfigured
           ? "OPINET 무료 API Key로 전국 평균 유가를 조회하고 30분 캐시해 예상 유류비에 반영합니다."
           : "OPINET 키가 없어 기본 유가 단가로 예상 유류비를 계산합니다."
+      },
+      {
+        name: "Naver Place Lookup",
+        status: naverSearchConfigured ? "ready" : "fallback",
+        description: naverSearchConfigured
+          ? "네이버 지역 검색 API로 거래처 등록 시 네이버 플레이스 링크를 자동으로 조회합니다."
+          : "네이버 검색 API 키가 없어 거래처 등록 시 네이버 플레이스 링크는 검색결과 페이지로 대체됩니다."
       },
       {
         name: "Business Status Intelligence",
