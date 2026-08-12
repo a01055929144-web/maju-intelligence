@@ -16,13 +16,17 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "회사명은 필수입니다." }, { status: 400 });
   }
 
-  const result = await updateCompanySettings(session.companyId, {
-    businessType: body.businessType,
-    name: body.name,
-    originAddress: body.originAddress,
-    ownerName: body.ownerName,
-    telegramChatId: body.telegramChatId
-  });
+  try {
+    const result = await updateCompanySettings(session.companyId, {
+      businessType: body.businessType,
+      name: body.name,
+      originAddress: body.originAddress,
+      ownerName: body.ownerName,
+      telegramChatId: body.telegramChatId
+    });
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "회사 설정을 저장하지 못했습니다." }, { status: 400 });
+  }
 }

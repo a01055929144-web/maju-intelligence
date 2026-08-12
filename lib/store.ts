@@ -2968,9 +2968,17 @@ export async function getRevenuePipeline(companyId?: string): Promise<RevenuePip
   };
 }
 
-export async function getSalesTransactions(companyId?: string, options?: { offset?: number }): Promise<SalesTransactionSummary> {
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function getSalesTransactions(
+  companyId?: string,
+  options?: { offset?: number; from?: string; to?: string }
+): Promise<SalesTransactionSummary> {
   const id = companyId || getDefaultCompanyId();
   const offset = Math.max(0, Math.floor(options?.offset || 0));
+  const from = options?.from && ISO_DATE_PATTERN.test(options.from) ? options.from : undefined;
+  const to = options?.to && ISO_DATE_PATTERN.test(options.to) ? options.to : undefined;
+  const dateFilter = `${from ? `&sales_date=gte.${from}` : ""}${to ? `&sales_date=lte.${to}` : ""}`;
 
   if (!isProductionStoreConfigured()) {
     const items = sampleCustomers.slice(0, 12).map((customer, index) => ({
@@ -3005,7 +3013,7 @@ export async function getSalesTransactions(companyId?: string, options?: { offse
     >(
       `sales_transactions?select=id,customer_key,customer_name,business_registration_number,sales_date,product_name,quantity,sales_amount,created_at&company_id=eq.${encodeURIComponent(
         id
-      )}&order=sales_date.desc,created_at.desc&limit=${SALES_TRANSACTIONS_FETCH_LIMIT}&offset=${offset}`
+      )}${dateFilter}&order=sales_date.desc,created_at.desc&limit=${SALES_TRANSACTIONS_FETCH_LIMIT}&offset=${offset}`
     ).catch(() => []),
     getNormalizedCustomerKeyMap(id)
   ]);
@@ -3672,6 +3680,11 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     });
   } catch (error) {
     if (!isMissingTelegramChatIdColumnError(error)) throw error;
+    if (payload.telegram_chat_id) {
+      throw new Error(
+        "텔레그램 chat_id를 저장할 수 없습니다. Supabase에 telegram_chat_id 컬럼이 아직 없습니다. ALTER TABLE companies ADD COLUMN IF NOT EXISTS telegram_chat_id text; 를 먼저 실행하세요."
+      );
+    }
     const { telegram_chat_id: _telegramChatId, ...payloadWithoutTelegram } = payload;
     rows = await supabaseRequest<Array<CompanyRow>>("companies?on_conflict=id", {
       method: "POST",

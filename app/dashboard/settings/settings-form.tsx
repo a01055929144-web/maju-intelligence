@@ -17,6 +17,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     telegramChatId: initial.telegramChatId || ""
   });
   const [message, setMessage] = useState("");
+  const [messageOk, setMessageOk] = useState(true);
   const [loading, setLoading] = useState(false);
   const [telegramTestMessage, setTelegramTestMessage] = useState("");
   const [telegramTesting, setTelegramTesting] = useState(false);
@@ -34,9 +35,11 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form)
     });
+    const payload = await response.json().catch(() => null);
 
     setLoading(false);
-    setMessage(response.ok ? "회사 설정이 저장됐습니다." : "저장에 실패했습니다. 값을 다시 확인해주세요.");
+    setMessageOk(response.ok);
+    setMessage(response.ok ? "회사 설정이 저장됐습니다." : payload?.error || "저장에 실패했습니다. 값을 다시 확인해주세요.");
   }
 
   async function handleTelegramTest() {
@@ -184,7 +187,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               ) : null}
             </label>
             {message ? (
-              <p className={`rounded-md px-3 py-2 text-sm font-bold ${message.includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{message}</p>
+              <p className={`rounded-md px-3 py-2 text-sm font-bold ${messageOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{message}</p>
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-bold leading-5 text-slate-500">저장 후 지도 홈과 거래처 원장에서 같은 출발지 기준으로 계산됩니다.</p>
