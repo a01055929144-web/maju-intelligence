@@ -1488,14 +1488,14 @@ function Onboarding({
         <div className="maju-section-card scroll-mt-4 border-l-4 border-l-blue-600 p-4" id="entry-panel">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 입력 화면</Badge>
+              <Badge className="mb-3 bg-blue-50 text-blue-700">2. 입력</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">위에서 선택한 방식에 맞는 입력 화면만 표시합니다.</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">선택한 입력 방식에 맞는 작업만 표시합니다.</p>
             </div>
-            <Badge className="w-fit bg-slate-100 px-3 py-1.5 text-slate-700">{entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력"}</Badge>
+            <Badge className="w-fit bg-slate-100 px-3 py-1.5 text-slate-700">{entryMode === "excel" ? "엑셀 대량" : entryMode === "manual" ? "수기 1건" : "OCR 보조"}</Badge>
           </div>
           <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50/70">
-            <summary className="cursor-pointer list-none px-3 py-2 text-xs font-black text-slate-600">등록 기준 보기</summary>
+            <summary className="cursor-pointer list-none px-3 py-2 text-xs font-black text-slate-600">현재 선택값 보기</summary>
             <div className="border-t border-slate-200 bg-white p-3">
               <RegistrationPathGuide
                 activeType={uploadType}
@@ -1955,24 +1955,24 @@ function DataRegistrationQuickPanel({
 }) {
   const typeOptions = [
     {
-      description: "사업자번호, 주소, 대표자, 연락처를 기준값으로 저장",
+      description: "사업자번호·주소·대표자·연락처",
       icon: Building2,
       id: "customer-master" as UploadTemplateType,
-      label: "거래처 기본정보",
+      label: "거래처 기본정보 등록",
       value: "1회 등록"
     },
     {
-      description: "ERP 매출 원장을 반복 업로드해 분석값 업데이트",
+      description: "ERP 매출 원장·품목·거래일",
       icon: Banknote,
       id: "sales-analysis" as UploadTemplateType,
-      label: "매출 거래내역",
+      label: "매출 거래내역 등록",
       value: "반복 업데이트"
     }
   ];
   const modeOptions = [
-    { description: "ERP 양식이 달라도 필드 매칭으로 정리", icon: Upload, id: "excel" as EntryMode, label: "엑셀 업로드", value: "대량" },
-    { description: "신규 매장 1곳을 바로 저장", icon: Building2, id: "manual" as EntryMode, label: "수기 등록", value: "단건" },
-    { description: "사업자등록증/PDF에서 값 보조 추출", icon: FileSpreadsheet, id: "document" as EntryMode, label: "OCR 보조", value: "보조" }
+    { description: "ERP 파일 전체 등록", icon: Upload, id: "excel" as EntryMode, label: "엑셀 대량", value: "대량" },
+    { description: "신규 매장 1곳 등록", icon: Building2, id: "manual" as EntryMode, label: "수기 1건", value: "단건" },
+    { description: "서류에서 후보값 추출", icon: FileSpreadsheet, id: "document" as EntryMode, label: "OCR 보조", value: "보조" }
   ];
   const selectedType = typeOptions.find((option) => option.id === activeType) || typeOptions[0];
   const selectedMode = modeOptions.find((option) => option.id === entryMode) || modeOptions[0];
@@ -1992,16 +1992,16 @@ function DataRegistrationQuickPanel({
         <div className="p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">1. 등록 기준 선택</Badge>
-              <h2 className="mt-3 text-xl font-black text-slate-950">무엇을, 어떤 방식으로 등록할지 먼저 고정하세요</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">선택한 기준이 아래 필드 매칭, 데이터 검수, DB 저장 단계에 그대로 적용됩니다.</p>
+              <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">1. 데이터 등록</Badge>
+              <h2 className="mt-3 text-xl font-black text-slate-950">등록할 데이터와 입력 방식을 선택하세요</h2>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">선택값은 필드 매칭, 데이터 검수, DB 저장 단계에 그대로 적용됩니다.</p>
             </div>
             <Badge className={`w-fit px-3 py-1.5 text-xs font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div>
-              <p className="mb-2 text-xs font-black text-slate-500">등록 데이터</p>
+              <p className="mb-2 text-xs font-black text-slate-500">등록 데이터 구분</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {typeOptions.map((option) => {
                   const selected = activeType === option.id;
@@ -2030,7 +2030,7 @@ function DataRegistrationQuickPanel({
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-black text-slate-500">등록 방식</p>
+              <p className="mb-2 text-xs font-black text-slate-500">입력 방식</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {modeOptions.map((option) => {
                   const selected = entryMode === option.id;
@@ -2063,8 +2063,8 @@ function DataRegistrationQuickPanel({
           <p className="mt-1 text-lg font-black text-slate-950">{typeLabel}</p>
           <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
             {[
-              ["등록 데이터", selectedType.label],
-              ["등록 방식", selectedMode.label],
+              ["데이터 구분", selectedType.label],
+              ["입력 방식", selectedMode.label],
               ["대기 행", rows ? `${rows.toLocaleString()}행` : "없음"],
               ["파일", rows ? filename : "선택 전"]
             ].map(([label, value]) => (

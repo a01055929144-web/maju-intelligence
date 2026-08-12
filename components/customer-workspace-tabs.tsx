@@ -9,12 +9,13 @@ type WorkspaceTab = {
   readonly href: string;
   readonly icon: LucideIcon;
   readonly label: string;
+  readonly helper: string;
 };
 
 const WORKSPACE_TABS: readonly WorkspaceTab[] = [
-  { href: "/", icon: FileSpreadsheet, label: "거래처 등록" },
-  { href: "/crm/timeline", icon: Building2, label: "거래처 원장" },
-  { href: "/customers/data", icon: Database, label: "저장·업로드 이력" }
+  { href: "/", icon: FileSpreadsheet, label: "데이터 등록", helper: "거래처·매출 입력" },
+  { href: "/crm/timeline", icon: Building2, label: "거래처 원장", helper: "상세·메모·첨부" },
+  { href: "/customers/data", icon: Database, label: "저장 이력", helper: "업로드·DB 상태" }
 ];
 
 /**
@@ -41,8 +42,8 @@ export function CustomerWorkspaceTabs() {
     <div className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-black text-slate-950">거래처 데이터 작업</p>
-          <p className="mt-0.5 text-xs font-bold text-slate-500">등록, 원장 확인, 저장 이력을 같은 기준으로 관리합니다.</p>
+          <p className="text-sm font-black text-slate-950">거래처 데이터 관리</p>
+          <p className="mt-0.5 text-xs font-bold text-slate-500">등록, 원장, 저장 이력을 같은 거래처 기준으로 확인합니다.</p>
         </div>
         <span className="w-fit rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
           DB 기준 작업공간
@@ -65,7 +66,10 @@ export function CustomerWorkspaceTabs() {
                 {index + 1}
               </span>
               <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
-              <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{tab.label}</span>
+                <span className={`mt-0.5 block truncate text-[11px] font-bold ${selected ? "text-teal-700" : "text-slate-400"}`}>{tab.helper}</span>
+              </span>
             </Link>
           );
         })}
