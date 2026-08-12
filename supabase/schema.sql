@@ -200,6 +200,16 @@ create table if not exists public.route_distance_cache (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.delivery_vehicles (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  driver_name text not null,
+  fuel_type text not null default 'diesel' check (fuel_type in ('diesel', 'gasoline')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint delivery_vehicles_company_driver_unique unique (company_id, driver_name)
+);
+
 create table if not exists public.sales_transactions (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -289,6 +299,7 @@ create index if not exists idx_customer_notes_customer_created on public.custome
 create index if not exists idx_customer_attachments_customer_created on public.customer_attachments(customer_id, created_at desc);
 create unique index if not exists idx_route_distance_cache_company_destination on public.route_distance_cache(company_id, destination_address);
 create index if not exists idx_route_distance_cache_company_calculated on public.route_distance_cache(company_id, calculated_at desc);
+create index if not exists idx_delivery_vehicles_company on public.delivery_vehicles(company_id);
 create index if not exists idx_sales_transactions_company_date on public.sales_transactions(company_id, sales_date desc);
 create index if not exists idx_sales_transactions_customer_key on public.sales_transactions(company_id, customer_key);
 create index if not exists idx_ai_reports_company_created on public.ai_reports(company_id, created_at desc);
@@ -311,6 +322,7 @@ alter table public.normalized_customers enable row level security;
 alter table public.customer_notes enable row level security;
 alter table public.customer_attachments enable row level security;
 alter table public.route_distance_cache enable row level security;
+alter table public.delivery_vehicles enable row level security;
 alter table public.sales_transactions enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.health_score_snapshots enable row level security;

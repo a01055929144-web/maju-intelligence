@@ -3,7 +3,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getTodayRoutePlan } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getTodayRoutePlan } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
@@ -17,12 +17,13 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers] = await Promise.all([
+  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId),
     getCustomerMaster(companyId),
     getCompanyOriginAddress(companyId),
-    getChurnRiskCustomers(companyId).catch(() => [])
+    getChurnRiskCustomers(companyId).catch(() => []),
+    getDeliveryVehicleFuelTypes(companyId).catch(() => ({}))
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   const churnRiskCustomerIds = new Set(churnRiskCustomers.map((customer) => customer.customerId));
@@ -54,6 +55,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           mapMarkers={mapMarkers}
           routePlan={routePlan}
           timelineHref={timelineHref}
+          vehicleFuelTypes={vehicleFuelTypes}
         />
       </section>
     </CustomerAppShell>

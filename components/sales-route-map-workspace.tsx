@@ -118,6 +118,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
   readonly timelineHref?: string;
+  readonly vehicleFuelTypes?: Record<string, "gasoline" | "diesel">;
 };
 
 type CourseSummary = {
@@ -163,7 +164,7 @@ const localStoreKeys = {
   vehicleEdits: "maju:sales-route:vehicle-edits"
 };
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -182,7 +183,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const sourceReady = routePlan.source === "supabase";
   const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
-  const deliveryVehicles = useMemo(() => applyVehicleEdits(createDeliveryVehiclesFromStores(routeSeedStores), vehicleEdits), [routeSeedStores, vehicleEdits]);
+  const baseDeliveryVehicles = useMemo(
+    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes),
+    [routeSeedStores, vehicleFuelTypes]
+  );
+  const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
   const gradeBaseStores = useMemo(
     () =>
@@ -346,6 +351,31 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     const payload = await response.json().catch(() => null);
     if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
     return { persisted: payload?.persisted !== false };
+  }
+
+  async function updateVehicle(vehicleId: string, edit: VehicleEdit): Promise<{ ok: boolean; message?: string }> {
+    setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }));
+
+    if (edit.fuelType === undefined) return { ok: true };
+    const baseVehicle = baseDeliveryVehicles.find((vehicle) => vehicle.id === vehicleId);
+    if (!baseVehicle) return { ok: true };
+
+    try {
+      const response = await fetch("/api/delivery-vehicles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+          driverName: baseVehicle.driver,
+          fuelType: edit.fuelType
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) return { ok: false, message: payload?.message || "연료 타입 저장에 실패했습니다." };
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "연료 타입 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
+    }
   }
 
   return (
@@ -537,7 +567,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             collapsed={leftCollapsed}
             onSelectVehicle={selectVehicle}
             onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
-            onUpdateVehicle={(vehicleId, edit) => setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }))}
+            onUpdateVehicle={updateVehicle}
             selectedVehicleId={vehicleFilterId}
             totalStores={allStores.length}
             vehicles={deliveryVehicles}
@@ -689,7 +719,7 @@ function DeliveryAssignmentPanel({
   readonly collapsed: boolean;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
-  readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => void;
+  readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly selectedVehicleId: string;
   readonly totalStores: number;
   readonly vehicles: DeliveryVehicle[];
@@ -759,10 +789,15 @@ function DeliveryAssignmentPanel({
               key={vehicle.id}
             >
               {editing ? (
-                <VehicleEditForm onCancel={() => setEditingVehicleId(null)} onSave={(edit) => {
-                  onUpdateVehicle(vehicle.id, edit);
-                  setEditingVehicleId(null);
-                }} vehicle={vehicle} />
+                <VehicleEditForm
+                  onCancel={() => setEditingVehicleId(null)}
+                  onSave={async (edit) => {
+                    const result = await onUpdateVehicle(vehicle.id, edit);
+                    if (result.ok) setEditingVehicleId(null);
+                    return result;
+                  }}
+                  vehicle={vehicle}
+                />
               ) : (
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
                   <div className="flex items-center justify-between gap-2">
@@ -938,12 +973,22 @@ function VehicleEditForm({
   vehicle
 }: {
   readonly onCancel: () => void;
-  readonly onSave: (edit: VehicleEdit) => void;
+  readonly onSave: (edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly vehicle: DeliveryVehicle;
 }) {
   const [driver, setDriver] = useState(vehicle.driver);
   const [area, setArea] = useState(vehicle.area);
   const [fuelType, setFuelType] = useState<"gasoline" | "diesel">(vehicle.fuelType || "diesel");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    const result = await onSave({ area, driver, fuelType });
+    setSaving(false);
+    if (!result.ok) setError(result.message || "저장에 실패했습니다.");
+  }
 
   return (
     <div className="space-y-2">
@@ -968,13 +1013,14 @@ function VehicleEditForm({
         ))}
       </div>
       <div className="flex gap-2">
-        <button className="maju-button-primary h-8 flex-1 text-xs" onClick={() => onSave({ area, driver, fuelType })} type="button">
-          저장
+        <button className="maju-button-primary h-8 flex-1 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={saving} onClick={handleSave} type="button">
+          {saving ? "저장 중..." : "저장"}
         </button>
-        <button className="maju-button-secondary h-8 flex-1 text-xs" onClick={onCancel} type="button">
+        <button className="maju-button-secondary h-8 flex-1 text-xs" disabled={saving} onClick={onCancel} type="button">
           취소
         </button>
       </div>
+      {error ? <p className="text-xs font-bold text-rose-600">{error}</p> : null}
     </div>
   );
 }
@@ -2826,7 +2872,7 @@ function toCustomerPayload(store: StoreRow) {
   };
 }
 
-function createDeliveryVehiclesFromStores(stores: StoreRow[]): DeliveryVehicle[] {
+function createDeliveryVehiclesFromStores(stores: StoreRow[], vehicleFuelTypes?: Record<string, "gasoline" | "diesel">): DeliveryVehicle[] {
   const groups = new Map<string, StoreRow[]>();
 
   stores.forEach((store, index) => {
@@ -2846,7 +2892,7 @@ function createDeliveryVehiclesFromStores(stores: StoreRow[]): DeliveryVehicle[]
       area: summarizeVehicleArea(orderedStops),
       driver,
       expectedRevenue: orderedStops.reduce((total, stop) => total + Number(stop.expectedRevenue || 0), 0),
-      fuelType: "diesel" as const,
+      fuelType: vehicleFuelTypes?.[driver] || "diesel",
       id: `vehicle-${index + 1}`,
       name: `배송 ${index + 1}호차`,
       stops: orderedStops,

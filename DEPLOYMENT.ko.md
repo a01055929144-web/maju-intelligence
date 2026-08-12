@@ -116,6 +116,7 @@ KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
 - ERP/유통사별 엑셀 매핑 프리셋 저장을 준비하려면 `supabase/migrations/20260701_excel_mapping_presets.sql`도 한 번 실행합니다.
 - 회사 출발지에서 거래처까지 티맵 거리/시간/경로 캐시를 저장하려면 `supabase/migrations/20260701_tmap_route_cache.sql`도 한 번 실행합니다.
 - 고객사 직원 카카오 가입과 모바일 앱 사용을 준비하려면 `supabase/migrations/20260724_staff_kakao_mobile.sql`도 한 번 실행합니다.
+- 배송차(담당자)별 연료 타입을 저장해 유류비 계산에 반영하려면 `supabase/migrations/20260813_delivery_vehicles.sql`도 한 번 실행합니다.
 - Supabase RLS 정책은 기본 운영 기준으로 켜져 있으며, 고객사별 사용자 초대와 세부 권한은 다음 운영 단계에서 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
 

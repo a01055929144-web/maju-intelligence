@@ -2815,6 +2815,62 @@ export async function saveRouteDistanceCache(
   };
 }
 
+export type DeliveryVehicleFuelType = "gasoline" | "diesel";
+
+function isMissingDeliveryVehiclesTableError(error: unknown) {
+  return error instanceof Error && error.message.includes("delivery_vehicles");
+}
+
+/** Delivery vehicles are keyed 1:1 by driver (담당자) name within a company. */
+export async function getDeliveryVehicleFuelTypes(companyId?: string): Promise<Record<string, DeliveryVehicleFuelType>> {
+  if (!isProductionStoreConfigured()) return {};
+
+  const resolvedCompanyId = companyId || getDefaultCompanyId();
+
+  try {
+    const rows = await supabaseRequest<Array<{ driver_name: string; fuel_type: string }>>(
+      `delivery_vehicles?select=driver_name,fuel_type&company_id=eq.${encodeURIComponent(resolvedCompanyId)}`
+    );
+    return rows.reduce<Record<string, DeliveryVehicleFuelType>>((map, row) => {
+      map[row.driver_name] = row.fuel_type === "gasoline" ? "gasoline" : "diesel";
+      return map;
+    }, {});
+  } catch (error) {
+    if (isMissingDeliveryVehiclesTableError(error)) return {};
+    throw error;
+  }
+}
+
+export async function upsertDeliveryVehicleFuelType(
+  companyId: string,
+  driverName: string,
+  fuelType: DeliveryVehicleFuelType
+): Promise<{ persisted: boolean; driverName: string; fuelType: DeliveryVehicleFuelType }> {
+  if (!driverName.trim()) throw new Error("담당자명이 필요합니다.");
+  if (!isProductionStoreConfigured()) return { persisted: false, driverName, fuelType };
+
+  try {
+    await supabaseRequest("delivery_vehicles?on_conflict=company_id,driver_name", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify([
+        {
+          company_id: companyId,
+          driver_name: driverName.trim(),
+          fuel_type: fuelType,
+          updated_at: new Date().toISOString()
+        }
+      ])
+    });
+    return { persisted: true, driverName, fuelType };
+  } catch (error) {
+    if (isMissingDeliveryVehiclesTableError(error)) {
+      throw new Error("배송차 연료 타입을 저장할 수 없습니다. Supabase에 delivery_vehicles 테이블이 아직 없습니다. supabase/migrations/20260813_delivery_vehicles.sql을 먼저 실행하세요.");
+    }
+    throw error;
+  }
+}
+
 async function getRouteDistanceCacheMap(companyId: string) {
   const cache = new Map<
     string,
