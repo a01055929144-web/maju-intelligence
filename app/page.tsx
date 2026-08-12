@@ -1958,20 +1958,24 @@ function DataRegistrationQuickPanel({
       description: "사업자번호, 주소, 대표자, 연락처를 기준값으로 저장",
       icon: Building2,
       id: "customer-master" as UploadTemplateType,
-      label: "거래처 마스터"
+      label: "거래처 기본정보",
+      value: "1회 등록"
     },
     {
       description: "ERP 매출 원장을 반복 업로드해 분석값 업데이트",
       icon: Banknote,
       id: "sales-analysis" as UploadTemplateType,
-      label: "매출 거래내역"
+      label: "매출 거래내역",
+      value: "반복 업데이트"
     }
   ];
   const modeOptions = [
-    { icon: Upload, id: "excel" as EntryMode, label: "엑셀 업로드", value: "대량 등록" },
-    { icon: Building2, id: "manual" as EntryMode, label: "수기 등록", value: "신규 1곳" },
-    { icon: FileSpreadsheet, id: "document" as EntryMode, label: "OCR 보조", value: "선택" }
+    { description: "ERP 양식이 달라도 필드 매칭으로 정리", icon: Upload, id: "excel" as EntryMode, label: "엑셀 업로드", value: "대량" },
+    { description: "신규 매장 1곳을 바로 저장", icon: Building2, id: "manual" as EntryMode, label: "수기 등록", value: "단건" },
+    { description: "사업자등록증/PDF에서 값 보조 추출", icon: FileSpreadsheet, id: "document" as EntryMode, label: "OCR 보조", value: "보조" }
   ];
+  const selectedType = typeOptions.find((option) => option.id === activeType) || typeOptions[0];
+  const selectedMode = modeOptions.find((option) => option.id === entryMode) || modeOptions[0];
   const statusTone = persisted ? "bg-emerald-50 text-emerald-800 ring-emerald-100" : canAnalyze ? "bg-blue-50 text-blue-800 ring-blue-100" : rows ? "bg-amber-50 text-amber-800 ring-amber-100" : "bg-slate-100 text-slate-700 ring-slate-200";
   const nextLabel = persisted ? "반영 완료" : canAnalyze ? "저장 실행" : rows ? "검수 필요" : "등록 시작";
   const nextDescription = persisted
@@ -1988,9 +1992,9 @@ function DataRegistrationQuickPanel({
         <div className="p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">1. 데이터 등록</Badge>
-              <h2 className="mt-3 text-xl font-black text-slate-950">먼저 등록할 데이터와 방식을 선택하세요</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">복잡한 설명은 접어두고, 실제 작업은 아래 버튼 순서대로 진행합니다.</p>
+              <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">1. 등록 기준 선택</Badge>
+              <h2 className="mt-3 text-xl font-black text-slate-950">무엇을, 어떤 방식으로 등록할지 먼저 고정하세요</h2>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">선택한 기준이 아래 필드 매칭, 데이터 검수, DB 저장 단계에 그대로 적용됩니다.</p>
             </div>
             <Badge className={`w-fit px-3 py-1.5 text-xs font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
           </div>
@@ -2016,7 +2020,7 @@ function DataRegistrationQuickPanel({
                           <Icon className={selected ? "h-4 w-4 text-teal-700" : "h-4 w-4 text-slate-400"} />
                           {option.label}
                         </span>
-                        {selected ? <CheckCircle2 className="h-4 w-4 text-teal-700" /> : null}
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>{option.value}</span>
                       </span>
                       <span className="mt-2 block text-xs font-bold leading-5 text-slate-500">{option.description}</span>
                     </button>
@@ -2045,6 +2049,7 @@ function DataRegistrationQuickPanel({
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{option.value}</span>
                       </span>
                       <span className="mt-3 block text-sm font-black">{option.label}</span>
+                      <span className={`mt-1 block truncate text-[11px] font-bold ${selected ? "text-white/70" : "text-slate-500"}`}>{option.description}</span>
                     </button>
                   );
                 })}
@@ -2056,11 +2061,23 @@ function DataRegistrationQuickPanel({
         <div className="border-t border-slate-200 bg-slate-50/80 p-4 xl:border-l xl:border-t-0">
           <p className="text-xs font-black text-slate-400">현재 작업</p>
           <p className="mt-1 text-lg font-black text-slate-950">{typeLabel}</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <MiniStatus label="대기 행" value={rows ? `${rows.toLocaleString()}행` : "없음"} />
-            <MiniStatus label="파일" value={rows ? filename : "선택 전"} />
+          <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+            {[
+              ["등록 데이터", selectedType.label],
+              ["등록 방식", selectedMode.label],
+              ["대기 행", rows ? `${rows.toLocaleString()}행` : "없음"],
+              ["파일", rows ? filename : "선택 전"]
+            ].map(([label, value]) => (
+              <div className="grid grid-cols-[92px_minmax(0,1fr)] border-b border-slate-100 last:border-b-0" key={label}>
+                <span className="bg-slate-50 px-3 py-2 text-[11px] font-black text-slate-400">{label}</span>
+                <span className="truncate px-3 py-2 text-xs font-black text-slate-900">{value}</span>
+              </div>
+            ))}
           </div>
-          <p className="mt-3 rounded-md bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600 ring-1 ring-inset ring-slate-200">{nextDescription}</p>
+          <div className="mt-3 rounded-md bg-white px-3 py-2 ring-1 ring-inset ring-slate-200">
+            <p className="text-[11px] font-black text-slate-400">다음 작업</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-700">{nextDescription}</p>
+          </div>
           <Button className="maju-button-primary mt-3 h-11 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
             {isAnalyzing ? "저장 중" : canAnalyze ? "저장하고 리포트 갱신" : registrationStatus.actionLabel}
             <ArrowRight className="h-4 w-4" />
