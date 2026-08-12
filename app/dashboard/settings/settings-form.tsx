@@ -181,7 +181,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           <div className="grid gap-2 pt-1">
             <QuickLink href="/routes/today" label="영업·배송 코스 보기" />
             <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" />
-            <QuickLink href="/" label="데이터 등록으로 이동" />
+            <QuickLink href="/" label="거래처 관리 · 등록으로 이동" />
           </div>
           <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-4">
             <p className="font-black text-blue-950">저장 후 확인 순서</p>

@@ -853,7 +853,7 @@ function DataRegistrationSidePanel({
 
   return (
     <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20">
-      <p className="px-2 pb-1 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-400">데이터 등록 메뉴</p>
+      <p className="px-2 pb-1 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-400">등록 메뉴</p>
       {items.map((item) => {
         const selected = activeSection === item.key;
         return (

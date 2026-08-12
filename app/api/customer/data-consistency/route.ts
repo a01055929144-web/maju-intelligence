@@ -260,7 +260,7 @@ function buildRecommendations({
     items.push(`사업자번호가 없어 국세청 상태조회에서 제외되는 거래처가 ${businessNumberMissingCount.toLocaleString()}곳 있습니다. 거래처 원장에서 사업자번호를 보완하세요.`);
   }
   if (businessStatusNeedsCheckCount > 0) {
-    items.push(`국세청 사업자 상태 확인이 필요한 거래처가 ${businessStatusNeedsCheckCount.toLocaleString()}곳 있습니다. 거래처 원장에서 전체 재조회를 실행하세요.`);
+    items.push(`국세청 사업자 상태 확인이 필요한 거래처가 ${businessStatusNeedsCheckCount.toLocaleString()}곳 있습니다. 거래처 관리 > 거래처 원장에서 전체 사업자 상태 조회를 실행하세요.`);
   }
   if (masterCount > 0 && masterWithoutRouteCount === 0 && routeWithoutMasterCount === 0) {
     items.push("거래처 원장과 코스 매장 수는 일치합니다. 다음은 코스 거리 계산 기준을 확인하세요.");

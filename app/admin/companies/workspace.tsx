@@ -395,7 +395,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 <div className="mt-4 grid gap-2">
                   <QuickAction href={`/dashboard?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" primary />
                   <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" />
-                  <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="데이터 등록/업로드" />
+                  <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="거래처 관리 · 등록/업로드" />
                   <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" />
                   <QuickAction href={`/routes/today?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="영업·배송 코스" />
                 </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Building2, Database, FileSpreadsheet, LucideIcon } from "lucide-react";
 
 type WorkspaceTab = {
@@ -26,8 +27,11 @@ const WORKSPACE_TABS: readonly WorkspaceTab[] = [
  */
 export function CustomerWorkspaceTabs() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const companyId = searchParams?.get("companyId");
+  const [companyId, setCompanyId] = useState("");
+
+  useEffect(() => {
+    setCompanyId(new URLSearchParams(window.location.search).get("companyId") || "");
+  }, []);
 
   function hrefWithCompany(href: string) {
     if (!companyId) return href;
