@@ -135,7 +135,7 @@ export function MapHomeView({
     ? `${stats.customerCount.toLocaleString()}곳`
     : visibleCustomerMarkerCount
       ? `${visibleCustomerMarkerCount.toLocaleString()}곳 표시`
-      : "등록 필요";
+      : "거래처 대기";
   const commandChips = [
     { label: "거래처", value: customerChipValue },
     { label: "신규", value: `${stats.weeklyOpportunities.toLocaleString()}곳` },
@@ -261,7 +261,7 @@ export function MapHomeView({
                 <p className="text-xs font-black text-teal-950">지도에서 시작</p>
                 <Badge className="bg-white text-teal-700 ring-1 ring-inset ring-teal-200">OS</Badge>
               </div>
-              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">지도 홈에서 위치를 보고 코스, 원장, 성장 업무로 이동합니다.</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-teal-800">지도에서 위치를 보고 코스, 거래처, 성장 업무로 이동합니다.</p>
             </div>
             <p className="maju-muted-label px-2 pb-2">핵심 업무</p>
             <div className="grid grid-cols-2 gap-2">
@@ -346,7 +346,7 @@ export function MapHomeView({
                   </div>
                 ))
               ) : (
-                <p className="maju-empty-state p-3 text-xs font-bold text-slate-500">거래처와 매출 원장이 쌓이면 추천 리드가 표시됩니다.</p>
+                <p className="maju-empty-state p-3 text-xs font-bold text-slate-500">거래처와 매출 데이터가 연결되면 추천 리드가 표시됩니다.</p>
               )}
             </div>
           </div>
@@ -394,7 +394,7 @@ export function MapHomeView({
         </div>
 
         <div className={`border-t border-slate-200 p-3 text-xs font-bold ${stats.latestUploadReady ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-          {stats.latestUploadReady ? "매출 원장 연결됨" : "매출 원장 업로드 필요"}
+          {stats.latestUploadReady ? "매출 데이터 연결됨" : "매출 데이터 대기"}
         </div>
       </aside>
 
