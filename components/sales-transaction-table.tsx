@@ -6,10 +6,14 @@ import type { SalesTransactionItem } from "@/lib/store";
 
 export function SalesTransactionTable({
   companyId,
+  dateFrom,
+  dateTo,
   initialItems,
   initialTruncated
 }: {
   readonly companyId?: string;
+  readonly dateFrom?: string;
+  readonly dateTo?: string;
   readonly initialItems: SalesTransactionItem[];
   readonly initialTruncated: boolean;
 }) {
@@ -26,6 +30,8 @@ export function SalesTransactionTable({
     try {
       const params = new URLSearchParams({ offset: String(items.length) });
       if (companyId) params.set("companyId", companyId);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
       const response = await fetch(`/api/revenue/transactions?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("추가 거래내역을 불러오지 못했습니다.");
       const payload = await response.json();

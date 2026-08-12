@@ -11,7 +11,11 @@ import { getSalesTransactions } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export default async function RevenueTransactionsPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+export default async function RevenueTransactionsPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ companyId?: string; from?: string; to?: string }>;
+}) {
   const resolvedSearchParams = await searchParams;
   const customerSession = await getCustomerSession();
   const adminSession = await getAdminSession();
@@ -20,7 +24,9 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
-  const sales = await getSalesTransactions(companyId);
+  const dateFrom = resolvedSearchParams?.from || "";
+  const dateTo = resolvedSearchParams?.to || "";
+  const sales = await getSalesTransactions(companyId, { from: dateFrom, to: dateTo });
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const hasSalesData = sales.transactionCount > 0;
   const salesSignals = [
@@ -92,12 +98,47 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
               {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
             </Badge>
           </div>
+          <form className="flex flex-wrap items-end gap-2 border-b border-slate-100 px-5 py-3" method="GET">
+            {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
+            <label className="space-y-1">
+              <span className="block text-[11px] font-bold text-slate-500">시작일</span>
+              <input
+                className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold outline-none focus:border-teal-400"
+                defaultValue={dateFrom}
+                name="from"
+                type="date"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="block text-[11px] font-bold text-slate-500">종료일</span>
+              <input
+                className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold outline-none focus:border-teal-400"
+                defaultValue={dateTo}
+                name="to"
+                type="date"
+              />
+            </label>
+            <button className="maju-button-secondary h-9" type="submit">
+              기간 적용
+            </button>
+            {dateFrom || dateTo ? (
+              <Link className="maju-button-secondary h-9" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
+                기간 초기화
+              </Link>
+            ) : null}
+            {dateFrom || dateTo ? <span className="text-[11px] font-bold text-teal-700">{dateFrom || "처음"} ~ {dateTo || "현재"} 기간 적용 중</span> : null}
+          </form>
           <div className="grid md:grid-cols-4">
             <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
             <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
             <Metric icon={Store} label="거래처 수" value={`${sales.customerCount.toLocaleString()}곳`} />
             <Metric icon={FileSpreadsheet} label="최근 매출일" value={sales.latestSalesDate || "-"} />
           </div>
+          {sales.truncated ? (
+            <p className="border-t border-amber-200/80 bg-amber-50/70 px-5 py-2.5 text-xs font-bold leading-5 text-amber-900">
+              위 요약 금액과 아래 거래처별·품목별 순위는 최근 거래 {sales.transactionCount.toLocaleString()}건 기준입니다. 원장 테이블에서 더 불러오기로 행을 추가해도 이 요약·순위에는 반영되지 않습니다.
+            </p>
+          ) : null}
         </div>
 
         <div className="grid maju-section-card lg:grid-cols-3">
@@ -188,7 +229,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </div>
         </div>
 
-        <SalesTransactionTable companyId={companyId} initialItems={sales.items} initialTruncated={sales.truncated} />
+        <SalesTransactionTable companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} initialItems={sales.items} initialTruncated={sales.truncated} />
         </div>
       </section>
     </CustomerAppShell>
