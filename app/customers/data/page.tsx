@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -57,6 +58,8 @@ export default function CustomerDataManagementPage() {
     };
   }, [adminCompanyId]);
 
+  const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
+
   return (
     <CustomerAppShell
       active="data-management"
@@ -94,6 +97,7 @@ export default function CustomerDataManagementPage() {
                     <th className="px-4 py-2.5">중복</th>
                     <th className="px-4 py-2.5">상태</th>
                     <th className="px-4 py-2.5">등록일시</th>
+                    <th className="px-4 py-2.5">작업</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -117,6 +121,15 @@ export default function CustomerDataManagementPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-2.5 text-slate-500">{upload.createdAt}</td>
+                      <td className="px-4 py-2.5">
+                        {upload.status === "failed" ? (
+                          <Link className="text-xs font-bold text-teal-700 underline underline-offset-2" href={dataRegistrationHref}>
+                            다시 업로드
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-300">-</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
