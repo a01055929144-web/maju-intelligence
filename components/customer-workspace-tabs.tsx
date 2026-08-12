@@ -12,9 +12,9 @@ type WorkspaceTab = {
 };
 
 const WORKSPACE_TABS: readonly WorkspaceTab[] = [
-  { href: "/", icon: FileSpreadsheet, label: "기본정보 등록" },
-  { href: "/crm/timeline", icon: Building2, label: "원장 조회" },
-  { href: "/customers/data", icon: Database, label: "저장 이력" }
+  { href: "/", icon: FileSpreadsheet, label: "거래처 등록" },
+  { href: "/crm/timeline", icon: Building2, label: "거래처 원장" },
+  { href: "/customers/data", icon: Database, label: "저장·업로드 이력" }
 ];
 
 /**
@@ -38,22 +38,38 @@ export function CustomerWorkspaceTabs() {
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
-      {WORKSPACE_TABS.map((tab) => {
-        const selected = pathname === tab.href;
-        return (
-          <Link
-            className={`inline-flex h-9 min-w-[112px] flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-black transition sm:flex-none ${
-              selected ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white hover:text-slate-900"
-            }`}
-            href={hrefWithCompany(tab.href)}
-            key={tab.href}
-          >
-            <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
-            <span className="truncate">{tab.label}</span>
-          </Link>
-        );
-      })}
+    <div className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-950">거래처 데이터 작업</p>
+          <p className="mt-0.5 text-xs font-bold text-slate-500">등록, 원장 확인, 저장 이력을 같은 기준으로 관리합니다.</p>
+        </div>
+        <span className="w-fit rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
+          DB 기준 작업공간
+        </span>
+      </div>
+      <div className="grid gap-2 bg-slate-50/70 p-2 sm:grid-cols-3">
+        {WORKSPACE_TABS.map((tab, index) => {
+          const selected = pathname === tab.href;
+          return (
+            <Link
+              className={`flex min-h-12 items-center gap-3 rounded-md border px-3 py-2 text-sm font-black transition ${
+                selected
+                  ? "border-teal-200 bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+              }`}
+              href={hrefWithCompany(tab.href)}
+              key={tab.href}
+            >
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                {index + 1}
+              </span>
+              <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
+              <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
