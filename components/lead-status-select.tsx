@@ -11,19 +11,32 @@ const statusLabels: Record<string, string> = {
   excluded: "제외"
 };
 
-export function LeadStatusSelect({ leadId, value }: { leadId: string; value: string }) {
+export function LeadStatusSelect({ leadId, value, companyId }: { leadId: string; value: string; companyId?: string }) {
   const [status, setStatus] = useState(value);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   async function update(nextStatus: string) {
+    const previousStatus = status;
     setStatus(nextStatus);
     setSaving(true);
-    await fetch(`/api/leads/${leadId}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus })
-    }).catch(() => null);
-    setSaving(false);
+    setError("");
+    try {
+      const response = await fetch(`/api/leads/${leadId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus, companyId })
+      });
+      if (!response.ok) {
+        setStatus(previousStatus);
+        setError("저장 실패");
+      }
+    } catch {
+      setStatus(previousStatus);
+      setError("저장 실패");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -40,6 +53,7 @@ export function LeadStatusSelect({ leadId, value }: { leadId: string; value: str
           </option>
         ))}
       </select>
+      {error ? <span className="mt-1 block text-[11px] font-bold text-rose-600">{error}</span> : null}
     </label>
   );
 }

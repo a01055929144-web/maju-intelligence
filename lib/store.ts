@@ -50,7 +50,7 @@ type AdminDashboardPayload = {
   }>;
   dataQuality: Array<{ label: string; value: number; description: string }>;
   scoringWeights: Array<{ label: string; value: number; note: string }>;
-  leadQueue: Array<{ id: string; name: string; region: string; score: number; status: string; statusValue: string }>;
+  leadQueue: Array<{ id: string; name: string; region: string; score: number; status: string; statusValue: string; companyId: string }>;
   uploadHistory: UploadHistoryItem[];
 };
 export type ExcelMappingPreset = {
@@ -3831,8 +3831,8 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       "customer_imports?select=id,row_count,status,quality_score,duplicate_count,created_at,companies(name)&order=created_at.desc&limit=20"
     ),
     supabaseRequest<Array<{ health_score: number }>>("ai_reports?select=health_score&order=created_at.desc&limit=50"),
-    supabaseRequest<Array<{ id: string; name: string; region: string; score: number; status: string }>>(
-      "lead_recommendations?select=id,name,region,score,status&order=score.desc&limit=20"
+    supabaseRequest<Array<{ id: string; name: string; region: string; score: number; status: string; company_id: string }>>(
+      "lead_recommendations?select=id,name,region,score,status,company_id&order=score.desc&limit=20"
     ),
     getUploadHistory()
   ]);
@@ -3877,7 +3877,8 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       region: lead.region,
       score: lead.score,
       status: lead.status === "today" ? "오늘 추천" : lead.status === "this-week" ? "이번주 추천" : lead.status,
-      statusValue: lead.status
+      statusValue: lead.status,
+      companyId: lead.company_id
     })),
     uploadHistory
   };
