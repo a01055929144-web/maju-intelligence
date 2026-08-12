@@ -216,6 +216,7 @@ export type DeliveryVehicle = {
   totalDistanceKm: number;
   totalDurationMinutes: number;
   expectedRevenue: number;
+  fuelType?: "gasoline" | "diesel";
 };
 export type VisitResult = "visited" | "interested" | "quote-requested" | "pending" | "failed";
 export type VisitTimelineItem = {

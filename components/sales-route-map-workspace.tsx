@@ -67,7 +67,7 @@ type StoreEdit = Partial<
     | "status"
   >
 >;
-type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver">>;
+type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver" | "fuelType">>;
 
 type StoreHistoryItem = {
   id: string;
@@ -133,6 +133,7 @@ type FuelPriceSummary = {
   pricePerLiter: number;
   sourceLabel: string;
 };
+type FuelPriceByType = Record<"diesel" | "gasoline", FuelPriceSummary | null>;
 
 const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "전체", value: "all" },
@@ -177,7 +178,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
-  const [fuelPriceSummary, setFuelPriceSummary] = useState<FuelPriceSummary | null>(null);
+  const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const sourceReady = routePlan.source === "supabase";
   const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
@@ -222,11 +223,35 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const activeDistanceKm = kpiSummary?.distanceKm ?? routeTotals.distanceKm;
   const distanceKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 매장까지";
   const durationKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 매장까지";
-  const estimatedFuelCostWon = fuelPriceSummary ? estimateFuelCostWon(activeDistanceKm, fuelPriceSummary.pricePerLiter) : 0;
+  const vehicleFuelTypeById = useMemo(() => {
+    const map = new Map<string, "gasoline" | "diesel">();
+    deliveryVehicles.forEach((vehicle) => map.set(vehicle.id, vehicle.fuelType || "diesel"));
+    return map;
+  }, [deliveryVehicles]);
+  const fuelDistanceByType = useMemo(() => {
+    const totals: Record<"diesel" | "gasoline", number> = { diesel: 0, gasoline: 0 };
+    visibleStores.forEach((store) => {
+      const fuelType = (store.deliveryVehicleId && vehicleFuelTypeById.get(store.deliveryVehicleId)) || "diesel";
+      totals[fuelType] += Number(store.distanceKm || 0);
+    });
+    return totals;
+  }, [visibleStores, vehicleFuelTypeById]);
+  const selectedVehicleFuelType = selectedVehicle?.fuelType || "diesel";
+  const activeFuelTypes: Array<"diesel" | "gasoline"> = kpiSummary
+    ? [selectedVehicleFuelType]
+    : (["diesel", "gasoline"] as const).filter((type) => fuelDistanceByType[type] > 0);
+  const estimatedFuelCostWon = kpiSummary
+    ? estimateFuelCostWon(kpiSummary.distanceKm, fuelPrices[selectedVehicleFuelType]?.pricePerLiter || 0)
+    : estimateFuelCostWon(fuelDistanceByType.diesel, fuelPrices.diesel?.pricePerLiter || 0) +
+      estimateFuelCostWon(fuelDistanceByType.gasoline, fuelPrices.gasoline?.pricePerLiter || 0);
+  const fuelPricesReady = activeFuelTypes.length > 0 && activeFuelTypes.every((type) => fuelPrices[type]);
+  const fuelBasisIsOpinet = activeFuelTypes.some((type) => fuelPrices[type]?.basis === "opinet");
   const fuelKpiHelper = !sourceReady
     ? "거래처 등록 대기"
-    : fuelPriceSummary
-      ? `${fuelPriceSummary.sourceLabel} · ${fuelPriceSummary.pricePerLiter.toLocaleString()}원/L`
+    : fuelPricesReady
+      ? activeFuelTypes
+          .map((type) => `${fuelPrices[type]?.sourceLabel} ${fuelPrices[type]?.pricePerLiter.toLocaleString()}원/L`)
+          .join(" · ")
       : "OPINET 유가 확인 중";
   const activeFilterLabels = [
     query.trim() ? `검색: ${query.trim()}` : "",
@@ -284,24 +309,22 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 
   useEffect(() => {
     if (!sourceReady) {
-      setFuelPriceSummary(null);
+      setFuelPrices({ diesel: null, gasoline: null });
       return;
     }
 
     let active = true;
-    const params = new URLSearchParams({
-      fuelType: "diesel"
-    });
 
-    fetch(`/api/fuel/opinet?${params.toString()}`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload) => {
-        if (!active || !payload) return;
-        setFuelPriceSummary(payload);
-      })
-      .catch(() => {
-        if (active) setFuelPriceSummary(null);
-      });
+    Promise.all(
+      (["diesel", "gasoline"] as const).map((fuelType) =>
+        fetch(`/api/fuel/opinet?fuelType=${fuelType}`, { cache: "no-store" })
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null)
+      )
+    ).then(([diesel, gasoline]) => {
+      if (!active) return;
+      setFuelPrices({ diesel, gasoline });
+    });
 
     return () => {
       active = false;
@@ -412,7 +435,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         />
         <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
         <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
-        <Kpi helper={fuelKpiHelper} label={fuelPriceSummary?.basis === "opinet" ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
+        <Kpi helper={fuelKpiHelper} label={fuelBasisIsOpinet ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
       </section>
 
       <RouteBasisStrip
@@ -744,9 +767,14 @@ function DeliveryAssignmentPanel({
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
-                      {vehicle.stops.length}곳
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
+                        {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
+                        {vehicle.stops.length}곳
+                      </span>
+                    </div>
                   </div>
                   <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
                     <UserRound className="h-3.5 w-3.5" />
@@ -915,14 +943,32 @@ function VehicleEditForm({
 }) {
   const [driver, setDriver] = useState(vehicle.driver);
   const [area, setArea] = useState(vehicle.area);
+  const [fuelType, setFuelType] = useState<"gasoline" | "diesel">(vehicle.fuelType || "diesel");
 
   return (
     <div className="space-y-2">
       <p className="text-sm font-black text-slate-950">{vehicle.name} 편집</p>
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      <div className="grid grid-cols-2 gap-1.5">
+        {[
+          { label: "경유", value: "diesel" as const },
+          { label: "휘발유", value: "gasoline" as const }
+        ].map((item) => (
+          <button
+            className={`h-8 rounded-md border px-2 text-xs font-black transition ${
+              fuelType === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"
+            }`}
+            key={item.value}
+            onClick={() => setFuelType(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
       <div className="flex gap-2">
-        <button className="maju-button-primary h-8 flex-1 text-xs" onClick={() => onSave({ area, driver })} type="button">
+        <button className="maju-button-primary h-8 flex-1 text-xs" onClick={() => onSave({ area, driver, fuelType })} type="button">
           저장
         </button>
         <button className="maju-button-secondary h-8 flex-1 text-xs" onClick={onCancel} type="button">
@@ -2800,6 +2846,7 @@ function createDeliveryVehiclesFromStores(stores: StoreRow[]): DeliveryVehicle[]
       area: summarizeVehicleArea(orderedStops),
       driver,
       expectedRevenue: orderedStops.reduce((total, stop) => total + Number(stop.expectedRevenue || 0), 0),
+      fuelType: "diesel" as const,
       id: `vehicle-${index + 1}`,
       name: `배송 ${index + 1}호차`,
       stops: orderedStops,
