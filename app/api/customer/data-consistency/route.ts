@@ -128,10 +128,10 @@ export async function GET(request: NextRequest) {
       value: duplicateGroups.length ? `${duplicateGroups.length.toLocaleString()}건 의심` : "중복 없음"
     },
     {
-      detail: "거래처 원장은 한 번에 최대 3,000건까지 불러옵니다. 이 이상이면 최신순으로 잘려서 일부만 보일 수 있습니다.",
+      detail: "거래처 원장은 한 번에 최대 3,000건까지 불러옵니다. 이 이상이면 거래처 원장 목록 하단의 '더 불러오기'로 나머지를 이어서 불러오세요.",
       label: "거래처 원장 전체 로드",
       ok: !customerMaster.truncated,
-      value: customerMaster.truncated ? "일부만 표시됨" : "전체 표시"
+      value: customerMaster.truncated ? "일부만 표시됨(더 불러오기 가능)" : "전체 표시"
     },
     {
       detail: "매출 원장은 최근 거래 기준으로 한 번에 최대 1,000건까지 불러옵니다. 한도에 도달하면 기간 필터나 페이지네이션 보강이 필요합니다.",

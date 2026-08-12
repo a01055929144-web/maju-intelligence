@@ -1710,8 +1710,12 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
   };
 }
 
-export async function getCustomerMaster(companyId?: string): Promise<{ customers: CustomerMasterItem[]; source: "sample" | "supabase"; truncated: boolean }> {
+export async function getCustomerMaster(
+  companyId?: string,
+  options?: { offset?: number }
+): Promise<{ customers: CustomerMasterItem[]; source: "sample" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
+  const offset = Math.max(0, Math.floor(options?.offset || 0));
 
   if (!isProductionStoreConfigured()) {
     return {
@@ -1754,17 +1758,17 @@ export async function getCustomerMaster(companyId?: string): Promise<{ customers
 
   try {
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
     );
   } catch (error) {
     if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
     );
   }
 
   return {
-    customers: rows.map((row, index) => toCustomerMasterItem(row, index)),
+    customers: rows.map((row, index) => toCustomerMasterItem(row, offset + index)),
     source: "supabase",
     truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT
   };

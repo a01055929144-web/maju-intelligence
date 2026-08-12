@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await getCustomerMaster(scope.companyId);
+  const offsetParam = request.nextUrl.searchParams.get("offset");
+  const offset = offsetParam ? Math.max(0, Number.parseInt(offsetParam, 10) || 0) : 0;
+  const result = await getCustomerMaster(scope.companyId, { offset });
   return NextResponse.json(result);
 }
 

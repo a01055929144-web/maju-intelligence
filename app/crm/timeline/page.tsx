@@ -212,6 +212,9 @@ export default function CrmTimelinePage() {
   }, []);
 
   const [customers, setCustomers] = useState<CustomerView[]>([]);
+  const [customersTruncated, setCustomersTruncated] = useState(false);
+  const [isLoadingMoreCustomers, setIsLoadingMoreCustomers] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -232,6 +235,7 @@ export default function CrmTimelinePage() {
         const nextCustomers = Array.isArray(payload.customers) ? payload.customers : [];
         setCustomerSource("supabase");
         setCustomers(nextCustomers);
+        setCustomersTruncated(Boolean(payload.truncated));
         const requestedCustomerId = getSelectedCustomerIdFromUrl();
         const requestedFilter = getOperationFilterFromUrl();
         const requestedIndex = requestedCustomerId ? nextCustomers.findIndex((customer: CustomerView) => customer.id === requestedCustomerId) : -1;
@@ -249,6 +253,26 @@ export default function CrmTimelinePage() {
       active = false;
     };
   }, []);
+
+  const loadMoreCustomers = async () => {
+    if (isLoadingMoreCustomers || !customersTruncated) return;
+    setIsLoadingMoreCustomers(true);
+    setLoadMoreError("");
+
+    try {
+      const response = await fetch(withCompanyQuery(`/api/customers?offset=${customers.length}`), { cache: "no-store" });
+      if (!response.ok) throw new Error("추가 거래처를 불러오지 못했습니다.");
+      const payload = await response.json();
+      if (payload?.source !== "supabase") throw new Error("추가 거래처를 불러오지 못했습니다.");
+      const nextBatch = Array.isArray(payload.customers) ? payload.customers : [];
+      setCustomers((previous) => [...previous, ...nextBatch]);
+      setCustomersTruncated(Boolean(payload.truncated));
+    } catch (error) {
+      setLoadMoreError(error instanceof Error ? error.message : "추가 거래처를 불러오지 못했습니다.");
+    } finally {
+      setIsLoadingMoreCustomers(false);
+    }
+  };
 
   const selectedCustomer = customers[selectedIndex] || emptyCustomer;
   const hasCustomers = customers.length > 0;
@@ -1064,6 +1088,19 @@ export default function CrmTimelinePage() {
                   <p className="mt-1 text-xs font-bold text-slate-400">
                     {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처 마스터를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
                   </p>
+                </div>
+              ) : null}
+              {customersTruncated ? (
+                <div className="space-y-1.5 pt-1">
+                  <button
+                    className="maju-button-secondary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isLoadingMoreCustomers}
+                    onClick={() => void loadMoreCustomers()}
+                    type="button"
+                  >
+                    {isLoadingMoreCustomers ? "불러오는 중..." : `${customers.length.toLocaleString()}곳 표시됨 · 더 불러오기`}
+                  </button>
+                  {loadMoreError ? <p className="text-center text-xs font-bold text-rose-600">{loadMoreError}</p> : null}
                 </div>
               ) : null}
             </div>
