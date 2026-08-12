@@ -3159,11 +3159,12 @@ const BUSINESS_STATUS_REFRESH_LIMIT = 300;
 
 /**
  * Refreshes normalized_customers.business_status/business_status_checked_at against the National
- * Tax Service's real-time 휴업/폐업 status API. Runs on-demand (no cron infrastructure exists in
- * this app yet), scoped to a company and optionally a specific set of customer ids. Customers
- * without a saved 사업자등록번호 can't be checked and are counted separately. Returns
- * configured: false (no-op) when NTS_BUSINESS_API_KEY isn't set, so callers can show a clear
- * "API 키 필요" message instead of a silent failure.
+ * Tax Service's real-time 휴업/폐업 status API, scoped to a company and optionally a specific set
+ * of customer ids. Used both by the on-demand UI action (거래처 관리 > 사업자 상태 조회) and by
+ * refreshAllCompaniesBusinessStatuses() for the daily cron. Customers without a saved
+ * 사업자등록번호 can't be checked and are counted separately. Returns configured: false (no-op)
+ * when NTS_BUSINESS_API_KEY isn't set, so callers can show a clear "API 키 필요" message instead
+ * of a silent failure.
  */
 export async function refreshCustomerBusinessStatuses(companyId: string, customerIds?: string[]): Promise<BusinessStatusRefreshResult> {
   const emptyResult: BusinessStatusRefreshResult = {
@@ -3220,6 +3221,47 @@ export async function refreshCustomerBusinessStatuses(companyId: string, custome
     skippedNoBusinessNumber,
     closed
   };
+}
+
+export type BusinessStatusDailyRefreshResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalChecked: number;
+  totalUpdated: number;
+  closed: Array<{ companyId: string; customerId: string; customerName: string; closedDate: string | null }>;
+};
+
+/**
+ * Runs refreshCustomerBusinessStatuses() across every company, for the daily cron
+ * (app/api/cron/business-status). Each company is capped at BUSINESS_STATUS_REFRESH_LIMIT
+ * customers per run, oldest-checked first, so a growing customer base is covered gradually
+ * across days rather than risking one slow run that times out.
+ */
+export async function refreshAllCompaniesBusinessStatuses(): Promise<BusinessStatusDailyRefreshResult> {
+  const emptyResult: BusinessStatusDailyRefreshResult = {
+    configured: isBusinessStatusApiConfigured(),
+    companiesProcessed: 0,
+    totalChecked: 0,
+    totalUpdated: 0,
+    closed: []
+  };
+  if (!emptyResult.configured || !isProductionStoreConfigured()) return emptyResult;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(
+    companies.map(async (company) => ({ companyId: company.id, result: await refreshCustomerBusinessStatuses(company.id) }))
+  );
+
+  return results.reduce<BusinessStatusDailyRefreshResult>(
+    (total, { companyId, result }) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalChecked: total.totalChecked + result.checked,
+      totalUpdated: total.totalUpdated + result.updated,
+      closed: [...total.closed, ...result.closed.map((item) => ({ companyId, ...item }))]
+    }),
+    { ...emptyResult, configured: true }
+  );
 }
 
 export async function matchSalesTransactionsToCustomer(
