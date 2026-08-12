@@ -3198,6 +3198,23 @@ const BUSINESS_STATUS_REFRESH_LIMIT = 300;
  * when NTS_BUSINESS_API_KEY isn't set, so callers can show a clear "API 키 필요" message instead
  * of a silent failure.
  */
+export async function bulkUpdateDeliveryManager(companyId: string, customerIds: string[], deliveryManager: string): Promise<{ updated: number }> {
+  if (!customerIds.length) return { updated: 0 };
+  if (!isProductionStoreConfigured()) return { updated: 0 };
+
+  const trimmed = deliveryManager.trim();
+  await supabaseRequest(
+    `normalized_customers?company_id=eq.${encodeURIComponent(companyId)}&id=in.(${customerIds.map((id) => encodeURIComponent(id)).join(",")})`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ delivery_manager: trimmed || null })
+    }
+  );
+
+  return { updated: customerIds.length };
+}
+
 export async function refreshCustomerBusinessStatuses(companyId: string, customerIds?: string[]): Promise<BusinessStatusRefreshResult> {
   const emptyResult: BusinessStatusRefreshResult = {
     configured: isBusinessStatusApiConfigured(),

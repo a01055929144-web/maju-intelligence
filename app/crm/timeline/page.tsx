@@ -276,6 +276,46 @@ export default function CrmTimelinePage() {
 
   const selectedCustomer = customers[selectedIndex] || emptyCustomer;
   const hasCustomers = customers.length > 0;
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkManagerInput, setBulkManagerInput] = useState("");
+  const [bulkManagerSubmitting, setBulkManagerSubmitting] = useState(false);
+  const [bulkManagerMessage, setBulkManagerMessage] = useState("");
+
+  function toggleBulkSelected(customerId: string) {
+    setBulkSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return next;
+    });
+  }
+
+  async function applyBulkManager() {
+    if (!bulkSelectedIds.size || !bulkManagerInput.trim() || bulkManagerSubmitting) return;
+    setBulkManagerSubmitting(true);
+    setBulkManagerMessage("");
+
+    try {
+      const customerIds = Array.from(bulkSelectedIds);
+      const response = await fetch("/api/customers/bulk-manager", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: bulkManagerInput })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "일괄 변경에 실패했습니다.");
+
+      const nextManager = bulkManagerInput.trim();
+      setCustomers((previous) => previous.map((customer) => (customer.id && bulkSelectedIds.has(customer.id) ? { ...customer, deliveryManager: nextManager } : customer)));
+      setBulkManagerMessage(`${customerIds.length.toLocaleString()}곳의 담당자를 "${nextManager}"(으)로 변경했습니다.`);
+      setBulkSelectedIds(new Set());
+      setBulkManagerInput("");
+    } catch (error) {
+      setBulkManagerMessage(error instanceof Error ? error.message : "일괄 변경에 실패했습니다.");
+    } finally {
+      setBulkManagerSubmitting(false);
+    }
+  }
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
   const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
   const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
@@ -1060,19 +1100,52 @@ export default function CrmTimelinePage() {
                 totalCount={customers.length}
               />
             </div>
+            {bulkSelectedIds.size ? (
+              <div className="space-y-1.5 border-b border-teal-100 bg-teal-50/70 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black text-teal-900">{bulkSelectedIds.size.toLocaleString()}곳 선택됨</span>
+                  <input
+                    className="h-8 min-w-0 flex-1 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400"
+                    onChange={(event) => setBulkManagerInput(event.target.value)}
+                    placeholder="새 담당자명"
+                    value={bulkManagerInput}
+                  />
+                  <button
+                    className="maju-button-secondary h-8 shrink-0 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!bulkManagerInput.trim() || bulkManagerSubmitting}
+                    onClick={() => void applyBulkManager()}
+                    type="button"
+                  >
+                    {bulkManagerSubmitting ? "변경 중..." : "일괄 변경"}
+                  </button>
+                  <button className="h-8 shrink-0 px-2 text-xs font-bold text-teal-700 hover:underline" onClick={() => setBulkSelectedIds(new Set())} type="button">
+                    선택 해제
+                  </button>
+                </div>
+                {bulkManagerMessage ? <p className="text-[11px] font-bold text-teal-800">{bulkManagerMessage}</p> : null}
+              </div>
+            ) : null}
             <div className="max-h-[560px] space-y-2 overflow-auto p-3 xl:max-h-[calc(100vh-520px)] xl:min-h-[360px]">
               {filteredCustomers.map(({ customer, index }) => {
                 const issues = customerOperationalIssues(customer);
                 const readyScore = Math.round(((4 - issues.length) / 4) * 100);
                 return (
-                  <button
+                  <div
                     key={`${customer.customerName}-${customer.address}`}
-                    className={`w-full rounded-md border p-3 text-left transition ${
+                    className={`flex w-full gap-2 rounded-md border p-3 transition ${
                       index === selectedIndex ? "border-slate-900 bg-slate-50 shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                     }`}
-                    onClick={() => setSelectedIndex(index)}
-                    type="button"
                   >
+                    {customer.id ? (
+                      <input
+                        aria-label={`${customer.customerName} 일괄 선택`}
+                        checked={bulkSelectedIds.has(customer.id)}
+                        className="mt-1 h-3.5 w-3.5 shrink-0"
+                        onChange={() => toggleBulkSelected(customer.id as string)}
+                        type="checkbox"
+                      />
+                    ) : null}
+                    <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedIndex(index)} type="button">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
@@ -1092,7 +1165,8 @@ export default function CrmTimelinePage() {
                       <span className="rounded bg-slate-100 px-2 py-1">{customer.monthlyRevenue}만원</span>
                       <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryManager}</span>
                     </div>
-                  </button>
+                    </button>
+                  </div>
                 );
               })}
               {!filteredCustomers.length ? (
