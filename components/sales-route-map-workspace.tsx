@@ -543,8 +543,8 @@ export function SalesRouteMapWorkspace({ mapMarkers, routePlan }: SalesRouteMapW
               <OperationalEmptyState
                 actionHref={dataRegistrationHref}
                 actionLabel="거래처 마스터 등록"
-                description="지도 마커는 DB에 저장된 거래처 주소와 좌표 기준으로 생성됩니다. 거래처 마스터를 등록하면 대시보드, 거래처 히스토리, 영업·배송 코스가 같은 원장으로 연결됩니다."
-                title="지도에 표시할 DB 거래처 원장이 없습니다."
+                description="거래처 기본정보를 저장하면 지도, 원장, 코스가 같은 DB 기준으로 연결됩니다."
+                title="표시할 거래처가 없습니다."
               />
             )}
           </div>
@@ -1027,8 +1027,8 @@ function CustomerDirectoryView({
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
             actionLabel="거래처 마스터 등록"
-            description="현재 회사에 연결된 DB 거래처 원장이 없습니다. 마스터를 등록하면 사업자번호, 담당자, 매출등급, 주소, 지도 좌표를 같은 기준으로 관리합니다."
-            title="거래처 목록을 시작하려면 DB 원장 등록이 필요합니다."
+            description="사업자번호, 주소, 담당자, 매출등급을 먼저 저장하세요."
+            title="거래처 원장이 비어 있습니다."
           />
         ) : null}
         {sourceReady ? (

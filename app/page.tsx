@@ -1403,7 +1403,7 @@ function Onboarding({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
             <span>
               <span className="block text-sm font-black text-slate-950">상세 등록 상태</span>
-              <span className="mt-0.5 block text-xs font-bold text-slate-500">저장 준비율, DB 반영 상태, 운영 화면 연결은 필요할 때 펼쳐서 확인합니다.</span>
+              <span className="mt-0.5 block text-xs font-bold text-slate-500">저장 가능 여부와 DB 반영 상태를 확인합니다.</span>
             </span>
             <Badge className={canAnalyze ? "bg-blue-100 text-blue-800" : pipelineMeta.persisted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
               {pipelineMeta.persisted ? "DB 반영" : canAnalyze ? "저장 가능" : "확인 필요"}
@@ -1457,7 +1457,7 @@ function Onboarding({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
             <span>
               <span className="block text-sm font-black text-slate-950">운영 점검</span>
-              <span className="mt-0.5 block text-xs font-bold text-slate-500">구현 상태, 배포 준비, 화면 연결 흐름을 필요할 때 확인합니다.</span>
+              <span className="mt-0.5 block text-xs font-bold text-slate-500">배포 전 DB, 화면 연결, 준비율을 확인합니다.</span>
             </span>
             <Badge className={readinessPercent >= 80 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
               준비율 {readinessPercent}%
