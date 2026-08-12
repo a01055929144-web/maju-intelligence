@@ -849,7 +849,7 @@ function StoreQuickCard({
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
           </div>
         </div>
-        <button className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
+        <button aria-label="닫기" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -2085,7 +2085,7 @@ function StoreDetail({
                 <Check className="h-4 w-4" />
                 {isSaving ? "저장 중" : "변경 저장"}
               </button>
-              <button className="grid h-9 w-9 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700" onClick={onClose} type="button">
+              <button aria-label="닫기" className="grid h-9 w-9 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700" onClick={onClose} type="button">
                 <X className="h-4 w-4" />
               </button>
             </div>

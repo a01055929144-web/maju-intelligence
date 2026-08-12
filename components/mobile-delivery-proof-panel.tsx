@@ -139,7 +139,7 @@ export function MobileDeliveryProofPanel({
             <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{customerName} 도착 사진과 점주 발송 문구를 저장합니다.</p>
           </div>
         </div>
-        <button className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700" onClick={loadProofs} type="button">
+        <button aria-label="배송완료 증빙 새로고침" className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700" onClick={loadProofs} type="button">
           <RefreshCw className={`h-4 w-4 ${loadingProofs ? "animate-spin" : ""}`} />
         </button>
       </div>
