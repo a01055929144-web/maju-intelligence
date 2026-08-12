@@ -43,7 +43,10 @@ export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" 
     url.searchParams.set("certkey", apiKey);
 
     const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) return fallbackFuelPrice(fuelType);
+    if (!response.ok) {
+      console.error(`[opinet] avgAllPrice.do responded ${response.status} ${response.statusText} — falling back to default ${fuelType} price.`);
+      return fallbackFuelPrice(fuelType);
+    }
 
     const payload = (await response.json()) as OpinetAveragePriceResponse;
     const rows = normalizeRows(payload.RESULT?.OIL);
@@ -52,7 +55,10 @@ export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" 
     const row = rows.find((item) => item.PRODCD === targetCode) || rows.find((item) => item.PRODNM?.includes(targetName));
     const price = Number(row?.PRICE || 0);
 
-    if (!Number.isFinite(price) || price <= 0) return fallbackFuelPrice(fuelType);
+    if (!Number.isFinite(price) || price <= 0) {
+      console.error(`[opinet] no valid price row found for ${fuelType} in avgAllPrice.do response — falling back to default price. rows=${JSON.stringify(rows).slice(0, 500)}`);
+      return fallbackFuelPrice(fuelType);
+    }
 
     return cacheFuelPrice(fuelType, {
       basis: "opinet",
@@ -61,7 +67,8 @@ export async function getOpinetAverageFuelPrice(fuelType: "gasoline" | "diesel" 
       pricePerLiter: Math.round(price),
       sourceLabel: `OPINET 전국 평균 ${targetName}`
     });
-  } catch {
+  } catch (error) {
+    console.error(`[opinet] avgAllPrice.do request failed — falling back to default ${fuelType} price.`, error);
     return fallbackFuelPrice(fuelType);
   }
 }
