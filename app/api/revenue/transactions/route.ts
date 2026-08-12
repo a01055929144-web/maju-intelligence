@@ -11,8 +11,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const offsetParam = request.nextUrl.searchParams.get("offset");
+  const offset = offsetParam ? Math.max(0, Number.parseInt(offsetParam, 10) || 0) : 0;
+
   return NextResponse.json({
     companyId: scope.companyId,
-    sales: await getSalesTransactions(scope.companyId)
+    sales: await getSalesTransactions(scope.companyId, { offset })
   });
 }

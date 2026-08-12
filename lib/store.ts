@@ -2949,8 +2949,9 @@ export async function getRevenuePipeline(companyId?: string): Promise<RevenuePip
   };
 }
 
-export async function getSalesTransactions(companyId?: string): Promise<SalesTransactionSummary> {
+export async function getSalesTransactions(companyId?: string, options?: { offset?: number }): Promise<SalesTransactionSummary> {
   const id = companyId || getDefaultCompanyId();
+  const offset = Math.max(0, Math.floor(options?.offset || 0));
 
   if (!isProductionStoreConfigured()) {
     const items = sampleCustomers.slice(0, 12).map((customer, index) => ({
@@ -2985,7 +2986,7 @@ export async function getSalesTransactions(companyId?: string): Promise<SalesTra
     >(
       `sales_transactions?select=id,customer_key,customer_name,business_registration_number,sales_date,product_name,quantity,sales_amount,created_at&company_id=eq.${encodeURIComponent(
         id
-      )}&order=sales_date.desc,created_at.desc&limit=${SALES_TRANSACTIONS_FETCH_LIMIT}`
+      )}&order=sales_date.desc,created_at.desc&limit=${SALES_TRANSACTIONS_FETCH_LIMIT}&offset=${offset}`
     ).catch(() => []),
     getNormalizedCustomerKeyMap(id)
   ]);

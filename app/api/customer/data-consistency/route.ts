@@ -134,10 +134,10 @@ export async function GET(request: NextRequest) {
       value: customerMaster.truncated ? "일부만 표시됨(더 불러오기 가능)" : "전체 표시"
     },
     {
-      detail: "매출 원장은 최근 거래 기준으로 한 번에 최대 1,000건까지 불러옵니다. 한도에 도달하면 기간 필터나 페이지네이션 보강이 필요합니다.",
+      detail: "매출 원장은 최근 거래 기준으로 한 번에 최대 1,000건까지 불러옵니다. 매출 거래내역 > 원장 테이블 하단의 '더 불러오기'로 나머지를 이어서 불러오세요.",
       label: "매출 원장 전체 로드",
       ok: !sales.truncated,
-      value: sales.truncated ? "최근 1,000건 표시" : "전체 표시"
+      value: sales.truncated ? "일부만 표시됨(더 불러오기 가능)" : "전체 표시"
     }
   ];
 
@@ -283,7 +283,7 @@ function buildRecommendations({
     items.push("매출 원장의 모든 거래처가 거래처 원장과 매칭되었습니다. 등급·리포트 산정에 안전하게 반영됩니다.");
   }
   if (salesTruncated) {
-    items.push("매출 원장이 최근 1,000건 기준으로 표시되고 있습니다. 실운영에서는 기간 필터 또는 페이지네이션을 추가해 전체 거래내역을 나눠 확인해야 합니다.");
+    items.push("매출 원장이 최근 1,000건 기준으로 먼저 표시되고 있습니다. 매출 거래내역 > 원장 테이블 하단의 '더 불러오기'로 나머지 거래내역을 이어서 확인하세요.");
   }
   if (duplicateGroupCount > 0) {
     items.push(`같은 상호명이 서로 다른 레코드로 쪼개진 것으로 보이는 거래처가 ${duplicateGroupCount.toLocaleString()}건 있습니다. 거래처 히스토리에서 주소 표기를 확인하고 하나로 정리하세요.`);

@@ -4,6 +4,7 @@ import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store,
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesTransactionMatcher } from "@/components/sales-transaction-matcher";
+import { SalesTransactionTable } from "@/components/sales-transaction-table";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions } from "@/lib/store";
@@ -187,52 +188,7 @@ export default async function RevenueTransactionsPage({ searchParams }: { search
           </div>
         </div>
 
-        <section className="maju-section-card scroll-mt-28" id="ledger-table">
-          <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-black text-slate-950">원장 테이블</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">최근 업로드 행</p>
-            </div>
-            <Badge className="bg-slate-900 text-white">{sales.items.length.toLocaleString()}행 표시</Badge>
-          </div>
-          <div className="max-h-[520px] overflow-auto">
-            <table className="w-full min-w-[920px] border-separate border-spacing-0 text-sm">
-              <thead className="sticky top-0 z-10 bg-white">
-                <tr className="text-left text-xs font-black text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 text-center">No</th>
-                  <th className="border-b border-slate-200 px-3 py-3">매출일</th>
-                  <th className="border-b border-slate-200 px-3 py-3">거래처</th>
-                  <th className="border-b border-slate-200 px-3 py-3">사업자번호</th>
-                  <th className="border-b border-slate-200 px-3 py-3">품목</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">수량</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">매출금액</th>
-                  <th className="border-b border-slate-200 px-3 py-3">적재시각</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sales.items.map((item, index) => (
-                  <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
-                    <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{index + 1}</td>
-                    <td className="border-b border-slate-100 px-3 py-3">{item.salesDate || "-"}</td>
-                    <td className="border-b border-slate-100 px-3 py-3">{item.customerName}</td>
-                    <td className="border-b border-slate-100 px-3 py-3">{item.businessRegistrationNumber || "-"}</td>
-                    <td className="border-b border-slate-100 px-3 py-3">{item.productName || "-"}</td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-right">{item.quantity.toLocaleString()}</td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-right text-primary">{Math.round(item.salesAmount).toLocaleString()}원</td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-xs text-slate-500">{item.createdAt}</td>
-                  </tr>
-                ))}
-                {!sales.items.length ? (
-                  <tr>
-                    <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
-                      아직 업로드된 매출 거래내역이 없습니다. 매출 거래내역서를 업로드하면 이곳에 누적됩니다.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <SalesTransactionTable companyId={companyId} initialItems={sales.items} initialTruncated={sales.truncated} />
         </div>
       </section>
     </CustomerAppShell>
