@@ -6,16 +6,15 @@ import { useEffect, useState } from "react";
 import { Building2, Database, FileSpreadsheet, LucideIcon } from "lucide-react";
 
 type WorkspaceTab = {
-  readonly description: string;
   readonly href: string;
   readonly icon: LucideIcon;
   readonly label: string;
 };
 
 const WORKSPACE_TABS: readonly WorkspaceTab[] = [
-  { description: "거래처·매출 입력", href: "/", icon: FileSpreadsheet, label: "기본정보 등록" },
-  { description: "검색·조회·수정", href: "/crm/timeline", icon: Building2, label: "원장 조회" },
-  { description: "업로드 결과·품질", href: "/customers/data", icon: Database, label: "저장 이력" }
+  { href: "/", icon: FileSpreadsheet, label: "기본정보 등록" },
+  { href: "/crm/timeline", icon: Building2, label: "원장 조회" },
+  { href: "/customers/data", icon: Database, label: "저장 이력" }
 ];
 
 /**
@@ -39,22 +38,19 @@ export function CustomerWorkspaceTabs() {
   }
 
   return (
-    <div className="mb-4 flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5">
+    <div className="mb-4 flex flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
       {WORKSPACE_TABS.map((tab) => {
         const selected = pathname === tab.href;
         return (
           <Link
-            className={`flex flex-1 min-w-[120px] items-center gap-2 rounded-md px-3 py-2 text-sm font-black transition ${
-              selected ? "bg-teal-700 text-white shadow-[0_4px_10px_rgba(15,118,110,0.18)]" : "text-slate-600 hover:bg-slate-50"
+            className={`inline-flex h-9 min-w-[112px] flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-black transition sm:flex-none ${
+              selected ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white hover:text-slate-900"
             }`}
             href={hrefWithCompany(tab.href)}
             key={tab.href}
           >
-            <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
-            <span className="min-w-0">
-              <span className="block truncate">{tab.label}</span>
-              <span className={`block truncate text-[11px] font-bold ${selected ? "text-teal-100" : "text-slate-400"}`}>{tab.description}</span>
-            </span>
+            <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
+            <span className="truncate">{tab.label}</span>
           </Link>
         );
       })}
