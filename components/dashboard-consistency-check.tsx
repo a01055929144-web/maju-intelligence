@@ -254,12 +254,23 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             {missingAddressExamples.length ? (
               <div className="maju-filter-box mt-3 border-amber-200 bg-amber-50 p-3">
                 <p className="text-xs font-black text-amber-900">주소 보완 대상</p>
+                <p className="mt-0.5 text-[11px] font-bold text-amber-700">눌러서 거래처 원장에서 바로 보완하세요.</p>
                 <div className="mt-2 space-y-1">
-                  {missingAddressExamples.slice(0, 4).map((customer) => (
-                    <p key={customer.customerId || customer.customerName} className="truncate text-xs font-bold text-amber-900">
-                      {customer.customerName} · {customer.deliveryZone || "권역 미지정"} · {customer.deliveryManager || "담당자 미지정"}
-                    </p>
-                  ))}
+                  {missingAddressExamples.slice(0, 4).map((customer) =>
+                    customer.customerId ? (
+                      <Link
+                        className="block truncate text-xs font-bold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-950"
+                        href={buildCustomerRecordHref(companyId, customer.customerId)}
+                        key={customer.customerId}
+                      >
+                        {customer.customerName} · {customer.deliveryZone || "권역 미지정"} · {customer.deliveryManager || "담당자 미지정"}
+                      </Link>
+                    ) : (
+                      <p key={customer.customerName} className="truncate text-xs font-bold text-amber-900">
+                        {customer.customerName} · {customer.deliveryZone || "권역 미지정"} · {customer.deliveryManager || "담당자 미지정"}
+                      </p>
+                    )
+                  )}
                 </div>
               </div>
             ) : null}
