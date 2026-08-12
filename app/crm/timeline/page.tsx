@@ -410,6 +410,19 @@ export default function CrmTimelinePage() {
   const selectedFilteredPosition = selectedFilteredArrayIndex + 1;
   const previousFilteredCustomer = selectedFilteredArrayIndex > 0 ? filteredCustomers[selectedFilteredArrayIndex - 1] : null;
   const nextFilteredCustomer = selectedFilteredArrayIndex >= 0 && selectedFilteredArrayIndex < filteredCustomers.length - 1 ? filteredCustomers[selectedFilteredArrayIndex + 1] : null;
+  const duplicateCandidates = useMemo(() => {
+    if (!selectedCustomer.customerName?.trim()) return [];
+    const key = selectedCustomer.customerName.trim().replace(/\s+/g, "").toLowerCase();
+    return customers.filter(
+      (customer) => customer.id !== selectedCustomer.id && customer.customerName.trim().replace(/\s+/g, "").toLowerCase() === key
+    );
+  }, [customers, selectedCustomer.customerName, selectedCustomer.id]);
+
+  function jumpToCustomer(customerId: string | undefined) {
+    if (!customerId) return;
+    const targetIndex = customers.findIndex((customer) => customer.id === customerId);
+    if (targetIndex >= 0) setSelectedIndex(targetIndex);
+  }
   const activeCleanupLabel = operationFilterLabel(operationFilter);
   const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
   const readyCustomerCount = customers.length - needsAttentionCustomers.length;
@@ -1115,6 +1128,25 @@ export default function CrmTimelinePage() {
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
                   </p>
+                  {duplicateCandidates.length ? (
+                    <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
+                      <p className="text-xs font-black text-rose-900">
+                        같은 상호명의 다른 레코드가 {duplicateCandidates.length}개 있습니다. 중복이면 하나로 정리하세요.
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {duplicateCandidates.map((customer) => (
+                          <button
+                            className="rounded border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-bold text-rose-800 hover:bg-rose-100"
+                            key={customer.id}
+                            onClick={() => jumpToCustomer(customer.id)}
+                            type="button"
+                          >
+                            {customer.address || "주소 없음"} 보기
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
