@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MessageSquareText, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type DeliveryStatus = "arrived" | "partial" | "issue";
 type MessageChannel = "kakao" | "sms";
@@ -47,6 +48,7 @@ export function MobileDeliveryProofPanel({
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>("arrived");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState("");
   const [loadingProofs, setLoadingProofs] = useState(false);
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
@@ -56,6 +58,16 @@ export function MobileDeliveryProofPanel({
   const deliveryProofAttachments = useMemo(() => attachments.filter((item) => item.attachmentType === "delivery_proof"), [attachments]);
   const deliveryNotes = useMemo(() => notes.filter((item) => item.noteType === "delivery"), [notes]);
   const ownerMessage = createOwnerMessage(customerName, memo, deliveryStatus, file?.name || "", loadingPosition);
+
+  function handleFileSelect(selected: File | null) {
+    if (selected && selected.size > MAX_UPLOAD_SIZE_BYTES) {
+      setFile(null);
+      setFileError(`파일 용량이 ${formatUploadSizeMb(selected.size)}로 최대 50MB를 초과합니다. 영상 길이를 줄이거나 화질을 낮춰 다시 선택해주세요.`);
+      return;
+    }
+    setFileError("");
+    setFile(selected);
+  }
 
   async function loadProofs() {
     setLoadingProofs(true);
@@ -151,12 +163,13 @@ export function MobileDeliveryProofPanel({
         <input
           accept="image/*,video/*"
           className="hidden"
-          onChange={(event) => setFile(event.target.files?.[0] || null)}
+          onChange={(event) => handleFileSelect(event.target.files?.[0] || null)}
           type="file"
         />
         <Plus className="h-4 w-4" />
         {file ? file.name : "도착 사진/영상 선택"}
       </label>
+      {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
 
       <textarea
         className="mt-3 min-h-[92px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"

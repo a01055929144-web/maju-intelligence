@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, ExternalLink, FileVideo, ImageIcon, Loader2, Plus, RefreshCw } from "lucide-react";
+import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type Attachment = {
   id: string;
@@ -27,6 +28,7 @@ export function MobileLoadingAttachmentPanel({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveErrorMessage, setSaveErrorMessage] = useState("");
 
   const loadingAttachments = useMemo(
     () => attachments.filter((item) => item.attachmentType === "loading_position"),
@@ -49,6 +51,13 @@ export function MobileLoadingAttachmentPanel({
   async function uploadFile(file: File | null) {
     if (!file || saveState === "saving") return;
 
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setSaveState("error");
+      setSaveErrorMessage(`파일 용량이 ${formatUploadSizeMb(file.size)}로 최대 50MB를 초과합니다. 영상 길이를 줄이거나 화질을 낮춰 다시 선택해주세요.`);
+      return;
+    }
+
+    setSaveErrorMessage("");
     setSaveState("saving");
     const formData = new FormData();
     formData.append("file", file);
@@ -63,6 +72,7 @@ export function MobileLoadingAttachmentPanel({
 
     if (!response?.ok) {
       setSaveState("error");
+      setSaveErrorMessage("업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.");
       return;
     }
 
@@ -107,7 +117,7 @@ export function MobileLoadingAttachmentPanel({
           업로드되었습니다. 거래처 원장 첨부자료에도 반영됩니다.
         </p>
       ) : null}
-      {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.</p> : null}
+      {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveErrorMessage || "업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요."}</p> : null}
 
       <div className="mt-4 grid gap-2">
         {loadState === "loading" ? <p className="rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">첨부자료를 불러오는 중입니다.</p> : null}
