@@ -14,6 +14,33 @@ type ChurnRiskCustomer = {
   region?: string;
 };
 
+function getDismissalStorageKey(companyId?: string) {
+  return `maju-churn-alert-dismissed:${companyId || "default"}`;
+}
+
+function readDismissedIds(companyId?: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(getDismissalStorageKey(companyId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { date?: string; ids?: string[] };
+    const today = new Date().toISOString().slice(0, 10);
+    if (parsed.date !== today || !Array.isArray(parsed.ids)) return [];
+    return parsed.ids;
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedIds(companyId: string | undefined, ids: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(getDismissalStorageKey(companyId), JSON.stringify({ date: new Date().toISOString().slice(0, 10), ids }));
+  } catch {
+    // localStorage unavailable — dismissal simply won't persist across navigation
+  }
+}
+
 export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string; timelineHref: string }) {
   const [customers, setCustomers] = useState<ChurnRiskCustomer[]>([]);
   const [dismissed, setDismissed] = useState(false);
@@ -26,7 +53,13 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
     fetch(`/api/customer/churn-risk${query}`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
-        if (mounted && Array.isArray(payload?.customers)) setCustomers(payload.customers);
+        if (!mounted || !Array.isArray(payload?.customers)) return;
+        const fetchedCustomers = payload.customers as ChurnRiskCustomer[];
+        setCustomers(fetchedCustomers);
+
+        const dismissedIds = new Set(readDismissedIds(companyId));
+        const stillAllDismissed = fetchedCustomers.length > 0 && fetchedCustomers.every((customer) => dismissedIds.has(customer.customerId));
+        setDismissed(stillAllDismissed);
       })
       .catch(() => null)
       .finally(() => {
@@ -42,6 +75,14 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
 
   const topCustomers = customers.slice(0, 3);
 
+  function handleDismiss() {
+    setDismissed(true);
+    writeDismissedIds(
+      companyId,
+      customers.map((customer) => customer.customerId)
+    );
+  }
+
   return (
     <div className="w-full max-w-[360px]">
       <div className="overflow-hidden rounded-xl border border-rose-200 bg-white shadow-[0_12px_28px_rgba(190,18,60,0.16)]">
@@ -53,7 +94,7 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
               <p className="mt-0.5 text-[11px] font-bold text-rose-700">21일 이상 매출 없음 · 방문 우선 추천</p>
             </div>
           </div>
-          <button aria-label="알림 닫기" className="shrink-0 text-rose-400 transition hover:text-rose-700" onClick={() => setDismissed(true)} type="button">
+          <button aria-label="알림 닫기" className="shrink-0 text-rose-400 transition hover:text-rose-700" onClick={handleDismiss} type="button">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
