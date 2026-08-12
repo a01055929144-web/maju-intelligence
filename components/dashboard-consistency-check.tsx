@@ -266,11 +266,25 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             {duplicateCustomerExamples.length ? (
               <div className="maju-filter-box mt-3 border-rose-200 bg-rose-50 p-3">
                 <p className="text-xs font-black text-rose-900">거래처 중복 의심</p>
-                <div className="mt-2 space-y-1">
+                <p className="mt-0.5 text-[11px] font-bold text-rose-700">레코드를 눌러 거래처 원장에서 바로 비교하세요.</p>
+                <div className="mt-2 space-y-2">
                   {duplicateCustomerExamples.slice(0, 4).map((group) => (
-                    <p key={group.customerName} className="truncate text-xs font-bold text-rose-900">
-                      {group.customerName} · {group.count}개 레코드로 분리됨
-                    </p>
+                    <div key={group.customerName} className="min-w-0">
+                      <p className="truncate text-xs font-black text-rose-900">
+                        {group.customerName} · {group.count}개 레코드로 분리됨
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {group.customers.slice(0, 6).map((customer, index) => (
+                          <Link
+                            className="truncate rounded border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-bold text-rose-800 hover:bg-rose-100"
+                            href={buildCustomerRecordHref(companyId, customer.id)}
+                            key={customer.id}
+                          >
+                            #{index + 1} {customer.address ? customer.address : "주소 없음"}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -391,6 +405,13 @@ function buildFixItems({
   }
 
   return items.sort((a, b) => getFixPriority(a.tone) - getFixPriority(b.tone)).slice(0, consistencyScore >= 90 ? 3 : 4);
+}
+
+function buildCustomerRecordHref(companyId: string | undefined, customerId: string) {
+  const params = new URLSearchParams();
+  if (companyId) params.set("companyId", companyId);
+  params.set("customerId", customerId);
+  return `/crm/timeline?${params.toString()}`;
 }
 
 function buildTimelineHref(companyId: string | undefined, missingAddressCount: number) {
