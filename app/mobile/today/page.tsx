@@ -18,9 +18,26 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const routePlan = await getTodayRoutePlan(session.companyId);
   const sourceReady = routePlan.source === "supabase";
   const firstGroup = routePlan.groups[0];
-  const todayStops = sourceReady ? firstGroup?.stops.slice(0, 6) || [] : [];
   const driverName = session.name || "모바일 담당자";
-  const routeArea = sourceReady ? firstGroup?.region || "전체 권역" : "거래처 등록 필요";
+  const normalizedDriverName = session.name?.trim();
+  const allStops = sourceReady ? routePlan.groups.flatMap((group) => group.stops) : [];
+  const myStops = normalizedDriverName ? allStops.filter((stop) => stop.deliveryDriver?.trim() === normalizedDriverName) : [];
+  const isPersonalized = myStops.length > 0;
+  const todayStops = isPersonalized ? myStops : sourceReady ? firstGroup?.stops.slice(0, 6) || [] : [];
+  const myRegions = Array.from(new Set(myStops.map((stop) => stop.region)));
+  const routeArea = isPersonalized
+    ? myRegions.length > 1
+      ? `${myRegions[0]} 외 ${myRegions.length - 1}곳`
+      : myRegions[0] || "전체 권역"
+    : sourceReady
+      ? firstGroup?.region || "전체 권역"
+      : "거래처 등록 필요";
+  const routeDistanceKm = isPersonalized
+    ? Math.round(myStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0) * 10) / 10
+    : routePlan.totalDistanceKm;
+  const routeDurationMinutes = isPersonalized
+    ? myStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
+    : routePlan.totalDurationMinutes;
   const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops[0];
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
@@ -50,12 +67,18 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           <section className="grid grid-cols-3 gap-2">
             <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${todayStops.length || routePlan.totalStops}곳` : "등록 필요"} />
-            <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routePlan.totalDistanceKm.toLocaleString()}km` : "-"} />
-            <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routePlan.totalDurationMinutes) : "-"} />
+            <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routeDistanceKm.toLocaleString()}km` : "-"} />
+            <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routeDurationMinutes) : "-"} />
           </section>
 
           {!sourceReady ? (
             <MobileOperationalEmptyState />
+          ) : null}
+
+          {sourceReady && !isPersonalized && normalizedDriverName ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800 ring-1 ring-inset ring-amber-100">
+              {driverName}님 이름으로 배정된 담당 거래처가 없어 전체 코스 중 매출 상위 권역을 표시합니다. 거래처 원장에서 담당자를 배정하면 내 코스만 표시됩니다.
+            </p>
           ) : null}
 
           <MobileFieldFlowPanel hasSelectedStop={Boolean(selectedStop)} selectedStopName={selectedStop?.name || "선택 거래처 없음"} />
