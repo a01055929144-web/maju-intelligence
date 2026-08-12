@@ -260,7 +260,7 @@ export default function CrmTimelinePage() {
   const [newAttachmentTitle, setNewAttachmentTitle] = useState("배송 적재위치 사진/영상");
   const [newAttachmentType, setNewAttachmentType] = useState("loading_position");
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
-  const [newAttachmentFile, setNewAttachmentFile] = useState<File | null>(null);
+  const [newAttachmentFiles, setNewAttachmentFiles] = useState<File[]>([]);
   const [addressQuery, setAddressQuery] = useState("");
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
@@ -290,7 +290,7 @@ export default function CrmTimelinePage() {
     setNewAttachmentTitle("배송 적재위치 사진/영상");
     setNewAttachmentType("loading_position");
     setNewAttachmentUrl("");
-    setNewAttachmentFile(null);
+    setNewAttachmentFiles([]);
     setAttachmentMessage("");
     setAddressQuery(selectedCustomer?.address || "");
     setAddressResults([]);
@@ -745,21 +745,29 @@ export default function CrmTimelinePage() {
     setAttachmentMessage("");
 
     try {
-      let response: Response;
+      const uploadedAttachments: CustomerAttachmentView[] = [];
+      let hasTemporaryResult = false;
 
-      if (newAttachmentFile) {
-        const formData = new FormData();
-        formData.append("attachmentType", newAttachmentType);
-        formData.append("companyId", getAdminCompanyIdFromUrl());
-        formData.append("customerId", selectedCustomer.id);
-        formData.append("file", newAttachmentFile);
-        formData.append("title", newAttachmentTitle);
-        response = await fetch("/api/customer-attachments/upload", {
-          method: "POST",
-          body: formData
-        });
+      if (newAttachmentFiles.length) {
+        for (let index = 0; index < newAttachmentFiles.length; index += 1) {
+          const file = newAttachmentFiles[index];
+          const formData = new FormData();
+          formData.append("attachmentType", newAttachmentType);
+          formData.append("companyId", getAdminCompanyIdFromUrl());
+          formData.append("customerId", selectedCustomer.id);
+          formData.append("file", file);
+          formData.append("title", newAttachmentFiles.length > 1 ? `${newAttachmentTitle} ${index + 1}` : newAttachmentTitle);
+          const response = await fetch("/api/customer-attachments/upload", {
+            method: "POST",
+            body: formData
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);
+          if (payload?.attachment) uploadedAttachments.push(payload.attachment);
+          if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
+        }
       } else {
-        response = await fetch("/api/customer-operations", {
+        const response = await fetch("/api/customer-operations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -772,19 +780,21 @@ export default function CrmTimelinePage() {
             title: newAttachmentTitle
           })
         });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
+        if (payload?.attachment) uploadedAttachments.push(payload.attachment);
+        if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
       }
 
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
-      if (payload?.attachment) setCustomerAttachments((current) => [payload.attachment, ...current]);
+      if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
       setAttachmentMessage(
-        payload?.uploaded === false || payload?.persisted === false
-          ? "첨부자료가 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다."
-          : "첨부자료가 거래처 원장에 저장됐습니다."
+        hasTemporaryResult
+          ? `${uploadedAttachments.length || 1}건이 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다.`
+          : `${uploadedAttachments.length || 1}건의 첨부자료가 거래처 원장에 저장됐습니다.`
       );
       setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
       setNewAttachmentUrl("");
-      setNewAttachmentFile(null);
+      setNewAttachmentFiles([]);
     } catch (error) {
       setAttachmentMessage(error instanceof Error ? error.message : "첨부자료 저장 중 오류가 발생했습니다.");
     } finally {
@@ -1413,19 +1423,34 @@ export default function CrmTimelinePage() {
                           <Plus className="h-4 w-4" />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-slate-950">{newAttachmentFile ? newAttachmentFile.name : "사진·PDF·영상을 직접 선택"}</span>
-                          <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">배송 적재위치는 여러 장의 사진이나 짧은 영상으로 남기면 현장 전달이 가장 정확합니다. 최대 50MB.</span>
+                          <span className="block truncate text-sm font-black text-slate-950">
+                            {newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 선택됨` : "사진·PDF·영상을 직접 선택"}
+                          </span>
+                          <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
+                            배송 적재위치는 여러 장의 사진이나 짧은 영상으로 남기면 현장 전달이 가장 정확합니다. 파일당 최대 50MB.
+                          </span>
+                          {newAttachmentFiles.length ? (
+                            <span className="mt-2 flex flex-wrap gap-1">
+                              {newAttachmentFiles.slice(0, 4).map((file) => (
+                                <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-blue-100" key={`${file.name}-${file.size}`}>
+                                  {file.name}
+                                </span>
+                              ))}
+                              {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
+                            </span>
+                          ) : null}
                         </span>
                         <input
                           accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
                           className="hidden"
-                          onChange={(event) => setNewAttachmentFile(event.target.files?.[0] || null)}
+                          multiple
+                          onChange={(event) => setNewAttachmentFiles(Array.from(event.target.files || []))}
                           type="file"
                         />
                       </label>
                       <button
                         className="maju-button-primary inline-flex h-11 items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
-                        disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFile) || isAttachmentSaving}
+                        disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFiles.length) || isAttachmentSaving}
                         onClick={saveAttachment}
                         type="button"
                       >
