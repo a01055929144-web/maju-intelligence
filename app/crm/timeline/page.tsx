@@ -5,6 +5,7 @@ import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 
 type TimelineItem = {
@@ -787,16 +788,17 @@ export default function CrmTimelinePage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="매장 기본정보, 사업자 상태, 적재위치, 메모를 한 원장에서 관리합니다."
-      title="거래처 원장"
+      subtitle="등록된 거래처를 검색·조회하고 상세 정보와 운영 상태를 수정합니다."
+      title="거래처 관리 · 거래처 원장"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
+      <CustomerWorkspaceTabs />
       <section className="mx-auto grid max-w-[1560px] gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
         <div className="xl:sticky xl:top-24 xl:self-start">
           <WorkspaceSectionNav
             items={[
               { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "원장 현황" },
-              { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "목록 필터" },
+              { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "거래처 검색·필터" },
               { description: "선택 거래처의 사업자정보와 배송 기준값을 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "상세 편집" },
               { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
             ]}
@@ -888,7 +890,7 @@ export default function CrmTimelinePage() {
               <div className="border-b border-slate-200/80 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-black text-slate-950">목록 필터</h2>
+                    <h2 className="text-base font-black text-slate-950">거래처 검색·필터</h2>
                     <p className="mt-1 text-xs font-bold text-slate-500">검색 · 등급 · 보완 필요 항목</p>
                   </div>
                   <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
@@ -1088,11 +1090,11 @@ export default function CrmTimelinePage() {
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isBusinessStatusChecking || !selectedCustomer.businessNumber}
                     onClick={refreshSelectedCustomerBusinessStatus}
-                    title={selectedCustomer.businessNumber ? "국세청 휴폐업 상태 재조회" : "사업자번호 등록 후 조회 가능"}
+                    title={selectedCustomer.businessNumber ? "국세청 사업자 상태 조회" : "사업자번호 등록 후 조회 가능"}
                     type="button"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${isBusinessStatusChecking ? "animate-spin" : ""}`} />
-                    {isBusinessStatusChecking ? "조회 중" : "상태 재조회"}
+                    {isBusinessStatusChecking ? "조회 중" : "사업자 상태 조회"}
                   </button>
                   <Link
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50"
@@ -1694,7 +1696,7 @@ function BusinessStatusControlPanel({
           type="button"
         >
           <RefreshCw className={`h-4 w-4 ${isChecking ? "animate-spin" : ""}`} />
-          {isChecking ? "조회 중" : "국세청 전체 재조회"}
+          {isChecking ? "조회 중" : "전체 사업자 상태 조회"}
         </button>
       </div>
       {message ? (

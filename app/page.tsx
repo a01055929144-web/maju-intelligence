@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { ExcelHeaderMappingPreview } from "@/components/excel-mapping-preview";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
@@ -462,10 +463,11 @@ export default function Home() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="거래처 마스터와 매출 거래내역을 지도 홈 기준으로 저장합니다."
-      title="데이터 등록"
+      subtitle="아직 없는 거래처 또는 매출 데이터를 새로 등록합니다."
+      title="거래처 관리 · 등록"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
+      <CustomerWorkspaceTabs />
       <div className="mx-auto max-w-[1880px] space-y-4">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
         {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}
@@ -838,7 +840,7 @@ function DataRegistrationSidePanel({
       description: "매출 거래내역 업로드",
       icon: FileSpreadsheet,
       key: "sales",
-      label: "매출 등록"
+      label: "매출 엑셀 업로드"
     },
     {
       badge: persisted ? "반영완료" : undefined,
@@ -1713,7 +1715,7 @@ function Onboarding({
               icon={Download}
               label="업로드 양식"
               tone="primary"
-              value="빈 양식 다운로드"
+              value="엑셀 템플릿 다운로드"
               onClick={() => onDownloadTemplate(uploadType)}
             />
             <DownloadActionCard

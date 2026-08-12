@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
-import { customerNavigationGroups, CustomerWorkspaceKey, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
+import { customerNavigationGroups, CustomerWorkspaceKey, flattenCustomerNavigationItems, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 
 type CustomerAppShellProps = {
   readonly active: CustomerWorkspaceKey;
@@ -53,7 +53,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
-  const activeNavigationItem = visibleNavigationGroups.flatMap((group) => group.items).find((item) => item.active === active);
+  const activeNavigationItem = flattenCustomerNavigationItems(visibleNavigationGroups).find((item) => item.active === active);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -104,6 +104,47 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
                   {!collapsed ? <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p> : null}
                   <div className="space-y-1">
                     {group.items.map((item) => {
+                      if (item.children && item.children.length) {
+                        const groupSelected = item.children.some((child) => isCurrentNavItem(pathname, child.href) || (!pathname && active === child.active));
+                        if (collapsed) {
+                          const firstChild = item.children[0];
+                          return (
+                            <Link
+                              key={`${group.label}-${item.label}`}
+                              className={`maju-nav-item relative justify-center ${groupSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
+                              href={scopedHref(firstChild.href)}
+                              title={item.label}
+                            >
+                              {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-teal-600" /> : null}
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-teal-700" : "text-slate-400"}`} />
+                            </Link>
+                          );
+                        }
+                        return (
+                          <div key={`${group.label}-${item.label}`}>
+                            <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-black ${groupSelected ? "text-teal-700" : "text-slate-700"}`}>
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-teal-700" : "text-slate-400"}`} />
+                              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                            </div>
+                            <div className="ml-[26px] space-y-1 border-l border-slate-200 pl-2.5">
+                              {item.children.map((child) => {
+                                const childSelected = isCurrentNavItem(pathname, child.href) || (!pathname && active === child.active);
+                                return (
+                                  <Link
+                                    key={`${group.label}-${item.label}-${child.label}`}
+                                    className={`maju-nav-item relative py-1.5 text-[13px] ${childSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
+                                    href={scopedHref(child.href)}
+                                  >
+                                    {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-teal-600" /> : null}
+                                    <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
+
                       const selected = isCurrentNavItem(pathname, item.href) || (!pathname && active === item.active);
                       const itemHref = scopedHref(item.href);
                       return (

@@ -54,6 +54,7 @@ export type MapHomeViewProps = {
   quickNav: {
     assistantHref: string;
     backHref: string;
+    dataManagementHref: string;
     dataRegistrationHref: string;
     pipelineHref: string;
     reportHref: string;
@@ -114,6 +115,7 @@ export function MapHomeView({
     customers: quickNav.timelineHref,
     dashboard: mapHomeHref,
     data: quickNav.dataRegistrationHref,
+    "data-management": quickNav.dataManagementHref,
     report: quickNav.reportHref,
     revenue: quickNav.pipelineHref,
     "revenue-ledger": quickNav.transactionsHref,

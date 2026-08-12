@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Building2,
+  Database,
   FileSpreadsheet,
   HeartPulse,
   LucideIcon,
@@ -21,11 +22,13 @@ export type CustomerWorkspaceKey =
   | "assistant"
   | "report"
   | "settings"
-  | "data";
+  | "data"
+  | "data-management";
 
 export type CustomerNavigationItem = {
   readonly active: CustomerWorkspaceKey;
   readonly badge?: string;
+  readonly children?: readonly CustomerNavigationItem[];
   readonly description: string;
   readonly href: string;
   readonly icon: LucideIcon;
@@ -63,10 +66,33 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       },
       {
         active: "customers",
-        description: "기본정보, 첨부자료, 메모 히스토리",
-        href: "/crm/timeline",
+        description: "거래처와 매출 데이터를 등록하고, 기존 거래처 정보를 조회·수정하며 데이터 상태를 관리",
+        href: "/",
         icon: Building2,
-        label: "거래처 원장"
+        label: "거래처 관리",
+        children: [
+          {
+            active: "data",
+            description: "아직 없는 거래처 또는 매출 데이터를 새로 등록",
+            href: "/",
+            icon: FileSpreadsheet,
+            label: "등록"
+          },
+          {
+            active: "customers",
+            description: "등록된 거래처를 검색·조회하고 상세 정보와 운영 상태를 수정",
+            href: "/crm/timeline",
+            icon: Building2,
+            label: "거래처 원장"
+          },
+          {
+            active: "data-management",
+            description: "데이터 등록 이력과 누락·미매칭·정합성 문제를 확인하고 관리",
+            href: "/customers/data",
+            icon: Database,
+            label: "데이터 관리"
+          }
+        ]
       }
     ]
   },
@@ -75,17 +101,17 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "revenue",
-        description: "매출 기회, 이탈 징후, 업셀링 후보",
+        description: "거래처별 매출 변화를 분석해 성장 기회, 이탈 징후, 업셀링 후보와 다음 액션을 찾음",
         href: "/revenue/pipeline",
         icon: BarChart3,
-        label: "매출 성장"
+        label: "매출 인사이트"
       },
       {
         active: "revenue-ledger",
-        description: "ERP 거래원장과 거래처별 매출 내역",
+        description: "ERP 또는 업로드로 수집된 거래처별 실제 매출 원본 데이터를 조회",
         href: "/revenue/transactions",
         icon: ReceiptText,
-        label: "매출 거래내역"
+        label: "매출 내역"
       },
       {
         active: "assistant",
@@ -107,13 +133,6 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     label: "관리",
     items: [
       {
-        active: "data",
-        description: "거래처 마스터와 매출 거래내역 등록",
-        href: "/",
-        icon: FileSpreadsheet,
-        label: "데이터 등록"
-      },
-      {
         active: "settings",
         description: "회사 정보, 출발지, 운영 기준값",
         href: "/dashboard/settings",
@@ -124,8 +143,13 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
   }
 ];
 
+/** Expands each group's items into a flat leaf-item list — items with children contribute their children, not the parent. */
+export function flattenCustomerNavigationItems(groups: CustomerNavigationGroup[] = customerNavigationGroups): CustomerNavigationItem[] {
+  return groups.flatMap((group) => group.items.flatMap((item) => (item.children && item.children.length ? item.children : [item])));
+}
+
 export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
-  return customerNavigationGroups.flatMap((group) => group.items).find((item) => item.active === active)?.label || "지도 홈";
+  return flattenCustomerNavigationItems().find((item) => item.active === active)?.label || "지도 홈";
 }
 
 export function getCustomerQuickActions() {

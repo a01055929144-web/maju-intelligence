@@ -101,6 +101,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       quickNav={{
         assistantHref: withCompanyQuery("/assistant"),
         backHref: "/admin/companies",
+        dataManagementHref: withCompanyQuery("/customers/data"),
         dataRegistrationHref: withCompanyQuery("/"),
         pipelineHref: withCompanyQuery("/revenue/pipeline"),
         reportHref: withCompanyQuery("/reports/latest"),
