@@ -314,9 +314,9 @@ function MapControls({
         <MapPin className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">로드뷰</span>
       </button>
-      <button aria-label="큰 지도" title="큰 지도" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800" onClick={onLargeMap} type="button">
+      <button aria-label="전체화면 지도" title="전체화면 지도" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800" onClick={onLargeMap} type="button">
         <ExternalLink className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">큰 지도</span>
+        <span className="hidden sm:inline">전체화면</span>
       </button>
     </div>
   );
@@ -542,14 +542,14 @@ function FallbackAddressMap({
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
         <div className="absolute right-3 z-30 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur" style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
           <button
-            aria-label="큰 지도"
+            aria-label="전체화면 지도"
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800"
             onClick={() => openInternalLargeMap({ focusedMarkerId, markers, routePath: routePath || emptyRoutePath })}
-            title="큰 지도"
+            title="전체화면 지도"
             type="button"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">큰 지도</span>
+            <span className="hidden sm:inline">전체화면</span>
           </button>
         </div>
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">

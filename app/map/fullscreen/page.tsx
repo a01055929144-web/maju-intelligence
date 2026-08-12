@@ -35,7 +35,7 @@ export default function FullscreenMapPage() {
     <main className="flex h-screen flex-col bg-slate-950 text-white">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
         <div className="min-w-0">
-          <h1 className="truncate text-base font-black">MAJU 내부 큰 지도</h1>
+          <h1 className="truncate text-base font-black">MAJU 전체화면 지도</h1>
           <p className="mt-0.5 truncate text-xs font-bold text-slate-400">현재 화면의 마커와 경로를 그대로 크게 표시합니다.</p>
         </div>
         <button
@@ -61,7 +61,7 @@ export default function FullscreenMapPage() {
             <div className="max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
               <p className="text-lg font-black">표시할 지도 데이터가 없습니다.</p>
               <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
-                원래 지도 화면에서 큰 지도 버튼을 다시 눌러주세요. 브라우저가 임시 지도 데이터를 차단한 경우 새창에 전달되지 않을 수 있습니다.
+                원래 지도 화면에서 전체화면 버튼을 다시 눌러주세요. 브라우저가 임시 지도 데이터를 차단한 경우 새창에 전달되지 않을 수 있습니다.
               </p>
             </div>
           </div>
