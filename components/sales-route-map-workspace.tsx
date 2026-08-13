@@ -624,6 +624,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                       setSelectedId(previewStore.id);
                       setPreviewStoreId("");
                     }}
+                    onSave={(edit) => updateStore(previewStore.id, edit)}
                     store={previewStore}
                   />
                 ) : null}
@@ -922,23 +923,69 @@ function RouteWorkspaceGuide({
   );
 }
 
+function buildNaverMapNavigateUrl(store: { readonly address?: string; readonly name: string; readonly region: string }) {
+  const query = [store.name, store.address || store.region].filter(Boolean).join(" ");
+  // 좌표를 별도로 들고 있지 않아 정확한 nmap:// 턴바이턴 경로 대신, 상호명+주소로 유일하게
+  // 매칭되면 그 매장 상세로 바로 이동하는 지도 검색 딥링크를 씁니다. 모바일에서는 네이버지도 앱이
+  // 설치돼 있으면 자동으로 앱이 열리고, 거기서 한 번 더 누르면 바로 길찾기로 넘어갑니다.
+  return `https://map.naver.com/p/search/${encodeURIComponent(query || "매장")}`;
+}
+
 function StoreQuickCard({
   onClose,
+  onNavigate,
   onOpenDetail,
+  onSave,
   store
 }: {
   readonly onClose: () => void;
+  readonly onNavigate?: () => void;
   readonly onOpenDetail: () => void;
+  readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
   readonly store: StoreRow;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [draft, setDraft] = useState({
+    name: store.name,
+    phone: store.phone || "",
+    deliveryDriver: store.deliveryDriver || "",
+    memo: store.memo || ""
+  });
+
+  useEffect(() => {
+    setDraft({ name: store.name, phone: store.phone || "", deliveryDriver: store.deliveryDriver || "", memo: store.memo || "" });
+    setIsEditing(false);
+  }, [store.id]);
+
+  async function handleSave() {
+    if (!onSave) return;
+    setIsSaving(true);
+    try {
+      await onSave(draft);
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
-    <div className="absolute left-4 top-4 z-30 h-auto w-[min(280px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)]">
+    <div className="absolute left-4 top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)]">
       <div className="flex items-start justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5 pr-1">
-            <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
-            <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-          </div>
+          {isEditing ? (
+            <input
+              autoFocus
+              className="h-8 w-full rounded-md border border-teal-200 bg-teal-50/50 px-2 text-[15px] font-black text-slate-950 outline-none focus:border-teal-400"
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              value={draft.name}
+            />
+          ) : (
+            <div className="flex min-w-0 items-center gap-1.5 pr-1">
+              <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
+              <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+            </div>
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700">{store.grade}등급</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
@@ -953,12 +1000,54 @@ function StoreQuickCard({
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
-        <div className="mt-2.5 flex items-center justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">{store.deliveryVehicleName || "담당자 미지정"}</span>
-          <button className="maju-button-primary h-8 shrink-0 px-3 text-xs" onClick={onOpenDetail} type="button">
-            상세 열기
-          </button>
-        </div>
+        {isEditing ? (
+          <div className="mt-2 space-y-1.5">
+            <input
+              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+              onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
+              placeholder="연락처"
+              value={draft.phone}
+            />
+            <input
+              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+              onChange={(event) => setDraft((current) => ({ ...current, deliveryDriver: event.target.value }))}
+              placeholder="담당 기사"
+              value={draft.deliveryDriver}
+            />
+            <textarea
+              className="min-h-14 w-full resize-none rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+              onChange={(event) => setDraft((current) => ({ ...current, memo: event.target.value }))}
+              placeholder="메모"
+              value={draft.memo}
+            />
+            <div className="flex items-center justify-end gap-1.5">
+              <button className="maju-button-secondary h-8 px-3 text-xs" disabled={isSaving} onClick={() => setIsEditing(false)} type="button">
+                취소
+              </button>
+              <button className="maju-button-primary h-8 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} onClick={handleSave} type="button">
+                {isSaving ? "저장 중" : "저장"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">{store.deliveryVehicleName || "담당자 미지정"}</span>
+              {onSave ? (
+                <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
+                  <Edit3 className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              <button className="maju-button-secondary h-8 shrink-0 px-3 text-xs" onClick={onNavigate || (() => window.open(buildNaverMapNavigateUrl(store), "_blank", "noopener,noreferrer"))} type="button">
+                <Navigation className="h-3.5 w-3.5" />
+                길찾기
+              </button>
+              <button className="maju-button-primary h-8 shrink-0 px-3 text-xs" onClick={onOpenDetail} type="button">
+                상세 열기
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1735,14 +1824,28 @@ function TodayCourseView({
                           </span>
                           <span className="flex shrink-0 flex-col items-end gap-2">
                             <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                            <span
-                              className="maju-button-secondary px-2 py-1 text-[11px]"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                toggleRouteStore(store.id);
-                              }}
-                            >
-                              해제
+                            <span className="flex items-center gap-1">
+                              <a
+                                aria-label={`${store.name} 길찾기`}
+                                className="maju-button-secondary inline-flex h-6 items-center gap-1 px-2 text-[11px]"
+                                href={buildNaverMapNavigateUrl(store)}
+                                onClick={(event) => event.stopPropagation()}
+                                rel="noreferrer"
+                                target="_blank"
+                                title="네이버지도로 길찾기"
+                              >
+                                <Navigation className="h-3 w-3" />
+                                길찾기
+                              </a>
+                              <span
+                                className="maju-button-secondary px-2 py-1 text-[11px]"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleRouteStore(store.id);
+                                }}
+                              >
+                                해제
+                              </span>
                             </span>
                           </span>
                         </div>
