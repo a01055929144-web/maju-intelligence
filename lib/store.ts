@@ -98,6 +98,8 @@ export type CustomerMasterItem = {
   industry: string;
   lastOrderDays: number;
   loadingPosition?: string;
+  businessHours?: string;
+  menuSummary?: string;
   naverPlaceUrl?: string;
   kakaoPlaceUrl?: string;
   googleMapUrl?: string;
@@ -126,6 +128,8 @@ export type CustomerMasterInput = {
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
+  businessHours?: string;
+  menuSummary?: string;
   naverPlaceUrl?: string;
   kakaoPlaceUrl?: string;
   googleMapUrl?: string;
@@ -184,6 +188,8 @@ export type RoutePlanStop = LeadItem & {
   email?: string;
   industry?: string;
   loadingPosition?: string;
+  businessHours?: string;
+  menuSummary?: string;
   openingDate?: string;
   order: number;
   phone?: string;
@@ -419,6 +425,7 @@ const AUTH_CREDENTIALS_ID = "maju-default";
 const CUSTOMER_MASTER_SELECT =
   "id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url";
 const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS = `${CUSTOMER_MASTER_SELECT},naver_place_url,kakao_place_url,google_map_url,place_links_checked_at`;
+const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS},business_hours,menu_summary`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -473,6 +480,11 @@ function isInvalidSupabaseApiKeyError(error: unknown) {
 function isMissingCustomerPlaceLinksColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return ["naver_place_url", "kakao_place_url", "google_map_url", "place_links_checked_at"].some((column) => message.includes(column));
+}
+
+function isMissingCustomerHoursMenuColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return ["business_hours", "menu_summary"].some((column) => message.includes(column));
 }
 
 function isMissingTelegramChatIdColumnError(error: unknown) {
@@ -1789,18 +1801,34 @@ export async function getCustomerMaster(
     representative_name: string | null;
     visit_count: number | null;
     loading_position: string | null;
+    business_hours?: string | null;
+    menu_summary?: string | null;
   };
   let rows: CustomerMasterRow[];
 
   try {
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
     );
   } catch (error) {
-    if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
-    rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-    );
+    if (isMissingCustomerHoursMenuColumnError(error)) {
+      try {
+        rows = await supabaseRequest<Array<CustomerMasterRow>>(
+          `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        );
+      } catch (innerError) {
+        if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
+        rows = await supabaseRequest<Array<CustomerMasterRow>>(
+          `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        );
+      }
+    } else if (isMissingCustomerPlaceLinksColumnError(error)) {
+      rows = await supabaseRequest<Array<CustomerMasterRow>>(
+        `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      );
+    } else {
+      throw error;
+    }
   }
 
   return {
@@ -1863,7 +1891,9 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
       visit_count: input.visitCount || 0,
-      loading_position: input.loadingPosition || null
+      loading_position: input.loadingPosition || null,
+      business_hours: input.businessHours || null,
+      menu_summary: input.menuSummary || null
     },
     0
   );
@@ -1919,9 +1949,22 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     visit_count: input.visitCount || 0,
     loading_position: input.loadingPosition || null
   };
-  const rows = await upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...placeLinks }).catch((error) => {
+  const hoursMenuFields = {
+    business_hours: input.businessHours || null,
+    menu_summary: input.menuSummary || null
+  };
+  const rows = await upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...placeLinks, ...hoursMenuFields }).catch((error) => {
+    if (isMissingCustomerHoursMenuColumnError(error)) {
+      return upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...placeLinks }).catch((innerError) => {
+        if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
+        return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
+      });
+    }
     if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
-    return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
+    return upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...hoursMenuFields }).catch((innerError) => {
+      if (!isMissingCustomerHoursMenuColumnError(innerError)) throw innerError;
+      return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
+    });
   });
   const savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
 
@@ -2788,6 +2831,8 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         email: customer.email,
         industry: customer.industry,
         loadingPosition: customer.loadingPosition,
+        businessHours: customer.businessHours,
+        menuSummary: customer.menuSummary,
         openingDate: customer.openingDate,
         phone: customer.phone,
         representativeName: customer.representativeName,
@@ -4405,7 +4450,9 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     region: asNullableString(row.region),
     representative_name: asNullableString(row.representative_name),
     visit_count: typeof row.visit_count === "number" ? row.visit_count : 0,
-    loading_position: asNullableString(row.loading_position)
+    loading_position: asNullableString(row.loading_position),
+    business_hours: asNullableString(row.business_hours),
+    menu_summary: asNullableString(row.menu_summary)
   };
 }
 
@@ -4438,6 +4485,8 @@ function toCustomerMasterItem(
     representative_name: string | null;
     visit_count: number | null;
     loading_position: string | null;
+    business_hours?: string | null;
+    menu_summary?: string | null;
   },
   index: number
 ): CustomerMasterItem {
@@ -4462,6 +4511,8 @@ function toCustomerMasterItem(
     industry: row.industry || "미분류",
     lastOrderDays: Number(row.last_order_days || 0),
     loadingPosition: row.loading_position || undefined,
+    businessHours: row.business_hours || undefined,
+    menuSummary: row.menu_summary || undefined,
     googleMapUrl: row.google_map_url || undefined,
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),

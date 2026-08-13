@@ -23,11 +23,15 @@ type RouteLeg = {
   toAddress: string;
 };
 
+export type GeoPoint = { lat: number; lng: number };
+
 export type RouteSequence = {
   legs: RouteLeg[];
   originAddress: string;
+  originPoint?: GeoPoint | null;
   path: KakaoRoutePoint[];
   stops: string[];
+  stopPoints?: Array<GeoPoint | null>;
   totalDistanceKm: number;
   totalDurationMinutes: number;
 };

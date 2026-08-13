@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   const companyId = scope.companyId;
   const originAddress = String(body?.originAddress || (await getCompanyOriginAddress(companyId))).trim();
-  const optimizedLegs = await optimizeRouteLegs(originAddress, destinations);
+  const { legs: optimizedLegs, geoPoints } = await optimizeRouteLegs(originAddress, destinations);
   const legs = optimizedLegs.map(({ destinationAddress, fromAddress, order, result }) => ({
     distanceKm: result.distanceKm,
     durationMinutes: result.durationMinutes,
@@ -51,8 +51,10 @@ export async function POST(request: NextRequest) {
     routeSequence: {
       legs,
       originAddress,
+      originPoint: geoPoints.get(originAddress) ?? null,
       path: dedupePath(path),
       stops: optimizedStops,
+      stopPoints: optimizedStops.map((address) => geoPoints.get(address) ?? null),
       totalDistanceKm,
       totalDurationMinutes
     }
@@ -113,7 +115,7 @@ async function optimizeRouteLegs(originAddress: string, destinations: string[]) 
     fromAddress = destinationAddress;
   }
 
-  return optimizedLegs;
+  return { legs: optimizedLegs, geoPoints };
 }
 
 function extractRoutePath(routeGeometry: unknown): RoutePoint[] {

@@ -1,12 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import { CalendarDays, Camera, Check, CheckCircle2, ChevronDown, Clock, Copy, Edit3, FileImage, MapPin, MessageSquareText, Navigation, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Search, Store, Truck, UserRound, X, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import {
+  CalendarDays,
+  Camera,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Copy,
+  Edit3,
+  FileImage,
+  Maximize2,
+  Minimize2,
+  MapPin,
+  MessageSquareText,
+  Navigation,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  RefreshCw,
+  Search,
+  Store,
+  Truck,
+  UserRound,
+  X,
+  type LucideIcon
+} from "lucide-react";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
+import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { DeliveryVehicle, RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
@@ -53,6 +79,7 @@ type StoreEdit = Partial<
     | "businessCertificateStatus"
     | "businessRegistrationNumber"
     | "businessStatus"
+    | "businessHours"
     | "deliveryArea"
     | "deliveryDriver"
     | "email"
@@ -60,6 +87,7 @@ type StoreEdit = Partial<
     | "grade"
     | "industry"
     | "memo"
+    | "menuSummary"
     | "name"
     | "openingDate"
     | "phone"
@@ -170,6 +198,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, KPI 통계/가이드 영역은 기본적으로 접어둡니다.
   const [statsExpanded, setStatsExpanded] = useState(false);
+  // 지도가 브라우저 전체 화면을 차지하는 실제 Fullscreen API 모드. 팝업 창을 새로 띄우는 대신
+  // 이 작업공간 전체를 그대로 화면 가득 확대해 네이버맵·카카오맵과 같은 방식으로 조작할 수 있습니다.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -222,6 +254,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
+  const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
   const visibleMapReadyStoreCount = useMemo(() => visibleStores.filter((store) => Boolean(store.address?.trim())).length, [visibleStores]);
@@ -320,6 +353,21 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
 
   useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => null);
+      return;
+    }
+    setStatsExpanded(false);
+    await workspaceRef.current?.requestFullscreen().catch(() => null);
+  }
+
+  useEffect(() => {
     if (!sourceReady) {
       setFuelPrices({ diesel: null, gasoline: null });
       return;
@@ -386,7 +434,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   }
 
   return (
-    <div className="maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0">
+    <div
+      className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0 ${isFullscreen ? "!rounded-none" : ""}`}
+      ref={workspaceRef}
+    >
       <header className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <p className="maju-muted-label text-teal-700">지도 작업공간</p>
@@ -441,6 +492,16 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             type="button"
           >
             {statsExpanded ? "통계 접기" : "통계 보기"}
+          </button>
+          <button
+            aria-pressed={isFullscreen}
+            className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${isFullscreen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "전체 화면 종료" : "네이버맵·카카오맵처럼 전체 화면으로 크게 보기"}
+            type="button"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            <span className="hidden sm:inline">{isFullscreen ? "전체 화면 종료" : "전체 화면"}</span>
           </button>
           <button
             aria-label="필터 초기화"
@@ -601,7 +662,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             vehicles={deliveryVehicles}
           />
 
-          <div className="relative h-[620px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
+          <div className={`relative min-h-0 min-w-0 bg-slate-100 ${isFullscreen ? "h-full" : "h-[620px] xl:h-full"}`}>
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
@@ -625,6 +686,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                       setPreviewStoreId("");
                     }}
                     onSave={(edit) => updateStore(previewStore.id, edit)}
+                    originAddress={originMarker?.address || ""}
                     store={previewStore}
                   />
                 ) : null}
@@ -923,25 +985,201 @@ function RouteWorkspaceGuide({
   );
 }
 
-function buildNaverMapNavigateUrl(store: { readonly address?: string; readonly name: string; readonly region: string }) {
-  const query = [store.name, store.address || store.region].filter(Boolean).join(" ");
-  // 좌표를 별도로 들고 있지 않아 정확한 nmap:// 턴바이턴 경로 대신, 상호명+주소로 유일하게
-  // 매칭되면 그 매장 상세로 바로 이동하는 지도 검색 딥링크를 씁니다. 모바일에서는 네이버지도 앱이
-  // 설치돼 있으면 자동으로 앱이 열리고, 거기서 한 번 더 누르면 바로 길찾기로 넘어갑니다.
-  return `https://map.naver.com/p/search/${encodeURIComponent(query || "매장")}`;
+/** On-demand geocode for one destination (and optionally an origin) via /api/routes/geocode. */
+async function geocodeAddresses(addresses: string[]): Promise<Record<string, GeoPoint | null>> {
+  const uniqueAddresses = Array.from(new Set(addresses.filter(Boolean)));
+  if (!uniqueAddresses.length) return {};
+  const response = await fetch("/api/routes/geocode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ addresses: uniqueAddresses })
+  }).catch(() => null);
+  if (!response?.ok) return {};
+  const payload = await response.json().catch(() => null);
+  return payload?.points || {};
+}
+
+/**
+ * Inline "길찾기" action: resolves real coordinates for origin/destination on first open (via
+ * /api/routes/geocode) and offers a real turn-by-turn route in Kakao Map (works with or without
+ * the app), plus app-required Naver Map / Tmap options, with a plain search-link fallback if
+ * coordinates couldn't be resolved. See lib/navigation-links.ts for why Kakao is the default.
+ */
+function NavigateMenu({
+  compact,
+  destinationAddress,
+  destinationName,
+  originAddress,
+  knownDestinationPoint,
+  knownOriginPoint
+}: {
+  readonly compact?: boolean;
+  readonly destinationAddress?: string;
+  readonly destinationName: string;
+  readonly originAddress?: string;
+  /** Skip the geocode round-trip when the caller already resolved these (e.g. from a Tmap route calc). */
+  readonly knownDestinationPoint?: GeoPoint | null;
+  readonly knownOriginPoint?: GeoPoint | null;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [points, setPoints] = useState<{ origin: GeoPoint | null; destination: GeoPoint | null } | null>(
+    knownDestinationPoint !== undefined ? { origin: knownOriginPoint || null, destination: knownDestinationPoint } : null
+  );
+
+  async function handleToggle(event: MouseEvent) {
+    event.stopPropagation();
+    const nextOpen = !isOpen;
+    setIsOpen(nextOpen);
+    if (nextOpen && !points && destinationAddress) {
+      setIsLoading(true);
+      const resolved = await geocodeAddresses([originAddress || "", destinationAddress]);
+      setPoints({
+        origin: (originAddress && resolved[originAddress]) || null,
+        destination: resolved[destinationAddress] || null
+      });
+      setIsLoading(false);
+    }
+  }
+
+  const origin: NavigationStop = { name: "출발지", point: points?.origin || null };
+  const destination: NavigationStop = { name: destinationName, point: points?.destination || null };
+  const links = buildRouteNavigationLinks(origin, destination);
+
+  return (
+    <div className="relative">
+      <button
+        className={compact ? "maju-button-secondary inline-flex h-6 items-center gap-1 px-2 text-[11px]" : "maju-button-secondary h-8 shrink-0 px-3 text-xs"}
+        onClick={handleToggle}
+        type="button"
+      >
+        <Navigation className="h-3 w-3" />
+        길찾기
+      </button>
+      {isOpen ? (
+        <div
+          className="absolute right-0 top-8 z-40 w-56 space-y-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,.18)]"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {isLoading ? (
+            <p className="px-2 py-2 text-xs font-bold text-slate-400">위치 확인 중...</p>
+          ) : (
+            <>
+              <a
+                className="flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-black text-slate-900 hover:bg-teal-50"
+                href={links.kakaoWebUrl}
+                onClick={() => setIsOpen(false)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                카카오맵으로 길찾기
+                <span className="text-[10px] font-bold text-teal-700">기본</span>
+              </a>
+              <a
+                aria-disabled={!links.naverAppUrl}
+                className={`flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-bold ${
+                  links.naverAppUrl ? "text-slate-700 hover:bg-slate-50" : "pointer-events-none text-slate-300"
+                }`}
+                href={links.naverAppUrl || undefined}
+                onClick={() => setIsOpen(false)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                네이버지도 앱 길찾기
+                <span className="text-[10px] font-bold text-slate-400">앱 필요</span>
+              </a>
+              <a
+                aria-disabled={!links.tmapAppUrl}
+                className={`flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-bold ${
+                  links.tmapAppUrl ? "text-slate-700 hover:bg-slate-50" : "pointer-events-none text-slate-300"
+                }`}
+                href={links.tmapAppUrl || undefined}
+                onClick={() => setIsOpen(false)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                티맵 길찾기
+                <span className="text-[10px] font-bold text-slate-400">앱 필요</span>
+              </a>
+              <a
+                className="flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                href={links.naverSearchUrl}
+                onClick={() => setIsOpen(false)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                네이버 지도에서 검색
+              </a>
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * "전체 경로 길찾기": builds one real multi-stop route (출발지 -> 경유지... -> 마지막 배송지)
+ * from the already-Tmap-geocoded course, instead of a single-place search link. Kakao Map
+ * supports up to 5 waypoints via URL scheme, so a course longer than 6 stops (start + 5 vias +
+ * destination) is capped to the first 5 vias + final destination and flagged as partial.
+ */
+function FullRouteNavigateAction({
+  originLabel,
+  originPoint,
+  stopPointByAddress,
+  stores
+}: {
+  readonly originLabel: string;
+  readonly originPoint?: GeoPoint | null;
+  readonly stopPointByAddress: Map<string, GeoPoint | null>;
+  readonly stores: StoreRow[];
+}) {
+  if (!stores.length) return null;
+
+  const stops: NavigationStop[] = stores.map((store) => ({
+    name: store.name,
+    point: stopPointByAddress.get(getRouteStopAddress(store)) || null
+  }));
+  const destination = stops[stops.length - 1];
+  const waypoints = stops.slice(0, -1);
+  const links = buildRouteNavigationLinks({ name: originLabel, point: originPoint || null }, destination, waypoints);
+  const isPartial = stops.length > 6;
+
+  return (
+    <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+      <p className="text-xs font-black text-slate-950">전체 경로 길찾기</p>
+      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+        {links.hasCoordinates
+          ? `${originLabel} → ${isPartial ? "경유지 5곳" : `경유지 ${waypoints.length}곳`} → ${destination.name}${isPartial ? " (카카오맵 경유지 제한으로 앞 5곳만 반영)" : ""}`
+          : "좌표를 확인할 수 없어 첫 배송지 검색으로 대체합니다."}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <a className="maju-button-primary h-9 px-3 text-xs" href={links.kakaoWebUrl} rel="noreferrer" target="_blank">
+          <Navigation className="h-3.5 w-3.5" />
+          카카오맵으로 전체 경로 길찾기
+        </a>
+        {links.naverAppUrl ? (
+          <a className="maju-button-secondary h-9 px-3 text-xs" href={links.naverAppUrl} rel="noreferrer" target="_blank">
+            네이버지도 앱 (경유지 포함)
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function StoreQuickCard({
   onClose,
-  onNavigate,
   onOpenDetail,
   onSave,
+  originAddress,
   store
 }: {
   readonly onClose: () => void;
-  readonly onNavigate?: () => void;
   readonly onOpenDetail: () => void;
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
+  readonly originAddress?: string;
   readonly store: StoreRow;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -950,11 +1188,20 @@ function StoreQuickCard({
     name: store.name,
     phone: store.phone || "",
     deliveryDriver: store.deliveryDriver || "",
-    memo: store.memo || ""
+    memo: store.memo || "",
+    businessHours: store.businessHours || "",
+    menuSummary: store.menuSummary || ""
   });
 
   useEffect(() => {
-    setDraft({ name: store.name, phone: store.phone || "", deliveryDriver: store.deliveryDriver || "", memo: store.memo || "" });
+    setDraft({
+      name: store.name,
+      phone: store.phone || "",
+      deliveryDriver: store.deliveryDriver || "",
+      memo: store.memo || "",
+      businessHours: store.businessHours || "",
+      menuSummary: store.menuSummary || ""
+    });
     setIsEditing(false);
   }, [store.id]);
 
@@ -1000,6 +1247,22 @@ function StoreQuickCard({
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
+        {!isEditing && (store.businessHours || store.menuSummary) ? (
+          <div className="mt-1.5 space-y-1">
+            {store.businessHours ? (
+              <p className="flex gap-2 text-[12px] font-bold leading-5 text-slate-600">
+                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600" />
+                <span className="line-clamp-1">{store.businessHours}</span>
+              </p>
+            ) : null}
+            {store.menuSummary ? (
+              <p className="flex gap-2 text-[12px] font-bold leading-5 text-slate-600">
+                <Store className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <span className="line-clamp-2">{store.menuSummary}</span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {isEditing ? (
           <div className="mt-2 space-y-1.5">
             <input
@@ -1013,6 +1276,18 @@ function StoreQuickCard({
               onChange={(event) => setDraft((current) => ({ ...current, deliveryDriver: event.target.value }))}
               placeholder="담당 기사"
               value={draft.deliveryDriver}
+            />
+            <input
+              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+              onChange={(event) => setDraft((current) => ({ ...current, businessHours: event.target.value }))}
+              placeholder="영업시간 (예: 매일 10:00-22:00)"
+              value={draft.businessHours}
+            />
+            <input
+              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+              onChange={(event) => setDraft((current) => ({ ...current, menuSummary: event.target.value }))}
+              placeholder="주요 메뉴/취급 품목"
+              value={draft.menuSummary}
             />
             <textarea
               className="min-h-14 w-full resize-none rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
@@ -1038,10 +1313,7 @@ function StoreQuickCard({
                   <Edit3 className="h-3.5 w-3.5" />
                 </button>
               ) : null}
-              <button className="maju-button-secondary h-8 shrink-0 px-3 text-xs" onClick={onNavigate || (() => window.open(buildNaverMapNavigateUrl(store), "_blank", "noopener,noreferrer"))} type="button">
-                <Navigation className="h-3.5 w-3.5" />
-                길찾기
-              </button>
+              <NavigateMenu destinationAddress={store.address || store.region} destinationName={store.name} originAddress={originAddress} />
               <button className="maju-button-primary h-8 shrink-0 px-3 text-xs" onClick={onOpenDetail} type="button">
                 상세 열기
               </button>
@@ -1391,6 +1663,11 @@ function TodayCourseView({
   const originMarker = markers.find((marker) => marker.tone === "origin");
   const routeOriginAddress = routeOriginMode === "current" && currentLocationOrigin ? currentLocationOrigin : originMarker?.address || "";
   const routeOriginLabel = routeOriginMode === "current" && currentLocationOrigin ? "현위치 출발" : "회사 출발지";
+  // 티맵 계산이 이미 좌표를 구했다면(routeSequence.stopPoints) 매장별 길찾기가 다시 지오코딩하지
+  // 않고 그 좌표를 그대로 재사용하도록 주소 -> 좌표 맵을 만들어둡니다.
+  const routeStopPointByAddress = new Map<string, GeoPoint | null>(
+    (routeSequence?.stops || []).map((address, index) => [address, routeSequence?.stopPoints?.[index] || null])
+  );
   const sequencedRouteStores = routeSequence?.stops.length
     ? routeSequence.stops
         .map((address) => selectedRouteStores.find((store) => getRouteStopAddress(store) === address))
@@ -1631,6 +1908,7 @@ function TodayCourseView({
           <StoreQuickCard
             onClose={() => setRouteSelectedStoreId("")}
             onOpenDetail={() => onSelectStore(routeSelectedStore.id)}
+            originAddress={routeOriginAddress}
             store={routeSelectedStore}
           />
         ) : null}
@@ -1735,6 +2013,9 @@ function TodayCourseView({
                     showMap={false}
                   />
                 ) : null}
+                {routeSequence && sequencedRouteStores.length ? (
+                  <FullRouteNavigateAction originLabel={routeOriginLabel} originPoint={routeSequence.originPoint} stores={sequencedRouteStores} stopPointByAddress={routeStopPointByAddress} />
+                ) : null}
                 {routeSelectedStore ? (
                   <DeliveryProofPanel
                     onSave={(proof) => saveDeliveryProof(routeSelectedStore.id, proof)}
@@ -1824,19 +2105,15 @@ function TodayCourseView({
                           </span>
                           <span className="flex shrink-0 flex-col items-end gap-2">
                             <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                            <span className="flex items-center gap-1">
-                              <a
-                                aria-label={`${store.name} 길찾기`}
-                                className="maju-button-secondary inline-flex h-6 items-center gap-1 px-2 text-[11px]"
-                                href={buildNaverMapNavigateUrl(store)}
-                                onClick={(event) => event.stopPropagation()}
-                                rel="noreferrer"
-                                target="_blank"
-                                title="네이버지도로 길찾기"
-                              >
-                                <Navigation className="h-3 w-3" />
-                                길찾기
-                              </a>
+                            <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                              <NavigateMenu
+                                compact
+                                destinationAddress={getRouteStopAddress(store)}
+                                destinationName={store.name}
+                                knownDestinationPoint={routeStopPointByAddress.get(getRouteStopAddress(store))}
+                                knownOriginPoint={routeSequence?.originPoint}
+                                originAddress={routeOriginAddress}
+                              />
                               <span
                                 className="maju-button-secondary px-2 py-1 text-[11px]"
                                 onClick={(event) => {
@@ -2229,6 +2506,8 @@ function StoreDetail({
   const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
   const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
+  const [draftBusinessHours, setDraftBusinessHours] = useState(store.businessHours || "");
+  const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
   const [draftDeliveryArea, setDraftDeliveryArea] = useState(store.deliveryArea || store.region);
   const [draftDeliveryDriver, setDraftDeliveryDriver] = useState(store.deliveryDriver || "");
   const [draftEmail, setDraftEmail] = useState(store.email);
@@ -2264,6 +2543,8 @@ function StoreDetail({
       businessCertificateStatus: draftBusinessCertificateStatus,
       businessRegistrationNumber: draftBusinessNumber,
       businessStatus: draftBusinessStatus,
+      businessHours: draftBusinessHours,
+      menuSummary: draftMenuSummary,
       deliveryArea: draftDeliveryArea,
       deliveryDriver: draftDeliveryDriver,
       email: draftEmail,
@@ -2342,6 +2623,8 @@ function StoreDetail({
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
                   <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
                   <EditRow label="업종" onChange={setDraftIndustry} value={draftIndustry} />
+                  <EditRow label="영업시간" onChange={setDraftBusinessHours} value={draftBusinessHours} />
+                  <EditRow label="주요 메뉴/취급 품목" onChange={setDraftMenuSummary} value={draftMenuSummary} />
                   <EditRow label="계좌정보" onChange={setDraftBankAccount} value={draftBankAccount} />
                   <SelectRow
                     label="사업자등록증"
@@ -3008,6 +3291,8 @@ function toCustomerPayload(store: StoreRow) {
     email: store.email,
     industry: store.industry,
     loadingPosition: store.memo || "",
+    businessHours: store.businessHours || "",
+    menuSummary: store.menuSummary || "",
     monthlyRevenue: Number(store.expectedRevenue || 0),
     openingDate: store.openingDate,
     phone: store.phone,
