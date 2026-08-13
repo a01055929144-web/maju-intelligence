@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
@@ -169,6 +169,12 @@ function syncSelectedCustomerUrl(customerId: string | undefined) {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+// Tailwind's JIT scanner needs complete, literal class strings (a template-interpolated
+// `xl:grid-cols-[${...}]` is invisible to it), so both collapsed states are spelled out here.
+function customerListGridColsClassName(listCollapsed: boolean) {
+  return listCollapsed ? "xl:grid-cols-[220px_minmax(0,1fr)]" : "xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]";
+}
+
 export default function CrmTimelinePage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
@@ -178,6 +184,10 @@ export default function CrmTimelinePage() {
   const [dbError, setDbError] = useState("");
   const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "sample" | "error">("loading");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // 거래처 검색·목록 사이드바가 항상 펼쳐져 있으면 옆의 선택 거래처 상세(원장/첨부자료)가 계속
+  // 좁게 눌려 보였습니다. 거래처를 고르면 자동으로 목록을 접어 상세가 전체 폭을 쓰도록 하고,
+  // 필요하면 다시 펼칠 수 있게 했습니다.
+  const [listCollapsed, setListCollapsed] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
   const [operationFilter, setOperationFilter] = useState<OperationFilter>("all");
@@ -1023,7 +1033,28 @@ export default function CrmTimelinePage() {
             title="거래처 목록"
             description="검색과 필터로 거래처를 찾고, 선택한 거래처의 원장을 오른쪽에서 관리합니다."
           />
-          <div className="grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
+          {/*
+            검색·필터 사이드바(360~400px)가 거래처 상세(원장/첨부자료) 그리드 옆에 항상 펼쳐져 있으면,
+            상세 쪽에 실제로 남는 폭이 좁아져 안의 정보가 눌려 보였습니다. 거래처를 고르면 목록을
+            자동으로 접어서 상세가 전체 폭을 쓰게 하고, 필요할 때만 다시 펼치도록 했습니다.
+          */}
+          <div className={`grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 ${customerListGridColsClassName(listCollapsed)}`}>
+            {listCollapsed ? (
+              <button
+                aria-label="거래처 검색·목록 펼치기"
+                className="maju-section-card flex items-center gap-2 px-3 py-3 text-left transition hover:bg-slate-50 xl:sticky xl:top-4 xl:flex-col xl:items-start xl:gap-3"
+                onClick={() => setListCollapsed(false)}
+                type="button"
+              >
+                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
+                  <PanelLeftOpen className="h-4 w-4 text-slate-500" />
+                  거래처 검색·목록
+                </span>
+                <span className="text-xs font-bold text-slate-500">
+                  {selectedCustomer.customerName} 선택됨 · {filteredCustomers.length}/{customers.length}곳
+                </span>
+              </button>
+            ) : (
             <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
               <div className="border-b border-slate-200/80 p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -1031,7 +1062,17 @@ export default function CrmTimelinePage() {
                     <h2 className="text-base font-black text-slate-950">거래처 검색·필터</h2>
                     <p className="mt-1 text-xs font-bold text-slate-500">검색 · 등급 · 보완 필요 항목</p>
                   </div>
-                  <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
+                    <button
+                      aria-label="거래처 검색·목록 접기"
+                      className="maju-button-secondary h-8 w-8 px-0"
+                      onClick={() => setListCollapsed(true)}
+                      type="button"
+                    >
+                      <PanelLeftClose className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
@@ -1185,7 +1226,14 @@ export default function CrmTimelinePage() {
                         type="checkbox"
                       />
                     ) : null}
-                    <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedIndex(index)} type="button">
+                    <button
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => {
+                        setSelectedIndex(index);
+                        setListCollapsed(true);
+                      }}
+                      type="button"
+                    >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
@@ -1232,6 +1280,7 @@ export default function CrmTimelinePage() {
               ) : null}
             </div>
           </aside>
+            )}
 
           <div className="min-w-0 space-y-4">
             <div className="maju-section-card scroll-mt-28 p-5" id="customer-ledger-detail">
@@ -1419,7 +1468,14 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {detailTab === "ledger" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(440px,0.42fr)]">
+            {/*
+              이 그리드는 좌측 260px 내비게이션 + 260px 거래처 목록 사이드바 안에 중첩돼 있어서, 화면이
+              2xl(1536px) 이상이어도 실제로 남는 폭은 훨씬 좁을 수 있습니다. 이전에 xl/2xl 뷰포트 기준
+              고정 2단 그리드(minmax(0,1fr)_minmax(440px,0.42fr))를 썼을 때 폭이 좁아지면 왼쪽 칸이
+              극단적으로 눌려 보이는 문제가 있었습니다(위 EditableField 폼과 같은 원인). 실제 남는 폭
+              기준으로 칸 수가 스스로 조절되도록 auto-fit으로 바꿨습니다.
+            */}
+            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] gap-4">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -1704,7 +1760,7 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(440px,0.42fr)]">
+            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] gap-4">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>

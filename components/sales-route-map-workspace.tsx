@@ -20,6 +20,8 @@ import {
   Navigation,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Plus,
   RefreshCw,
   Search,
@@ -195,7 +197,10 @@ const localStoreKeys = {
 export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, 좌우 목록 패널은 기본적으로 접어두고
+  // 얇은 토글 스트립만 남깁니다. 필요할 때 한 번 눌러서 펼치는 방식입니다.
+  const [leftCollapsed, setLeftCollapsed] = useState(true);
+  const [rightCollapsed, setRightCollapsed] = useState(true);
   // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, KPI 통계/가이드 영역은 기본적으로 접어둡니다.
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 지도가 브라우저 전체 화면을 차지하는 실제 Fullscreen API 모드. 팝업 창을 새로 띄우는 대신
@@ -576,7 +581,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         </>
       ) : null}
 
-      <section className="shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-2.5">
+      {/*
+        네이버맵/카카오맵처럼 지도가 배경을 꽉 채우고, 검색·필터 바와 좌우 패널은 그 위에 뜨는 카드로
+        보이도록 했습니다. 모바일(작은 화면)에서는 겹치는 카드가 쓰기 어려워서 xl 이상에서만 지도 위에
+        띄우고, 그 아래 화면에서는 기존처럼 지도 위쪽에 일반 문서 흐름으로 쌓이게 둡니다.
+      */}
+      <section
+        className={`shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-2.5 ${
+          activeView === "map"
+            ? "xl:absolute xl:inset-x-3 xl:top-3 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-4 xl:py-2.5 xl:shadow-lg xl:backdrop-blur-sm"
+            : ""
+        }`}
+      >
         <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -649,26 +665,20 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         ) : null}
       </section>
 
+      {/*
+        지도가 배경(전체 화면)이 되고, 배송담당자 필터·거래처 목록 패널은 그 위에 뜨는 카드로
+        배치됩니다(네이버맵/카카오맵 방식). xl 미만 화면은 겹치는 플로팅 카드가 오히려 쓰기
+        어려워서 기존처럼 지도 위/아래로 패널이 일반 문서 흐름으로 쌓이는 레이아웃을 유지합니다.
+      */}
       {activeView === "map" ? (
-        <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl xl:min-h-0 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_340px]" : "xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
-          <DeliveryAssignmentPanel
-            collapsed={leftCollapsed}
-            fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
-            onSelectVehicle={selectVehicle}
-            onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
-            onUpdateVehicle={updateVehicle}
-            selectedVehicleId={vehicleFilterId}
-            totalStores={allStores.length}
-            vehicles={deliveryVehicles}
-          />
-
-          <div className={`relative min-h-0 min-w-0 bg-slate-100 ${isFullscreen ? "h-full" : "h-[620px] xl:h-full"}`}>
+        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0">
+          <div className={`relative min-h-0 min-w-0 bg-slate-100 xl:absolute xl:inset-0 ${isFullscreen ? "h-full" : "h-[420px] xl:h-full"}`}>
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
-                    mapClassName="h-full min-h-[620px] rounded-none border-0 xl:min-h-0"
+                    mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={markers}
                     onMarkerClick={(marker) => {
                       if (!marker.id || marker.tone === "origin") return;
@@ -701,15 +711,32 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             )}
           </div>
 
-          <StoreManagementPanel
-            dataRegistrationHref={dataRegistrationHref}
-            onSelectStore={setSelectedId}
-            selectedStoreId={selectedId}
-            sourceReady={sourceReady}
-            title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 매장 거래처"}
-            stores={visibleStores}
-          />
-        </section>
+          <div className="min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:top-20 xl:bottom-3 xl:z-10 xl:w-[300px] xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg">
+            <DeliveryAssignmentPanel
+              collapsed={leftCollapsed}
+              fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
+              onSelectVehicle={selectVehicle}
+              onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
+              onUpdateVehicle={updateVehicle}
+              selectedVehicleId={vehicleFilterId}
+              totalStores={allStores.length}
+              vehicles={deliveryVehicles}
+            />
+          </div>
+
+          <div className="min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:top-20 xl:bottom-3 xl:z-10 xl:w-[340px] xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg">
+            <StoreManagementPanel
+              collapsed={rightCollapsed}
+              dataRegistrationHref={dataRegistrationHref}
+              onSelectStore={setSelectedId}
+              onToggleCollapsed={() => setRightCollapsed((value) => !value)}
+              selectedStoreId={selectedId}
+              sourceReady={sourceReady}
+              title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 매장 거래처"}
+              stores={visibleStores}
+            />
+          </div>
+        </div>
       ) : null}
 
       {activeView === "customers" ? (
@@ -797,6 +824,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     </div>
   );
 }
+
 
 function DeliveryAssignmentPanel({
   collapsed,
@@ -1429,20 +1457,42 @@ function VehicleEditForm({
 }
 
 function StoreManagementPanel({
+  collapsed,
   dataRegistrationHref,
   onSelectStore,
+  onToggleCollapsed,
   selectedStoreId,
   sourceReady,
   stores,
   title
 }: {
+  readonly collapsed: boolean;
   readonly dataRegistrationHref: string;
   readonly onSelectStore: (storeId: string) => void;
+  readonly onToggleCollapsed: () => void;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
   readonly title: string;
 }) {
+  if (collapsed) {
+    return (
+      <aside className="flex min-h-0 flex-col items-center gap-3 border-l border-slate-200/80 bg-white py-3">
+        <button
+          aria-label="거래처 목록 패널 펼치기"
+          className="maju-button-secondary h-9 w-9 px-0"
+          onClick={onToggleCollapsed}
+          type="button"
+        >
+          <PanelRightOpen className="h-4 w-4" />
+        </button>
+        <Store className="h-5 w-5 text-slate-500" />
+        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">{title}</span>
+        <span className="rounded-md bg-slate-100 px-1.5 py-1 text-[11px] font-black text-slate-700">{stores.length}</span>
+      </aside>
+    );
+  }
+
   return (
     <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
@@ -1451,6 +1501,14 @@ function StoreManagementPanel({
             <p className="text-sm font-black text-slate-950">{title}</p>
             <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
           </div>
+          <button
+            aria-label="거래처 목록 패널 접기"
+            className="maju-button-secondary h-8 w-8 shrink-0 px-0"
+            onClick={onToggleCollapsed}
+            type="button"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
           <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
