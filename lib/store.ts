@@ -1724,6 +1724,13 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
+    countTableRows("admin_audit_logs", "감사 로그", "데이터 등록/수정 시 남는 관리자 감사 로그입니다."),
+    countTableRows("column_mappings", "엑셀 헤더 매핑 이력", "대량 등록 시 저장되는 헤더-필드 매핑 이력입니다."),
+    countTableRows("raw_customer_rows", "엑셀 원본 행", "대량 등록 원본 엑셀 행 백업입니다."),
+    countTableRows("health_score_snapshots", "건강도 스냅샷", "리포트별 건강도 점수 스냅샷입니다."),
+    countTableRows("auth_credentials", "DB 저장 로그인 정보", "관리자/고객 로그인 정보를 DB에서 관리할 때 사용하는 테이블입니다."),
+    countTableRows("excel_mapping_presets", "엑셀 매핑 프리셋", "ERP/유통사별로 저장해둔 엑셀 헤더 매핑 프리셋입니다."),
+    checkVisitLeadRelationship(),
     checkCustomerPlaceLinkColumns(),
     checkDefaultCompany()
     ]),
@@ -2285,6 +2292,32 @@ async function checkCustomerPlaceLinkColumns(): Promise<DatabaseCheck> {
       description: isMissingCustomerPlaceLinksColumnError(error)
         ? "20260725_customer_place_links.sql 마이그레이션을 Supabase SQL Editor에서 실행해야 링크가 DB에 저장됩니다."
         : getErrorMessage(error)
+    };
+  }
+}
+
+async function checkVisitLeadRelationship(): Promise<DatabaseCheck> {
+  try {
+    await supabaseRequest<Array<Record<string, unknown>>>(
+      "visit_results?select=id,lead_recommendations(id)&limit=1"
+    );
+
+    return {
+      name: "방문 결과 ↔ 추천 리드 연결",
+      status: "ready",
+      count: null,
+      description: "visit_results.lead_id와 lead_recommendations 간 외래키가 정상적으로 연결되어 있습니다."
+    };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    const isRelationshipMissing = message.includes("PGRST200") || message.includes("relationship");
+    return {
+      name: "방문 결과 ↔ 추천 리드 연결",
+      status: "missing",
+      count: null,
+      description: isRelationshipMissing
+        ? "supabase/migrations/20260814_visit_results_lead_fk.sql 마이그레이션을 실행해야 방문 히스토리에서 추천 리드 정보가 정상 조회됩니다."
+        : message
     };
   }
 }
