@@ -55,7 +55,12 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
-  const activeNavigationItem = flattenCustomerNavigationItems(visibleNavigationGroups).find((item) => item.active === active);
+  // 같은 active 키를 공유하는 항목이 여러 개일 수 있어(예: 거래처 전체 현황/거래처 관리 모두 "customers"),
+  // 사이드바 "현재 작업" 카드는 우선 현재 경로(pathname)로 정확히 일치하는 항목을 찾고,
+  // 못 찾으면(예: 서버 렌더 초기) active 키로 대체 매칭합니다.
+  const flatNavigationItems = flattenCustomerNavigationItems(visibleNavigationGroups);
+  const activeNavigationItem =
+    flatNavigationItems.find((item) => isCurrentNavItem(pathname, item.href)) || flatNavigationItems.find((item) => item.active === active);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;

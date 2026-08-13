@@ -1117,7 +1117,16 @@ export default function CrmTimelinePage() {
             ) : null}
             {filteredCustomers.length ? (
               <div className="grid grid-cols-[20px_minmax(0,1fr)_44px_64px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                <span />
+                <input
+                  aria-label="현재 목록 전체 선택"
+                  checked={filteredCustomers.some(({ customer }) => Boolean(customer.id)) && filteredCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
+                  className="h-3.5 w-3.5 shrink-0"
+                  onChange={(event) => {
+                    const ids = filteredCustomers.map(({ customer }) => customer.id).filter((id): id is string => Boolean(id));
+                    setBulkSelectedIds(event.target.checked ? new Set(ids) : new Set());
+                  }}
+                  type="checkbox"
+                />
                 <span>상호명</span>
                 <span className="text-center">등급</span>
                 <span className="text-right">상태</span>
