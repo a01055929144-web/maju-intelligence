@@ -21,8 +21,8 @@ export function WorkspaceSectionNav({ eyebrow = "작업 구분", items, title }:
     <aside className="maju-section-card overflow-hidden">
       <div className="border-b border-slate-200/80 bg-slate-50/80 px-4 py-3">
         <p className="maju-muted-label">{eyebrow}</p>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <h2 className="truncate text-sm font-black text-slate-950">{title}</h2>
+        <div className="mt-1 flex min-w-0 items-center justify-between gap-3">
+          <h2 className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{title}</h2>
           <span className="shrink-0 rounded-md bg-white px-2 py-1 text-[10px] font-black text-slate-500 ring-1 ring-inset ring-slate-200">
             {items.length}개
           </span>

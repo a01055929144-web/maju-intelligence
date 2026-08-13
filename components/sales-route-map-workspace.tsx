@@ -826,9 +826,9 @@ function DeliveryAssignmentPanel({
                     {vehicle.driver}
                   </p>
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
+                    <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
                     <span
-                      className="maju-button-secondary inline-flex h-7 items-center gap-1 px-2 text-xs"
+                      className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
                       onClick={(event) => {
                         event.stopPropagation();
                         setEditingVehicleId(vehicle.id);
