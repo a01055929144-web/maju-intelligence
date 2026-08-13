@@ -1870,12 +1870,15 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
 
   const id = companyId || getDefaultCompanyId();
   await upsertCompany(id, "마주식자재");
-  const importId = await createManualCustomerImport(id);
   const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
   const normalizedKey = businessNumber || makeCustomerKey(customerName, input.address || "");
-  const existingRows = await supabaseRequest<Array<{ id: string }>>(
-    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
-  ).catch(() => []);
+  // import 생성과 중복 조회는 서로 의존하지 않으므로 병렬 실행합니다.
+  const [importId, existingRows] = await Promise.all([
+    createManualCustomerImport(id),
+    supabaseRequest<Array<{ id: string }>>(
+      `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+    ).catch(() => [])
+  ]);
   const placeLinks = {
     google_map_url: resolvedPlaceLinks.googleMapUrl || null,
     kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
