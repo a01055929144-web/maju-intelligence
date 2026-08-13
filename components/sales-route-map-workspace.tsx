@@ -445,8 +445,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     >
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2.5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="maju-muted-label text-teal-700">지도 작업공간</p>
-          <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 운영</h2>
+          <h2 className="text-[16px] font-black leading-tight">영업·배송 운영</h2>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">

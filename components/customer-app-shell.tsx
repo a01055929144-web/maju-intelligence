@@ -197,13 +197,10 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   {subtitle ? <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p> : null}
                 </div>
               ) : (
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
-                    <span className="text-sm font-black text-slate-900">{activeWorkspaceLabel}</span>
-                    {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
-                  </div>
-                  <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{title}</p>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
+                  <span className="text-sm font-black text-slate-900">{activeWorkspaceLabel}</span>
+                  {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                 </div>
               )}
               <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
