@@ -5213,9 +5213,10 @@ function templateSampleValue(key: string) {
     birthDate: "1974-01-01",
     region: "성동구",
     industry: "한식",
-    naverPlaceUrl: "https://naver.me/x0UEyxqb",
-    kakaoPlaceUrl: "https://place.map.kakao.com/1386668708",
-    googleMapUrl: "https://maps.app.goo.gl/Yi95hRHRViVUYoqm6",
+    // 실제 다른 업체의 링크가 아니라 예시 매장명(성동 마루한식 01)과 형식만 맞춘 안내용 링크입니다.
+    naverPlaceUrl: "https://map.naver.com/p/search/성동 마루한식 01",
+    kakaoPlaceUrl: "https://map.kakao.com/?q=성동 마루한식 01",
+    googleMapUrl: "https://www.google.com/maps/search/성동 마루한식 01",
     salesDate: "2026-07-01",
     salesAmount: 2340000,
     productName: "육류",

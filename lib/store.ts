@@ -1282,6 +1282,9 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
     if (input.role) memberPatch.role = input.role;
     if (input.status) memberPatch.status = input.status === "revoked" ? "inactive" : "active";
 
+    // company_members는 실제 로그인 권한/역할을 판단하는 기준 테이블이므로, 여기서 실패한 채로
+    // 조용히 넘어가면 "비활성화했다"고 화면에는 뜨지만 실제로는 그 직원이 계속 접속 가능한
+    // 상태가 될 수 있습니다. 그래서 이 PATCH는 실패 시 그대로 throw해서 관리자에게 알립니다.
     await supabaseRequest(
       `company_members?company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(invitation.accepted_by)}`,
       {
@@ -1291,7 +1294,7 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
         },
         body: JSON.stringify(memberPatch)
       }
-    ).catch(() => null);
+    );
   }
 
   const updatedInvitation = toStaffInvitation(invitation);
@@ -2446,17 +2449,25 @@ export async function saveAnalysis(
   }));
 
   // 서로 의존하지 않는 저장 작업은 병렬로 실행해 저장 대기 시간을 줄입니다.
+  // column_mappings/raw_customer_rows는 매핑 이력·원본 백업용 부가 데이터라, 저장에 실패해도
+  // 아래에서 이어지는 normalized_customers/매출 거래내역 저장까지 막히면 안 되므로 개별적으로 catch합니다.
   await Promise.all([
     mappingRows.length
       ? supabaseRequest("column_mappings", {
           method: "POST",
           body: JSON.stringify(mappingRows)
+        }).catch((error) => {
+          console.error(`[saveAnalysis] column_mappings 저장 실패 (importId=${importId}): ${getErrorMessage(error)}`);
+          return null;
         })
       : Promise.resolve(),
     rawRows.length
       ? supabaseRequest("raw_customer_rows", {
           method: "POST",
           body: JSON.stringify(rawRows)
+        }).catch((error) => {
+          console.error(`[saveAnalysis] raw_customer_rows 저장 실패 (importId=${importId}): ${getErrorMessage(error)}`);
+          return null;
         })
       : Promise.resolve(),
     options.uploadType === "sales-analysis" && options.rawRows?.length
@@ -2529,6 +2540,8 @@ export async function saveAnalysis(
   }));
 
   // 감사 로그, 레거시 행 저장, 리포트 생성은 서로 결과값을 주고받지 않으므로 병렬로 실행합니다.
+  // 감사 로그 저장 실패(테이블 누락 등)가 Promise.all을 reject시켜 정작 중요한 ai_reports 저장까지
+  // 막아버리는 일이 없도록 감사 로그는 개별적으로 catch합니다.
   const [, , reports] = await Promise.all([
     supabaseRequest("admin_audit_logs", {
       method: "POST",
@@ -2548,6 +2561,9 @@ export async function saveAnalysis(
           }
         }
       ])
+    }).catch((error) => {
+      console.error(`[saveAnalysis] admin_audit_logs 저장 실패: ${getErrorMessage(error)}`);
+      return null;
     }),
     legacyCustomerRows.length
       ? supabaseRequest("customer_rows", {
@@ -2579,7 +2595,9 @@ export async function saveAnalysis(
     status: lead.score >= 90 ? "today" : "this-week"
   }));
 
-  // 건강도 스냅샷과 리드 저장도 서로 독립적이므로 병렬로 실행합니다.
+  // 건강도 스냅샷과 리드 저장도 서로 독립적이므로 병렬로 실행합니다. ai_reports는 이미 저장이
+  // 끝난 상태이므로, 이 두 부가 정보 중 하나가 실패해도 다른 하나까지 함께 날아가거나
+  // saveAnalysis() 전체가 실패한 것처럼 보이지 않도록 각각 개별적으로 catch합니다.
   await Promise.all([
     supabaseRequest("health_score_snapshots", {
       method: "POST",
@@ -2597,11 +2615,17 @@ export async function saveAnalysis(
           formula_version: "v1"
         }
       ])
+    }).catch((error) => {
+      console.error(`[saveAnalysis] health_score_snapshots 저장 실패 (reportId=${reportId}): ${getErrorMessage(error)}`);
+      return null;
     }),
     leads.length
       ? supabaseRequest("lead_recommendations", {
           method: "POST",
           body: JSON.stringify(leads)
+        }).catch((error) => {
+          console.error(`[saveAnalysis] lead_recommendations 저장 실패 (reportId=${reportId}): ${getErrorMessage(error)}`);
+          return null;
         })
       : Promise.resolve()
   ]);
@@ -3005,7 +3029,11 @@ export async function saveVisitResult(input: {
   });
 
   if (input.result === "quote-requested" || input.result === "interested") {
-    await updateLeadStatus(input.leadId, "high-probability", input.companyId).catch(() => null);
+    // 방문 결과 저장 자체는 이미 완료됐으므로 리드 상태 동기화 실패로 전체 저장을 막지는 않되,
+    // 조용히 사라지지 않도록 로그는 남깁니다.
+    await updateLeadStatus(input.leadId, "high-probability", input.companyId).catch((error) => {
+      console.error(`[saveVisitResult] leadId=${input.leadId} 리드 상태 동기화 실패: ${getErrorMessage(error)}`);
+    });
   }
 
   return { persisted: true, id: rows[0]?.id, ...input };
@@ -4113,18 +4141,25 @@ async function writeAdminAuditLog({
 }) {
   if (!isProductionStoreConfigured()) return;
 
-  await supabaseRequest("admin_audit_logs", {
-    method: "POST",
-    body: JSON.stringify([
-      {
-        action,
-        company_id: companyId,
-        metadata,
-        target_id: targetId || null,
-        target_type: targetType || null
-      }
-    ])
-  });
+  try {
+    await supabaseRequest("admin_audit_logs", {
+      method: "POST",
+      body: JSON.stringify([
+        {
+          action,
+          company_id: companyId,
+          metadata,
+          target_id: targetId || null,
+          target_type: targetType || null
+        }
+      ])
+    });
+  } catch (error) {
+    // 감사 로그 저장 실패가 실제 사용자 작업(등록/수정/메모 저장 등)까지 막으면 안 되므로 여기서 삼켜서
+    // 호출부에는 영향이 없게 하되, Vercel Function 로그에는 남겨서 운영자가 추적할 수 있게 합니다.
+    // /admin/system 진단의 "감사 로그" 항목이 missing으로 뜨면 이 로그와 함께 원인을 확인하세요.
+    console.error(`[writeAdminAuditLog] action=${action} companyId=${companyId} 실패: ${getErrorMessage(error)}`);
+  }
 }
 
 /**
