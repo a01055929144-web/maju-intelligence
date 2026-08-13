@@ -877,7 +877,7 @@ function RouteWorkspaceGuide({
         : `${selectedVehicleLabel} 기준 경유 매장을 선택한 뒤 티맵 계산을 실행하세요.`
       : activeView === "customers"
         ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
-        : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 원장을 확인합니다.";
+        : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 관리를 확인합니다.";
 
   return (
     <section className="shrink-0 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
@@ -1008,7 +1008,7 @@ function VehicleEditForm({
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
       <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
       <p className="text-[11px] font-bold leading-4 text-slate-400">
-        담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 원장의 담당자 일괄 변경을 사용하세요.
+        담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 관리의 담당자 일괄 변경을 사용하세요.
       </p>
       {!fuelTypeConfigured ? (
         <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] font-bold leading-4 text-amber-800">
@@ -1201,8 +1201,8 @@ function CustomerDirectoryView({
           ) : (
             <OperationalEmptyState
               actionHref={dataRegistrationHref}
-              actionLabel="거래처 원장 확인"
-              description="검색어, 매출등급, 배송차 조건에 맞는 거래처가 없습니다. 현재 필터를 초기화하거나 거래처 원장 값을 확인하세요."
+              actionLabel="거래처 관리 확인"
+              description="검색어, 매출등급, 배송차 조건에 맞는 거래처가 없습니다. 현재 필터를 초기화하거나 거래처 관리에서 값을 확인하세요."
               title="현재 조건에 맞는 거래처가 없습니다."
             />
           )

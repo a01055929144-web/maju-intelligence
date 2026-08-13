@@ -109,7 +109,7 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
           ))}
         </div>
         <Link className="flex items-center justify-center gap-1 border-t border-slate-100 py-2 text-[11px] font-black text-rose-700 transition hover:bg-rose-50" href={timelineHref}>
-          거래처 원장에서 전체 확인
+          거래처 관리에서 전체 확인
         </Link>
       </div>
     </div>

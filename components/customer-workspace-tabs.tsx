@@ -14,12 +14,12 @@ type WorkspaceTab = {
 
 const WORKSPACE_TABS: readonly WorkspaceTab[] = [
   { href: "/", icon: FileSpreadsheet, label: "데이터 등록", helper: "거래처·매출 입력" },
-  { href: "/crm/timeline", icon: Building2, label: "거래처 원장", helper: "상세·메모·첨부" },
+  { href: "/crm/timeline", icon: Building2, label: "거래처 관리", helper: "상세·메모·첨부" },
   { href: "/customers/data", icon: Database, label: "저장 이력", helper: "업로드·DB 상태" }
 ];
 
 /**
- * Shared tab strip for the 거래처 관리 workspace (등록 / 거래처 원장 / 데이터 관리), which today
+ * Shared tab strip for the 거래처 관리 workspace (등록 / 거래처 관리 / 데이터 관리), which today
  * is still three separate routes rather than one physically merged page — this makes the three
  * routes read as a single tabbed workspace without requiring a risky deep merge of their
  * (very large) implementations. Preserves the companyId query param across tab switches so admin
@@ -43,7 +43,7 @@ export function CustomerWorkspaceTabs() {
       <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">거래처 데이터 관리</p>
-          <p className="mt-0.5 text-xs font-bold text-slate-500">등록, 원장, 저장 이력을 같은 거래처 기준으로 확인합니다.</p>
+          <p className="mt-0.5 text-xs font-bold text-slate-500">등록, 거래처 관리, 저장 이력을 같은 거래처 기준으로 확인합니다.</p>
         </div>
         <span className="w-fit rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
           DB 기준 작업공간

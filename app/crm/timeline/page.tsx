@@ -925,8 +925,8 @@ export default function CrmTimelinePage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="등록된 거래처를 검색·조회하고 상세 정보와 운영 상태를 수정합니다."
-      title="거래처 관리 · 거래처 원장"
+      subtitle="등록된 거래처를 검색해 상세 정보와 운영 상태를 바로 수정합니다."
+      title="거래처 관리"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <CustomerWorkspaceTabs />
@@ -934,12 +934,12 @@ export default function CrmTimelinePage() {
         <div className="xl:sticky xl:top-24 xl:self-start">
           <WorkspaceSectionNav
             items={[
-              { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "원장 현황" },
+              { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "전체 현황" },
               { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "거래처 검색·필터" },
-              { description: "선택 거래처의 사업자정보와 배송 기준값을 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "상세 편집" },
+              { description: "선택 거래처의 사업자정보와 배송 기준값을 바로 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "거래처 편집" },
               { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
             ]}
-            title="거래처 원장"
+            title="거래처 관리"
           />
         </div>
 
@@ -947,8 +947,8 @@ export default function CrmTimelinePage() {
         <div className="maju-section-card scroll-mt-28" id="customer-ledger-summary">
           <SectionHeader
             eyebrow="지도 작업공간"
-            title="거래처 원장"
-            description="지도 홈이 사용하는 거래처 기준값입니다."
+            title="거래처 전체 현황"
+            description="지도 홈이 사용하는 거래처 기준값입니다. 개별 거래처 수정은 아래 검색 후 상세 편집에서 진행합니다."
           />
           <div className="p-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">

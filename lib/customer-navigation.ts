@@ -75,7 +75,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
             description: "거래처 상세, 메모, 첨부자료 관리",
             href: "/crm/timeline",
             icon: Building2,
-            label: "거래처 원장"
+            label: "거래처 관리"
           },
           {
             active: "data-management",
@@ -147,7 +147,7 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 export function getCustomerQuickActions() {
   return [
     { active: "dashboard" as const, helper: "홈", icon: MapPinned, label: "지도" },
-    { active: "customers" as const, helper: "원장", icon: Building2, label: "거래처" },
+    { active: "customers" as const, helper: "관리", icon: Building2, label: "거래처" },
     { active: "revenue" as const, helper: "성장", icon: BarChart3, label: "매출" }
   ];
 }

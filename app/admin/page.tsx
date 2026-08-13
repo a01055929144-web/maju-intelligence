@@ -263,7 +263,7 @@ export default async function AdminPage() {
           <CardContent className="grid gap-3 text-sm md:grid-cols-4">
             {[
               ["고객사/계정", "/api/admin/companies"],
-              ["거래처 원장", "/api/customers"],
+              ["거래처 관리", "/api/customers"],
               ["매출 원장", "/api/revenue/transactions"],
               ["배송 코스", "/api/routes/today"]
             ].map(([label, endpoint]) => (
