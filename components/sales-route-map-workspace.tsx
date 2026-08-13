@@ -168,6 +168,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [query, setQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, KPI 통계/가이드 영역은 기본적으로 접어둡니다.
+  const [statsExpanded, setStatsExpanded] = useState(false);
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -432,6 +434,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             })}
           </nav>
           <button
+            aria-expanded={statsExpanded}
+            className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${statsExpanded ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
+            onClick={() => setStatsExpanded((value) => !value)}
+            title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
+            type="button"
+          >
+            {statsExpanded ? "통계 접기" : "통계 보기"}
+          </button>
+          <button
             aria-label="필터 초기화"
             className="maju-button-secondary h-10 shrink-0 rounded-md px-3 text-slate-600"
             onClick={resetWorkspace}
@@ -449,53 +460,62 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         </div>
       ) : null}
 
-      <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
-        <Kpi
-          helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
-          label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
-          tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
-          value={sourceReady ? `${kpiSummary?.selectedCount ?? selectedGradeCount}곳` : "등록 필요"}
-        />
-        <Kpi
-          helper={selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "전체 배송차 기준"}
-          label={selectedVehicle ? "선택 배송차" : "배송차량"}
-          tone="blue"
-          value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
-        />
-        <Kpi
-          helper={kpiSummary ? "선택 경유지 기준" : "현재 필터 기준"}
-          label="매장 매출합"
-          tone="green"
-          value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"}
-        />
-        <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
-        <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
-        <Kpi helper={fuelKpiHelper} label={fuelBasisIsOpinet ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
-      </section>
+      {/*
+        네이버맵/카카오맵처럼 지도가 화면 대부분을 차지해야 한다는 피드백에 따라, KPI 통계·기준값
+        가이드·필터 조건 요약은 기본 접힘 상태로 두고 "통계 보기" 토글로만 펼치게 했습니다. 지도
+        섹션이 항상 곧바로 이어지도록 이 블록 전체를 조건부로 렌더링합니다.
+      */}
+      {statsExpanded ? (
+        <>
+          <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
+            <Kpi
+              helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
+              label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
+              tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
+              value={sourceReady ? `${kpiSummary?.selectedCount ?? selectedGradeCount}곳` : "등록 필요"}
+            />
+            <Kpi
+              helper={selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "전체 배송차 기준"}
+              label={selectedVehicle ? "선택 배송차" : "배송차량"}
+              tone="blue"
+              value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
+            />
+            <Kpi
+              helper={kpiSummary ? "선택 경유지 기준" : "현재 필터 기준"}
+              label="매장 매출합"
+              tone="green"
+              value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"}
+            />
+            <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
+            <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
+            <Kpi helper={fuelKpiHelper} label={fuelBasisIsOpinet ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
+          </section>
 
-      <RouteBasisStrip
-        allStoreCount={allStores.length}
-        allStoreTotals={allStoreTotals}
-        currentStoreCount={visibleStores.length}
-        currentTotals={routeTotals}
-        dataRegistrationHref={dataRegistrationHref}
-        mapReadyStoreCount={mapReadyStoreCount}
-        missingAddressCount={missingAddressCount}
-        routePlan={routePlan}
-        visibleMapReadyStoreCount={visibleMapReadyStoreCount}
-      />
+          <RouteBasisStrip
+            allStoreCount={allStores.length}
+            allStoreTotals={allStoreTotals}
+            currentStoreCount={visibleStores.length}
+            currentTotals={routeTotals}
+            dataRegistrationHref={dataRegistrationHref}
+            mapReadyStoreCount={mapReadyStoreCount}
+            missingAddressCount={missingAddressCount}
+            routePlan={routePlan}
+            visibleMapReadyStoreCount={visibleMapReadyStoreCount}
+          />
 
-      <RouteWorkspaceGuide
-        activeView={activeView}
-        courseSummary={courseSummary}
-        dataRegistrationHref={dataRegistrationHref}
-        markerViewMode={markerViewMode}
-        selectedVehicleLabel={selectedVehicleLabel}
-        sourceReady={sourceReady}
-        visibleStoreCount={visibleStores.length}
-      />
+          <RouteWorkspaceGuide
+            activeView={activeView}
+            courseSummary={courseSummary}
+            dataRegistrationHref={dataRegistrationHref}
+            markerViewMode={markerViewMode}
+            selectedVehicleLabel={selectedVehicleLabel}
+            sourceReady={sourceReady}
+            visibleStoreCount={visibleStores.length}
+          />
+        </>
+      ) : null}
 
-      <section className="shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3">
+      <section className="shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-2.5">
         <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -550,20 +570,22 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </span>
           </div>
         </div>
-        <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <span className="text-xs font-black text-slate-400">현재 조건</span>
-          {activeFilterLabels.length ? (
-            activeFilterLabels.map((label) => (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
-                {label}
-              </span>
-            ))
-          ) : sourceReady ? (
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
-          ) : (
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 등록 대기</span>
-          )}
-        </div>
+        {statsExpanded ? (
+          <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <span className="text-xs font-black text-slate-400">현재 조건</span>
+            {activeFilterLabels.length ? (
+              activeFilterLabels.map((label) => (
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
+                  {label}
+                </span>
+              ))
+            ) : sourceReady ? (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
+            ) : (
+              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 등록 대기</span>
+            )}
+          </div>
+        ) : null}
       </section>
 
       {activeView === "map" ? (
