@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  /* 전체적으로 글씨와 여백이 커 보인다는 피드백에 따라 기준 폰트 크기를 살짝 줄였습니다.
+     Tailwind의 텍스트(text-sm 등)와 여백(p-3, gap-2, h-10 등) 유틸리티는 대부분 rem 기준이라
+     이 값 하나로 앱 전체의 글씨와 여백이 함께 조금씩 줄어듭니다. */
+  font-size: 90%;
+}
+
 :root {
   --background: 210 30% 98%;
   --foreground: 222 34% 14%;
@@ -76,7 +83,7 @@ select {
   }
 
   .maju-card-header {
-    @apply border-b border-slate-200/80 bg-slate-50/70 px-5 py-4;
+    @apply border-b border-slate-200/80 bg-slate-50/70 px-4 py-3;
   }
 
   .maju-stat-card {
