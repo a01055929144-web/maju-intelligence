@@ -233,7 +233,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                     현재 화면은 고객사 운영 화면을 관리자 권한으로 확인하는 모드입니다. 계정, 권한, 고객사 생성·수정은 어드민에서 관리하세요.
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Link
                     className="inline-flex h-8 items-center justify-center rounded-md bg-amber-900 px-3 text-xs font-black text-white transition hover:bg-amber-950"
                     href="/admin/companies"

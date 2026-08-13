@@ -1674,7 +1674,16 @@ function Onboarding({
                           inputMode={manualInputMode(field.key)}
                           type={manualInputType(field.key)}
                           value={String(manualDraft[field.key] ?? "")}
-                          onChange={(event) => onManualChange({ ...manualDraft, [field.key]: event.target.value })}
+                          onChange={(event) => {
+                            const rawValue = event.target.value;
+                            const nextValue =
+                              field.key === "businessRegistrationNumber"
+                                ? formatBusinessNumberInput(rawValue)
+                                : field.key === "phone"
+                                  ? formatPhoneNumberInput(rawValue)
+                                  : rawValue;
+                            onManualChange({ ...manualDraft, [field.key]: nextValue });
+                          }}
                           placeholder={field.description || `${field.label} 입력`}
                         />
                         {field.key === "businessRegistrationNumber" && isMaster ? (
@@ -4495,7 +4504,7 @@ function SaveResultSummary({
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{copy.body}</p>
           <p className="mt-2 rounded-md bg-white/75 px-3 py-2 text-xs font-black leading-5 text-slate-700">최근 상태: {registrationStatus.title}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <Badge className="bg-white text-slate-600 ring-1 ring-inset ring-slate-200">{rows.toLocaleString()}행 대기</Badge>
           <Link
             className={`inline-flex h-9 items-center justify-center rounded-md px-3 text-xs font-black shadow-sm ${
@@ -5444,6 +5453,32 @@ function formatBusinessRegistrationNumber(value: string) {
   const digits = value.replace(/[^0-9]/g, "").slice(0, 10);
   if (digits.length !== 10) return value;
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+// 입력 중에도 자동으로 하이픈이 붙도록 하는 실시간 포맷터입니다 (10자리 미만이어도 동작).
+function formatBusinessNumberInput(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+// 휴대폰(010 등, 3-4-4)과 서울(02)/지역 번호를 입력 자릿수에 맞춰 실시간으로 하이픈 처리합니다.
+function formatPhoneNumberInput(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
+  if (!digits) return "";
+
+  if (digits.startsWith("02")) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
 }
 
 function isValidBusinessRegistrationNumber(value: string) {

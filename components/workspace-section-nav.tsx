@@ -35,34 +35,30 @@ export function WorkspaceSectionNav({ eyebrow = "작업 구분", items, title }:
 
           return (
             <Link
-              className={`group relative flex min-h-[72px] w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition ${
+              className={`group relative flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
                 selected
                   ? "border-teal-200 bg-teal-50 text-teal-950 shadow-[0_8px_18px_rgba(15,118,110,0.08)]"
                   : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50/60 hover:text-slate-950"
               }`}
               href={item.href}
               key={item.label}
+              title={item.description}
             >
-              {selected ? <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-teal-600" /> : null}
+              {selected ? <span className="absolute inset-y-2.5 left-0 w-1 rounded-r-full bg-teal-600" /> : null}
               <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md ring-1 ring-inset ${
                 selected ? "bg-white text-teal-700 ring-teal-100" : "bg-slate-50 text-slate-400 ring-slate-100 group-hover:bg-white group-hover:text-teal-700"
               }`}>
                 <Icon className="h-4 w-4" />
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-2 leading-none">
-                  <span className="truncate text-sm font-black">{item.label}</span>
-                  {item.badge ? (
-                    <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black ring-1 ring-inset ${
-                      selected ? "bg-white text-teal-700 ring-teal-100" : "bg-slate-50 text-slate-600 ring-slate-200"
-                    }`}>
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </span>
-                <span className={`mt-1.5 line-clamp-2 block text-xs font-bold leading-5 ${selected ? "text-teal-800/75" : "text-slate-500"}`}>
-                  {item.description}
-                </span>
+              <span className="flex min-w-0 flex-1 items-center gap-2 leading-none">
+                <span className="truncate text-sm font-black">{item.label}</span>
+                {item.badge ? (
+                  <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black ring-1 ring-inset ${
+                    selected ? "bg-white text-teal-700 ring-teal-100" : "bg-slate-50 text-slate-600 ring-slate-200"
+                  }`}>
+                    {item.badge}
+                  </span>
+                ) : null}
               </span>
             </Link>
           );

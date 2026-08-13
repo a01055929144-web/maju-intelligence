@@ -1311,7 +1311,7 @@ function StoreQuickCard({
           <div className="mt-2 space-y-1.5">
             <input
               className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
-              onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
+              onChange={(event) => setDraft((current) => ({ ...current, phone: formatPhoneNumberInput(event.target.value) }))}
               placeholder="연락처"
               value={draft.phone}
             />
@@ -2692,7 +2692,7 @@ function StoreDetail({
                   <EditRow label="매장명" onChange={setDraftName} value={draftName} />
                   <BusinessNumberEditRow onChange={setDraftBusinessNumber} valid={businessNumberValid} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
-                  <EditRow label="연락처" onChange={setDraftPhone} value={draftPhone} />
+                  <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumberInput(value))} value={draftPhone} />
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
@@ -3523,6 +3523,24 @@ function isValidBusinessRegistrationNumber(value: string) {
   const digits = normalizeBusinessRegistrationNumber(value);
   if (!/^[0-9]{10}$/.test(digits)) return false;
   return getBusinessRegistrationCheckDigit(digits.slice(0, 9)) === Number(digits[9]);
+}
+
+// 휴대폰(010 등, 3-4-4)과 서울(02)/지역 번호를 입력 자릿수에 맞춰 실시간으로 하이픈 처리합니다.
+function formatPhoneNumberInput(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
+  if (!digits) return "";
+
+  if (digits.startsWith("02")) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
 }
 
 function getBusinessRegistrationCheckDigit(firstNineDigits: string) {

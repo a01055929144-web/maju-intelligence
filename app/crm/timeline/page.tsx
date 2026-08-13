@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, Info, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
@@ -964,7 +964,15 @@ export default function CrmTimelinePage() {
           <div className="p-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="maju-muted-label">원장 상태</p>
+                <div className="flex items-center gap-1">
+                  <p className="maju-muted-label">원장 상태</p>
+                  <span
+                    className={`grid h-4 w-4 shrink-0 place-items-center rounded-full ${hasOperationalLedger ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+                    title={ledgerStatusDescription}
+                  >
+                    <Info className="h-2.5 w-2.5" />
+                  </span>
+                </div>
                 <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
                 <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
               </div>
@@ -973,11 +981,7 @@ export default function CrmTimelinePage() {
               <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
               <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
             </div>
-            <div className={`mt-2 flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
-              <p className={`text-xs font-black ${hasOperationalLedger ? "text-emerald-900" : "text-amber-900"}`}>{ledgerStatusLabel}</p>
-              <p className={`truncate text-xs font-bold ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
-            </div>
-            {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+            {dbError ? <p className="mt-2 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
             {!hasCustomers ? (
               <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
                 <p className="text-sm font-black text-amber-900">
@@ -1323,7 +1327,7 @@ export default function CrmTimelinePage() {
                     </div>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
                     <button
                       aria-label="이전 거래처"
@@ -1575,10 +1579,15 @@ export default function CrmTimelinePage() {
                         label="사업자번호"
                         value={draftCustomer.businessNumber || ""}
                         inputRef={businessNumberInputRef}
-                        onChange={(value) => updateDraft("businessNumber", value)}
+                        onChange={(value) => updateDraft("businessNumber", formatBusinessNumberInput(value))}
                       />
                       <EditableField label="대표자명" value={draftCustomer.representativeName || ""} onChange={(value) => updateDraft("representativeName", value)} />
-                      <EditableField label="연락처" value={draftCustomer.phone || ""} inputRef={phoneInputRef} onChange={(value) => updateDraft("phone", value)} />
+                      <EditableField
+                        label="연락처"
+                        value={draftCustomer.phone || ""}
+                        inputRef={phoneInputRef}
+                        onChange={(value) => updateDraft("phone", formatPhoneNumberInput(value))}
+                      />
                       <EditableField label="이메일" value={draftCustomer.email || ""} onChange={(value) => updateDraft("email", value)} />
                       <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
                       <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
@@ -1912,12 +1921,14 @@ function useAdminCompanyId() {
 
 function SectionHeader({ description, eyebrow, title }: { description: string; eyebrow: string; title: string }) {
   return (
-    <div className="flex flex-col gap-2 border-b border-slate-200/80 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 px-4 py-3">
       <div>
         <p className="text-xs font-black uppercase tracking-wide text-teal-700">{eyebrow}</p>
         <h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2>
       </div>
-      <p className="max-w-2xl text-sm font-semibold leading-6 text-slate-500">{description}</p>
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500" title={description}>
+        <Info className="h-3.5 w-3.5" />
+      </span>
     </div>
   );
 }
@@ -2120,7 +2131,7 @@ function LedgerListStatusStrip({
             {hasCustomers ? `현재 목록 ${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳 표시` : "거래처 마스터 등록 후 목록, 상세, 코스가 같은 DB 기준으로 연결됩니다."}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {chips.length ? (
             chips.map((chip) => (
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700" key={chip}>
@@ -2601,7 +2612,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
           <h4 className="mt-1 text-base font-black text-slate-950">네이버·카카오·구글 링크</h4>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">리뷰, 영업시간, 휴폐업 확인, 로드뷰 확인에 사용할 기준 링크입니다.</p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <Badge className={filledCount === links.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
             {filledCount}/{links.length} 등록
           </Badge>
@@ -2908,6 +2919,33 @@ function formatBusinessRegistrationNumber(value: string) {
   const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
   if (digits.length !== 10) return value;
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+// 입력 중에도 자동으로 하이픈이 붙도록 하는 실시간 포맷터입니다 (10자리 미만이어도 동작).
+function formatBusinessNumberInput(value: string) {
+  const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+// 휴대폰(010 등, 3-4-4)과 서울/지역 번호(02는 2자리, 그 외는 3자리 지역번호)를
+// 입력 자릿수에 맞춰 실시간으로 하이픈을 붙여줍니다.
+function formatPhoneNumberInput(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
+  if (!digits) return "";
+
+  if (digits.startsWith("02")) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
 }
 
 function isValidBusinessRegistrationNumber(value: string) {
