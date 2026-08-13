@@ -349,7 +349,8 @@ export default function CrmTimelinePage() {
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);
-    setIsEditing(hasCustomers && operationFilter !== "all" && customerMatchesOperationFilter(selectedCustomer, operationFilter));
+    // 거래처를 선택하면 곧바로 편집 가능한 상태로 엽니다 (거래처 관리 = 조회가 아니라 수정이 기본 동작).
+    setIsEditing(hasCustomers);
     setSaveMessage("");
     setNewMemo("");
     setNewNextAction("");
