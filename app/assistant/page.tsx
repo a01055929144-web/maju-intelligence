@@ -158,7 +158,7 @@ function AssistantBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 초안은 방문 결과와 영업 메모를 실행 문장으로 바꾸는 보조 기능입니다.</p>

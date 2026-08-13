@@ -343,7 +343,7 @@ function MappingWorkspaceModal({
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
       <div className="maju-section-card mx-auto flex h-full max-w-[1760px] flex-col overflow-hidden shadow-2xl">
-        <div className="maju-card-header grid gap-4 bg-white px-5 py-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="maju-card-header grid gap-4 bg-white px-5 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,auto)] xl:items-center">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-blue-700 text-white">매핑 전용 화면</Badge>

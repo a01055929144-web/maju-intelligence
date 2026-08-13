@@ -2010,10 +2010,13 @@ function DataRegistrationQuickPanel({
             <Badge className={`w-fit px-3 py-1.5 text-xs font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {/* 카드가 2~3개씩 고정 열로 나뉘면 우측 320px 정보 패널까지 겹쳐 실제 폭이 좁아질 때
+             텍스트가 한 글자씩 줄바꿈되는 문제가 있어, 실제 공간에 맞춰 자동으로 줄바꿈되는
+             auto-fit 패턴으로 바꿨습니다. */}
+          <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
             <div>
               <p className="mb-2 text-xs font-black text-slate-500">등록 데이터 구분</p>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-2">
                 {typeOptions.map((option) => {
                   const selected = activeType === option.id;
                   const Icon = option.icon;
@@ -2042,7 +2045,7 @@ function DataRegistrationQuickPanel({
 
             <div>
               <p className="mb-2 text-xs font-black text-slate-500">입력 방식</p>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2">
                 {modeOptions.map((option) => {
                   const selected = entryMode === option.id;
                   const Icon = option.icon;
@@ -2661,7 +2664,7 @@ function DeploymentReadinessChecklist({
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,auto)] lg:items-center">
         <div>
           <Badge className="bg-slate-900 text-white">배포 전 체크리스트</Badge>
           <h2 className="mt-3 text-lg font-black text-slate-950">실운영 전 반드시 확인할 경로</h2>

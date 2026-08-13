@@ -368,7 +368,7 @@ function ReportBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>

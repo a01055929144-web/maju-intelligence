@@ -1978,7 +1978,7 @@ function BusinessStatusControlPanel({
 
   return (
     <div className={`mt-3 overflow-hidden rounded-lg border ${hasIssue ? "border-amber-200 bg-amber-50/70" : "border-emerald-100 bg-emerald-50/70"}`}>
-      <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+      <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={hasIssue ? "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200" : "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200"}>
@@ -2775,7 +2775,7 @@ function AttachmentRow({ icon: Icon, label, storagePath = "", url = "", value }:
       : "bg-slate-100 text-slate-600 ring-slate-200";
 
   return (
-    <div className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
+    <div className="grid grid-cols-[32px_minmax(0,1fr)_minmax(0,auto)] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
       <span className="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-slate-500">
         <Icon className="h-4 w-4" />
       </span>

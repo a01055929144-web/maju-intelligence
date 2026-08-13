@@ -230,7 +230,12 @@ function PipelineBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_auto] xl:items-center">
+      {/*
+        세 번째 칸을 auto로 두면 flex-wrap 버튼 묶음의 줄바꿈 전 최대 너비를 기준으로 트랙 크기가
+        고정돼, 가운데 설명 문단(minmax(0,1fr))이 극단적으로 눌려 한 글자씩 줄바꿈되는 문제가
+        있었습니다. minmax(0,auto)로 바꿔 필요할 때는 줄어들 수 있게 했습니다.
+      */}
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">집계 기준</p>
           <p className="mt-1 maju-muted-label normal-case tracking-normal">방문 결과 기반</p>
