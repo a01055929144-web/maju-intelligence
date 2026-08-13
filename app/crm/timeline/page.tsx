@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, Info, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 
 type TimelineItem = {
@@ -966,12 +968,7 @@ export default function CrmTimelinePage() {
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                 <div className="flex items-center gap-1">
                   <p className="maju-muted-label">원장 상태</p>
-                  <span
-                    className={`grid h-4 w-4 shrink-0 place-items-center rounded-full ${hasOperationalLedger ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
-                    title={ledgerStatusDescription}
-                  >
-                    <Info className="h-2.5 w-2.5" />
-                  </span>
+                  <InfoTooltip size="sm" text={ledgerStatusDescription} tone={hasOperationalLedger ? "emerald" : "amber"} />
                 </div>
                 <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
                 <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
@@ -1920,19 +1917,6 @@ function useAdminCompanyId() {
   return companyId;
 }
 
-function SectionHeader({ description, eyebrow, title }: { description: string; eyebrow: string; title: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 px-4 py-3">
-      <div>
-        <p className="text-xs font-black uppercase tracking-wide text-teal-700">{eyebrow}</p>
-        <h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2>
-      </div>
-      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500" title={description}>
-        <Info className="h-3.5 w-3.5" />
-      </span>
-    </div>
-  );
-}
 
 function CustomerFilterButton({
   active,

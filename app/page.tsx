@@ -34,6 +34,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { ExcelHeaderMappingPreview } from "@/components/excel-mapping-preview";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
@@ -468,7 +469,7 @@ export default function Home() {
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <CustomerWorkspaceTabs />
-      <div className="mx-auto max-w-[1880px] space-y-4">
+      <div className="mx-auto max-w-[1880px] space-y-3">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
         {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}
         {screen === "onboarding" && (
@@ -551,10 +552,10 @@ function WorkspaceModeTabs({
   }[active as "briefing" | "onboarding" | "report"] || ["데이터 작업공간", "거래처와 매출 데이터를 운영 기준값으로 관리합니다."];
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="min-w-0">
-        <p className="text-sm font-black text-slate-950">{copy[0]}</p>
-        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{copy[1]}</p>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <p className="truncate text-sm font-black text-slate-950">{copy[0]}</p>
+        <InfoTooltip text={copy[1]} />
       </div>
       <div className="grid w-full gap-1 rounded-md border border-slate-200 bg-slate-50 p-1 sm:w-auto sm:grid-cols-3">
         {tabs.map(([key, label]) => {
@@ -852,7 +853,7 @@ function DataRegistrationSidePanel({
   ];
 
   return (
-    <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20">
+    <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
       <p className="px-2 pb-1 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-400">등록 유형</p>
       {items.map((item) => {
         const selected = activeSection === item.key;
@@ -1382,7 +1383,7 @@ function Onboarding({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[212px_minmax(0,1fr)]">
+    <div className="grid gap-3 lg:grid-cols-[212px_minmax(0,1fr)]">
       <DataRegistrationSidePanel
         activeSection={sidebarSection}
         customerRows={uploadType === "customer-master" ? rawRows.length : 0}
@@ -1390,8 +1391,8 @@ function Onboarding({
         persisted={pipelineMeta.persisted}
         salesRows={uploadType === "sales-analysis" ? rawRows.length : 0}
       />
-      <section className="min-w-0 space-y-4">
-      <div className="space-y-4">
+      <section className="min-w-0 space-y-3">
+      <div className="space-y-3">
         <DataRegistrationQuickPanel
           activeType={uploadType}
           canAnalyze={canAnalyze}

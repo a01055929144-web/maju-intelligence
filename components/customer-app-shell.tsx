@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
-  Info,
   LogOut,
   MapPinned,
   MessageSquareText,
@@ -14,6 +13,7 @@ import {
   Settings
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
 import { customerNavigationGroups, CustomerWorkspaceKey, flattenCustomerNavigationItems, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 
@@ -78,8 +78,8 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200 bg-white shadow-[8px_0_24px_rgba(15,23,42,0.04)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
-            <div className="border-b border-slate-200/80 p-4">
-              <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
+            <div className="border-b border-slate-200/80 px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0">
+              <div className={`flex w-full items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
                 <Link className={`flex min-w-0 items-center gap-3 ${collapsed ? "justify-center" : ""}`} href={scopedHref("/dashboard")}>
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]">M</span>
                   {!collapsed ? (
@@ -186,7 +186,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
         <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
           <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
-            <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2" : "py-3"}`}>
+            <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -196,14 +196,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   </div>
                   <div className="flex min-w-0 items-center gap-1.5">
                     <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
-                    {subtitle ? (
-                      <span
-                        className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-400"
-                        title={subtitle}
-                      >
-                        <Info className="h-3 w-3" />
-                      </span>
-                    ) : null}
+                    {subtitle ? <InfoTooltip text={subtitle} /> : null}
                   </div>
                 </div>
               ) : (

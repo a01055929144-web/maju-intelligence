@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Building2, Database, FileSpreadsheet, LucideIcon } from "lucide-react";
+import { SectionHeader } from "@/components/section-header";
 
 type WorkspaceTab = {
   readonly href: string;
@@ -39,16 +40,16 @@ export function CustomerWorkspaceTabs() {
   }
 
   return (
-    <div className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-black text-slate-950">거래처 데이터 관리</p>
-          <p className="mt-0.5 text-xs font-bold text-slate-500">등록, 거래처 관리, 저장 이력을 같은 거래처 기준으로 확인합니다.</p>
-        </div>
-        <span className="w-fit rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
-          DB 기준 작업공간
-        </span>
-      </div>
+    <div className="mb-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <SectionHeader
+        badge={
+          <span className="w-fit shrink-0 rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
+            DB 기준 작업공간
+          </span>
+        }
+        description="등록, 거래처 관리, 저장 이력을 같은 거래처 기준으로 확인합니다."
+        title="거래처 데이터 관리"
+      />
       <div className="grid gap-2 bg-slate-50/70 p-2 sm:grid-cols-3">
         {WORKSPACE_TABS.map((tab, index) => {
           const selected = pathname === tab.href;
