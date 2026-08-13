@@ -77,18 +77,16 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="xl:sticky xl:top-24 xl:self-start">
-          <WorkspaceSectionNav
-            items={[
-              { active: true, badge: `${pipeline.items.length}건`, description: "예상매출, 가중매출, 전환율을 먼저 봅니다.", href: "#pipeline-summary", icon: TrendingUp, label: "성장 현황" },
-              { description: "방문 기록과 매출 원장 연결 기준을 확인합니다.", href: "#pipeline-basis", icon: FileText, label: "실행 기준" },
-              { description: "견적 요청, 관심 있음, 보류 상태를 나눠 봅니다.", href: "#pipeline-status", icon: Percent, label: "상태 분포" },
-              { description: "실제 후속 영업을 해야 할 후보 목록입니다.", href: "#pipeline-table", icon: ReceiptText, label: "후보 목록" }
-            ]}
-            title="매출 성장"
-          />
-        </div>
+      <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
+        <WorkspaceSectionNav
+          items={[
+            { active: true, badge: `${pipeline.items.length}건`, description: "예상매출, 가중매출, 전환율을 먼저 봅니다.", href: "#pipeline-summary", icon: TrendingUp, label: "성장 현황" },
+            { description: "방문 기록과 매출 원장 연결 기준을 확인합니다.", href: "#pipeline-basis", icon: FileText, label: "실행 기준" },
+            { description: "견적 요청, 관심 있음, 보류 상태를 나눠 봅니다.", href: "#pipeline-status", icon: Percent, label: "상태 분포" },
+            { description: "실제 후속 영업을 해야 할 후보 목록입니다.", href: "#pipeline-table", icon: ReceiptText, label: "후보 목록" }
+          ]}
+          title="매출 성장"
+        />
 
         <div className="min-w-0 space-y-4">
         <div className="maju-section-card scroll-mt-28" id="pipeline-summary">

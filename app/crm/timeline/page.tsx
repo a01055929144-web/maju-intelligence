@@ -941,18 +941,16 @@ export default function CrmTimelinePage() {
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
-      <section className="mx-auto grid max-w-[1560px] gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="xl:sticky xl:top-24 xl:self-start">
-          <WorkspaceSectionNav
-            items={[
-              { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "전체 현황" },
-              { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "거래처 검색·필터" },
-              { description: "선택 거래처의 사업자정보와 배송 기준값을 바로 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "거래처 편집" },
-              { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
-            ]}
-            title="거래처 관리"
-          />
-        </div>
+      <section className="mx-auto max-w-[1560px]">
+        <WorkspaceSectionNav
+          items={[
+            { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "전체 현황" },
+            { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "거래처 검색·필터" },
+            { description: "선택 거래처의 사업자정보와 배송 기준값을 바로 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "거래처 편집" },
+            { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
+          ]}
+          title="거래처 관리"
+        />
 
         <div className="min-w-0 space-y-4">
         <div className="maju-section-card scroll-mt-28" id="customer-ledger-summary">

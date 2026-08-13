@@ -74,18 +74,16 @@ export default async function RevenueTransactionsPage({
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="xl:sticky xl:top-24 xl:self-start">
-          <WorkspaceSectionNav
-            items={[
-              { active: true, badge: hasSalesData ? "연결" : "필요", description: "매출액, 행 수, 거래처 수를 먼저 확인합니다.", href: "#ledger-summary", icon: ReceiptText, label: "원장 현황" },
-              { description: "거래처 원장과 매출 거래내역 매칭 상태를 봅니다.", href: "#ledger-basis", icon: Store, label: "매칭·기준" },
-              { description: "거래처별, 품목별 매출 집중도를 확인합니다.", href: "#ledger-analysis", icon: BarChart3, label: "매출 분석" },
-              { description: "최근 업로드된 원장 행을 ERP 테이블처럼 검토합니다.", href: "#ledger-table", icon: FileSpreadsheet, label: "원장 테이블" }
-            ]}
-            title="매출 거래내역"
-          />
-        </div>
+      <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
+        <WorkspaceSectionNav
+          items={[
+            { active: true, badge: hasSalesData ? "연결" : "필요", description: "매출액, 행 수, 거래처 수를 먼저 확인합니다.", href: "#ledger-summary", icon: ReceiptText, label: "원장 현황" },
+            { description: "거래처 원장과 매출 거래내역 매칭 상태를 봅니다.", href: "#ledger-basis", icon: Store, label: "매칭·기준" },
+            { description: "거래처별, 품목별 매출 집중도를 확인합니다.", href: "#ledger-analysis", icon: BarChart3, label: "매출 분석" },
+            { description: "최근 업로드된 원장 행을 ERP 테이블처럼 검토합니다.", href: "#ledger-table", icon: FileSpreadsheet, label: "원장 테이블" }
+          ]}
+          title="매출 거래내역"
+        />
 
         <div className="min-w-0 space-y-4">
         <div className="maju-section-card scroll-mt-28" id="ledger-summary">
