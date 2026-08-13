@@ -758,15 +758,19 @@ export async function upsertAuthCredentials(input: Partial<AuthCredentials>, aud
 export async function getCustomerLoginCredentials(email: string): Promise<CustomerLoginCredentials | null> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return null;
+  const fallback = getFallbackAuthCredentials();
 
-  if (!isProductionStoreConfigured()) {
-    const fallback = getFallbackAuthCredentials();
+  function fallbackCustomerCredentials(): CustomerLoginCredentials | null {
     if (fallback.customerEmail.toLowerCase() !== normalizedEmail) return null;
     return {
       ...fallback,
       companyName: "마주식자재",
       ownerName: "정두영"
     };
+  }
+
+  if (!isProductionStoreConfigured()) {
+    return fallbackCustomerCredentials();
   }
 
   try {
@@ -782,9 +786,8 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
     >(`auth_credentials?select=admin_email,admin_password,customer_email,customer_password,customer_company_id,updated_at&customer_email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`);
 
     const row = rows[0];
-    if (!row?.customer_email || !row.customer_company_id) return null;
+    if (!row?.customer_email || !row.customer_company_id) return fallbackCustomerCredentials();
 
-    const fallback = getFallbackAuthCredentials();
     const company = await getCompanySettings(row.customer_company_id, "고객사").catch(() => null);
 
     return {
@@ -799,13 +802,7 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
     };
   } catch (error) {
     console.error("Customer credential lookup fallback:", error);
-    const fallback = getFallbackAuthCredentials();
-    if (fallback.customerEmail.toLowerCase() !== normalizedEmail) return null;
-    return {
-      ...fallback,
-      companyName: "마주식자재",
-      ownerName: "정두영"
-    };
+    return fallbackCustomerCredentials();
   }
 }
 
