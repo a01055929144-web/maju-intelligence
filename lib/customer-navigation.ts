@@ -4,6 +4,7 @@ import {
   Database,
   FileSpreadsheet,
   HeartPulse,
+  LayoutDashboard,
   LucideIcon,
   MapPinned,
   MessageSquareText,
@@ -63,6 +64,13 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
         icon: Building2,
         label: "거래처 데이터",
         children: [
+          {
+            active: "customers",
+            description: "전체 거래처, 등급, 보완 상태를 요약해서 봅니다.",
+            href: "/crm/timeline#customer-ledger-summary",
+            icon: LayoutDashboard,
+            label: "거래처 전체 현황"
+          },
           {
             active: "data",
             description: "거래처 기본정보와 매출 거래내역 입력",
