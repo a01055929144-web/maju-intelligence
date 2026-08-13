@@ -77,7 +77,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           {sourceReady && !isPersonalized && normalizedDriverName ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800 ring-1 ring-inset ring-amber-100">
-              {driverName}님 이름으로 배정된 담당 거래처가 없어 전체 코스 중 매출 상위 권역을 표시합니다. 거래처 원장에서 담당자를 배정하면 내 코스만 표시됩니다.
+              {driverName}님 이름으로 배정된 담당 거래처가 없어 전체 코스 중 매출 상위 권역을 표시합니다. 거래처 관리에서 담당자를 배정하면 내 코스만 표시됩니다.
             </p>
           ) : null}
 

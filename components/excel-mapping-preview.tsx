@@ -25,6 +25,8 @@ export function ExcelHeaderMappingPreview({
   rows: RawRow[];
 }) {
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
+  const [cardQuery, setCardQuery] = useState("");
+  const [cardFilter, setCardFilter] = useState<"all" | "mapped" | "unmapped">("all");
 
   if (!headers.length) return null;
 
@@ -38,6 +40,14 @@ export function ExcelHeaderMappingPreview({
   const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
   const mappedHeaderCount = Object.keys(mappedByHeader).length;
   const unusedHeaderCount = Math.max(0, headers.length - mappedHeaderCount);
+  const normalizedCardQuery = cardQuery.trim().toLowerCase();
+  const visibleHeaders = headers.filter((header) => {
+    const mapped = Boolean(mappedByHeader[header]);
+    if (cardFilter === "mapped" && !mapped) return false;
+    if (cardFilter === "unmapped" && mapped) return false;
+    if (normalizedCardQuery && !header.toLowerCase().includes(normalizedCardQuery)) return false;
+    return true;
+  });
 
   function updateHeaderMapping(header: string, nextFieldKey: string) {
     const nextMap = { ...fieldMap };
@@ -121,9 +131,45 @@ export function ExcelHeaderMappingPreview({
           <MappingCounter label="필수 연결" value={`${requiredMappedCount}/${requiredFields.length}`} />
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
+        <input
+          className="h-9 min-w-48 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          onChange={(event) => setCardQuery(event.target.value)}
+          placeholder="엑셀 컬럼명 검색..."
+          value={cardQuery}
+        />
+        <div className="maju-filter-box grid grid-cols-3 gap-1.5 bg-slate-50 p-1">
+          {[
+            ["all", "전체"],
+            ["unmapped", "미연결"],
+            ["mapped", "연결됨"]
+          ].map(([value, label]) => (
+            <button
+              className={`h-8 rounded-md border px-3 text-xs font-black transition ${
+                cardFilter === value
+                  ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_14px_rgba(37,99,235,0.18)]"
+                  : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
+              }`}
+              key={value}
+              onClick={() => setCardFilter(value as "all" | "mapped" | "unmapped")}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <Badge className="bg-slate-100 text-slate-700">{visibleHeaders.length}/{headers.length}컬럼 표시</Badge>
+      </div>
       <div className="max-h-[620px] overflow-auto bg-slate-50/60 p-4">
+        {!visibleHeaders.length ? (
+          <div className="maju-empty-state p-5">
+            <p className="text-sm font-black text-slate-800">조건에 맞는 컬럼이 없습니다.</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
+          </div>
+        ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {headers.map((header, headerIndex) => {
+          {visibleHeaders.map((header) => {
+            const headerIndex = headers.indexOf(header);
             const mappedFieldKey = mappedByHeader[header] || "";
             const mappedField = fields.find((field) => field.key === mappedFieldKey);
             const samples = rows
@@ -183,6 +229,7 @@ export function ExcelHeaderMappingPreview({
             );
           })}
         </div>
+        )}
       </div>
       <FullExcelDataPreview headers={headers} rows={rows} />
       {isWorkspaceOpen ? (
