@@ -121,77 +121,68 @@ export function ExcelHeaderMappingPreview({
           <MappingCounter label="필수 연결" value={`${requiredMappedCount}/${requiredFields.length}`} />
         </div>
       </div>
-      <div className="max-h-[560px] overflow-auto bg-white">
-        <table className="w-full min-w-[880px] border-separate border-spacing-0 text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
-            <tr>
-              <th className="w-[64px] border-b border-r border-slate-200 px-3 py-3 text-center font-black">No</th>
-              <th className="w-[24%] border-b border-r border-slate-200 px-4 py-3 font-black">ERP 엑셀 헤더</th>
-              <th className="w-[36%] border-b border-r border-slate-200 px-4 py-3 font-black">실제 행 값</th>
-              <th className="w-[120px] border-b border-r border-slate-200 px-4 py-3 font-black">상태</th>
-              <th className="border-b border-slate-200 px-4 py-3 font-black">MAJU 표준 필드</th>
-            </tr>
-          </thead>
-          <tbody>
-            {headers.map((header, headerIndex) => {
-              const mappedFieldKey = mappedByHeader[header] || "";
-              const mappedField = fields.find((field) => field.key === mappedFieldKey);
-              const samples = rows
-                .slice(0, 6)
-                .map((row, index) => ({ index: index + 2, value: String(row[header] ?? "").trim() }))
-                .filter((sample) => sample.value);
+      <div className="max-h-[620px] overflow-auto bg-slate-50/60 p-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {headers.map((header, headerIndex) => {
+            const mappedFieldKey = mappedByHeader[header] || "";
+            const mappedField = fields.find((field) => field.key === mappedFieldKey);
+            const samples = rows
+              .slice(0, 4)
+              .map((row, index) => ({ index: index + 2, value: String(row[header] ?? "").trim() }))
+              .filter((sample) => sample.value);
 
-              return (
-                <tr key={header} className="align-top transition odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/30">
-                  <td className="border-b border-r border-slate-100 px-3 py-3 text-center font-black text-slate-400">{headerIndex + 1}</td>
-                  <td className="border-b border-r border-slate-100 px-4 py-3">
-                    <p className="font-black text-slate-950">{header}</p>
-                    <p className="mt-1 text-[11px] font-bold text-slate-400">원본 컬럼명</p>
-                  </td>
-                  <td className="border-b border-r border-slate-100 px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {samples.length ? (
-                        samples.map((sample) => (
-                          <span key={`${header}-${sample.index}`} className="max-w-[220px] truncate rounded-md bg-slate-50 px-2 py-1 font-bold text-slate-700">
-                            <span className="mr-1 text-slate-400">{sample.index}행</span>
-                            {sample.value}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="rounded-md bg-slate-50 px-2 py-1 font-bold text-slate-400">빈 값</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="border-b border-r border-slate-100 px-4 py-3">
-                    {mappedField ? (
-                      <Badge className={mappedField.required ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-700"}>
-                        {mappedField.required ? "필수 연결" : "선택 연결"}
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-slate-100 text-slate-500">미사용</Badge>
-                    )}
-                  </td>
-                  <td className="border-b border-slate-100 px-4 py-3">
-                    <select
-                      className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      value={mappedFieldKey}
-                      onChange={(event) => updateHeaderMapping(header, event.target.value)}
-                    >
-                      <option value="">사용하지 않음</option>
-                      {fields.map((field) => (
-                        <option key={field.key} value={field.key}>
-                          {field.label}
-                          {field.required ? " *" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {mappedField?.description ? <p className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">{mappedField.description}</p> : null}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            return (
+              <div
+                key={header}
+                className={`flex flex-col rounded-lg border bg-white p-3 shadow-sm transition ${
+                  mappedField ? (mappedField.required ? "border-blue-200" : "border-slate-200") : "border-slate-200"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-black text-slate-400">컬럼 {headerIndex + 1} · 원본 헤더</p>
+                    <p className="mt-0.5 truncate text-sm font-black text-slate-950" title={header}>
+                      {header}
+                    </p>
+                  </div>
+                  {mappedField ? (
+                    <Badge className={mappedField.required ? "shrink-0 bg-blue-100 text-blue-800" : "shrink-0 bg-slate-100 text-slate-700"}>
+                      {mappedField.required ? "필수 연결" : "선택 연결"}
+                    </Badge>
+                  ) : (
+                    <Badge className="shrink-0 bg-slate-100 text-slate-500">미사용</Badge>
+                  )}
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {samples.length ? (
+                    samples.map((sample) => (
+                      <span key={`${header}-${sample.index}`} className="max-w-[160px] truncate rounded-md bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-700">
+                        <span className="mr-1 text-slate-400">{sample.index}행</span>
+                        {sample.value}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="rounded-md bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-400">빈 값</span>
+                  )}
+                </div>
+                <select
+                  className="mt-3 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  value={mappedFieldKey}
+                  onChange={(event) => updateHeaderMapping(header, event.target.value)}
+                >
+                  <option value="">사용하지 않음</option>
+                  {fields.map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                      {field.required ? " *" : ""}
+                    </option>
+                  ))}
+                </select>
+                {mappedField?.description ? <p className="mt-1.5 text-[11px] font-semibold leading-4 text-slate-500">{mappedField.description}</p> : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
       <FullExcelDataPreview headers={headers} rows={rows} />
       {isWorkspaceOpen ? (
