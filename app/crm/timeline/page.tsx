@@ -1497,7 +1497,15 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-4 grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
+                    {/*
+                      이 폼은 좌측 260px 내비게이션 + 400px 검색 사이드바 + 우측 440px 첨부자료 패널까지
+                      한 화면에 3중으로 중첩된 뷰포트 기준(xl/2xl) 그리드 안에 들어있습니다. 화면 자체는
+                      2xl(1536px) 이상이어도, 이 폼에 실제로 남는 폭은 그 중첩 때문에 훨씬 좁아질 수 있어서
+                      "뷰포트 기준" md:grid-cols-2/2xl:grid-cols-3처럼 고정 컬럼 수를 강제하면 남은 폭이
+                      좁을 때 칸이 극단적으로 눌려 보이는 문제가 있었습니다. 실제 남은 폭 기준으로
+                      칸 수가 스스로 조절되도록 auto-fit으로 바꿨습니다.
+                    */}
+                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-3 gap-y-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
@@ -1523,11 +1531,11 @@ export default function CrmTimelinePage() {
                       <EditableField label="출발지 거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" label="배송 적재위치" value={draftCustomer.loadingPosition || ""} inputRef={loadingPositionInputRef} onChange={(value) => updateDraft("loadingPosition", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" helper="네이버 리뷰, 영업시간, 업체 상태 추적에 활용합니다." label="네이버 플레이스 링크" value={draftCustomer.naverPlaceUrl || ""} onChange={(value) => updateDraft("naverPlaceUrl", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" helper="카카오맵 장소 상세와 로드뷰 확인에 활용합니다." label="카카오맵 링크" value={draftCustomer.kakaoPlaceUrl || ""} onChange={(value) => updateDraft("kakaoPlaceUrl", value)} />
-                      <EditableField className="md:col-span-2 xl:col-span-3" helper="구글 리뷰와 지도 정보를 함께 확인할 때 활용합니다." label="구글맵 링크" value={draftCustomer.googleMapUrl || ""} onChange={(value) => updateDraft("googleMapUrl", value)} />
+                      <EditableField className="col-span-full" label="주소" value={draftCustomer.address} onChange={(value) => updateDraft("address", value)} />
+                      <EditableField className="col-span-full" label="배송 적재위치" value={draftCustomer.loadingPosition || ""} inputRef={loadingPositionInputRef} onChange={(value) => updateDraft("loadingPosition", value)} />
+                      <EditableField className="col-span-full" helper="네이버 리뷰, 영업시간, 업체 상태 추적에 활용합니다." label="네이버 플레이스 링크" value={draftCustomer.naverPlaceUrl || ""} onChange={(value) => updateDraft("naverPlaceUrl", value)} />
+                      <EditableField className="col-span-full" helper="카카오맵 장소 상세와 로드뷰 확인에 활용합니다." label="카카오맵 링크" value={draftCustomer.kakaoPlaceUrl || ""} onChange={(value) => updateDraft("kakaoPlaceUrl", value)} />
+                      <EditableField className="col-span-full" helper="구글 리뷰와 지도 정보를 함께 확인할 때 활용합니다." label="구글맵 링크" value={draftCustomer.googleMapUrl || ""} onChange={(value) => updateDraft("googleMapUrl", value)} />
                     </div>
                   </div>
                 ) : (
