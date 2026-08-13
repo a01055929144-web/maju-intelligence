@@ -2402,13 +2402,6 @@ export async function saveAnalysis(
     confidence: 100
   }));
 
-  if (mappingRows.length) {
-    await supabaseRequest("column_mappings", {
-      method: "POST",
-      body: JSON.stringify(mappingRows)
-    });
-  }
-
   const rawRows = (options.rawRows?.length ? options.rawRows : rows).map((row, index) => ({
     company_id: companyId,
     import_id: importId,
@@ -2416,16 +2409,24 @@ export async function saveAnalysis(
     raw_data: row
   }));
 
-  if (rawRows.length) {
-    await supabaseRequest("raw_customer_rows", {
-      method: "POST",
-      body: JSON.stringify(rawRows)
-    });
-  }
-
-  if (options.uploadType === "sales-analysis" && options.rawRows?.length) {
-    await saveSalesTransactions(companyId, importId, options.rawRows, options.columnMapping || {});
-  }
+  // 서로 의존하지 않는 저장 작업은 병렬로 실행해 저장 대기 시간을 줄입니다.
+  await Promise.all([
+    mappingRows.length
+      ? supabaseRequest("column_mappings", {
+          method: "POST",
+          body: JSON.stringify(mappingRows)
+        })
+      : Promise.resolve(),
+    rawRows.length
+      ? supabaseRequest("raw_customer_rows", {
+          method: "POST",
+          body: JSON.stringify(rawRows)
+        })
+      : Promise.resolve(),
+    options.uploadType === "sales-analysis" && options.rawRows?.length
+      ? saveSalesTransactions(companyId, importId, options.rawRows, options.columnMapping || {})
+      : Promise.resolve()
+  ]);
 
   const normalizedRows = rows.map((row, index) => {
     const rawRow = options.rawRows?.[index];
@@ -2491,63 +2492,46 @@ export async function saveAnalysis(
     delivery_km: row.deliveryKm
   }));
 
-  await supabaseRequest("admin_audit_logs", {
-    method: "POST",
-    body: JSON.stringify([
-      {
-        company_id: companyId,
-        action: "excel_upload_analyzed",
-        target_type: "customer_import",
-        target_id: importId,
-        metadata: {
-          actorName: options.actorName || "local-mvp-user",
-          rows: rows.length,
-          rawRows: rawRows.length,
-          mappings: mappingRows.length,
-          duplicateCount,
-          qualityScore
-        }
-      }
-    ])
-  });
-
-  if (legacyCustomerRows.length) {
-    await supabaseRequest("customer_rows", {
+  // 감사 로그, 레거시 행 저장, 리포트 생성은 서로 결과값을 주고받지 않으므로 병렬로 실행합니다.
+  const [, , reports] = await Promise.all([
+    supabaseRequest("admin_audit_logs", {
       method: "POST",
-      body: JSON.stringify(legacyCustomerRows)
-    }).catch(() => null);
-  }
-
-  const reports = await supabaseRequest<Array<{ id: string }>>("ai_reports", {
-    method: "POST",
-    body: JSON.stringify([
-      {
-        company_id: companyId,
-        import_id: importId,
-        health_score: report.health.total,
-        report
-      }
-    ])
-  });
-  const reportId = reports[0].id;
-
-  await supabaseRequest("health_score_snapshots", {
-    method: "POST",
-    body: JSON.stringify([
-      {
-        company_id: companyId,
-        report_id: reportId,
-        total: report.health.total,
-        sales_power: report.health.salesPower,
-        delivery_efficiency: report.health.deliveryEfficiency,
-        crm_management: report.health.crmManagement,
-        new_sales: report.health.newSales,
-        concentration: report.health.concentration,
-        risk: report.health.risk,
-        formula_version: "v1"
-      }
-    ])
-  });
+      body: JSON.stringify([
+        {
+          company_id: companyId,
+          action: "excel_upload_analyzed",
+          target_type: "customer_import",
+          target_id: importId,
+          metadata: {
+            actorName: options.actorName || "local-mvp-user",
+            rows: rows.length,
+            rawRows: rawRows.length,
+            mappings: mappingRows.length,
+            duplicateCount,
+            qualityScore
+          }
+        }
+      ])
+    }),
+    legacyCustomerRows.length
+      ? supabaseRequest("customer_rows", {
+          method: "POST",
+          body: JSON.stringify(legacyCustomerRows)
+        }).catch(() => null)
+      : Promise.resolve(null),
+    supabaseRequest<Array<{ id: string }>>("ai_reports", {
+      method: "POST",
+      body: JSON.stringify([
+        {
+          company_id: companyId,
+          import_id: importId,
+          health_score: report.health.total,
+          report
+        }
+      ])
+    })
+  ]);
+  const reportId = (reports as Array<{ id: string }>)[0].id;
 
   const leads = report.leadRecommendations.map((lead) => ({
     company_id: companyId,
@@ -2559,12 +2543,32 @@ export async function saveAnalysis(
     status: lead.score >= 90 ? "today" : "this-week"
   }));
 
-  if (leads.length) {
-    await supabaseRequest("lead_recommendations", {
+  // 건강도 스냅샷과 리드 저장도 서로 독립적이므로 병렬로 실행합니다.
+  await Promise.all([
+    supabaseRequest("health_score_snapshots", {
       method: "POST",
-      body: JSON.stringify(leads)
-    });
-  }
+      body: JSON.stringify([
+        {
+          company_id: companyId,
+          report_id: reportId,
+          total: report.health.total,
+          sales_power: report.health.salesPower,
+          delivery_efficiency: report.health.deliveryEfficiency,
+          crm_management: report.health.crmManagement,
+          new_sales: report.health.newSales,
+          concentration: report.health.concentration,
+          risk: report.health.risk,
+          formula_version: "v1"
+        }
+      ])
+    }),
+    leads.length
+      ? supabaseRequest("lead_recommendations", {
+          method: "POST",
+          body: JSON.stringify(leads)
+        })
+      : Promise.resolve()
+  ]);
 
   return {
     persisted: true,
