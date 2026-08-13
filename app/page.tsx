@@ -32,7 +32,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { ExcelHeaderMappingPreview } from "@/components/excel-mapping-preview";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Progress } from "@/components/ui/progress";
@@ -468,7 +467,6 @@ export default function Home() {
       title="거래처 관리 · 등록"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
-      <CustomerWorkspaceTabs />
       <div className="mx-auto max-w-[1880px] space-y-3">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
         {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}

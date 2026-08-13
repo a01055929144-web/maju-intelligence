@@ -5,7 +5,6 @@ import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
@@ -942,7 +941,6 @@ export default function CrmTimelinePage() {
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
-      <CustomerWorkspaceTabs />
       <section className="mx-auto grid max-w-[1560px] gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
         <div className="xl:sticky xl:top-24 xl:self-start">
           <WorkspaceSectionNav

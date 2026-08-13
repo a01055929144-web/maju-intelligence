@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 
 type UploadHistoryItem = {
@@ -74,7 +73,6 @@ export default function CustomerDataManagementPage() {
       title="거래처 관리 · 데이터 관리"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
-      <CustomerWorkspaceTabs />
       <div className="mx-auto max-w-[1560px] space-y-4">
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
