@@ -285,12 +285,14 @@ function RevenueDataBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
-    <div className="border-b border-slate-200/80 p-4 md:border-b-0 md:border-r last:md:border-r-0">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-        <Icon className="h-5 w-5" />
+    <div className="flex items-center gap-3 border-b border-slate-200/80 p-3 md:border-b-0 md:border-r last:md:border-r-0">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+        <Icon className="h-4 w-4" />
       </div>
-      <p className="maju-muted-label">{label}</p>
-      <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
+      <div className="min-w-0">
+        <p className="maju-muted-label">{label}</p>
+        <p className="mt-0.5 truncate text-xl font-black text-slate-950">{value}</p>
+      </div>
     </div>
   );
 }

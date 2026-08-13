@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
+  Info,
   LogOut,
   MapPinned,
   MessageSquareText,
@@ -185,7 +186,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
         <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
           <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
-            <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2" : "py-4"}`}>
+            <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2" : "py-3"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -193,8 +194,17 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                     {mode === "customer" ? <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{roleLabel}</Badge> : null}
                     {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
-                  <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
-                  {subtitle ? <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p> : null}
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
+                    {subtitle ? (
+                      <span
+                        className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-400"
+                        title={subtitle}
+                      >
+                        <Info className="h-3 w-3" />
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
