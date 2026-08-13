@@ -1008,27 +1008,24 @@ export default function CrmTimelinePage() {
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="maju-panel p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">거래처 운영 현황</Badge>
-                <p className="text-base font-black text-slate-950">보완이 필요한 거래처를 먼저 정리하세요</p>
-                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">사업자 상태, 연락처, 배송주소, 적재위치 기준으로 원장 완성도를 봅니다.</p>
-              </div>
+        <div className="maju-section-card scroll-mt-28">
+          <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="사업자 상태, 연락처, 배송주소, 적재위치 기준으로 원장 완성도를 확인하고 부족한 데이터를 보완합니다." />
+          <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 lg:flex-row lg:items-center lg:justify-between">
+              <p className="text-sm font-black text-slate-900">보완이 필요한 거래처를 먼저 정리하세요</p>
               <div className="grid grid-cols-2 gap-2 text-center">
                 <MiniLedgerMetric label="운영 가능" value={`${readyCustomerCount.toLocaleString()}곳`} tone="ready" />
                 <MiniLedgerMetric label="보완 필요" value={`${needsAttentionCustomers.length.toLocaleString()}곳`} tone="warning" />
               </div>
             </div>
+            <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-3 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
+              <span>
+                <span className="block text-sm font-black">거래처 데이터 보완</span>
+                <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
+              </span>
+              <Plus className="h-5 w-5 shrink-0" />
+            </Link>
           </div>
-          <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-4 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
-            <span>
-              <span className="block text-sm font-black">거래처 데이터 보완</span>
-              <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
-            </span>
-            <Plus className="h-5 w-5" />
-          </Link>
         </div>
 
         <div className="maju-section-card scroll-mt-28" id="customer-ledger-list">
@@ -1080,6 +1077,7 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
               <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
+                <p className="maju-muted-label px-0.5 pb-1.5">검색</p>
                 <label className="maju-search-field">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
@@ -1089,74 +1087,77 @@ export default function CrmTimelinePage() {
                     value={customerSearch}
                   />
                 </label>
-                <div className="maju-filter-box mt-3">
-                  <p className="maju-muted-label px-2 pb-1">매출 등급</p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {(["all", "A", "B", "C"] as const).map((grade) => (
-                      <button
-                        className={`h-9 rounded-md border text-xs font-black transition ${
-                          gradeFilter === grade
-                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
-                            : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
-                        }`}
-                        key={grade}
-                        onClick={() => setGradeFilter(grade)}
-                        type="button"
-                      >
-                        {grade === "all" ? "전체" : `${grade}등급`}
-                      </button>
-                    ))}
+                <div className="mt-3 border-t border-slate-200/80 pt-3">
+                  <p className="maju-muted-label px-0.5 pb-1.5">필터</p>
+                  <div className="maju-filter-box">
+                    <p className="maju-muted-label px-2 pb-1">매출 등급</p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(["all", "A", "B", "C"] as const).map((grade) => (
+                        <button
+                          className={`h-9 rounded-md border text-xs font-black transition ${
+                            gradeFilter === grade
+                              ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                              : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                          }`}
+                          key={grade}
+                          onClick={() => setGradeFilter(grade)}
+                          type="button"
+                        >
+                          {grade === "all" ? "전체" : `${grade}등급`}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="maju-filter-box mt-3">
-                  <p className="maju-muted-label px-2 pb-1">운영 상태</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <CustomerFilterButton
-                      active={operationFilter === "address-missing"}
-                      count={addressMissingCount}
-                      label="주소 미등록"
-                      onClick={() => applyOperationFilter("address-missing")}
-                      tone="danger"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "business-number-missing"}
-                      count={businessNumberMissingCount}
-                      label="사업자번호 미등록"
-                      onClick={() => applyOperationFilter("business-number-missing")}
-                      tone="warning"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "business-check"}
-                      count={businessCheckCount}
-                      label="사업자 확인"
-                      onClick={() => applyOperationFilter("business-check")}
-                      tone="danger"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "loading-missing"}
-                      count={loadingMissingCount}
-                      label="적재위치 미등록"
-                      onClick={() => applyOperationFilter("loading-missing")}
-                      tone="warning"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "contact-missing"}
-                      count={contactMissingCount}
-                      label="연락처 미등록"
-                      onClick={() => applyOperationFilter("contact-missing")}
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "manager-missing"}
-                      count={managerMissingCount}
-                      label="담당자 미지정"
-                      onClick={() => applyOperationFilter("manager-missing")}
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "all"}
-                      count={customers.length}
-                      label="운영 전체"
-                      onClick={clearOperationFilter}
-                    />
+                  <div className="maju-filter-box mt-3">
+                    <p className="maju-muted-label px-2 pb-1">운영 상태</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <CustomerFilterButton
+                        active={operationFilter === "address-missing"}
+                        count={addressMissingCount}
+                        label="주소 미등록"
+                        onClick={() => applyOperationFilter("address-missing")}
+                        tone="danger"
+                      />
+                      <CustomerFilterButton
+                        active={operationFilter === "business-number-missing"}
+                        count={businessNumberMissingCount}
+                        label="사업자번호 미등록"
+                        onClick={() => applyOperationFilter("business-number-missing")}
+                        tone="warning"
+                      />
+                      <CustomerFilterButton
+                        active={operationFilter === "business-check"}
+                        count={businessCheckCount}
+                        label="사업자 확인"
+                        onClick={() => applyOperationFilter("business-check")}
+                        tone="danger"
+                      />
+                      <CustomerFilterButton
+                        active={operationFilter === "loading-missing"}
+                        count={loadingMissingCount}
+                        label="적재위치 미등록"
+                        onClick={() => applyOperationFilter("loading-missing")}
+                        tone="warning"
+                      />
+                      <CustomerFilterButton
+                        active={operationFilter === "contact-missing"}
+                        count={contactMissingCount}
+                        label="연락처 미등록"
+                        onClick={() => applyOperationFilter("contact-missing")}
+                      />
+                      <CustomerFilterButton
+                        active={operationFilter === "manager-missing"}
+                        count={managerMissingCount}
+                        label="담당자 미지정"
+                        onClick={() => applyOperationFilter("manager-missing")}
+                      />
+                      <CustomerFilterButton
+                        active={operationFilter === "all"}
+                        count={customers.length}
+                        label="운영 전체"
+                        onClick={clearOperationFilter}
+                      />
+                    </div>
                   </div>
                 </div>
                 <BusinessStatusControlPanel
