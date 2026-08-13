@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Building2, FileBadge2, ImageOff, MapPin, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, MapPin, Plus, Printer, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -100,6 +100,9 @@ export default function CrmSummaryPage() {
   const [operationsSummary, setOperationsSummary] = useState<Record<string, OperationsSummaryEntry>>({});
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [exportMessage, setExportMessage] = useState("");
+  const [isExportingImage, setIsExportingImage] = useState(false);
+  const exportTableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -242,6 +245,58 @@ export default function CrmSummaryPage() {
     });
   }, [customers, statusFilter, tableSearch]);
 
+  async function downloadExcel() {
+    setExportMessage("");
+    try {
+      // 엑셀 쓰기 라이브러리는 실제로 다운로드 버튼을 눌렀을 때만 불러옵니다(초기 번들 크기 절약).
+      const writeXlsxFileModule = await import("write-excel-file/browser");
+      const headerRow = ["거래처명", "대표자명", "연락처", "사업자번호", "사업자 상태", "메모", "사업자등록증", "적재위치 사진"].map((value) => ({
+        fontWeight: "bold" as const,
+        value
+      }));
+      const dataRows = filteredRows.map((customer) => {
+        const summaryEntry = customer.id ? operationsSummary[customer.id] : undefined;
+        return [
+          { value: customer.customerName },
+          { value: customer.representativeName || "" },
+          { value: customer.phone || "" },
+          { value: customer.businessNumber ? formatBusinessRegistrationNumber(customer.businessNumber) : "" },
+          { value: customer.businessStatus || "확인 필요" },
+          { value: summaryEntry?.latestMemo || "" },
+          { value: customer.businessLicenseFileUrl || "미등록" },
+          { value: summaryEntry?.loadingPositionPhotoUrl || "미등록" }
+        ];
+      });
+      await writeXlsxFileModule.default([headerRow, ...dataRows], { sheet: "거래처 전체 현황" }).toFile("거래처_전체현황.xlsx");
+    } catch (error) {
+      setExportMessage(error instanceof Error ? error.message : "엑셀 다운로드에 실패했습니다.");
+    }
+  }
+
+  async function downloadImage() {
+    if (!exportTableRef.current || isExportingImage) return;
+    setExportMessage("");
+    setIsExportingImage(true);
+    try {
+      // 이미지 캡처 라이브러리도 버튼을 눌렀을 때만 불러옵니다.
+      const { toPng } = await import("html-to-image");
+      const dataUrl = await toPng(exportTableRef.current, { backgroundColor: "#ffffff", pixelRatio: 2 });
+      const link = document.createElement("a");
+      link.download = "거래처_전체현황.png";
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      setExportMessage(error instanceof Error ? error.message : "이미지 다운로드에 실패했습니다.");
+    } finally {
+      setIsExportingImage(false);
+    }
+  }
+
+  function downloadPdf() {
+    setExportMessage("");
+    window.print();
+  }
+
   return (
     <CustomerAppShell
       active="customers"
@@ -341,12 +396,29 @@ export default function CrmSummaryPage() {
         </div>
 
         <div className="maju-section-card">
-          <SectionHeader
-            eyebrow="국세청 상태조회"
-            title="사업자 상태·메모·첨부 현황"
-            description="거래처명, 대표자명, 연락처, 사업자번호, 사업자 상태값, 메모, 사업자등록증, 적재위치 사진을 한 표에서 확인합니다."
-          />
-          <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50/60 p-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <SectionHeader
+              eyebrow="국세청 상태조회"
+              title="사업자 상태·메모·첨부 현황"
+              description="거래처명, 대표자명, 연락처, 사업자번호, 사업자 상태값, 메모, 사업자등록증, 적재위치 사진을 한 표에서 확인합니다."
+            />
+            <div className="no-print flex shrink-0 flex-wrap gap-1.5 p-3">
+              <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadExcel()} type="button">
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                엑셀
+              </button>
+              <button className="maju-button-secondary h-8 text-xs" onClick={downloadPdf} type="button">
+                <Printer className="h-3.5 w-3.5" />
+                PDF
+              </button>
+              <button className="maju-button-secondary h-8 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={isExportingImage} onClick={() => void downloadImage()} type="button">
+                <ImageDown className="h-3.5 w-3.5" />
+                {isExportingImage ? "생성 중" : "이미지"}
+              </button>
+            </div>
+          </div>
+          {exportMessage ? <p className="no-print mx-3 -mt-1 mb-2 rounded-md bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{exportMessage}</p> : null}
+          <div className="no-print flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50/60 p-3 lg:flex-row lg:items-center lg:justify-between">
             <label className="maju-search-field lg:max-w-xs">
               <Search className="h-4 w-4 text-slate-400" />
               <input
@@ -373,6 +445,8 @@ export default function CrmSummaryPage() {
               ))}
             </div>
           </div>
+          <div className="bg-white" id="crm-summary-print-target" ref={exportTableRef}>
+          <p className="print-only hidden px-3 pb-2 pt-3 text-sm font-black text-slate-950">거래처 전체 현황 · 사업자 상태·메모·첨부 현황</p>
           {filteredRows.length ? (
             <div className="grid grid-cols-[minmax(0,1.3fr)_100px_120px_120px_84px_minmax(0,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
               <span>거래처명</span>
@@ -467,8 +541,29 @@ export default function CrmSummaryPage() {
               );
             })}
           </div>
+          </div>
         </div>
       </section>
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #crm-summary-print-target,
+          #crm-summary-print-target * {
+            visibility: visible;
+          }
+          #crm-summary-print-target {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .print-only {
+            display: block !important;
+          }
+        }
+      `}</style>
     </CustomerAppShell>
   );
 }

@@ -29,6 +29,8 @@ type DbSummary = {
 type CustomerView = {
   id?: string;
   address: string;
+  bankAccountFileUrl?: string;
+  businessLicenseFileUrl?: string;
   businessNumber?: string;
   businessStatus?: string;
   customerName: string;
@@ -495,8 +497,35 @@ export default function CrmTimelinePage() {
   }
   const activeCleanupLabel = operationFilterLabel(operationFilter);
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
-  const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
-  const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
+  // 사업자등록증·통장사본은 첨부자료함(customer_attachments) 외에도 데이터 등록의 OCR 저장 경로로
+  // 거래처 원장에 직접 저장될 수 있어(businessLicenseFileUrl/bankAccountFileUrl), 두 경로를 모두 인식합니다.
+  const businessCertificateAttachments =
+    customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length || (selectedCustomer.businessLicenseFileUrl ? 1 : 0);
+  const bankAccountAttachments =
+    customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length || (selectedCustomer.bankAccountFileUrl ? 1 : 0);
+  const masterFileAttachments = [
+    !customerAttachments.some((attachment) => attachment.attachmentType === "business_license") && selectedCustomer.businessLicenseFileUrl
+      ? {
+          id: "master-business-license",
+          attachmentType: "business_license",
+          createdAt: "데이터 등록 시 저장",
+          fileUrl: selectedCustomer.businessLicenseFileUrl,
+          storagePath: "",
+          title: "사업자등록증"
+        }
+      : null,
+    !customerAttachments.some((attachment) => attachment.attachmentType === "bank_account") && selectedCustomer.bankAccountFileUrl
+      ? {
+          id: "master-bank-account",
+          attachmentType: "bank_account",
+          createdAt: "데이터 등록 시 저장",
+          fileUrl: selectedCustomer.bankAccountFileUrl,
+          storagePath: "",
+          title: "통장사본"
+        }
+      : null
+  ].filter((row): row is { id: string; attachmentType: string; createdAt: string; fileUrl: string; storagePath: string; title: string } => Boolean(row));
+  const combinedAttachments = [...customerAttachments, ...masterFileAttachments];
   const attachmentChecklist = [
     {
       count: loadingPositionAttachments,
@@ -1652,11 +1681,11 @@ export default function CrmTimelinePage() {
                   <div className="maju-section-card mt-4 overflow-hidden">
                     <div className="maju-card-header flex items-center justify-between gap-3 px-3 py-2">
                       <p className="text-xs font-black text-slate-500">등록된 첨부자료</p>
-                      <Badge className="bg-slate-100 text-slate-700">{customerAttachments.length}건</Badge>
+                      <Badge className="bg-slate-100 text-slate-700">{combinedAttachments.length}건</Badge>
                     </div>
                     <div className="grid gap-0">
-                      {customerAttachments.length ? (
-                        customerAttachments.map((attachment) => (
+                      {combinedAttachments.length ? (
+                        combinedAttachments.map((attachment) => (
                           <AttachmentRow
                             key={attachment.id}
                             icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
