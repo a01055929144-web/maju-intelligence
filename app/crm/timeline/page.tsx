@@ -1283,7 +1283,7 @@ export default function CrmTimelinePage() {
             )}
 
           <div className="min-w-0 space-y-4">
-            <div className="maju-section-card scroll-mt-28 p-5" id="customer-ledger-detail">
+            <div className="maju-section-card scroll-mt-28 p-4" id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>
@@ -1844,7 +1844,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="maju-empty-state m-4 p-5">
+                    <div className="maju-empty-state m-4 p-4">
                       <p className="text-sm font-black text-slate-700">아직 DB 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
@@ -1881,7 +1881,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="maju-empty-state m-4 p-5">
+                    <div className="maju-empty-state m-4 p-4">
                       <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 DB에 저장된 데이터만 표시합니다.
@@ -1912,7 +1912,7 @@ function useAdminCompanyId() {
 
 function SectionHeader({ description, eyebrow, title }: { description: string; eyebrow: string; title: string }) {
   return (
-    <div className="flex flex-col gap-2 border-b border-slate-200/80 px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex flex-col gap-2 border-b border-slate-200/80 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
         <p className="text-xs font-black uppercase tracking-wide text-teal-700">{eyebrow}</p>
         <h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2>

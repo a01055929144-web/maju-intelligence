@@ -48,7 +48,7 @@ export default async function AdminPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <div className="grid gap-3 lg:grid-cols-3">
           {adminSignals.map((signal) => (
             <AdminSignalCard key={signal.label} {...signal} />
@@ -58,7 +58,7 @@ export default async function AdminPage() {
         <div className="grid gap-4 md:grid-cols-4">
           {overview.map(([label, value, Icon]) => (
             <Card key={label as string} className="shadow-none">
-              <CardContent className="p-5">
+              <CardContent className="p-4">
                 <Icon className="mb-4 h-5 w-5 text-primary" />
                 <p className="text-xs font-bold text-muted-foreground">{label as string}</p>
                 <p className="mt-1 text-3xl font-black">{value as string}</p>

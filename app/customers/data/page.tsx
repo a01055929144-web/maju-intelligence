@@ -88,11 +88,11 @@ export default function CustomerDataManagementPage() {
           </div>
           <div className="overflow-x-auto">
             {!uploadsLoaded ? (
-              <p className="p-6 text-sm font-bold text-slate-400">불러오는 중…</p>
+              <p className="p-4 text-sm font-bold text-slate-400">불러오는 중…</p>
             ) : loadError ? (
-              <p className="p-6 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
+              <p className="p-4 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
             ) : uploads.length === 0 ? (
-              <p className="p-6 text-sm font-bold text-slate-400">업로드 이력이 아직 없습니다. 거래처 관리 &gt; 등록에서 엑셀을 업로드해보세요.</p>
+              <p className="p-4 text-sm font-bold text-slate-400">업로드 이력이 아직 없습니다. 거래처 관리 &gt; 등록에서 엑셀을 업로드해보세요.</p>
             ) : (
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>

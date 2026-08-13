@@ -57,7 +57,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-4">
         <div className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -99,7 +99,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           </div>
           <div className="divide-y divide-slate-100">
             {drafts.map((draft) => (
-              <article key={draft.id} className="grid gap-4 p-5 hover:bg-slate-50/60 xl:grid-cols-[220px_minmax(0,1fr)_220px]">
+              <article key={draft.id} className="grid gap-4 p-4 hover:bg-slate-50/60 xl:grid-cols-[220px_minmax(0,1fr)_220px]">
                 <div className="min-w-0">
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
                     <Badge className="bg-teal-100 text-teal-800">{typeLabels[draft.type]}</Badge>
@@ -158,7 +158,7 @@ function AssistantBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 초안은 방문 결과와 영업 메모를 실행 문장으로 바꾸는 보조 기능입니다.</p>
@@ -220,7 +220,7 @@ function AssistantActionCard({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Sparkles; label: string; value: string }) {
   return (
-    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+    <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r last:md:border-r-0">
       <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
         <Icon className="h-5 w-5" />
       </div>

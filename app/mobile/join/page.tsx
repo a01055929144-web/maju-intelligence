@@ -26,7 +26,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
         </header>
 
         <div className="flex-1 space-y-5 px-5 py-6">
-          <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <Badge className="mb-4 bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-200">
               <MessageCircle className="mr-1 h-3.5 w-3.5" />
               {joinMode === "company" ? "카카오톡 초대" : "개인으로 시작"}

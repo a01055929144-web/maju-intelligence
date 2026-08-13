@@ -97,14 +97,14 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
 
-      <div className="grid gap-4 border-b border-slate-200 bg-white p-5 md:grid-cols-4">
+      <div className="grid gap-4 border-b border-slate-200 bg-white p-4 md:grid-cols-4">
         <StaffSignal icon={<Users className="h-4 w-4" />} label="등록 직원" value={`${invitations.length}명`} />
         <StaffSignal icon={<Link2 className="h-4 w-4" />} label="초대 대기" value={`${pendingCount}명`} />
         <StaffSignal icon={<Smartphone className="h-4 w-4" />} label="가입 완료" value={`${acceptedCount}명`} />
         <StaffSignal icon={<CheckCircle2 className="h-4 w-4" />} label="활성 직원" value={`${activeCount}명`} />
       </div>
 
-      <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           <div className="grid gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4 md:grid-cols-3">
             <OnboardingStep
@@ -166,7 +166,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
             </div>
           ))}
           {!invitations.length ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-bold leading-6 text-slate-500">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm font-bold leading-6 text-slate-500">
               아직 등록된 직원 초대가 없습니다. 오른쪽에서 직원명을 입력해 카카오 가입 링크를 먼저 생성하세요.
             </div>
           ) : null}

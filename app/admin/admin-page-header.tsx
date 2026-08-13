@@ -25,7 +25,7 @@ const navItems = [
 export function AdminPageHeader({ active, badge, session, subtitle, title }: AdminPageHeaderProps) {
   return (
     <header className="border-b border-slate-200/80 bg-white/[0.78] backdrop-blur-2xl">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">{badge}</Badge>
           <h1 className="truncate text-[26px] font-black tracking-normal text-slate-900">{title}</h1>

@@ -632,7 +632,7 @@ function Briefing({
   return (
     <section className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="rounded-md border border-slate-200 bg-white p-5">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
           <Badge className="mb-4 bg-blue-50 text-blue-700">등록 가이드</Badge>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-end">
             <div>
@@ -659,7 +659,7 @@ function Briefing({
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold text-slate-500">등록 후 생성되는 결과</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             {reportOutcomes.map(([label, value, hint]) => (
@@ -691,7 +691,7 @@ function Briefing({
           {dataSets.map((dataSet) => {
             const Icon = dataSet.icon;
             return (
-              <div key={dataSet.title} className="rounded-md border border-slate-200 bg-white p-5">
+              <div key={dataSet.title} className="rounded-md border border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-700">
@@ -721,7 +721,7 @@ function Briefing({
           })}
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-5">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2">
             <Database className="h-5 w-5 text-blue-700" />
             <p className="text-lg font-black text-slate-950">저장 전 검증 기준</p>
@@ -1520,7 +1520,7 @@ function Onboarding({
           {entryMode === "excel" ? (
             <>
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-              <label className="maju-panel flex min-h-56 cursor-pointer flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center transition hover:bg-blue-50">
+              <label className="maju-panel flex min-h-56 cursor-pointer flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/50 p-4 text-center transition hover:bg-blue-50">
                 <Upload className="mb-4 h-11 w-11 text-blue-700" />
                 <span className="text-lg font-black text-slate-950">엑셀 파일 업로드</span>
                 <span className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">ERP 헤더를 읽고 MAJU 표준 필드에 연결합니다.</span>
@@ -1761,14 +1761,14 @@ function Onboarding({
 
       <aside className="space-y-4">
         <div className="maju-section-card border-l-4 border-l-violet-600">
-          <div className="maju-card-header bg-violet-50/40 p-5">
+          <div className="maju-card-header bg-violet-50/40 p-4">
             <Badge className="mb-3 bg-violet-50 text-violet-700">3. 미리보기 · 매핑 · 저장</Badge>
             <h2 className="text-lg font-black text-slate-950">엑셀 전체 미리보기와 컬럼 매칭</h2>
             <p className="mt-1 text-sm font-medium leading-6 text-slate-500">
               {rawRows.length ? `${rawRows.length}개 행 전체를 확인하고, ERP 헤더를 MAJU 표준 필드에 연결한 뒤 저장합니다.` : "엑셀 업로드 또는 수기 저장 후 이곳에서 확인합니다."}
             </p>
           </div>
-          <div className="space-y-5 p-5">
+          <div className="space-y-5 p-4">
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
               <RegistrationStatusCard status={registrationStatus} />
               <UploadStatusCard
@@ -1911,7 +1911,7 @@ function Onboarding({
                   </div>
                 ) : null}
                 {!headers.length ? (
-                  <div className="maju-empty-state p-6 text-center">
+                  <div className="maju-empty-state p-4 text-center">
                     <p className="font-black text-slate-950">아직 검수할 등록 데이터가 없습니다.</p>
                     <p className="mt-2 text-sm font-medium leading-6 text-slate-500">엑셀 업로드 또는 수기 입력을 시작하면 필드 매칭, 데이터 검수, DB 저장 상태가 순서대로 표시됩니다.</p>
                   </div>
@@ -3495,7 +3495,7 @@ function DocumentOcrRegistrationPanel({
   return (
     <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-3">
-        <label className="flex min-h-48 cursor-pointer flex-col justify-between rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-5 transition hover:bg-blue-50">
+        <label className="flex min-h-48 cursor-pointer flex-col justify-between rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-4 transition hover:bg-blue-50">
           <span>
             <span className="grid h-11 w-11 place-items-center rounded-md bg-white text-blue-700 ring-1 ring-inset ring-blue-100">
               <FileSpreadsheet className="h-5 w-5" />

@@ -163,7 +163,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         </button>
       </div>
 
-      <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-3 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
           <StatusTile label="DB 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
           <StatusTile label="대시보드" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
@@ -183,7 +183,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         </div>
       </div>
 
-      <div className="grid gap-3 border-t border-slate-100 px-5 py-4 lg:grid-cols-2">
+      <div className="grid gap-3 border-t border-slate-100 px-4 py-4 lg:grid-cols-2">
         <ScoreBar
           description={`${okCount}/${Math.max(checks.length, 1)}개 기준 통과`}
           label="데이터 기준 일치율"
@@ -199,9 +199,9 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
       </div>
 
       {error ? (
-        <div className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm font-bold text-amber-900">{error}</div>
+        <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">{error}</div>
       ) : (
-        <div className="grid gap-3 border-t border-slate-100 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-3 border-t border-slate-100 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-2 md:grid-cols-2">
             {checks.map((check) => (
               <div key={check.label} className={`maju-stat-card ${check.ok ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>

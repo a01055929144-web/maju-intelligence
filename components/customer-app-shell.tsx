@@ -185,7 +185,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
         <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
           <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
-            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2" : "py-4"}`}>
+            <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -225,7 +225,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
           </header>
 
           {mode === "admin-preview" ? (
-            <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-6 ${fullBleed ? "shrink-0" : ""}`}>
+            <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-4 ${fullBleed ? "shrink-0" : ""}`}>
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-black text-amber-900">관리자 미리보기 모드</p>
@@ -251,7 +251,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             </div>
           ) : null}
 
-          <div className={fullBleed ? "flex flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "px-4 py-4 sm:px-6"}>{children}</div>
+          <div className={fullBleed ? "flex flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "px-4 py-4 sm:px-4"}>{children}</div>
         </section>
       </div>
     </main>

@@ -57,7 +57,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         </header>
 
         <div className="flex-1 space-y-4 px-5 py-5">
-          <section className="rounded-2xl bg-teal-700 p-5 text-white shadow-[0_16px_36px_rgba(15,118,110,0.22)]">
+          <section className="rounded-2xl bg-teal-700 p-4 text-white shadow-[0_16px_36px_rgba(15,118,110,0.22)]">
             <p className="text-xs font-black uppercase text-white/70">Today Route</p>
             <h1 className="mt-2 text-[28px] font-black leading-tight">{heroCopy.title}</h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-white/78">
@@ -145,7 +145,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 </Link>
               ))}
               {!todayStops.length ? (
-                <div className="p-5 text-sm font-bold leading-6 text-slate-500">
+                <div className="p-4 text-sm font-bold leading-6 text-slate-500">
                   오늘 배정된 코스가 없습니다. 관리자 또는 고객사 담당자가 배송차별 코스를 먼저 확정해야 합니다.
                 </div>
               ) : null}

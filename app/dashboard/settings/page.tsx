@@ -34,7 +34,7 @@ export default async function CompanySettingsPage() {
       userName={session.name}
       workspaceRole={session.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6">
+      <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <div className="space-y-5">
           <CompanySettingsForm initial={company} />
           <StaffManagementPanel initialInvitations={staff.invitations} />

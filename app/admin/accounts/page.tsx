@@ -17,7 +17,7 @@ export default async function AdminAccountsPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="accounts" badge="Account Control" session={session} subtitle="관리자 계정, 기본 고객사 계정, 회사별 계정의 역할을 분리해서 점검합니다" title="전역 계정 설정" />
 
-      <section className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-4">
         <div className="grid gap-3 md:grid-cols-3">
           <RoleCard
             description="어드민 콘솔에 접근하고 고객사, 업로드, 시스템 상태를 관리합니다."

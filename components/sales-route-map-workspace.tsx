@@ -527,7 +527,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       */}
       <div className="relative flex flex-1 flex-col xl:min-h-0">
         {timelineHref ? (
-          <div className="shrink-0 px-5 pt-3 empty:hidden">
+          <div className="shrink-0 px-4 pt-3 empty:hidden">
             <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
           </div>
         ) : null}
@@ -1553,7 +1553,7 @@ function StoreManagementPanel({
               </button>
             ))
           ) : (
-            <div className="grid h-full min-h-[180px] place-items-center px-5 text-center">
+            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
               <div>
                 <p className="text-sm font-black text-slate-700">{sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}</p>
                 <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
@@ -2333,8 +2333,8 @@ function OperationalEmptyState({
   readonly title: string;
 }) {
   return (
-    <div className="grid h-full min-h-[520px] place-items-center px-5 text-center">
-      <div className="max-w-xl rounded-xl border border-dashed border-teal-200 bg-teal-50/60 px-6 py-8 shadow-[0_8px_22px_rgba(15,118,110,0.08)]">
+    <div className="grid h-full min-h-[520px] place-items-center px-4 text-center">
+      <div className="max-w-xl rounded-xl border border-dashed border-teal-200 bg-teal-50/60 px-4 py-8 shadow-[0_8px_22px_rgba(15,118,110,0.08)]">
         <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-white text-teal-700 shadow-sm ring-1 ring-inset ring-teal-100">
           <Store className="h-5 w-5" />
         </div>
@@ -2644,7 +2644,7 @@ function StoreDetail({
     <>
       <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
       <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="maju-card-header border-b px-6 py-5">
+        <header className="maju-card-header border-b px-4 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
@@ -2685,7 +2685,7 @@ function StoreDetail({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
           <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -2853,11 +2853,11 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
 
   return (
     <section className="maju-section-card">
-      <button className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left" onClick={() => setOpen((value) => !value)} type="button">
+      <button className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left" onClick={() => setOpen((value) => !value)} type="button">
         <span className="text-sm font-black text-slate-900">{title}</span>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open ? <div className="border-t border-slate-200 px-5 pb-5">{children}</div> : null}
+      {open ? <div className="border-t border-slate-200 px-4 pb-5">{children}</div> : null}
     </section>
   );
 }

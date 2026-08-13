@@ -215,7 +215,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-primary">
               <ClipboardList className="h-5 w-5" />
@@ -232,7 +232,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             <AdminQueueMetric label="DB 상태" value={source === "supabase" ? "연결" : "확인"} tone={source === "supabase" ? "default" : "warning"} />
           </div>
         </div>
-        <div className="grid gap-3 p-5 lg:grid-cols-4">
+        <div className="grid gap-3 p-4 lg:grid-cols-4">
           {adminActionQueue.map(({ company, missingCheck, readiness }) => (
             <button
               key={company.id}
@@ -258,7 +258,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </button>
           ))}
           {!adminActionQueue.length ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 lg:col-span-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 lg:col-span-4">
               <p className="font-black text-emerald-900">모든 고객사가 운영 준비 기준을 충족했습니다.</p>
               <p className="mt-1 text-sm font-bold text-emerald-700">신규 업로드 실패, 출발지 변경, 계정 변경 요청만 수시로 확인하면 됩니다.</p>
             </div>
@@ -343,7 +343,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </button>
           ))}
           {!filteredCompanies.length ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
               <p className="text-sm font-black text-slate-800">조건에 맞는 고객사가 없습니다.</p>
               <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">검색어 또는 운영 필터를 바꾸거나 신규 고객사를 등록하세요.</p>
             </div>
@@ -352,7 +352,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       </aside>
 
       <section className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <div>
             <Badge className="mb-2 bg-slate-100 text-slate-700">{selectedCompany ? "선택 고객사" : "신규 고객사"}</Badge>
             <h2 className="text-2xl font-black">{selectedCompany?.name || "새 고객사 등록"}</h2>
@@ -363,7 +363,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           <Building2 className="h-8 w-8 text-primary" />
         </div>
 
-        <form className="space-y-6 p-5" onSubmit={handleSubmit}>
+        <form className="space-y-6 p-4" onSubmit={handleSubmit}>
           {selectedCompany ? (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">

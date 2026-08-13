@@ -565,8 +565,8 @@ function FallbackAddressMap({
           </div>
         ) : null}
         {!displayMarkers.length ? (
-          <div className="absolute inset-0 grid place-items-center p-6 text-center">
-            <div className="rounded-md border border-slate-200 bg-white/95 p-5 shadow-sm">
+          <div className="absolute inset-0 grid place-items-center p-4 text-center">
+            <div className="rounded-md border border-slate-200 bg-white/95 p-4 shadow-sm">
               <p className="font-black text-slate-900">표시할 지도 데이터가 없습니다.</p>
               <p className="mt-2 text-sm font-bold leading-6 text-slate-500">거래처 주소를 먼저 등록하거나 고객사 데이터 기준 진단을 확인하세요.</p>
             </div>

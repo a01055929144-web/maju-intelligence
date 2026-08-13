@@ -77,7 +77,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-4 xl:grid-cols-[260px_minmax(0,1fr)]">
         <div className="xl:sticky xl:top-24 xl:self-start">
           <WorkspaceSectionNav
             items={[
@@ -108,7 +108,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
         </div>
 
         {pipelineError ? (
-          <div className="maju-filter-box border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-900">
+          <div className="maju-filter-box border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-900">
             DB 연결 또는 방문 기록 테이블을 확인하세요. 화면은 계속 사용할 수 있도록 비어 있는 상태로 표시합니다.
           </div>
         ) : null}
@@ -136,7 +136,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
               <h2 className="text-lg font-black text-slate-950">상태 분포</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">후속 작업 단계</p>
             </div>
-            <div className="space-y-4 p-5">
+            <div className="space-y-4 p-4">
               <PipelineLine label="견적 요청" value={pipeline.quoteRequests} total={pipeline.items.length} />
               <PipelineLine label="관심 있음" value={pipeline.interested} total={pipeline.items.length} />
               <PipelineLine label="보류" value={pipeline.pending} total={pipeline.items.length} />
@@ -235,7 +235,7 @@ function PipelineBasisPanel({
         고정돼, 가운데 설명 문단(minmax(0,1fr))이 극단적으로 눌려 한 글자씩 줄바꿈되는 문제가
         있었습니다. minmax(0,auto)로 바꿔 필요할 때는 줄어들 수 있게 했습니다.
       */}
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">집계 기준</p>
           <p className="mt-1 maju-muted-label normal-case tracking-normal">방문 결과 기반</p>
@@ -269,7 +269,7 @@ function PipelineBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
-    <div className="border-b border-slate-200/80 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+    <div className="border-b border-slate-200/80 p-4 md:border-b-0 md:border-r last:md:border-r-0">
       <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
         <Icon className="h-5 w-5" />
       </div>

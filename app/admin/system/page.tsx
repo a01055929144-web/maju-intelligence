@@ -91,9 +91,9 @@ export default async function AdminSystemPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="system" badge="System Check" session={session} subtitle="실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다" title="운영 설정 점검" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <Card className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
-          <CardContent className="p-5">
+          <CardContent className="p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
                 <Badge className={system.readyForOperations ? "mb-3 bg-primary text-primary-foreground" : "mb-3 bg-amber-100 text-amber-900"}>
@@ -389,7 +389,7 @@ export default async function AdminSystemPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-md border border-dashed border-border bg-muted/35 p-5">
+              <div className="rounded-md border border-dashed border-border bg-muted/35 p-4">
                 <p className="text-sm font-black text-slate-900">아직 표시할 감사 로그가 없습니다.</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   거래처 마스터나 매출 거래내역을 저장하면 업로드 분석 기록이 이곳에 남습니다. 운영 전환 후에는 고객사별 변경 이력을 여기서 확인합니다.
@@ -719,7 +719,7 @@ function LaunchGateCard({ description, label, ready }: { description: string; la
 function Metric({ icon: Icon, label, value }: { icon: typeof Database; label: string; value: string }) {
   return (
     <Card className="shadow-none">
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
         <p className="text-xs font-bold text-muted-foreground">{label}</p>
         <p className="mt-1 text-3xl font-black">{value}</p>

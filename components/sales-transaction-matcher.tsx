@@ -111,7 +111,7 @@ export function SalesTransactionMatcher({
       </div>
 
       {message ? (
-        <div className={`px-5 py-2 text-xs font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+        <div className={`px-4 py-2 text-xs font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
           {message.text}
         </div>
       ) : null}

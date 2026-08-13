@@ -51,7 +51,7 @@ export function Report({
   return (
     <section className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-md border border-slate-200 bg-white p-5">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <Badge className="mb-4 bg-blue-50 text-blue-700">MAJU AI Report</Badge>
@@ -98,7 +98,7 @@ export function Report({
           />
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold text-slate-500">Company Health Score</p>

@@ -57,8 +57,8 @@ export default function FullscreenMapPage() {
             showList={false}
           />
         ) : (
-          <div className="grid h-full place-items-center bg-slate-50 p-6 text-center text-slate-900">
-            <div className="max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="grid h-full place-items-center bg-slate-50 p-4 text-center text-slate-900">
+            <div className="max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-lg font-black">표시할 지도 데이터가 없습니다.</p>
               <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                 원래 지도 화면에서 전체화면 버튼을 다시 눌러주세요. 브라우저가 임시 지도 데이터를 차단한 경우 새창에 전달되지 않을 수 있습니다.

@@ -124,9 +124,9 @@ export default async function ReportDetailPage({
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-4">
         <Card className="border-slate-200 bg-white shadow-sm">
-          <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+          <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
             <div>
               <Badge className="mb-3 bg-teal-700 text-white">{report.companyName}</Badge>
               <h2 className="text-xl font-black leading-tight text-slate-950">우선 작업: {primaryAction.title}</h2>
@@ -368,7 +368,7 @@ function ReportBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>
@@ -401,7 +401,7 @@ function ReportBasisPanel({
 function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
     <Card className="shadow-none">
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
         <p className="text-xs font-bold text-muted-foreground">{label}</p>
         <p className="mt-1 text-3xl font-black">{value}</p>

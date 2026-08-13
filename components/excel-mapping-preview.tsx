@@ -162,7 +162,7 @@ export function ExcelHeaderMappingPreview({
       </div>
       <div className="max-h-[620px] overflow-auto bg-slate-50/60 p-4">
         {!visibleHeaders.length ? (
-          <div className="maju-empty-state p-5">
+          <div className="maju-empty-state p-4">
             <p className="text-sm font-black text-slate-800">조건에 맞는 컬럼이 없습니다.</p>
             <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
           </div>
@@ -341,9 +341,9 @@ function MappingWorkspaceModal({
   const unmappedColumnCount = headers.filter((header) => !mappedByHeader[header]).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-6">
+    <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-4">
       <div className="maju-section-card mx-auto flex h-full max-w-[1760px] flex-col overflow-hidden shadow-2xl">
-        <div className="maju-card-header grid gap-4 bg-white px-5 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+        <div className="maju-card-header grid gap-4 bg-white px-4 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,auto)] xl:items-center">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-blue-700 text-white">매핑 전용 화면</Badge>
@@ -369,7 +369,7 @@ function MappingWorkspaceModal({
 
         <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_420px]">
           <section className="flex min-h-0 flex-col border-r border-slate-200 bg-slate-50/50">
-            <div className="maju-card-header bg-white px-5 py-3">
+            <div className="maju-card-header bg-white px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-slate-950">엑셀 원본 데이터</p>
@@ -380,7 +380,7 @@ function MappingWorkspaceModal({
                 <Badge className="bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-100">원본표</Badge>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
               <input
                 className="h-10 min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={columnQuery}
@@ -424,7 +424,7 @@ function MappingWorkspaceModal({
           </section>
 
           <aside className="flex min-h-0 flex-col bg-white">
-            <div className="maju-card-header bg-white px-5 py-3">
+            <div className="maju-card-header bg-white px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-black text-slate-950">표준 필드 매칭</p>
@@ -495,7 +495,7 @@ function MappingWorkspaceModal({
                   <FieldMappingGroup fields={filteredOptionalFields} fieldMap={fieldMap} headers={headers} title="선택 필드" tone="optional" onFieldMap={onFieldMap} />
                 </>
               ) : (
-                <div className="maju-empty-state p-5">
+                <div className="maju-empty-state p-4">
                   <p className="text-sm font-black text-slate-800">조건에 맞는 표준 필드가 없습니다.</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
                 </div>
@@ -503,7 +503,7 @@ function MappingWorkspaceModal({
             </div>
           </aside>
         </div>
-        <div className="border-t border-slate-200 bg-white px-5 py-3">
+        <div className="border-t border-slate-200 bg-white px-4 py-3">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px_220px] lg:items-center">
             <div className="min-w-0">
               <p className="text-sm font-black text-slate-950">

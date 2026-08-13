@@ -22,7 +22,7 @@ export default async function AdminUploadsPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="uploads" badge="Operations" session={session} subtitle="거래처 마스터와 매출 거래내역의 적재 상태, 품질, 리포트 생성 여부를 확인합니다" title="업로드/분석 이력" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Metric icon={FileSpreadsheet} label="최근 업로드" value={`${uploads.length.toLocaleString()}건`} />
           <Metric icon={Rows3} label="처리 행 수" value={processedRows.toLocaleString()} />
@@ -80,7 +80,7 @@ export default async function AdminUploadsPage() {
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <Card className="shadow-none">
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
         <p className="text-xs font-bold text-muted-foreground">{label}</p>
         <p className="mt-1 text-3xl font-black">{value}</p>

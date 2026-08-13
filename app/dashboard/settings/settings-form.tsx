@@ -117,7 +117,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               회사 계정과 최초 회사 등록은 MAJU 관리자가 생성합니다. 고객사는 운영에 필요한 기준값만 설정에서 수정합니다.
             </p>
           </div>
-          <div className="space-y-4 p-5">
+          <div className="space-y-4 p-4">
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">회사명</span>
               <input
@@ -211,7 +211,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <p className="mt-1 text-sm font-black text-foreground">{hasOrigin ? form.originAddress : "출발지 주소를 입력해주세요"}</p>
           </div>
         </div>
-        <div className="space-y-4 p-5 text-sm leading-6 text-muted-foreground">
+        <div className="space-y-4 p-4 text-sm leading-6 text-muted-foreground">
           <WorkflowItem
             icon={<Database className="h-4 w-4" />}
             title="고객사 계정"
@@ -261,7 +261,7 @@ function BasisCard({ icon, title, description }: { icon: ReactNode; title: strin
 
 function OperationSignal({ icon, label, ok, value }: { icon: ReactNode; label: string; ok: boolean; value: string }) {
   return (
-    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+    <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r last:md:border-r-0">
       <div className={ok ? "text-teal-700" : "text-amber-600"}>{icon}</div>
       <p className="mt-3 text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-black text-foreground">{value}</p>

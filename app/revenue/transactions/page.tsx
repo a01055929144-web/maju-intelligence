@@ -74,7 +74,7 @@ export default async function RevenueTransactionsPage({
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+      <section className="mx-auto grid max-w-[1560px] gap-4 px-4 py-4 sm:px-4 xl:grid-cols-[260px_minmax(0,1fr)]">
         <div className="xl:sticky xl:top-24 xl:self-start">
           <WorkspaceSectionNav
             items={[
@@ -98,7 +98,7 @@ export default async function RevenueTransactionsPage({
               {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
             </Badge>
           </div>
-          <form className="flex flex-wrap items-end gap-2 border-b border-slate-100 px-5 py-3" method="GET">
+          <form className="flex flex-wrap items-end gap-2 border-b border-slate-100 px-4 py-3" method="GET">
             {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
             <label className="space-y-1">
               <span className="block text-[11px] font-bold text-slate-500">시작일</span>
@@ -135,7 +135,7 @@ export default async function RevenueTransactionsPage({
             <Metric icon={FileSpreadsheet} label="최근 매출일" value={sales.latestSalesDate || "-"} />
           </div>
           {sales.truncated ? (
-            <p className="border-t border-amber-200/80 bg-amber-50/70 px-5 py-2.5 text-xs font-bold leading-5 text-amber-900">
+            <p className="border-t border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-xs font-bold leading-5 text-amber-900">
               위 요약 금액과 아래 거래처별·품목별 순위는 최근 거래 {sales.transactionCount.toLocaleString()}건 기준입니다. 원장 테이블에서 더 불러오기로 행을 추가해도 이 요약·순위에는 반영되지 않습니다.
             </p>
           ) : null}
@@ -259,7 +259,7 @@ function RevenueDataBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 대시보드와 AI 리포트에 반영되는 기준값입니다.</p>
@@ -285,7 +285,7 @@ function RevenueDataBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: string; value: string }) {
   return (
-    <div className="border-b border-slate-200/80 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+    <div className="border-b border-slate-200/80 p-4 md:border-b-0 md:border-r last:md:border-r-0">
       <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
         <Icon className="h-5 w-5" />
       </div>
