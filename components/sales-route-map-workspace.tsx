@@ -520,11 +520,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         </div>
       </header>
 
-      {timelineHref ? (
-        <div className="shrink-0 px-5 pt-3 empty:hidden">
-          <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
-        </div>
-      ) : null}
+      {/*
+        검색·필터 바(및 지도 뷰의 좌우 패널)는 아래에서 xl:absolute로 이 영역 위에 떠 있는 카드로
+        배치됩니다. 이 relative 래퍼가 없으면 absolute 위치 기준이 이 카드 내부가 아니라 문서
+        전체가 되어, 검색 바가 페이지 맨 위(대시보드 공통 헤더 자리)로 튀어 올라가 로그아웃 등
+        상단 버튼을 가리는 문제가 있었습니다.
+      */}
+      <div className="relative flex flex-1 flex-col xl:min-h-0">
+        {timelineHref ? (
+          <div className="shrink-0 px-5 pt-3 empty:hidden">
+            <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
+          </div>
+        ) : null}
 
       {/*
         네이버맵/카카오맵처럼 지도가 화면 대부분을 차지해야 한다는 피드백에 따라, KPI 통계·기준값
@@ -774,6 +781,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           vehicles={deliveryVehicles}
         />
       ) : null}
+      </div>
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
