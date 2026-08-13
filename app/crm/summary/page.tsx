@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, FileBadge2, ImageOff, MapPin, Search } from "lucide-react";
+import { Building2, FileBadge2, ImageOff, MapPin, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -12,14 +12,6 @@ type TimelineItem = {
   id: string;
   expectedRevenue: number;
   result: string;
-};
-
-type DbSummary = {
-  description: string;
-  label: string;
-  normalizedCustomers: number | null;
-  tone: "ready" | "fallback";
-  visitResults: number | null;
 };
 
 type CustomerSummaryRow = {
@@ -44,14 +36,6 @@ type OperationsSummaryEntry = {
 };
 
 type StatusFilter = "all" | "정상" | "휴업" | "폐업" | "확인 필요";
-
-const defaultDbSummary: DbSummary = {
-  description: "DB 상태를 확인 중입니다.",
-  label: "DB 확인 중",
-  normalizedCustomers: null,
-  tone: "fallback",
-  visitResults: null
-};
 
 function getAdminCompanyIdFromUrl() {
   if (typeof window === "undefined") return "";
@@ -78,10 +62,6 @@ function formatBusinessRegistrationNumber(value: string) {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 }
 
-function formatDbCount(value: number | null) {
-  return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
-}
-
 function chunk<T>(items: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
@@ -101,10 +81,18 @@ function gradeClassName(grade: string) {
   return "bg-slate-100 text-slate-700";
 }
 
+function customerOperationalIssueCount(customer: CustomerSummaryRow) {
+  let count = 0;
+  if (customer.businessStatus !== "정상") count += 1;
+  if (!customer.phone || !customer.representativeName) count += 1;
+  if (!customer.address) count += 1;
+  if (!customer.loadingPosition) count += 1;
+  return count;
+}
+
 export default function CrmSummaryPage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
-  const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [dbError, setDbError] = useState("");
   const [customers, setCustomers] = useState<CustomerSummaryRow[]>([]);
@@ -120,7 +108,6 @@ export default function CrmSummaryPage() {
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!active || !payload) return;
-        if (payload.dbSummary) setDbSummary(payload.dbSummary);
         setTimeline(Array.isArray(payload.timeline) ? payload.timeline : []);
         if (payload.errorMessage) setDbError(payload.errorMessage);
       })
@@ -229,6 +216,8 @@ export default function CrmSummaryPage() {
   const loadingReadyCount = customers.filter((customer) => Boolean(customer.loadingPosition)).length;
   const managerCount = new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size;
   const realMemoCount = customers.reduce((sum, customer) => sum + (customer.id ? operationsSummary[customer.id]?.memoCount || 0 : 0), 0);
+  const needsAttentionCount = customers.filter((customer) => customerOperationalIssueCount(customer) > 0).length;
+  const readyCustomerCount = customers.length - needsAttentionCount;
 
   const statusCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = { all: customers.length, 정상: 0, 휴업: 0, 폐업: 0, "확인 필요": 0 };
@@ -271,19 +260,17 @@ export default function CrmSummaryPage() {
             description="지도 홈이 사용하는 거래처 기준값입니다. 개별 거래처 수정은 거래처 관리에서 진행합니다."
           />
           <div className="p-3">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(3,minmax(0,1fr))]">
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                 <div className="flex items-center gap-1">
                   <p className="maju-muted-label">원장 상태</p>
                   <InfoTooltip size="sm" text={ledgerStatusDescription} tone={hasOperationalLedger ? "emerald" : "amber"} />
                 </div>
                 <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
-                <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
               </div>
-              <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
-              <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
-              <SummaryCard helper="검색·상태 필터 적용 결과" label="표시 중" value={`${filteredRows.length}곳`} tone="blue" />
-              <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
+              <SummaryCard helper={hasOperationalLedger ? "지도 홈 기준" : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
+              <SummaryCard helper="매출 상위 등급" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
+              <SummaryCard helper={hasOperationalLedger ? "방문 결과 기준" : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
             </div>
             {dbError ? <p className="mt-2 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
             {!hasCustomers ? (
@@ -299,16 +286,57 @@ export default function CrmSummaryPage() {
                 </Link>
               </div>
             ) : null}
-            <CustomerLedgerBasisPanel
-              addressMissingCount={addressMissingCount}
-              businessNumberMissingCount={businessNumberMissingCount}
-              customerCount={customers.length}
-              filteredCount={filteredRows.length}
-              loadingReadyCount={loadingReadyCount}
-              managerMissingCount={managerMissingCount}
-              managerCount={managerCount}
-              memoCount={realMemoCount}
-            />
+          </div>
+        </div>
+
+        <div className="maju-section-card">
+          <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="보완이 필요한 거래처를 먼저 정리하세요." />
+          <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <p className="text-sm font-black text-slate-900">원장 완성도</p>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <MiniLedgerMetric label="운영 가능" value={`${readyCustomerCount.toLocaleString()}곳`} tone="ready" />
+                  <MiniLedgerMetric label="보완 필요" value={`${needsAttentionCount.toLocaleString()}곳`} tone="warning" />
+                </div>
+              </div>
+              {addressMissingCount + businessNumberMissingCount + managerMissingCount > 0 ? (
+                <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+                  {[
+                    { label: "주소 미등록", value: addressMissingCount },
+                    { label: "사업자번호 미등록", value: businessNumberMissingCount },
+                    { label: "담당자 미지정", value: managerMissingCount }
+                  ].map((item) => (
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-amber-900" key={item.label}>
+                      {item.label} {item.value.toLocaleString()}건
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="border-t border-slate-200 pt-3 text-xs font-black text-emerald-700">필수값 정상</p>
+              )}
+            </div>
+            <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-3 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
+              <span>
+                <span className="block text-sm font-black">거래처 데이터 보완</span>
+                <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
+              </span>
+              <Plus className="h-5 w-5 shrink-0" />
+            </Link>
+          </div>
+          <div className="grid divide-y divide-slate-200 border-t border-slate-200/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="min-w-0 px-3 py-3">
+              <p className="text-[11px] font-black uppercase text-slate-400">배송 담당자</p>
+              <p className="mt-1 text-sm font-black text-slate-950">{managerCount.toLocaleString()}명</p>
+            </div>
+            <div className="min-w-0 px-3 py-3">
+              <p className="text-[11px] font-black uppercase text-slate-400">적재위치 등록</p>
+              <p className="mt-1 text-sm font-black text-slate-950">{loadingReadyCount.toLocaleString()}곳</p>
+            </div>
+            <div className="min-w-0 px-3 py-3">
+              <p className="text-[11px] font-black uppercase text-slate-400">메모 이력</p>
+              <p className="mt-1 text-sm font-black text-slate-950">{realMemoCount.toLocaleString()}건</p>
+            </div>
           </div>
         </div>
 
@@ -445,68 +473,13 @@ export default function CrmSummaryPage() {
   );
 }
 
-function CustomerLedgerBasisPanel({
-  addressMissingCount,
-  businessNumberMissingCount,
-  customerCount,
-  filteredCount,
-  loadingReadyCount,
-  managerMissingCount,
-  managerCount,
-  memoCount
-}: {
-  addressMissingCount: number;
-  businessNumberMissingCount: number;
-  customerCount: number;
-  filteredCount: number;
-  loadingReadyCount: number;
-  managerMissingCount: number;
-  managerCount: number;
-  memoCount: number;
-}) {
-  const items = [
-    { label: "전체 DB 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
-    { label: "현재 필터", value: `${filteredCount.toLocaleString()}곳`, helper: "표시 중인 표 기준" },
-    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "지도 홈 필터" },
-    { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
-    { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
-  ];
-  const attentionItems = [
-    { label: "주소 미등록", value: addressMissingCount },
-    { label: "사업자번호 미등록", value: businessNumberMissingCount },
-    { label: "담당자 미지정", value: managerMissingCount }
-  ];
-  const attentionTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
+function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready" | "warning"; value: string }) {
+  const toneClassName = tone === "ready" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800";
 
   return (
-    <div className="maju-section-card mt-3 overflow-hidden bg-slate-50/70">
-      <div className="maju-card-header grid gap-2 px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
-        <p className="font-black text-slate-950">거래처 기준값</p>
-        <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 지도 홈이 함께 사용하는 기준 데이터입니다.</p>
-      </div>
-      <div className="grid divide-y divide-slate-200 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
-        {items.map((item) => (
-          <div className="min-w-0 px-3 py-3" key={item.label}>
-            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
-          </div>
-        ))}
-      </div>
-      <div
-        className={`grid gap-2 border-t px-3 py-3 text-xs font-bold leading-5 md:grid-cols-[160px_minmax(0,1fr)] md:items-center ${
-          attentionTotal ? "border-amber-200 bg-amber-50/80 text-amber-900" : "border-emerald-100 bg-emerald-50/70 text-emerald-900"
-        }`}
-      >
-        <p className="font-black">{attentionTotal ? `보완 필요 ${attentionTotal.toLocaleString()}건` : "필수값 정상"}</p>
-        <div className="flex flex-wrap gap-2">
-          {attentionItems.map((item) => (
-            <span className="rounded-full bg-white px-2.5 py-1 font-black" key={item.label}>
-              {item.label} {item.value.toLocaleString()}건
-            </span>
-          ))}
-        </div>
-      </div>
+    <div className={`maju-stat-card min-w-32 px-4 py-3 ${toneClassName}`}>
+      <p className="text-[11px] font-black opacity-70">{label}</p>
+      <p className="mt-1 text-xl font-black leading-none">{value}</p>
     </div>
   );
 }

@@ -494,8 +494,6 @@ export default function CrmTimelinePage() {
     }
   }
   const activeCleanupLabel = operationFilterLabel(operationFilter);
-  const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
-  const readyCustomerCount = customers.length - needsAttentionCustomers.length;
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
   const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
   const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
@@ -934,26 +932,6 @@ export default function CrmTimelinePage() {
         />
 
         <div className="min-w-0 space-y-4">
-        <div className="maju-section-card scroll-mt-28">
-          <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="사업자 상태, 연락처, 배송주소, 적재위치 기준으로 원장 완성도를 확인하고 부족한 데이터를 보완합니다." />
-          <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 lg:flex-row lg:items-center lg:justify-between">
-              <p className="text-sm font-black text-slate-900">보완이 필요한 거래처를 먼저 정리하세요</p>
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <MiniLedgerMetric label="운영 가능" value={`${readyCustomerCount.toLocaleString()}곳`} tone="ready" />
-                <MiniLedgerMetric label="보완 필요" value={`${needsAttentionCustomers.length.toLocaleString()}곳`} tone="warning" />
-              </div>
-            </div>
-            <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-3 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
-              <span>
-                <span className="block text-sm font-black">거래처 데이터 보완</span>
-                <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
-              </span>
-              <Plus className="h-5 w-5 shrink-0" />
-            </Link>
-          </div>
-        </div>
-
         <div className="maju-section-card scroll-mt-28" id="customer-ledger-list">
           <SectionHeader
             eyebrow="거래처 작업"
@@ -2206,17 +2184,6 @@ function MiniMetric({ label, value, wide = false }: { label: string; value: stri
     <div className={`maju-stat-card bg-slate-50/70 ${wide ? "col-span-2" : ""}`}>
       <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready" | "warning"; value: string }) {
-  const toneClassName = tone === "ready" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800";
-
-  return (
-    <div className={`maju-stat-card min-w-32 px-4 py-3 ${toneClassName}`}>
-      <p className="text-[11px] font-black opacity-70">{label}</p>
-      <p className="mt-1 text-xl font-black leading-none">{value}</p>
     </div>
   );
 }
