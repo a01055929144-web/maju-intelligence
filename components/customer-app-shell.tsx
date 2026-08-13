@@ -20,6 +20,7 @@ type CustomerAppShellProps = {
   readonly active: CustomerWorkspaceKey;
   readonly children: ReactNode;
   readonly companyName: string;
+  readonly fullBleed?: boolean;
   readonly hidePageTitle?: boolean;
   readonly mode?: "admin-preview" | "customer";
   readonly previewCompanyId?: string;
@@ -30,7 +31,7 @@ type CustomerAppShellProps = {
   readonly workspaceRole?: string;
 };
 
-export function CustomerAppShell({ active, children, companyName, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
   const pathname = usePathname();
@@ -72,8 +73,8 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
   }, [mode, workspaceRole]);
 
   return (
-    <main className="maju-app-bg min-h-screen text-slate-950">
-      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
+    <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-hidden" : ""}`}>
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200 bg-white shadow-[8px_0_24px_rgba(15,23,42,0.04)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 p-4">
@@ -182,8 +183,8 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
           </div>
         </aside>
 
-        <section className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
+        <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
+          <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
             <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2.5" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -227,7 +228,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
           </header>
 
           {mode === "admin-preview" ? (
-            <div className="border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-6">
+            <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-6 ${fullBleed ? "shrink-0" : ""}`}>
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-black text-amber-900">관리자 미리보기 모드</p>
@@ -253,7 +254,7 @@ export function CustomerAppShell({ active, children, companyName, hidePageTitle 
             </div>
           ) : null}
 
-          <div className="px-4 py-4 sm:px-6">{children}</div>
+          <div className={fullBleed ? "flex flex-col px-4 py-3 sm:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-3" : "px-4 py-4 sm:px-6"}>{children}</div>
         </section>
       </div>
     </main>

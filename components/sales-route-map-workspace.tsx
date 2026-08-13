@@ -384,8 +384,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   }
 
   return (
-    <div className="maju-section-card flex min-h-[760px] flex-col text-slate-900">
-      <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+    <div className="maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <p className="maju-muted-label text-teal-700">지도 작업공간</p>
           <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 운영</h2>
@@ -444,12 +444,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       </header>
 
       {timelineHref ? (
-        <div className="px-5 pt-3 empty:hidden">
+        <div className="shrink-0 px-5 pt-3 empty:hidden">
           <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
         </div>
       ) : null}
 
-      <section className="grid grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
+      <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
         <Kpi
           helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
           label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
@@ -495,7 +495,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         visibleStoreCount={visibleStores.length}
       />
 
-      <section className="space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3">
+      <section className="shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3">
         <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -567,7 +567,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       </section>
 
       {activeView === "map" ? (
-        <section className={`grid min-h-[620px] grid-cols-1 overflow-hidden rounded-b-xl xl:h-[calc(100vh-280px)] xl:min-h-[620px] ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_340px]" : "xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
+        <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl xl:min-h-0 ${leftCollapsed ? "xl:grid-cols-[52px_minmax(0,1fr)_340px]" : "xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
           <DeliveryAssignmentPanel
             collapsed={leftCollapsed}
             fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
@@ -880,7 +880,7 @@ function RouteWorkspaceGuide({
         : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 원장을 확인합니다.";
 
   return (
-    <section className="border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
+    <section className="shrink-0 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200">{viewLabel}</span>
@@ -1136,15 +1136,15 @@ function CustomerDirectoryView({
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
 
   return (
-    <section className="min-h-[620px] overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:h-[calc(100vh-280px)] xl:min-h-[620px]">
-      <div className="grid gap-3 lg:grid-cols-4">
+    <section className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:min-h-0">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-4">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
         <DirectoryStat label="예상매출" value={`${totals.expectedRevenue.toLocaleString()}만원`} />
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="maju-section-card mt-4 min-h-[480px] xl:h-[calc(100%-92px)]">
+      <div className="maju-section-card mt-4 min-h-[480px] flex-1 xl:min-h-0">
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
@@ -1455,7 +1455,7 @@ function TodayCourseView({
   };
 
   return (
-    <section className={`grid min-h-[620px] grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:h-[calc(100vh-280px)] xl:min-h-[620px] ${routePanelCollapsed ? "xl:grid-cols-[280px_minmax(0,1fr)_56px]" : "xl:grid-cols-[280px_minmax(0,1fr)_400px]"}`}>
+    <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:min-h-0 ${routePanelCollapsed ? "xl:grid-cols-[280px_minmax(0,1fr)_56px]" : "xl:grid-cols-[280px_minmax(0,1fr)_400px]"}`}>
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
@@ -2710,7 +2710,7 @@ function RouteBasisStrip({
   const durationValue = sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산";
 
   return (
-    <section className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 xl:flex-row xl:items-center">
+    <section className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 xl:flex-row xl:items-center">
       <div className="flex shrink-0 items-center gap-2">
         <span className="text-xs font-black text-slate-500">기준</span>
         {!sourceReady ? (

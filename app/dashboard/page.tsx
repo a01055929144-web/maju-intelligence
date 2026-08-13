@@ -41,6 +41,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     <CustomerAppShell
       active="dashboard"
       companyName={customerSession?.companyName || company.name}
+      fullBleed
       hidePageTitle
       mode={customerSession ? "customer" : "admin-preview"}
       previewCompanyId={customerSession ? undefined : companyId}
@@ -49,7 +50,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1760px]">
+      <section className="mx-auto flex w-full max-w-[1760px] flex-col xl:h-full xl:min-h-0">
         <SalesRouteMapWorkspace
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
           mapMarkers={mapMarkers}
