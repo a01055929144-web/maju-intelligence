@@ -443,7 +443,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0 ${isFullscreen ? "!rounded-none" : ""}`}
       ref={workspaceRef}
     >
-      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2.5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <p className="maju-muted-label text-teal-700">지도 작업공간</p>
           <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 운영</h2>
@@ -594,9 +594,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         띄우고, 그 아래 화면에서는 기존처럼 지도 위쪽에 일반 문서 흐름으로 쌓이게 둡니다.
       */}
       <section
-        className={`shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-2.5 ${
+        className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2 ${
           activeView === "map"
-            ? "xl:absolute xl:inset-x-3 xl:top-3 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-4 xl:py-2.5 xl:shadow-lg xl:backdrop-blur-sm"
+            ? "xl:absolute xl:inset-x-2 xl:top-2 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-3 xl:py-2 xl:shadow-lg xl:backdrop-blur-sm"
             : ""
         }`}
       >
@@ -865,7 +865,7 @@ function DeliveryAssignmentPanel({
 
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-3 border-r border-slate-200/80 bg-white py-3">
+      <aside className="flex min-h-0 flex-col items-center gap-2 border-r border-slate-200/80 bg-white py-2.5">
         <button
           aria-label="배송 담당자 패널 펼치기"
           className="maju-button-secondary h-9 w-9 px-0"
@@ -874,8 +874,9 @@ function DeliveryAssignmentPanel({
         >
           <PanelLeftOpen className="h-4 w-4" />
         </button>
-        <Truck className="h-5 w-5 text-slate-500" />
-        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">담당자필터</span>
+        <span title="배송담당자 필터">
+          <Truck className="h-5 w-5 text-slate-500" />
+        </span>
       </aside>
     );
   }
@@ -1493,7 +1494,7 @@ function StoreManagementPanel({
 }) {
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-3 border-l border-slate-200/80 bg-white py-3">
+      <aside className="flex min-h-0 flex-col items-center gap-2 border-l border-slate-200/80 bg-white py-2.5">
         <button
           aria-label="거래처 목록 패널 펼치기"
           className="maju-button-secondary h-9 w-9 px-0"
@@ -1502,8 +1503,9 @@ function StoreManagementPanel({
         >
           <PanelRightOpen className="h-4 w-4" />
         </button>
-        <Store className="h-5 w-5 text-slate-500" />
-        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">{title}</span>
+        <span title={title}>
+          <Store className="h-5 w-5 text-slate-500" />
+        </span>
         <span className="rounded-md bg-slate-100 px-1.5 py-1 text-[11px] font-black text-slate-700">{stores.length}</span>
       </aside>
     );

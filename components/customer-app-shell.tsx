@@ -185,7 +185,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
         <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
           <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
-            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2.5" : "py-4"}`}>
+            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2" : "py-4"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -254,7 +254,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             </div>
           ) : null}
 
-          <div className={fullBleed ? "flex flex-col px-4 py-3 sm:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-3" : "px-4 py-4 sm:px-6"}>{children}</div>
+          <div className={fullBleed ? "flex flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "px-4 py-4 sm:px-6"}>{children}</div>
         </section>
       </div>
     </main>
