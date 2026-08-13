@@ -2658,7 +2658,8 @@ function PlaceLinkButton({ label, purpose, url = "" }: { label: string; purpose:
 function buildPlaceSearchLinks(query: string) {
   const encodedQuery = encodeURIComponent(query || "매장");
   return [
-    { href: `https://search.naver.com/search.naver?query=${encodedQuery}`, label: "네이버" },
+    { href: `https://map.naver.com/p/search/${encodedQuery}`, label: "네이버 지도" },
+    { href: `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedQuery}`, label: "네이버 블로그" },
     { href: `https://map.kakao.com/?q=${encodedQuery}`, label: "카카오맵" },
     { href: `https://www.google.com/maps/search/${encodedQuery}`, label: "구글맵" }
   ];
