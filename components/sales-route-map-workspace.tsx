@@ -932,9 +932,9 @@ function StoreQuickCard({
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
         <div className="mt-2.5 flex items-center justify-between gap-2">
-          <span className="truncate text-[11px] font-black text-slate-400">{store.deliveryVehicleName || "담당자 미지정"}</span>
+          <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">{store.deliveryVehicleName || "담당자 미지정"}</span>
           <button className="maju-button-primary h-8 shrink-0 px-3 text-xs" onClick={onOpenDetail} type="button">
-            원장 열기
+            상세 열기
           </button>
         </div>
       </div>
