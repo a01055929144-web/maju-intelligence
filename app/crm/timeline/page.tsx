@@ -1048,7 +1048,7 @@ export default function CrmTimelinePage() {
                 </span>
               </button>
             ) : (
-            <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
+            <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)] xl:overflow-y-auto">
               <div className="border-b border-slate-200/80 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1211,7 +1211,7 @@ export default function CrmTimelinePage() {
                 <span className="text-right">상태</span>
               </div>
             ) : null}
-            <div className="max-h-[560px] divide-y divide-slate-100 overflow-auto xl:max-h-[calc(100vh-520px)] xl:min-h-[360px]">
+            <div className="divide-y divide-slate-100">
               {filteredCustomers.map(({ customer, index }) => {
                 const issues = customerOperationalIssues(customer);
                 const selected = index === selectedIndex;
