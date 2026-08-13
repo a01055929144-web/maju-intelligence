@@ -957,6 +957,12 @@ function Onboarding({
   const [documentOcrFilename, setDocumentOcrFilename] = useState("");
   const [documentOcrMeta, setDocumentOcrMeta] = useState<OcrMeta | null>(null);
   const [documentOcrStatus, setDocumentOcrStatus] = useState("");
+  const [documentOcrPreviewUrl, setDocumentOcrPreviewUrl] = useState("");
+  useEffect(() => {
+    return () => {
+      if (documentOcrPreviewUrl) URL.revokeObjectURL(documentOcrPreviewUrl);
+    };
+  }, [documentOcrPreviewUrl]);
   const [savedPreset, setSavedPreset] = useState<FieldMap | null>(null);
   const [presetMessage, setPresetMessage] = useState("");
   const requiredFields = template.fields.filter((field) => field.required);
@@ -1258,6 +1264,10 @@ function Onboarding({
     onUploadType("customer-master");
     setDocumentOcrFilename(file.name);
     setDocumentOcrStatus("OCR 추출 중입니다. 잠시만 기다려주세요.");
+    setDocumentOcrPreviewUrl((previousUrl) => {
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      return URL.createObjectURL(file);
+    });
 
     const formData = new FormData();
     formData.append("file", file);
@@ -1557,6 +1567,7 @@ function Onboarding({
               manualDraft={manualDraft}
               ocrMeta={documentOcrMeta}
               ocrStatus={documentOcrStatus}
+              previewUrl={documentOcrPreviewUrl}
               onDocumentFile={applyDocumentOcr}
               onManualChange={onManualChange}
               onManualSave={onManualSave}
@@ -3419,6 +3430,7 @@ function DocumentOcrRegistrationPanel({
   manualDraft,
   ocrMeta,
   ocrStatus,
+  previewUrl,
   onDocumentFile,
   onManualChange,
   onManualSave
@@ -3429,6 +3441,7 @@ function DocumentOcrRegistrationPanel({
   manualDraft: RawRow;
   ocrMeta: OcrMeta | null;
   ocrStatus: string;
+  previewUrl?: string;
   onDocumentFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onManualChange: (draft: RawRow) => void;
   onManualSave: () => void | Promise<void>;
@@ -3501,8 +3514,22 @@ function DocumentOcrRegistrationPanel({
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <Badge className="mb-2 bg-blue-100 text-blue-800">보조 입력값</Badge>
-              <h3 className="text-lg font-black text-slate-950">{filename || "서류 업로드 대기"}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-black text-slate-950">{filename || "서류 업로드 대기"}</h3>
+                {previewUrl ? (
+                  <a
+                    className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-black text-blue-700 hover:bg-blue-100"
+                    href={previewUrl}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    새창 미리보기
+                  </a>
+                ) : null}
+              </div>
               <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{ocrStatus || "OCR은 선택 기능입니다. 저장 전 후보값을 사람이 확인합니다."}</p>
+              {previewUrl ? <p className="mt-1 text-xs font-bold text-slate-400">새창에서 서류 원본을 보며 아래 값을 직접 입력하거나 OCR 후보값을 검증하세요.</p> : null}
             </div>
             <Button className="shrink-0" onClick={onManualSave} disabled={!manualComplete || isManualSaving}>
               <Save size={18} />
