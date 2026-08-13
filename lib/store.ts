@@ -2052,6 +2052,64 @@ export async function getCustomerOperations(customerId: string, companyId?: stri
   };
 }
 
+export type CustomerOperationsSummaryEntry = {
+  memoCount: number;
+  latestMemo?: string;
+  loadingPositionPhotoUrl?: string;
+};
+
+/**
+ * 배치 버전 getCustomerOperations: 거래처별로 한 번씩 호출하는 대신(N+1), 전체 거래처 ID를
+ * 한 번의 in() 조회로 묶어 실제 메모 건수/최신 메모, 적재위치 사진 존재 여부를 반환합니다.
+ * "거래처 전체 현황" 표에서 memoCount 같은 가짜 placeholder 값을 쓰지 않기 위한 용도입니다.
+ */
+export async function getCustomerOperationsSummary(
+  customerIds: string[],
+  companyId?: string
+): Promise<Record<string, CustomerOperationsSummaryEntry>> {
+  const id = companyId || getDefaultCompanyId();
+  const summary: Record<string, CustomerOperationsSummaryEntry> = {};
+
+  if (!isProductionStoreConfigured()) return summary;
+
+  const idList = customerIds.filter((customerId) => !customerId.startsWith("sample-") && !customerId.startsWith("local-"));
+  if (!idList.length) return summary;
+
+  const idsParam = idList.map(encodeURIComponent).join(",");
+
+  const [notes, attachments] = await Promise.all([
+    supabaseRequest<Array<{ customer_id: string; memo: string; created_at: string }>>(
+      `customer_notes?select=customer_id,memo,created_at&company_id=eq.${encodeURIComponent(id)}&customer_id=in.(${idsParam})&order=created_at.desc`
+    ),
+    supabaseRequest<Array<{ customer_id: string; attachment_type: string; file_url: string | null; storage_path: string | null }>>(
+      `customer_attachments?select=customer_id,attachment_type,file_url,storage_path&company_id=eq.${encodeURIComponent(
+        id
+      )}&customer_id=in.(${idsParam})&attachment_type=eq.loading_position&order=created_at.desc`
+    )
+  ]);
+
+  for (const note of notes) {
+    const entry = summary[note.customer_id] || { memoCount: 0 };
+    summary[note.customer_id] = {
+      ...entry,
+      latestMemo: entry.latestMemo || note.memo,
+      memoCount: entry.memoCount + 1
+    };
+  }
+
+  for (const attachment of attachments) {
+    const entry = summary[attachment.customer_id] || { memoCount: 0 };
+    if (entry.loadingPositionPhotoUrl) continue;
+    summary[attachment.customer_id] = {
+      ...entry,
+      loadingPositionPhotoUrl:
+        attachment.file_url || (attachment.storage_path ? `/api/customer-attachments/file?path=${encodeURIComponent(attachment.storage_path)}` : undefined)
+    };
+  }
+
+  return summary;
+}
+
 export async function addCustomerNote(
   input: { customerId: string; memo: string; nextAction?: string; noteType?: string; createdByName?: string },
   companyId?: string

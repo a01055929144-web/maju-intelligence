@@ -67,7 +67,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
           {
             active: "customers",
             description: "전체 거래처, 등급, 보완 상태를 요약해서 봅니다.",
-            href: "/crm/timeline#customer-ledger-summary",
+            href: "/crm/summary",
             icon: LayoutDashboard,
             label: "거래처 전체 현황"
           },

@@ -5,7 +5,6 @@ import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { InfoTooltip } from "@/components/info-tooltip";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 
@@ -168,12 +167,6 @@ function syncSelectedCustomerUrl(customerId: string | undefined) {
     url.searchParams.delete("customerId");
   }
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-}
-
-// Tailwind's JIT scanner needs complete, literal class strings (a template-interpolated
-// `xl:grid-cols-[${...}]` is invisible to it), so both collapsed states are spelled out here.
-function customerListGridColsClassName(listCollapsed: boolean) {
-  return listCollapsed ? "xl:grid-cols-[220px_minmax(0,1fr)]" : "xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]";
 }
 
 export default function CrmTimelinePage() {
@@ -415,17 +408,6 @@ export default function CrmTimelinePage() {
   }, [selectedCustomer?.id]);
 
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
-  const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
-  const hasOperationalLedger = customerSource === "supabase";
-  const ledgerStatusLabel =
-    customerSource === "loading"
-      ? "원장 확인 중"
-      : hasOperationalLedger
-        ? "DB 거래처 원장 연결"
-        : "DB 거래처 원장 미연결";
-  const ledgerStatusDescription = hasOperationalLedger
-    ? "Supabase 거래처 원장 기준으로 목록과 상세를 표시합니다."
-    : "데이터 등록에서 거래처 마스터를 저장하면 이 화면에 실제 원장이 표시됩니다.";
   const filteredCustomers = useMemo(() => {
     const keyword = customerSearch.trim().toLowerCase();
 
@@ -952,54 +934,6 @@ export default function CrmTimelinePage() {
         />
 
         <div className="min-w-0 space-y-4">
-        <div className="maju-section-card scroll-mt-28" id="customer-ledger-summary">
-          <SectionHeader
-            eyebrow="지도 작업공간"
-            title="거래처 전체 현황"
-            description="지도 홈이 사용하는 거래처 기준값입니다. 개별 거래처 수정은 아래 검색 후 상세 편집에서 진행합니다."
-          />
-          <div className="p-3">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="flex items-center gap-1">
-                  <p className="maju-muted-label">원장 상태</p>
-                  <InfoTooltip size="sm" text={ledgerStatusDescription} tone={hasOperationalLedger ? "emerald" : "amber"} />
-                </div>
-                <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
-                <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
-              </div>
-              <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
-              <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
-              <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
-              <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
-            </div>
-            {dbError ? <p className="mt-2 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
-            {!hasCustomers ? (
-              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-black text-amber-900">
-                  {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
-                </p>
-                <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                  데이터 등록에서 거래처 마스터를 저장하면 지도 홈과 거래처 원장이 같은 DB 기준으로 연결됩니다.
-                </p>
-                <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
-                  거래처 마스터 등록하기
-                </Link>
-              </div>
-            ) : null}
-            <CustomerLedgerBasisPanel
-              addressMissingCount={addressMissingCount}
-              businessNumberMissingCount={businessNumberMissingCount}
-              customerCount={customers.length}
-              filteredCount={filteredCustomers.length}
-              loadingReadyCount={customers.filter((customer) => Boolean(customer.loadingPosition)).length}
-              managerMissingCount={managerMissingCount}
-              managerCount={new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size}
-              memoCount={customers.reduce((sum, customer) => sum + customer.memoCount, 0)}
-            />
-          </div>
-        </div>
-
         <div className="maju-section-card scroll-mt-28">
           <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="사업자 상태, 연락처, 배송주소, 적재위치 기준으로 원장 완성도를 확인하고 부족한 데이터를 보완합니다." />
           <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -1031,24 +965,24 @@ export default function CrmTimelinePage() {
             상세 쪽에 실제로 남는 폭이 좁아져 안의 정보가 눌려 보였습니다. 거래처를 고르면 목록을
             자동으로 접어서 상세가 전체 폭을 쓰게 하고, 필요할 때만 다시 펼치도록 했습니다.
           */}
-          <div className={`grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 ${customerListGridColsClassName(listCollapsed)}`}>
+          <div className="space-y-4 border-t border-slate-200/80 bg-slate-50/50 p-4">
             {listCollapsed ? (
               <button
                 aria-label="거래처 검색·목록 펼치기"
-                className="maju-section-card flex items-center gap-2 px-3 py-3 text-left transition hover:bg-slate-50 xl:sticky xl:top-4 xl:flex-col xl:items-start xl:gap-3"
+                className="maju-section-card flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50"
                 onClick={() => setListCollapsed(false)}
                 type="button"
               >
-                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
-                  <PanelLeftOpen className="h-4 w-4 text-slate-500" />
-                  거래처 검색·목록
-                </span>
-                <span className="text-xs font-bold text-slate-500">
-                  {selectedCustomer.customerName} 선택됨 · {filteredCustomers.length}/{customers.length}곳
+                <PanelLeftOpen className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-black text-slate-950">거래처 검색·목록</span>
+                  <span className="text-xs font-bold text-slate-500">
+                    {selectedCustomer.customerName} 선택됨 · {filteredCustomers.length}/{customers.length}곳
+                  </span>
                 </span>
               </button>
             ) : (
-            <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)] xl:overflow-y-auto">
+            <aside className="maju-section-card">
               <div className="border-b border-slate-200/80 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1280,7 +1214,6 @@ export default function CrmTimelinePage() {
             <div className="maju-section-card scroll-mt-28 p-4" id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>
                   <h2 className="truncate text-[26px] font-black leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
@@ -2126,68 +2059,6 @@ function LedgerListStatusStrip({
   );
 }
 
-function CustomerLedgerBasisPanel({
-  addressMissingCount,
-  businessNumberMissingCount,
-  customerCount,
-  filteredCount,
-  loadingReadyCount,
-  managerMissingCount,
-  managerCount,
-  memoCount
-}: {
-  addressMissingCount: number;
-  businessNumberMissingCount: number;
-  customerCount: number;
-  filteredCount: number;
-  loadingReadyCount: number;
-  managerMissingCount: number;
-  managerCount: number;
-  memoCount: number;
-}) {
-  const items = [
-    { label: "전체 DB 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
-    { label: "현재 필터", value: `${filteredCount.toLocaleString()}곳`, helper: "목록·상세 표시 기준" },
-    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "지도 홈 필터" },
-    { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
-    { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
-  ];
-  const attentionItems = [
-    { label: "주소 미등록", value: addressMissingCount },
-    { label: "사업자번호 미등록", value: businessNumberMissingCount },
-    { label: "담당자 미지정", value: managerMissingCount }
-  ];
-  const attentionTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
-
-  return (
-    <div className="maju-section-card mt-3 overflow-hidden bg-slate-50/70">
-      <div className="maju-card-header grid gap-2 px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
-        <p className="font-black text-slate-950">거래처 기준값</p>
-        <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 지도 홈이 함께 사용하는 기준 데이터입니다.</p>
-      </div>
-      <div className="grid divide-y divide-slate-200 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
-        {items.map((item) => (
-          <div className="min-w-0 px-3 py-3" key={item.label}>
-            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
-          </div>
-        ))}
-      </div>
-      <div className={`grid gap-2 border-t px-3 py-3 text-xs font-bold leading-5 md:grid-cols-[160px_minmax(0,1fr)] md:items-center ${attentionTotal ? "border-amber-200 bg-amber-50/80 text-amber-900" : "border-emerald-100 bg-emerald-50/70 text-emerald-900"}`}>
-        <p className="font-black">{attentionTotal ? `보완 필요 ${attentionTotal.toLocaleString()}건` : "필수값 정상"}</p>
-        <div className="flex flex-wrap gap-2">
-          {attentionItems.map((item) => (
-            <span className="rounded-full bg-white px-2.5 py-1 font-black" key={item.label}>
-              {item.label} {item.value.toLocaleString()}건
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function FieldRecordTracePanel({
   onOpenHistory,
   onOpenLedger,
@@ -2350,24 +2221,6 @@ function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready"
   );
 }
 
-function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string; label: string; tone?: "slate" | "emerald" | "blue" | "violet"; value: string }) {
-  const toneClassName = {
-    blue: "text-blue-700",
-    emerald: "text-emerald-700",
-    slate: "text-slate-950",
-    violet: "text-violet-700"
-  }[tone];
-
-  return (
-    <div className="maju-stat-card p-4">
-      <p className="maju-muted-label">{label}</p>
-      <p className={`mt-2 truncate text-[24px] font-black leading-none ${toneClassName}`} title={value}>
-        {value}
-      </p>
-      <p className="mt-2 truncate text-xs font-semibold text-slate-500">{helper}</p>
-    </div>
-  );
-}
 
 function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
@@ -2882,10 +2735,6 @@ function isOperationFilter(value: string | null): value is OperationFilter {
     value === "loading-missing" ||
     value === "manager-missing"
   );
-}
-
-function formatDbCount(value: number | null) {
-  return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
 }
 
 function normalizeBusinessRegistrationNumber(value: string) {
