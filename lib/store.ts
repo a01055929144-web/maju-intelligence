@@ -190,6 +190,9 @@ export type RoutePlanStop = LeadItem & {
   loadingPosition?: string;
   businessHours?: string;
   menuSummary?: string;
+  naverPlaceUrl?: string;
+  kakaoPlaceUrl?: string;
+  googleMapUrl?: string;
   openingDate?: string;
   order: number;
   phone?: string;
@@ -2891,6 +2894,9 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         loadingPosition: customer.loadingPosition,
         businessHours: customer.businessHours,
         menuSummary: customer.menuSummary,
+        naverPlaceUrl: customer.naverPlaceUrl,
+        kakaoPlaceUrl: customer.kakaoPlaceUrl,
+        googleMapUrl: customer.googleMapUrl,
         openingDate: customer.openingDate,
         phone: customer.phone,
         representativeName: customer.representativeName,

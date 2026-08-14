@@ -12,6 +12,7 @@ import {
   Clock,
   Copy,
   Edit3,
+  ExternalLink,
   FileImage,
   Maximize2,
   Minimize2,
@@ -35,6 +36,7 @@ import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
+import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { DeliveryVehicle, RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
@@ -178,9 +180,9 @@ const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; s
   { helper: "선택·경유·티맵", icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
-  course: "배송차와 매장을 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
+  course: "배송차와 거래처를 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
   customers: "전체 거래처 원장을 검색, 등급, 배송차 기준으로 확인합니다.",
-  map: "매장 등급 또는 배송차 기준으로 지도 마커를 확인합니다."
+  map: "거래처 등급 또는 배송차 기준으로 지도 마커를 확인합니다."
 };
 const originMarkerId = "origin-hub";
 const tmapWaypointLimit = 15;
@@ -190,6 +192,7 @@ const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
   deliveryProofs: "maju:sales-route:delivery-proofs",
   histories: "maju:sales-route:histories",
+  manualDrivers: "maju:sales-route:manual-drivers",
   storeEdits: "maju:sales-route:store-edits",
   vehicleEdits: "maju:sales-route:vehicle-edits"
 };
@@ -217,14 +220,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
+  const [manualDrivers, setManualDrivers] = useState<string[]>(() => readLocalJson(localStoreKeys.manualDrivers, []));
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   const sourceReady = routePlan.source === "supabase";
   const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
   const baseDeliveryVehicles = useMemo(
-    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes),
-    [routeSeedStores, vehicleFuelTypes]
+    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualDrivers),
+    [routeSeedStores, vehicleFuelTypes, manualDrivers]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   const fuelTypeConfiguredByVehicleId = useMemo(() => {
@@ -266,13 +270,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const missingAddressCount = allStores.length - mapReadyStoreCount;
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
   const isVehicleFiltered = vehicleFilterId !== "all";
-  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 매장";
+  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 거래처";
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
   const activeDistanceKm = kpiSummary?.distanceKm ?? routeTotals.distanceKm;
-  const distanceKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 매장까지";
-  const durationKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 매장까지";
+  const distanceKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 거래처까지";
+  const durationKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 거래처까지";
   const vehicleFuelTypeById = useMemo(() => {
     const map = new Map<string, "gasoline" | "diesel">();
     deliveryVehicles.forEach((vehicle) => map.set(vehicle.id, vehicle.fuelType || "diesel"));
@@ -356,6 +360,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
+  useEffect(() => saveLocalJson(localStoreKeys.manualDrivers, manualDrivers), [manualDrivers]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
@@ -438,6 +443,40 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     }
   }
 
+  /**
+   * "배송차"는 실제로는 거래처의 담당자(deliveryDriver) 값으로 그룹핑해 만드는 화면 전용 개념이라
+   * 별도의 차량 테이블이 없습니다. 새 담당자·배송차를 추가한다는 것은 아직 어떤 거래처에도 배정되지
+   * 않은 담당자 이름을 미리 등록해 목록에 보이게 하는 것과 같습니다. 연료 타입은 delivery_vehicles에
+   * upsert되어 새로고침 후에도 유지되고, manualDrivers는 거래처가 배정되기 전까지 빈 배송차로 보이게
+   * 하기 위한 이 화면 전용 로컬 저장값입니다.
+   */
+  async function addManualDriver(driverName: string, fuelType: "gasoline" | "diesel" = "diesel"): Promise<{ ok: boolean; message?: string }> {
+    const trimmed = driverName.trim();
+    if (!trimmed) return { ok: false, message: "담당자 이름을 입력하세요." };
+    if (deliveryVehicles.some((vehicle) => vehicle.driver === trimmed)) {
+      return { ok: false, message: "이미 등록된 담당자입니다." };
+    }
+
+    try {
+      const response = await fetch("/api/delivery-vehicles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+          driverName: trimmed,
+          fuelType
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) return { ok: false, message: payload?.message || "담당자 저장에 실패했습니다." };
+    } catch {
+      return { ok: false, message: "담당자 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
+    }
+
+    setManualDrivers((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    return { ok: true };
+  }
+
   return (
     <div
       className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0 ${isFullscreen ? "!rounded-none" : ""}`}
@@ -450,7 +489,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
             {[
-              { label: "매장 등급", value: "grade" },
+              { label: "거래처 등급", value: "grade" },
               { label: "배송차", value: "vehicle" }
             ].map((item) => {
               const selected = markerViewMode === item.value;
@@ -542,7 +581,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
             <Kpi
               helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
-              label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
+              label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 거래처"} · ${selectedGradeLabel}`}
               tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
               value={sourceReady ? `${kpiSummary?.selectedCount ?? selectedGradeCount}곳` : "등록 필요"}
             />
@@ -554,7 +593,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             />
             <Kpi
               helper={kpiSummary ? "선택 경유지 기준" : "현재 필터 기준"}
-              label="매장 매출합"
+              label="거래처 매출합"
               tone="green"
               value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"}
             />
@@ -663,7 +702,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                 </span>
               ))
             ) : sourceReady ? (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 거래처 표시 중</span>
             ) : (
               <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 등록 대기</span>
             )}
@@ -696,6 +735,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                 </div>
                 {previewStore ? (
                   <StoreQuickCard
+                    driverOptions={deliveryDefaults.drivers}
+                    leftPanelCollapsed={leftCollapsed}
+                    onAddDriver={addManualDriver}
                     onClose={() => setPreviewStoreId("")}
                     onOpenDetail={() => {
                       setSelectedId(previewStore.id);
@@ -725,6 +767,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             <DeliveryAssignmentPanel
               collapsed={leftCollapsed}
               fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
+              onAddDriver={addManualDriver}
               onSelectVehicle={selectVehicle}
               onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
               onUpdateVehicle={updateVehicle}
@@ -746,7 +789,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               onToggleCollapsed={() => setRightCollapsed((value) => !value)}
               selectedStoreId={selectedId}
               sourceReady={sourceReady}
-              title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 매장 거래처"}
+              title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
               stores={visibleStores}
             />
           </div>
@@ -788,6 +831,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           driverOptions={deliveryDefaults.drivers}
           history={storeHistories[selectedStore.id] || []}
           key={selectedStore.id}
+          onAddDriver={addManualDriver}
           onClose={() => setSelectedId("")}
           onClearHistory={(storeId) =>
             setStoreHistories((current) => ({
@@ -844,6 +888,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
+  onAddDriver,
   onSelectVehicle,
   onToggleCollapsed,
   onUpdateVehicle,
@@ -853,6 +898,7 @@ function DeliveryAssignmentPanel({
 }: {
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
+  readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
@@ -861,6 +907,7 @@ function DeliveryAssignmentPanel({
   readonly vehicles: DeliveryVehicle[];
 }) {
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
 
   if (collapsed) {
     return (
@@ -911,7 +958,7 @@ function DeliveryAssignmentPanel({
             <p className="text-sm font-black text-slate-950">전체 담당자</p>
             <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">{totalStores}곳</span>
           </div>
-          <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 거래처 표시</p>
         </button>
       </div>
       <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-auto">
@@ -974,7 +1021,85 @@ function DeliveryAssignmentPanel({
           );
         })}
       </div>
+      <div className="shrink-0 border-t border-slate-200/80 p-3">
+        {isAdding ? (
+          <AddDriverForm
+            onCancel={() => setIsAdding(false)}
+            onSave={async (driverName, fuelType) => {
+              const result = await onAddDriver(driverName, fuelType);
+              if (result.ok) setIsAdding(false);
+              return result;
+            }}
+          />
+        ) : (
+          <button className="maju-button-secondary flex h-9 w-full items-center justify-center gap-1.5 text-xs" onClick={() => setIsAdding(true)} type="button">
+            <Plus className="h-3.5 w-3.5" />
+            새 담당자·배송차 추가
+          </button>
+        )}
+      </div>
     </aside>
+  );
+}
+
+function AddDriverForm({
+  onCancel,
+  onSave
+}: {
+  readonly onCancel: () => void;
+  readonly onSave: (driverName: string, fuelType: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+}) {
+  const [driverName, setDriverName] = useState("");
+  const [fuelType, setFuelType] = useState<"gasoline" | "diesel">("diesel");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    const result = await onSave(driverName, fuelType);
+    setSaving(false);
+    if (!result.ok) setError(result.message || "저장에 실패했습니다.");
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-teal-200 bg-teal-50/40 p-2.5">
+      <p className="text-xs font-black text-slate-950">새 담당자·배송차 추가</p>
+      <input
+        autoFocus
+        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => setDriverName(event.target.value)}
+        placeholder="담당자 이름 (예: 김배송 매니저)"
+        value={driverName}
+      />
+      <div className="grid grid-cols-2 gap-1.5">
+        {[
+          { label: "경유", value: "diesel" as const },
+          { label: "휘발유", value: "gasoline" as const }
+        ].map((item) => (
+          <button
+            className={`h-8 rounded-md border px-2 text-xs font-black transition ${
+              fuelType === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"
+            }`}
+            key={item.value}
+            onClick={() => setFuelType(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {error ? <p className="text-[11px] font-bold leading-4 text-rose-600">{error}</p> : null}
+      <p className="text-[11px] font-bold leading-4 text-slate-400">거래처 배정은 거래처 관리에서 담당자를 지정하면 이 배송차에 자동으로 묶입니다.</p>
+      <div className="flex items-center justify-end gap-1.5">
+        <button className="maju-button-secondary h-8 px-3 text-xs" disabled={saving} onClick={onCancel} type="button">
+          취소
+        </button>
+        <button className="maju-button-primary h-8 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={saving || !driverName.trim()} onClick={handleSave} type="button">
+          {saving ? "저장 중" : "추가"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -996,14 +1121,14 @@ function RouteWorkspaceGuide({
   readonly visibleStoreCount: number;
 }) {
   const viewLabel = activeView === "map" ? "지도 확인" : activeView === "customers" ? "거래처 목록" : "경유 코스";
-  const markerLabel = markerViewMode === "grade" ? "매장 등급별 마커" : "배송차별 마커";
+  const markerLabel = markerViewMode === "grade" ? "거래처 등급별 마커" : "배송차별 마커";
   const guide =
     !sourceReady
       ? "거래처 마스터를 등록하면 지도, 거래처 목록, 배송차 경유 계산이 같은 원장 기준으로 열립니다."
       : activeView === "course"
       ? courseSummary
         ? `${selectedVehicleLabel} 기준 경유 ${courseSummary.selectedCount}곳의 도로 거리와 시간이 계산되었습니다.`
-        : `${selectedVehicleLabel} 기준 경유 매장을 선택한 뒤 티맵 계산을 실행하세요.`
+        : `${selectedVehicleLabel} 기준 경유 거래처를 선택한 뒤 티맵 계산을 실행하세요.`
       : activeView === "customers"
         ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
         : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 관리를 확인합니다.";
@@ -1214,12 +1339,18 @@ function FullRouteNavigateAction({
 }
 
 function StoreQuickCard({
+  driverOptions,
+  leftPanelCollapsed,
+  onAddDriver,
   onClose,
   onOpenDetail,
   onSave,
   originAddress,
   store
 }: {
+  readonly driverOptions?: string[];
+  readonly leftPanelCollapsed?: boolean;
+  readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onOpenDetail: () => void;
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
@@ -1261,7 +1392,11 @@ function StoreQuickCard({
   }
 
   return (
-    <div className="absolute left-4 top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)]">
+    <div
+      className={`absolute top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] left-4 ${
+        leftPanelCollapsed ? "xl:left-[84px]" : "xl:left-[336px]"
+      }`}
+    >
       <div className="flex items-start justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
           {isEditing ? (
@@ -1307,6 +1442,7 @@ function StoreQuickCard({
             ) : null}
           </div>
         ) : null}
+        {!isEditing ? <PlaceLinkRow className="mt-2" store={store} /> : null}
         {isEditing ? (
           <div className="mt-2 space-y-1.5">
             <input
@@ -1315,10 +1451,11 @@ function StoreQuickCard({
               placeholder="연락처"
               value={draft.phone}
             />
-            <input
-              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
-              onChange={(event) => setDraft((current) => ({ ...current, deliveryDriver: event.target.value }))}
-              placeholder="담당 기사"
+            <DriverSelectField
+              compact
+              driverOptions={driverOptions || []}
+              onAddDriver={onAddDriver}
+              onChange={(value) => setDraft((current) => ({ ...current, deliveryDriver: value }))}
               value={draft.deliveryDriver}
             />
             <input
@@ -1366,6 +1503,121 @@ function StoreQuickCard({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 저장된 네이버·카카오·구글 링크가 있으면 그 링크로, 없으면 상호명+주소 검색 링크로 새 탭에서 엽니다.
+ * 실제 리뷰·영업시간·메뉴는 각 플랫폼 페이지에서 확인합니다(공식 리뷰 API는 유료라 여기서는 연결만 제공).
+ */
+function PlaceLinkRow({ className = "", store }: { readonly className?: string; readonly store: StoreRow }) {
+  const searchLinks = buildPlaceSearchLinks([store.name, store.address || store.region].filter(Boolean).join(" "));
+  const links = [
+    { label: "네이버", url: store.naverPlaceUrl?.trim() || searchLinks.naverPlaceUrl },
+    { label: "카카오맵", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
+    { label: "구글맵", url: store.googleMapUrl?.trim() || searchLinks.googleMapUrl }
+  ];
+
+  return (
+    <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+      {links.map((link) => (
+        <a
+          className="inline-flex h-6 items-center gap-1 rounded-full bg-white px-2 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+          href={link.url}
+          key={link.label}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {link.label}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** 담당자·배송차 선택 드롭다운. 목록 맨 아래 "+ 새 담당자 추가"를 고르면 이름을 입력해 바로 등록합니다. */
+function DriverSelectField({
+  compact,
+  driverOptions,
+  onAddDriver,
+  onChange,
+  value
+}: {
+  readonly compact?: boolean;
+  readonly driverOptions: string[];
+  readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onChange: (value: string) => void;
+  readonly value: string;
+}) {
+  const ADD_NEW = "__add_new_driver__";
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const options = value && !driverOptions.includes(value) ? [value, ...driverOptions] : driverOptions;
+  const selectClassName = compact
+    ? "h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+    : "h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100";
+
+  async function handleAddNew() {
+    if (!onAddDriver) return;
+    setSaving(true);
+    setError("");
+    const result = await onAddDriver(newName);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.message || "담당자 추가에 실패했습니다.");
+      return;
+    }
+    onChange(newName.trim());
+    setIsAddingNew(false);
+    setNewName("");
+  }
+
+  if (isAddingNew) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <input
+            autoFocus
+            className={compact ? "h-8 w-full rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400" : "h-10 w-full rounded-md border border-teal-200 bg-white px-3 font-bold outline-none focus:border-teal-400"}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="새 담당자 이름"
+            value={newName}
+          />
+          <button className="maju-button-secondary h-8 shrink-0 px-2 text-xs" disabled={saving} onClick={() => setIsAddingNew(false)} type="button">
+            취소
+          </button>
+          <button className="maju-button-primary h-8 shrink-0 px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={saving || !newName.trim()} onClick={handleAddNew} type="button">
+            {saving ? "추가 중" : "추가"}
+          </button>
+        </div>
+        {error ? <p className="text-[11px] font-bold text-rose-600">{error}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <select
+      className={selectClassName}
+      onChange={(event) => {
+        if (event.target.value === ADD_NEW) {
+          setIsAddingNew(true);
+          return;
+        }
+        onChange(event.target.value);
+      }}
+      value={value}
+    >
+      <option value="">담당자 미지정</option>
+      {options.map((driver) => (
+        <option key={driver} value={driver}>
+          {driver}
+        </option>
+      ))}
+      {onAddDriver ? <option value={ADD_NEW}>+ 새 담당자 추가</option> : null}
+    </select>
   );
 }
 
@@ -1516,7 +1768,7 @@ function StoreManagementPanel({
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm font-black text-slate-950">{title}</p>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">거래처를 누르면 상세 패널이 열립니다.</p>
           </div>
           <button
             aria-label="거래처 목록 패널 접기"
@@ -1557,7 +1809,7 @@ function StoreManagementPanel({
               <div>
                 <p className="text-sm font-black text-slate-700">{sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}</p>
                 <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처 마스터를 먼저 등록하면 담당자별 매장 목록이 표시됩니다."}
+                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처 마스터를 먼저 등록하면 담당자별 거래처 목록이 표시됩니다."}
                 </p>
                 {!sourceReady ? (
                 <Link className="maju-button-primary mt-3 h-8" href={dataRegistrationHref}>
@@ -1569,7 +1821,7 @@ function StoreManagementPanel({
           )}
         </div>
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-bold leading-5 text-slate-500">상세 정보, 메모, 첨부자료는 매장 선택 후 우측 넓은 패널에서 관리합니다.</p>
+          <p className="text-xs font-bold leading-5 text-slate-500">상세 정보, 메모, 첨부자료는 거래처 선택 후 우측 넓은 패널에서 관리합니다.</p>
         </div>
       </div>
     </aside>
@@ -1922,14 +2174,14 @@ function TodayCourseView({
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
         <div className="border-b border-slate-200/80 px-4 py-3">
           <p className="text-sm font-black text-slate-950">경유 코스</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 매장을 계산합니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 거래처를 계산합니다.</p>
         </div>
         <div className="border-b border-slate-200/80 p-3">
           <div className="maju-panel bg-slate-50 p-3">
             <p className="text-xs font-black text-slate-500">실사용 순서</p>
             <div className="mt-3 grid gap-2">
               <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
-              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 매장 선택" />
+              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 거래처 선택" />
               <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
               <RouteWorkStep active={Boolean(routeSequence)} done={Boolean(routeSequence)} label="코스 확인" />
             </div>
@@ -1942,7 +2194,7 @@ function TodayCourseView({
             type="button"
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-black text-slate-950">전체 매장 보기</p>
+              <p className="text-sm font-black text-slate-950">전체 거래처 보기</p>
               <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
             </div>
             <p className="mt-1 text-xs font-bold text-slate-500">전체 위치 확인용 · 경유 계산은 차량 선택 후 진행</p>
@@ -2062,7 +2314,7 @@ function TodayCourseView({
                 </div>
                 <div className="mb-3 grid grid-cols-3 gap-2">
                   <RouteMetric label="계산 대상" value={`${selectedRouteStores.length}곳`} />
-                  <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지-매장 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
+                  <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지-거래처 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
                   <RouteMetric label={routeSequence ? "티맵 경유 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
                 <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
@@ -2075,8 +2327,8 @@ function TodayCourseView({
                       : isVehicleScoped && selectedRouteStores.length
                         ? `${activeRouteBatchIndex + 1}묶음 ${selectedRouteStores.length}곳을 계산할 준비가 됐습니다. 버튼을 눌러 도로 기준 경유 거리와 시간을 갱신하세요.`
                         : isVehicleScoped
-                          ? "아래 매장 목록에서 경유지를 추가하세요."
-                          : "왼쪽에서 배송차를 선택하면 해당 차량의 매장만 경유 계산 대상으로 표시됩니다."}
+                          ? "아래 거래처 목록에서 경유지를 추가하세요."
+                          : "왼쪽에서 배송차를 선택하면 해당 차량의 거래처만 경유 계산 대상으로 표시됩니다."}
                   </p>
                 </div>
                 {isVehicleScoped ? (
@@ -2105,7 +2357,7 @@ function TodayCourseView({
                   <input
                     className="maju-search-field h-10 w-full bg-slate-50 pl-9 pr-3"
                     onChange={(event) => setRouteQuery(event.target.value)}
-                    placeholder="경유 매장 검색..."
+                    placeholder="경유 거래처 검색..."
                     value={routeQuery}
                   />
                 </label>
@@ -2207,7 +2459,7 @@ function TodayCourseView({
                 ) : (
                   <div className="maju-empty-state bg-white p-4">
                     <p className="text-sm font-black text-slate-700">선택한 경유지가 없습니다.</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">아래 매장 목록에서 추가 버튼을 누르세요.</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">아래 거래처 목록에서 추가 버튼을 누르세요.</p>
                   </div>
                 )}
                 {inactiveSelectedCount ? (
@@ -2230,9 +2482,9 @@ function TodayCourseView({
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-black text-slate-950">{isVehicleScoped ? "매장 선택" : "배송차 선택 필요"}</p>
+                    <p className="text-sm font-black text-slate-950">{isVehicleScoped ? "거래처 선택" : "배송차 선택 필요"}</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">
-                      {isVehicleScoped ? "매장을 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다." : "왼쪽에서 배송차를 선택하면 해당 차량의 매장이 표시됩니다."}
+                      {isVehicleScoped ? "거래처를 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다." : "왼쪽에서 배송차를 선택하면 해당 차량의 거래처가 표시됩니다."}
                     </p>
                   </div>
                   <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{routeCandidateStores.length}곳</span>
@@ -2296,7 +2548,7 @@ function TodayCourseView({
                     })
                   ) : (
                     <div className="maju-empty-state bg-white p-4">
-                      <p className="text-sm font-black text-slate-700">{isVehicleScoped ? "조건에 맞는 매장이 없습니다." : "배송차를 먼저 선택하세요."}</p>
+                      <p className="text-sm font-black text-slate-700">{isVehicleScoped ? "조건에 맞는 거래처가 없습니다." : "배송차를 먼저 선택하세요."}</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         {isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."}
                       </p>
@@ -2552,6 +2804,7 @@ function StoreDetail({
   attachments,
   driverOptions,
   history,
+  onAddDriver,
   onClose,
   onClearHistory,
   onDeleteHistory,
@@ -2565,6 +2818,7 @@ function StoreDetail({
   readonly attachments: StoreAttachment;
   readonly driverOptions: string[];
   readonly history: StoreHistoryItem[];
+  readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onClearHistory: (storeId: string) => void;
   readonly onDeleteHistory: (storeId: string, historyId: string) => void;
@@ -2689,7 +2943,7 @@ function StoreDetail({
           <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <EditRow label="매장명" onChange={setDraftName} value={draftName} />
+                  <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
                   <BusinessNumberEditRow onChange={setDraftBusinessNumber} valid={businessNumberValid} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
                   <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumberInput(value))} value={draftPhone} />
@@ -2731,8 +2985,15 @@ function StoreDetail({
                     value={draftGrade}
                   />
                   <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
-                  <SelectRow label="담당자" onChange={setDraftDeliveryDriver} options={driverOptions.map((driver) => ({ label: driver, value: driver }))} value={draftDeliveryDriver} />
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">담당자</span>
+                    <DriverSelectField driverOptions={driverOptions} onAddDriver={onAddDriver} onChange={setDraftDeliveryDriver} value={draftDeliveryDriver} />
+                  </label>
                   <SelectRow label="배송권역" onChange={setDraftDeliveryArea} options={areaOptions.map((area) => ({ label: area, value: area }))} value={draftDeliveryArea} />
+                </div>
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-black text-slate-500">외부 매장 정보</p>
+                  <PlaceLinkRow store={store} />
                 </div>
               </CollapsibleSection>
 
@@ -3185,7 +3446,7 @@ function RouteBasisStrip({
   readonly routePlan: RoutePlan;
   readonly visibleMapReadyStoreCount: number;
 }) {
-  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 매장 주소 정상";
+  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 거래처 주소 정상";
   const sourceLabel = routePlan.source === "supabase" ? "거래처 연결됨" : "거래처 연결 대기";
   const sourceHelper = routePlan.source === "supabase" ? "저장된 거래처 기준" : "거래처 등록 또는 연결 확인 필요";
   const sourceReady = routePlan.source === "supabase";
@@ -3208,9 +3469,9 @@ function RouteBasisStrip({
       <div className="grid min-w-0 flex-1 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
         <RouteBasisMetric label="DB 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
-        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 매장 합산" tone={sourceReady ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 거래처 합산" tone={sourceReady ? "default" : "warning"} />
         <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={sourceReady ? "default" : "warning"} />
-        <RouteBasisMetric label="현재 화면 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · 매출 ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
+        <RouteBasisMetric label="현재 화면 거래처" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · 매출 ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
   );
@@ -3377,13 +3638,22 @@ function toCustomerPayload(store: StoreRow) {
   };
 }
 
-function createDeliveryVehiclesFromStores(stores: StoreRow[], vehicleFuelTypes?: Record<string, "gasoline" | "diesel">): DeliveryVehicle[] {
+function createDeliveryVehiclesFromStores(
+  stores: StoreRow[],
+  vehicleFuelTypes?: Record<string, "gasoline" | "diesel">,
+  extraDrivers: string[] = []
+): DeliveryVehicle[] {
   const groups = new Map<string, StoreRow[]>();
 
   stores.forEach((store, index) => {
     const driver = store.deliveryDriver || defaultDriverByIndex(index);
     const area = store.deliveryArea || store.region || "미분류";
     groups.set(driver, [...(groups.get(driver) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
+  });
+
+  // 아직 배정된 거래처가 없는, 방금 추가한 담당자·배송차도 빈 그룹으로 목록에 나타나야 합니다.
+  extraDrivers.forEach((driver) => {
+    if (!groups.has(driver)) groups.set(driver, []);
   });
 
   return Array.from(groups.entries()).map(([driver, stops], index) => {
