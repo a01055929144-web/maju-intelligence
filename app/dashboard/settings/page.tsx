@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getCustomerSession } from "@/lib/auth";
-import { getCompanySettings, getCompanyStaffInvitations } from "@/lib/store";
+import { getBusinessNumberExceptions, getCompanySettings, getCompanyStaffInvitations } from "@/lib/store";
+import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-panel";
 import { CompanySettingsForm } from "./settings-form";
 import { StaffManagementPanel } from "./staff-management-panel";
 
@@ -11,9 +12,10 @@ export default async function CompanySettingsPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
 
-  const [company, staff] = await Promise.all([
+  const [company, staff, businessNumberExceptions] = await Promise.all([
     getCompanySettings(session.companyId, session.companyName),
-    getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false }))
+    getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false })),
+    getBusinessNumberExceptions(session.companyId).catch(() => ({ exceptions: [], persisted: false }))
   ]);
 
   return (
@@ -38,6 +40,7 @@ export default async function CompanySettingsPage() {
         <div className="space-y-5">
           <CompanySettingsForm initial={company} />
           <StaffManagementPanel initialInvitations={staff.invitations} />
+          <BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} />
         </div>
       </section>
     </CustomerAppShell>

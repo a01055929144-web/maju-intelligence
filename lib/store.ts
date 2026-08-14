@@ -1911,14 +1911,18 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
   const id = companyId || getDefaultCompanyId();
   await upsertCompany(id, "마주식자재");
   const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
-  const normalizedKey = businessNumber || makeCustomerKey(customerName, input.address || "");
-  // import 생성과 중복 조회는 서로 의존하지 않으므로 병렬 실행합니다.
-  const [importId, existingRows] = await Promise.all([
+  // import 생성과 예외 사업자번호 조회는 서로 의존하지 않으므로 병렬 실행합니다.
+  const [importId, exemptBusinessNumbers] = await Promise.all([
     createManualCustomerImport(id),
-    supabaseRequest<Array<{ id: string }>>(
-      `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
-    ).catch(() => [])
+    businessNumber ? getExemptBusinessNumberSet(id) : Promise.resolve(new Set<string>())
   ]);
+  // 종사업자번호 등 중복 허용 목록에 등록된 사업자번호는 상호명+주소 기준 key를 사용해,
+  // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 병합되지 않도록 합니다.
+  const normalizedKey =
+    businessNumber && !exemptBusinessNumbers.has(businessNumber) ? businessNumber : makeCustomerKey(customerName, input.address || "");
+  const existingRows = await supabaseRequest<Array<{ id: string }>>(
+    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+  ).catch(() => []);
   const placeLinks = {
     google_map_url: resolvedPlaceLinks.googleMapUrl || null,
     kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
@@ -2003,6 +2007,155 @@ async function upsertNormalizedCustomerWithOptionalPlaceLinks(payload: Record<st
     },
     body: JSON.stringify([payload])
   });
+}
+
+export type BusinessNumberException = {
+  id: string;
+  businessRegistrationNumber: string;
+  memo: string;
+  createdAt: string;
+};
+
+function isMissingBusinessNumberExceptionsTableError(error: unknown) {
+  return error instanceof Error && error.message.includes("business_number_exceptions");
+}
+
+/**
+ * 하나의 사업자등록번호(종사업자번호 등)로 여러 거래처를 운영하는 회사를 위한 예외 목록입니다.
+ * 이 목록에 등록된 사업자번호는 데이터 등록/업로드 시 normalized_key를 사업자번호 대신
+ * 상호명+주소 기준으로 계산해, 서로 다른 거래처가 같은 레코드로 병합되거나 중복으로
+ * 잘못 경고되지 않도록 합니다. getExemptBusinessNumberSet()과 함께 사용하세요.
+ */
+export async function getBusinessNumberExceptions(companyId: string): Promise<{ exceptions: BusinessNumberException[]; persisted: boolean }> {
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!isProductionStoreConfigured()) return { exceptions: [], persisted: false };
+
+  try {
+    const rows = await supabaseRequest<Array<{ id: string; business_registration_number: string; memo: string | null; created_at: string }>>(
+      `business_number_exceptions?select=id,business_registration_number,memo,created_at&company_id=eq.${encodeURIComponent(
+        companyId
+      )}&order=created_at.desc`
+    );
+    return {
+      persisted: true,
+      exceptions: rows.map((row) => ({
+        id: row.id,
+        businessRegistrationNumber: row.business_registration_number,
+        memo: row.memo || "",
+        createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+      }))
+    };
+  } catch (error) {
+    if (isMissingBusinessNumberExceptionsTableError(error)) return { exceptions: [], persisted: false };
+    throw error;
+  }
+}
+
+/** normalized_key 계산에서 businessNumber || ... 폴백을 우회해야 할 사업자번호 집합만 가볍게 가져옵니다. */
+export async function getExemptBusinessNumberSet(companyId?: string): Promise<Set<string>> {
+  const id = companyId || getDefaultCompanyId();
+  if (!isProductionStoreConfigured()) return new Set();
+
+  try {
+    const rows = await supabaseRequest<Array<{ business_registration_number: string }>>(
+      `business_number_exceptions?select=business_registration_number&company_id=eq.${encodeURIComponent(id)}`
+    );
+    return new Set(rows.map((row) => normalizeBusinessNumber(row.business_registration_number)));
+  } catch (error) {
+    if (isMissingBusinessNumberExceptionsTableError(error)) return new Set();
+    throw error;
+  }
+}
+
+export async function addBusinessNumberException(
+  companyId: string,
+  businessRegistrationNumber: string,
+  memo: string,
+  auditContext: AuditActorContext = {}
+): Promise<{ exception: BusinessNumberException; persisted: boolean }> {
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+  const businessNumber = normalizeBusinessNumber(businessRegistrationNumber || "");
+  if (!businessNumber) throw new Error("사업자등록번호를 입력하세요.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      exception: {
+        id: globalThis.crypto.randomUUID(),
+        businessRegistrationNumber: businessNumber,
+        memo: memo.trim(),
+        createdAt: "서버 저장 미확인"
+      }
+    };
+  }
+
+  try {
+    const rows = await supabaseRequest<Array<{ id: string; business_registration_number: string; memo: string | null; created_at: string }>>(
+      "business_number_exceptions?on_conflict=company_id,business_registration_number",
+      {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify([
+          {
+            company_id: companyId,
+            business_registration_number: businessNumber,
+            memo: memo.trim() || null,
+            created_by: auditContext.actorName || "시스템"
+          }
+        ])
+      }
+    );
+    const row = rows[0];
+    const exception: BusinessNumberException = {
+      id: row.id,
+      businessRegistrationNumber: row.business_registration_number,
+      memo: row.memo || "",
+      createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+    };
+
+    await writeAdminAuditLog({
+      companyId,
+      action: "business_number_exception_created",
+      targetType: "business_number_exception",
+      targetId: exception.id,
+      metadata: {
+        actorName: auditContext.actorName || "시스템",
+        actorRole: auditContext.actorRole || "unknown",
+        businessRegistrationNumber: exception.businessRegistrationNumber
+      }
+    }).catch(() => null);
+
+    return { persisted: true, exception };
+  } catch (error) {
+    if (isMissingBusinessNumberExceptionsTableError(error)) {
+      throw new Error(
+        "중복 허용 사업자번호를 저장할 수 없습니다. Supabase에 business_number_exceptions 테이블이 아직 없습니다. supabase/migrations/20260814_business_number_exceptions.sql을 먼저 실행하세요."
+      );
+    }
+    throw error;
+  }
+}
+
+export async function removeBusinessNumberException(companyId: string, exceptionId: string, auditContext: AuditActorContext = {}): Promise<void> {
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!exceptionId) throw new Error("삭제할 항목 ID가 필요합니다.");
+  if (!isProductionStoreConfigured()) return;
+
+  await supabaseRequest(`business_number_exceptions?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(exceptionId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+
+  await writeAdminAuditLog({
+    companyId,
+    action: "business_number_exception_removed",
+    targetType: "business_number_exception",
+    targetId: exceptionId,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown"
+    }
+  }).catch(() => null);
 }
 
 export async function getCustomerOperations(customerId: string, companyId?: string) {
@@ -2552,7 +2705,7 @@ export async function saveAnalysis(
   // 서로 의존하지 않는 저장 작업은 병렬로 실행해 저장 대기 시간을 줄입니다.
   // column_mappings/raw_customer_rows는 매핑 이력·원본 백업용 부가 데이터라, 저장에 실패해도
   // 아래에서 이어지는 normalized_customers/매출 거래내역 저장까지 막히면 안 되므로 개별적으로 catch합니다.
-  await Promise.all([
+  const [, , , exemptBusinessNumbers] = await Promise.all([
     mappingRows.length
       ? supabaseRequest("column_mappings", {
           method: "POST",
@@ -2573,13 +2726,17 @@ export async function saveAnalysis(
       : Promise.resolve(),
     options.uploadType === "sales-analysis" && options.rawRows?.length
       ? saveSalesTransactions(companyId, importId, options.rawRows, options.columnMapping || {})
-      : Promise.resolve()
+      : Promise.resolve(),
+    getExemptBusinessNumberSet(companyId).catch(() => new Set<string>())
   ]);
 
   const normalizedRows = rows.map((row, index) => {
     const rawRow = options.rawRows?.[index];
     const businessRegistrationNumber = rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) : "";
-    const normalizedKey = businessRegistrationNumber || makeNormalizedKey(row);
+    // 중복 허용 목록에 등록된 사업자번호(종사업자번호 등)는 상호명+주소 기준 key를 사용해,
+    // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 덮어써지지 않도록 합니다.
+    const normalizedKey =
+      businessRegistrationNumber && !exemptBusinessNumbers.has(businessRegistrationNumber) ? businessRegistrationNumber : makeNormalizedKey(row);
     const baseRow: Record<string, unknown> = {
       company_id: companyId,
       import_id: importId,
@@ -4304,14 +4461,20 @@ async function buildNameOnlyCustomerKeyLookup(companyId: string) {
 }
 
 async function saveSalesTransactions(companyId: string, importId: string, rawRows: RawUploadRow[], columnMapping: ColumnMapping) {
-  const nameOnlyLookup = await buildNameOnlyCustomerKeyLookup(companyId).catch(() => new Map<string, string>());
+  const [nameOnlyLookup, exemptBusinessNumbers] = await Promise.all([
+    buildNameOnlyCustomerKeyLookup(companyId).catch(() => new Map<string, string>()),
+    getExemptBusinessNumberSet(companyId).catch(() => new Set<string>())
+  ]);
   const salesRows = rawRows
     .map((row) => {
       const customerName = getRawCell(row, columnMapping.customerName);
       const businessRegistrationNumber = normalizeBusinessNumber(getRawCell(row, columnMapping.businessRegistrationNumber));
+      // 중복 허용 목록에 등록된 사업자번호는 매출 매칭 key로 쓰지 않고 상호명/주소 기준으로 대체합니다.
+      // (사업자번호 자체는 원래 값 그대로 저장하고, key 계산에서만 제외합니다.)
+      const keyEligibleBusinessNumber = exemptBusinessNumbers.has(businessRegistrationNumber) ? "" : businessRegistrationNumber;
       const address = getRawCell(row, columnMapping.address);
-      const nameOnlyMatch = !businessRegistrationNumber && !address ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) : undefined;
-      const customerKey = businessRegistrationNumber || nameOnlyMatch || makeCustomerKey(customerName, address);
+      const nameOnlyMatch = !keyEligibleBusinessNumber && !address ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) : undefined;
+      const customerKey = keyEligibleBusinessNumber || nameOnlyMatch || makeCustomerKey(customerName, address);
 
       return {
         company_id: companyId,

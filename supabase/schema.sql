@@ -210,6 +210,16 @@ create table if not exists public.delivery_vehicles (
   constraint delivery_vehicles_company_driver_unique unique (company_id, driver_name)
 );
 
+create table if not exists public.business_number_exceptions (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  business_registration_number text not null,
+  memo text,
+  created_by text,
+  created_at timestamptz not null default now(),
+  constraint business_number_exceptions_company_number_unique unique (company_id, business_registration_number)
+);
+
 create table if not exists public.sales_transactions (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -300,6 +310,7 @@ create index if not exists idx_customer_attachments_customer_created on public.c
 create unique index if not exists idx_route_distance_cache_company_destination on public.route_distance_cache(company_id, destination_address);
 create index if not exists idx_route_distance_cache_company_calculated on public.route_distance_cache(company_id, calculated_at desc);
 create index if not exists idx_delivery_vehicles_company on public.delivery_vehicles(company_id);
+create index if not exists idx_business_number_exceptions_company on public.business_number_exceptions(company_id);
 create index if not exists idx_sales_transactions_company_date on public.sales_transactions(company_id, sales_date desc);
 create index if not exists idx_sales_transactions_customer_key on public.sales_transactions(company_id, customer_key);
 create index if not exists idx_ai_reports_company_created on public.ai_reports(company_id, created_at desc);
@@ -323,6 +334,7 @@ alter table public.customer_notes enable row level security;
 alter table public.customer_attachments enable row level security;
 alter table public.route_distance_cache enable row level security;
 alter table public.delivery_vehicles enable row level security;
+alter table public.business_number_exceptions enable row level security;
 alter table public.sales_transactions enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.health_score_snapshots enable row level security;

@@ -964,6 +964,21 @@ function Onboarding({
   }, [documentOcrPreviewUrl]);
   const [savedPreset, setSavedPreset] = useState<FieldMap | null>(null);
   const [presetMessage, setPresetMessage] = useState("");
+  // 중복 허용(종사업자번호 등) 목록에 등록된 사업자번호는 업로드 미리보기의 "중복 후보" 경고에서 제외합니다.
+  const [exemptBusinessNumbers, setExemptBusinessNumbers] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let active = true;
+    fetch(businessNumberExceptionsEndpoint(), { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!active || !Array.isArray(payload?.exceptions)) return;
+        setExemptBusinessNumbers(new Set(payload.exceptions.map((item: { businessRegistrationNumber: string }) => item.businessRegistrationNumber)));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   const requiredFields = template.fields.filter((field) => field.required);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const complete = missingRequiredFields.length === 0;
@@ -980,7 +995,10 @@ function Onboarding({
   const canAnalyze = rawRows.length > 0 && complete;
   const mappedRequiredCount = requiredFields.length - missingRequiredFields.length;
   const mappingProgress = requiredFields.length ? Math.round((mappedRequiredCount / requiredFields.length) * 100) : 100;
-  const dataQuality = useMemo(() => summarizeDataQuality(rawRows, requiredFields, fieldMap), [fieldMap, rawRows, requiredFields]);
+  const dataQuality = useMemo(
+    () => summarizeDataQuality(rawRows, requiredFields, fieldMap, exemptBusinessNumbers),
+    [exemptBusinessNumbers, fieldMap, rawRows, requiredFields]
+  );
   const uploadHint = isMaster
     ? "사업자 정보, 배송주소, 대표자, 연락처를 회사의 거래처 마스터로 저장합니다."
     : "거래처 key와 매출 행을 누적해 일/월/분기/반기/연 분석과 이탈 징후를 갱신합니다.";
@@ -5258,7 +5276,12 @@ function fieldLabelForHeader(header: string, fields: readonly UploadTemplateFiel
   return fields.find((field) => field.key === header)?.label || header;
 }
 
-function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTemplateField[], fieldMap: FieldMap): DataQualitySummary {
+function summarizeDataQuality(
+  rows: RawRow[],
+  requiredFields: readonly UploadTemplateField[],
+  fieldMap: FieldMap,
+  exemptBusinessNumbers: Set<string> = new Set()
+): DataQualitySummary {
   const seenKeys = new Map<string, number>();
   let duplicateCandidates = 0;
   const invalidBusinessNumbers: DataQualitySummary["invalidBusinessNumbers"] = [];
@@ -5285,7 +5308,9 @@ function summarizeDataQuality(rows: RawRow[], requiredFields: readonly UploadTem
 
     const customerName = normalizeTextForCompare(getCell(row, fieldMap.customerName));
     const address = normalizeTextForCompare(getCell(row, fieldMap.address));
-    const duplicateKey = businessNumber || [customerName, address].filter(Boolean).join("|");
+    // 중복 허용 목록에 등록된 사업자번호(종사업자번호 등)는 상호명+주소 기준으로 구분합니다.
+    const keyEligibleBusinessNumber = businessNumber && !exemptBusinessNumbers.has(businessNumber) ? businessNumber : "";
+    const duplicateKey = keyEligibleBusinessNumber || [customerName, address].filter(Boolean).join("|");
 
     if (duplicateKey) {
       const count = seenKeys.get(duplicateKey) || 0;
@@ -5334,6 +5359,11 @@ function mappingPresetEndpoint(type: UploadTemplateType) {
   const companyId = getAdminCompanyIdFromUrl();
   if (companyId) params.set("companyId", companyId);
   return `/api/excel-mapping-presets?${params.toString()}`;
+}
+
+function businessNumberExceptionsEndpoint() {
+  const companyId = getAdminCompanyIdFromUrl();
+  return companyId ? `/api/business-number-exceptions?companyId=${encodeURIComponent(companyId)}` : "/api/business-number-exceptions";
 }
 
 function isUploadTemplateType(value: string | null): value is UploadTemplateType {
