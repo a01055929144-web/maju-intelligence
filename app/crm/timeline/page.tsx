@@ -2437,7 +2437,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
     "리뷰 변화와 컴플레인 단서",
     "배송 적재위치와 로드뷰 확인"
   ];
-  const searchLinks = buildPlaceSearchLinks([customer.customerName, customer.address].filter(Boolean).join(" "));
+  const searchLinks = buildPlaceSearchLinks(customer.customerName, customer.address);
 
   return (
     <div className="maju-section-card overflow-hidden border-teal-100">
@@ -2565,13 +2565,17 @@ function PlaceLinkButton({ label, purpose, url = "" }: { label: string; purpose:
   );
 }
 
-function buildPlaceSearchLinks(query: string) {
-  const encodedQuery = encodeURIComponent(query || "매장");
+function buildPlaceSearchLinks(customerName: string, address?: string) {
+  const fullQuery = [customerName, address].map((value) => value?.trim()).filter(Boolean).join(" ") || "거래처";
+  const encodedFullQuery = encodeURIComponent(fullQuery);
+  // 네이버 지도는 상호명+상세주소(동/호수·층수 포함)로 검색하면 네이버 DB 주소 표기와 조금만 달라도
+  // 결과가 없거나 다른 곳으로 연결되는 경우가 많아, 상호명 단독 검색이 훨씬 안정적으로 매칭됩니다.
+  const encodedNaverQuery = encodeURIComponent(customerName?.trim() || fullQuery);
   return [
-    { href: `https://map.naver.com/p/search/${encodedQuery}`, label: "네이버 지도" },
-    { href: `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedQuery}`, label: "네이버 블로그" },
-    { href: `https://map.kakao.com/?q=${encodedQuery}`, label: "카카오맵" },
-    { href: `https://www.google.com/maps/search/${encodedQuery}`, label: "구글맵" }
+    { href: `https://map.naver.com/p/search/${encodedNaverQuery}`, label: "네이버 지도" },
+    { href: `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedFullQuery}`, label: "네이버 블로그" },
+    { href: `https://map.kakao.com/?q=${encodedFullQuery}`, label: "카카오맵" },
+    { href: `https://www.google.com/maps/search/${encodedFullQuery}`, label: "구글맵" }
   ];
 }
 

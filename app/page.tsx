@@ -3649,8 +3649,7 @@ function PlaceLinkCapturePanel({
 }) {
   const customerName = String(manualDraft.customerName || "").trim();
   const address = String(manualDraft.address || "").trim();
-  const searchQuery = [customerName, address].filter(Boolean).join(" ");
-  const searchLinks = buildPlaceSearchLinks(searchQuery);
+  const searchLinks = buildPlaceSearchLinks(customerName, address);
   const filledCount = fields.filter((field) => String(manualDraft[field.key] ?? "").trim()).length;
 
   return (
@@ -3665,7 +3664,7 @@ function PlaceLinkCapturePanel({
           {searchLinks.map((link) => (
             <a
               className={`inline-flex h-9 items-center justify-center rounded-md border px-3 text-xs font-black transition ${
-                searchQuery ? "border-teal-200 bg-white text-teal-800 hover:bg-teal-100" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"
+                customerName || address ? "border-teal-200 bg-white text-teal-800 hover:bg-teal-100" : "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"
               }`}
               href={link.href}
               key={link.label}
@@ -5360,12 +5359,16 @@ function customerHistoryHref(customerId: string) {
   return query ? `/crm/timeline?${query}` : "/crm/timeline";
 }
 
-function buildPlaceSearchLinks(query: string) {
-  const encodedQuery = encodeURIComponent(query || "매장");
+function buildPlaceSearchLinks(customerName: string, address?: string) {
+  const fullQuery = [customerName, address].map((value) => value?.trim()).filter(Boolean).join(" ") || "거래처";
+  const encodedFullQuery = encodeURIComponent(fullQuery);
+  // 네이버 지도는 상호명+상세주소로 검색하면 네이버 DB 주소 표기와 조금만 달라도 결과가 없거나 다른
+  // 곳으로 연결되는 경우가 많아, 상호명 단독 검색이 훨씬 안정적으로 매칭됩니다.
+  const encodedNaverQuery = encodeURIComponent(customerName?.trim() || fullQuery);
   return [
-    { href: `https://search.naver.com/search.naver?query=${encodedQuery}`, label: "네이버" },
-    { href: `https://map.kakao.com/?q=${encodedQuery}`, label: "카카오맵" },
-    { href: `https://www.google.com/maps/search/${encodedQuery}`, label: "구글맵" }
+    { href: `https://map.naver.com/p/search/${encodedNaverQuery}`, label: "네이버" },
+    { href: `https://map.kakao.com/?q=${encodedFullQuery}`, label: "카카오맵" },
+    { href: `https://www.google.com/maps/search/${encodedFullQuery}`, label: "구글맵" }
   ];
 }
 

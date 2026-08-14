@@ -99,7 +99,7 @@ type StoreEdit = Partial<
     | "status"
   >
 >;
-type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver" | "fuelType">>;
+type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver" | "fuelType" | "name">>;
 
 type StoreHistoryItem = {
   id: string;
@@ -1393,7 +1393,7 @@ function StoreQuickCard({
 
   return (
     <div
-      className={`absolute top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] left-4 ${
+      className={`absolute top-4 xl:top-20 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] left-4 ${
         leftPanelCollapsed ? "xl:left-[84px]" : "xl:left-[336px]"
       }`}
     >
@@ -1407,12 +1407,10 @@ function StoreQuickCard({
               value={draft.name}
             />
           ) : (
-            <div className="flex min-w-0 items-center gap-1.5 pr-1">
-              <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
-              <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-            </div>
+            <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700">{store.grade}등급</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
           </div>
@@ -1511,7 +1509,7 @@ function StoreQuickCard({
  * 실제 리뷰·영업시간·메뉴는 각 플랫폼 페이지에서 확인합니다(공식 리뷰 API는 유료라 여기서는 연결만 제공).
  */
 function PlaceLinkRow({ className = "", store }: { readonly className?: string; readonly store: StoreRow }) {
-  const searchLinks = buildPlaceSearchLinks([store.name, store.address || store.region].filter(Boolean).join(" "));
+  const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
   const links = [
     { label: "네이버", url: store.naverPlaceUrl?.trim() || searchLinks.naverPlaceUrl },
     { label: "카카오맵", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
@@ -1667,6 +1665,7 @@ function VehicleEditForm({
   readonly onSave: (edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly vehicle: DeliveryVehicle;
 }) {
+  const [name, setName] = useState(vehicle.name);
   const [driver, setDriver] = useState(vehicle.driver);
   const [area, setArea] = useState(vehicle.area);
   const [fuelType, setFuelType] = useState<"gasoline" | "diesel">(vehicle.fuelType || "diesel");
@@ -1676,7 +1675,7 @@ function VehicleEditForm({
   async function handleSave() {
     setSaving(true);
     setError("");
-    const result = await onSave({ area, driver, fuelType });
+    const result = await onSave({ area, driver, fuelType, name: name.trim() || vehicle.name });
     setSaving(false);
     if (!result.ok) setError(result.message || "저장에 실패했습니다.");
   }
@@ -1684,10 +1683,20 @@ function VehicleEditForm({
   return (
     <div className="space-y-2">
       <p className="text-sm font-black text-slate-950">{vehicle.name} 편집</p>
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      <label className="grid gap-1 text-xs">
+        <span className="font-black text-slate-500">호차명</span>
+        <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setName(event.target.value)} value={name} />
+      </label>
+      <label className="grid gap-1 text-xs">
+        <span className="font-black text-slate-500">담당자</span>
+        <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
+      </label>
+      <label className="grid gap-1 text-xs">
+        <span className="font-black text-slate-500">구역</span>
+        <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      </label>
       <p className="text-[11px] font-bold leading-4 text-slate-400">
-        담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 관리의 담당자 일괄 변경을 사용하세요.
+        호차명·담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 관리의 담당자 일괄 변경을 사용하세요.
       </p>
       {!fuelTypeConfigured ? (
         <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] font-bold leading-4 text-amber-800">
