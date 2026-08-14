@@ -160,7 +160,7 @@ export function ExcelHeaderMappingPreview({
         </div>
         <Badge className="bg-slate-100 text-slate-700">{visibleHeaders.length}/{headers.length}컬럼 표시</Badge>
       </div>
-      <div className="max-h-[620px] overflow-auto bg-slate-50/60 p-4">
+      <div className="overflow-x-auto bg-slate-50/60 p-4">
         {!visibleHeaders.length ? (
           <div className="maju-empty-state p-4">
             <p className="text-sm font-black text-slate-800">조건에 맞는 컬럼이 없습니다.</p>
@@ -717,7 +717,7 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
           ) : null}
         </div>
       </div>
-      <div className="max-h-[680px] overflow-auto bg-white">
+      <div className="overflow-x-auto bg-white">
         <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-xs">
           <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-sm">
             <tr>
