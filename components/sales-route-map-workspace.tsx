@@ -23,6 +23,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Phone,
   Plus,
   RefreshCw,
   Search,
@@ -1346,7 +1347,8 @@ function StoreQuickCard({
   onOpenDetail,
   onSave,
   originAddress,
-  store
+  store,
+  variant = "floating"
 }: {
   readonly driverOptions?: string[];
   readonly leftPanelCollapsed?: boolean;
@@ -1356,6 +1358,12 @@ function StoreQuickCard({
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
   readonly originAddress?: string;
   readonly store: StoreRow;
+  /**
+   * "floating": 지도 홈처럼 지도 위에 떠 있는 좌측 패널을 피해야 하는 전체화면 지도용 위치 계산.
+   * "grid": 경유 코스처럼 이미 별도 그리드 컬럼으로 좌우 패널 공간이 확보된 레이아웃용 — 항상 지도 영역
+   * 안쪽에서 안전한 고정 여백만 사용해 옆 패널을 절대 침범하지 않습니다.
+   */
+  readonly variant?: "floating" | "grid";
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1391,12 +1399,19 @@ function StoreQuickCard({
     }
   }
 
+  // grid 변형은 이미 그리드 컬럼으로 좌우 여백이 확보돼 있으므로 고정된 작은 좌측 여백만 사용합니다.
+  // floating 변형(지도 홈)은 지도 위에 떠 있는 좌측 패널을 피해야 해서 더 큰 오프셋을 쓰되,
+  // 두 경우 모두 너비를 컨테이너 폭 기준 calc()로 제한해 옆 패널을 절대 침범하지 않게 합니다.
+  const positionClassName =
+    variant === "grid"
+      ? "left-4 w-[min(300px,calc(100%-32px))]"
+      : `left-4 w-[min(300px,calc(100%-32px))] ${
+          leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(300px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(300px,calc(100%-352px))]"
+        }`;
+  const topClassName = variant === "grid" ? "top-4" : "top-4 xl:top-20";
+
   return (
-    <div
-      className={`absolute top-4 xl:top-20 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] left-4 ${
-        leftPanelCollapsed ? "xl:left-[84px]" : "xl:left-[336px]"
-      }`}
-    >
+    <div className={`absolute ${topClassName} z-30 h-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}>
       <div className="flex items-start justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
           {isEditing ? (
@@ -1424,6 +1439,26 @@ function StoreQuickCard({
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
+        {!isEditing ? (
+          <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-bold text-slate-500">
+            <span className="flex items-center gap-1 truncate">
+              <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+              {store.phone || "연락처 미등록"}
+            </span>
+            <span className="flex items-center gap-1 truncate">
+              <UserRound className="h-3 w-3 shrink-0 text-slate-400" />
+              {store.representativeName || "대표자 미등록"}
+            </span>
+            <span className="flex items-center gap-1 truncate">
+              <FileImage className="h-3 w-3 shrink-0 text-slate-400" />
+              {store.businessRegistrationNumber || "사업자번호 미등록"}
+            </span>
+            <span className="flex items-center gap-1 truncate">
+              <CalendarDays className="h-3 w-3 shrink-0 text-slate-400" />
+              {store.openingDate ? `개업 ${store.openingDate}` : "개업일 미등록"}
+            </span>
+          </div>
+        ) : null}
         {!isEditing ? (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {store.businessHours ? (
@@ -1515,21 +1550,24 @@ const isGenericNaverSearchLink = (url?: string) => {
 };
 
 // 네이버·카카오맵·구글맵처럼 클릭 시 새 탭으로 열리는 링크형 아이콘과 영업시간·메뉴처럼
-// 클릭 동작 없이 마우스오버로만 내용을 보여주는 정보형 아이콘에 공통으로 쓰는 원형 배지입니다.
+// 클릭 동작 없이 마우스오버로만 내용을 보여주는 정보형 아이콘에 공통으로 쓰는 배지입니다.
 function IconBadge({
   children,
   className = "",
   href,
+  shape = "circle",
   title,
   tone
 }: {
   readonly children: React.ReactNode;
   readonly className?: string;
   readonly href?: string;
+  readonly shape?: "circle" | "square";
   readonly title: string;
   readonly tone: string;
 }) {
-  const sharedClassName = `grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-black ring-1 ring-inset transition hover:scale-105 ${tone} ${className}`;
+  const shapeClassName = shape === "square" ? "rounded-[9px]" : "rounded-full";
+  const sharedClassName = `grid h-7 w-7 shrink-0 place-items-center ${shapeClassName} text-[11px] font-black ring-1 ring-inset transition hover:scale-105 ${tone} ${className}`;
   if (href) {
     return (
       <a className={sharedClassName} href={href} rel="noreferrer" target="_blank" title={title}>
@@ -1544,6 +1582,14 @@ function IconBadge({
   );
 }
 
+// 원 안에 첫 글자만 넣던 방식 대신, 각 플랫폼의 실제 브랜드 컬러(네이버 그린·카카오 옐로우)와
+// 지도 서비스임을 알 수 있는 핀 아이콘을 조합해 한눈에 구분되도록 했습니다.
+const PLACE_LINK_BRAND_STYLE: Record<string, { icon: ReactNode; tone: string }> = {
+  구글맵: { icon: <MapPin className="h-4 w-4" />, tone: "bg-white text-[#EA4335] ring-slate-200" },
+  네이버: { icon: <span className="text-[13px] font-black leading-none">N</span>, tone: "bg-[#03C75A] text-white ring-[#03C75A]" },
+  카카오맵: { icon: <MapPin className="h-4 w-4" />, tone: "bg-[#FEE500] text-slate-900 ring-[#FEE500]" }
+};
+
 function PlaceLinkRow({ className = "", compact = false, store }: { readonly className?: string; readonly compact?: boolean; readonly store: StoreRow }) {
   const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
   const links = [
@@ -1555,11 +1601,14 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
   if (compact) {
     return (
       <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
-        {links.map((link) => (
-          <IconBadge href={link.url} key={link.label} title={`${link.label}에서 보기`} tone={link.tone}>
-            {link.label[0]}
-          </IconBadge>
-        ))}
+        {links.map((link) => {
+          const brand = PLACE_LINK_BRAND_STYLE[link.label];
+          return (
+            <IconBadge href={link.url} key={link.label} shape="square" title={`${link.label}에서 보기`} tone={brand?.tone ?? link.tone}>
+              {brand?.icon ?? link.label[0]}
+            </IconBadge>
+          );
+        })}
       </div>
     );
   }
@@ -2011,6 +2060,7 @@ function TodayCourseView({
   const [routeSequence, setRouteSequence] = useState<RouteSequence | null>(null);
   const [routeBatchIndex, setRouteBatchIndex] = useState(0);
   const [routePanelCollapsed, setRoutePanelCollapsed] = useState(false);
+  const [routeLeftPanelCollapsed, setRouteLeftPanelCollapsed] = useState(false);
   const [routeQuery, setRouteQuery] = useState("");
   const [routeSelectedStoreId, setRouteSelectedStoreId] = useState("");
   const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
@@ -2226,51 +2276,88 @@ function TodayCourseView({
     }));
   };
 
+  // 좌측(경유 코스 목록)·우측(경유 순서) 패널을 각각 독립적으로 접었다 펼 수 있어 4가지 조합이 나옵니다.
+  // Tailwind가 클래스를 정적으로 스캔할 수 있도록 조합별 전체 클래스 문자열을 그대로 나열합니다.
+  const routeGridColsClassName = routeLeftPanelCollapsed
+    ? routePanelCollapsed
+      ? "xl:grid-cols-[56px_minmax(0,1fr)_56px]"
+      : "xl:grid-cols-[56px_minmax(0,1fr)_400px]"
+    : routePanelCollapsed
+      ? "xl:grid-cols-[280px_minmax(0,1fr)_56px]"
+      : "xl:grid-cols-[280px_minmax(0,1fr)_400px]";
+
   return (
-    <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:min-h-0 ${routePanelCollapsed ? "xl:grid-cols-[280px_minmax(0,1fr)_56px]" : "xl:grid-cols-[280px_minmax(0,1fr)_400px]"}`}>
+    <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:min-h-0 ${routeGridColsClassName}`}>
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
-        <div className="border-b border-slate-200/80 px-4 py-3">
-          <p className="text-sm font-black text-slate-950">경유 코스</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 거래처를 계산합니다.</p>
-        </div>
-        <div className="border-b border-slate-200/80 p-3">
-          <div className="maju-panel bg-slate-50 p-3">
-            <p className="text-xs font-black text-slate-500">실사용 순서</p>
-            <div className="mt-3 grid gap-2">
-              <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
-              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 거래처 선택" />
-              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
-              <RouteWorkStep active={Boolean(routeSequence)} done={Boolean(routeSequence)} label="코스 확인" />
-            </div>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
-          <button
-            className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-            onClick={() => onSelectVehicle("all")}
-            type="button"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-black text-slate-950">전체 거래처 보기</p>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
-            </div>
-            <p className="mt-1 text-xs font-bold text-slate-500">전체 위치 확인용 · 경유 계산은 차량 선택 후 진행</p>
-          </button>
-          {vehicles.map((vehicle) => (
+        {routeLeftPanelCollapsed ? (
+          <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
             <button
-              className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === vehicle.id ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-              key={vehicle.id}
-              onClick={() => onSelectVehicle(vehicle.id)}
+              aria-label="경유 코스 목록 패널 열기"
+              className="maju-button-secondary h-10 w-10 px-0"
+              onClick={() => setRouteLeftPanelCollapsed(false)}
               type="button"
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">{vehicle.stops.length}곳</span>
-              </div>
-              <p className="mt-1 text-xs font-bold text-slate-500">{vehicle.driver} · {vehicle.area}</p>
+              <PanelLeftOpen className="h-4 w-4" />
             </button>
-          ))}
-        </div>
+            <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">경유 코스</div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{vehicles.length}</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-slate-950">경유 코스</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 거래처를 계산합니다.</p>
+              </div>
+              <button
+                aria-label="경유 코스 목록 패널 접기"
+                className="maju-button-secondary h-9 w-9 shrink-0 px-0"
+                onClick={() => setRouteLeftPanelCollapsed(true)}
+                type="button"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="border-b border-slate-200/80 p-3">
+              <div className="maju-panel bg-slate-50 p-3">
+                <p className="text-xs font-black text-slate-500">실사용 순서</p>
+                <div className="mt-3 grid gap-2">
+                  <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
+                  <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 거래처 선택" />
+                  <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
+                  <RouteWorkStep active={Boolean(routeSequence)} done={Boolean(routeSequence)} label="코스 확인" />
+                </div>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
+              <button
+                className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                onClick={() => onSelectVehicle("all")}
+                type="button"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-black text-slate-950">전체 거래처 보기</p>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
+                </div>
+                <p className="mt-1 text-xs font-bold text-slate-500">전체 위치 확인용 · 경유 계산은 차량 선택 후 진행</p>
+              </button>
+              {vehicles.map((vehicle) => (
+                <button
+                  className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === vehicle.id ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                  key={vehicle.id}
+                  onClick={() => onSelectVehicle(vehicle.id)}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">{vehicle.stops.length}곳</span>
+                  </div>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{vehicle.driver} · {vehicle.area}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </aside>
 
       <div className="relative h-[620px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
@@ -2294,6 +2381,7 @@ function TodayCourseView({
             onOpenDetail={() => onSelectStore(routeSelectedStore.id)}
             originAddress={routeOriginAddress}
             store={routeSelectedStore}
+            variant="grid"
           />
         ) : null}
       </div>
