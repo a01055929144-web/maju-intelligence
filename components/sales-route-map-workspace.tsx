@@ -1508,10 +1508,18 @@ function StoreQuickCard({
  * 저장된 네이버·카카오·구글 링크가 있으면 그 링크로, 없으면 상호명+주소 검색 링크로 새 탭에서 엽니다.
  * 실제 리뷰·영업시간·메뉴는 각 플랫폼 페이지에서 확인합니다(공식 리뷰 API는 유료라 여기서는 연결만 제공).
  */
+// 예전 로직으로 저장된 네이버 링크는 "상호명+상세주소" 조합 검색이라 결과가 어긋나는 경우가 많았습니다.
+// 실제로 네이버 API가 확정 매칭한 링크(map.naver.com/p/search가 아닌 다른 경로)가 아니라면,
+// 저장된 값 대신 항상 최신 로직(상호명 단독 검색)으로 다시 계산해서 보여줍니다.
+const isGenericNaverSearchLink = (url?: string) => {
+  const trimmed = url?.trim();
+  return !trimmed || /^https:\/\/map\.naver\.com\/p\/search\//.test(trimmed);
+};
+
 function PlaceLinkRow({ className = "", store }: { readonly className?: string; readonly store: StoreRow }) {
   const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
   const links = [
-    { label: "네이버", url: store.naverPlaceUrl?.trim() || searchLinks.naverPlaceUrl },
+    { label: "네이버", url: isGenericNaverSearchLink(store.naverPlaceUrl) ? searchLinks.naverPlaceUrl : store.naverPlaceUrl!.trim() },
     { label: "카카오맵", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
     { label: "구글맵", url: store.googleMapUrl?.trim() || searchLinks.googleMapUrl }
   ];
