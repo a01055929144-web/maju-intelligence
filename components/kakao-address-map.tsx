@@ -22,6 +22,7 @@ export type KakaoRoutePoint = {
 };
 
 type KakaoAddressMapProps = {
+  readonly controlsOffsetClassName?: string;
   readonly controlsOffsetPx?: number;
   readonly fallbackReason?: string;
   readonly focusedMarkerId?: string;
@@ -51,6 +52,7 @@ const kakaoSdkTimeoutMs = 5000;
 const kakaoGeocodeTimeoutMs = 4500;
 
 export function KakaoAddressMap({
+  controlsOffsetClassName,
   controlsOffsetPx,
   focusedMarkerId,
   mapClassName = defaultMapClassName,
@@ -267,6 +269,7 @@ export function KakaoAddressMap({
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
         <MapControls
+          offsetClassName={controlsOffsetClassName}
           offsetPx={controlsOffsetPx}
           onFitAll={fitAllMarkers}
           onLargeMap={openLargeMap}
@@ -285,22 +288,27 @@ export function KakaoAddressMap({
 }
 
 function MapControls({
+  offsetClassName,
   offsetPx,
   onFitAll,
   onLargeMap,
   onLocation,
   onRoadview
 }: {
+  readonly offsetClassName?: string;
   readonly offsetPx?: number;
   readonly onFitAll: () => void;
   readonly onLargeMap: () => void;
   readonly onLocation: () => void;
   readonly onRoadview: () => void;
 }) {
+  // offsetClassName이 있으면 반응형 브레이크포인트별로 다른 여백을 줄 수 있어(예: 모바일은 그대로,
+  // xl 이상에서는 지도 위에 뜨는 검색·필터 바 아래로 내림) 이를 우선 사용하고, 없을 때만
+  // 기존처럼 고정 px 오프셋(모든 화면 크기에서 동일)을 인라인 스타일로 적용합니다.
   return (
     <div
-      className="absolute right-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
-      style={{ top: offsetPx !== undefined ? `${offsetPx}px` : "0.75rem" }}
+      className={`absolute right-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur ${offsetClassName || ""}`}
+      style={offsetClassName ? undefined : { top: offsetPx !== undefined ? `${offsetPx}px` : "0.75rem" }}
     >
       <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
         <Crosshair className="h-3.5 w-3.5" />

@@ -651,20 +651,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </label>
           <div className="flex flex-wrap items-center justify-start gap-1.5 xl:justify-end">
             <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
-            {gradeFilters.map((filter) => (
-              <button
-                className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
-                  gradeFilter === filter.value
-                    ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
-                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-                }`}
-                key={filter.value}
-                onClick={() => setGradeFilter(filter.value)}
-                type="button"
-              >
-                {filter.label}
-              </button>
-            ))}
+            <select
+              className={`h-10 rounded-lg border px-2.5 text-xs font-black outline-none transition ${
+                gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-slate-900 bg-slate-900 text-white"
+              }`}
+              onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
+              value={gradeFilter}
+            >
+              {gradeFilters.map((filter) => (
+                <option key={filter.value} value={filter.value}>
+                  {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
+                </option>
+              ))}
+            </select>
           <button
             aria-pressed={excludeClosedStores}
             className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
@@ -723,6 +722,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
+                    controlsOffsetClassName="top-3 xl:top-20"
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={markers}
@@ -1716,38 +1716,27 @@ function DriverSelectField({
   );
 }
 
+// 등급/배송차별 마커 색상 범례입니다. 예전에는 항목마다 색점+글자 라벨을 각각 펼쳐서 보여줘 검색바
+// 한 줄을 다 차지했는데, 지금은 색점만 모아 보여주고 전체 설명은 마우스오버 툴팁으로 옮겼습니다.
 function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; readonly vehicles: DeliveryVehicle[] }) {
-  if (mode === "grade") {
-    return (
-      <div className="maju-filter-box flex flex-wrap items-center gap-1 px-2 py-1">
-        <span className="mr-1 text-xs font-black text-slate-500">마커</span>
-        {[
-          ["A", "#7c3aed"],
-          ["B", "#2563eb"],
-          ["C", "#64748b"]
-        ].map(([label, color]) => (
-          <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={label}>
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-            {label}등급
-          </span>
-        ))}
-      </div>
-    );
-  }
+  const items =
+    mode === "grade"
+      ? [
+          { color: "#7c3aed", label: "A등급" },
+          { color: "#2563eb", label: "B등급" },
+          { color: "#64748b", label: "C등급" }
+        ]
+      : vehicles.slice(0, 8).map((vehicle, index) => ({ color: vehicleMarkerColors[index % vehicleMarkerColors.length], label: vehicle.name }));
+  const title = items.length ? `마커 색상 안내 · ${items.map((item) => item.label).join(" · ")}` : "마커 색상 안내";
 
   return (
-    <div className="maju-filter-box flex max-w-full flex-wrap items-center gap-1 px-2 py-1">
-      <span className="mr-1 text-xs font-black text-slate-500">마커</span>
-      {vehicles.slice(0, 5).map((vehicle, index) => (
-        <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={vehicle.id}>
-          <span className="grid h-4 min-w-4 place-items-center rounded-full text-[10px] text-white" style={{ backgroundColor: vehicleMarkerColors[index % vehicleMarkerColors.length] }}>
-            {index + 1}
-          </span>
-          {vehicle.name}
-        </span>
+    <span className="maju-filter-box inline-flex h-10 shrink-0 items-center gap-1 px-2" title={title}>
+      <span className="mr-0.5 text-xs font-black text-slate-500">마커</span>
+      {items.slice(0, 5).map((item) => (
+        <span className="h-2.5 w-2.5 rounded-full" key={item.label} style={{ backgroundColor: item.color }} />
       ))}
-      {vehicles.length > 5 ? <span className="px-1 text-[11px] font-black text-slate-400">+{vehicles.length - 5}</span> : null}
-    </div>
+      {items.length > 5 ? <span className="text-[11px] font-black text-slate-400">+{items.length - 5}</span> : null}
+    </span>
   );
 }
 
