@@ -877,8 +877,60 @@ export default function CrmTimelinePage() {
     }
   }
 
+  // 파일을 선택하는 즉시 업로드합니다. 예전에는 파일 선택 후 별도로 "첨부자료 등록" 버튼을
+  // 한 번 더 눌러야 저장됐는데, 그 두 번째 클릭이 눈에 잘 띄지 않아 파일을 선택하고도
+  // "등록 대기" 상태로 남는 문제가 있었습니다.
+  async function uploadAttachmentFiles(files: File[]) {
+    if (!selectedCustomer?.id || !files.length) return;
+    setIsAttachmentSaving(true);
+    setAttachmentMessage("");
+
+    try {
+      const titleBase = newAttachmentTitle.trim() || attachmentTitleFromType(newAttachmentType);
+      const uploadedAttachments: CustomerAttachmentView[] = [];
+      let hasTemporaryResult = false;
+
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const formData = new FormData();
+        formData.append("attachmentType", newAttachmentType);
+        formData.append("companyId", getAdminCompanyIdFromUrl());
+        formData.append("customerId", selectedCustomer.id);
+        formData.append("file", file);
+        formData.append("title", files.length > 1 ? `${titleBase} ${index + 1}` : titleBase);
+        const response = await fetch("/api/customer-attachments/upload", {
+          method: "POST",
+          body: formData
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);
+        if (payload?.attachment) uploadedAttachments.push(payload.attachment);
+        if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
+      }
+
+      if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
+      setAttachmentMessage(
+        hasTemporaryResult
+          ? `${uploadedAttachments.length || files.length}건이 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다.`
+          : `${uploadedAttachments.length || files.length}건의 첨부자료가 거래처 원장에 자동 저장됐습니다.`
+      );
+      setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
+      setNewAttachmentFiles([]);
+    } catch (error) {
+      setAttachmentMessage(error instanceof Error ? error.message : "첨부자료 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsAttachmentSaving(false);
+    }
+  }
+
   async function saveAttachment() {
     if (!selectedCustomer?.id || !newAttachmentTitle.trim()) return;
+
+    if (newAttachmentFiles.length) {
+      await uploadAttachmentFiles(newAttachmentFiles);
+      return;
+    }
+
     setIsAttachmentSaving(true);
     setAttachmentMessage("");
 
@@ -886,43 +938,23 @@ export default function CrmTimelinePage() {
       const uploadedAttachments: CustomerAttachmentView[] = [];
       let hasTemporaryResult = false;
 
-      if (newAttachmentFiles.length) {
-        for (let index = 0; index < newAttachmentFiles.length; index += 1) {
-          const file = newAttachmentFiles[index];
-          const formData = new FormData();
-          formData.append("attachmentType", newAttachmentType);
-          formData.append("companyId", getAdminCompanyIdFromUrl());
-          formData.append("customerId", selectedCustomer.id);
-          formData.append("file", file);
-          formData.append("title", newAttachmentFiles.length > 1 ? `${newAttachmentTitle} ${index + 1}` : newAttachmentTitle);
-          const response = await fetch("/api/customer-attachments/upload", {
-            method: "POST",
-            body: formData
-          });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);
-          if (payload?.attachment) uploadedAttachments.push(payload.attachment);
-          if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
-        }
-      } else {
-        const response = await fetch("/api/customer-operations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "attachment",
-            attachmentType: newAttachmentType,
-            companyId: getAdminCompanyIdFromUrl(),
-            customerId: selectedCustomer.id,
-            fileUrl: newAttachmentUrl,
-            mimeType: guessMimeType(newAttachmentUrl),
-            title: newAttachmentTitle
-          })
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
-        if (payload?.attachment) uploadedAttachments.push(payload.attachment);
-        if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
-      }
+      const response = await fetch("/api/customer-operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "attachment",
+          attachmentType: newAttachmentType,
+          companyId: getAdminCompanyIdFromUrl(),
+          customerId: selectedCustomer.id,
+          fileUrl: newAttachmentUrl,
+          mimeType: guessMimeType(newAttachmentUrl),
+          title: newAttachmentTitle
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
+      if (payload?.attachment) uploadedAttachments.push(payload.attachment);
+      if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
 
       if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
       setAttachmentMessage(
@@ -1632,7 +1664,7 @@ export default function CrmTimelinePage() {
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-slate-950">
-                            {newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 선택됨` : "사진·PDF·영상을 직접 선택"}
+                            {isAttachmentSaving ? "업로드 중..." : newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 선택됨` : "사진·PDF·영상을 선택하면 바로 저장됩니다"}
                           </span>
                           <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
                             배송 적재위치는 여러 장의 사진이나 짧은 영상으로 남기면 현장 전달이 가장 정확합니다. 파일당 최대 50MB.
@@ -1651,19 +1683,26 @@ export default function CrmTimelinePage() {
                         <input
                           accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
                           className="hidden"
+                          disabled={isAttachmentSaving}
                           multiple
-                          onChange={(event) => setNewAttachmentFiles(Array.from(event.target.files || []))}
+                          onChange={(event) => {
+                            const files = Array.from(event.target.files || []);
+                            event.target.value = "";
+                            if (!files.length) return;
+                            setNewAttachmentFiles(files);
+                            uploadAttachmentFiles(files);
+                          }}
                           type="file"
                         />
                       </label>
                       <button
                         className="maju-button-primary inline-flex h-11 items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
-                        disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFiles.length) || isAttachmentSaving}
+                        disabled={!newAttachmentTitle.trim() || !newAttachmentUrl.trim() || isAttachmentSaving}
                         onClick={saveAttachment}
                         type="button"
                       >
                         <Plus className="h-4 w-4" />
-                        {isAttachmentSaving ? "등록 중" : "첨부자료 등록"}
+                        {isAttachmentSaving ? "등록 중" : "파일 링크 등록"}
                       </button>
                       {attachmentMessage ? (
                         <p className={`rounded-md border px-3 py-2 text-xs font-bold leading-5 ${
