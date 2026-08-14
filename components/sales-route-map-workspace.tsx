@@ -722,7 +722,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName="top-3 xl:top-20"
+                    controlsOffsetClassName={`top-3 xl:top-20 ${rightCollapsed ? "xl:right-[76px]" : "xl:right-[364px]"}`}
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={markers}
