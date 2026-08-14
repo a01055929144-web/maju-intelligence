@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SectionHeader } from "@/components/section-header";
@@ -324,6 +324,7 @@ export default function CrmTimelinePage() {
   }
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
   const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<{ mimeType: string; title: string; url: string } | null>(null);
   const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [newMemo, setNewMemo] = useState("");
@@ -510,6 +511,7 @@ export default function CrmTimelinePage() {
           attachmentType: "business_license",
           createdAt: "데이터 등록 시 저장",
           fileUrl: selectedCustomer.businessLicenseFileUrl,
+          mimeType: guessMimeType(selectedCustomer.businessLicenseFileUrl),
           storagePath: "",
           title: "사업자등록증"
         }
@@ -520,11 +522,14 @@ export default function CrmTimelinePage() {
           attachmentType: "bank_account",
           createdAt: "데이터 등록 시 저장",
           fileUrl: selectedCustomer.bankAccountFileUrl,
+          mimeType: guessMimeType(selectedCustomer.bankAccountFileUrl),
           storagePath: "",
           title: "통장사본"
         }
       : null
-  ].filter((row): row is { id: string; attachmentType: string; createdAt: string; fileUrl: string; storagePath: string; title: string } => Boolean(row));
+  ].filter((row): row is { id: string; attachmentType: string; createdAt: string; fileUrl: string; mimeType: string; storagePath: string; title: string } =>
+    Boolean(row)
+  );
   const combinedAttachments = [...customerAttachments, ...masterFileAttachments];
   const attachmentChecklist = [
     {
@@ -1729,9 +1734,11 @@ export default function CrmTimelinePage() {
                             key={attachment.id}
                             icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
                             label={attachmentLabel(attachment.attachmentType, attachment.title)}
+                            mimeType={attachment.mimeType || guessMimeType(attachment.fileUrl)}
                             storagePath={attachment.storagePath}
                             url={attachment.fileUrl}
                             value={attachment.createdAt}
+                            onPreview={setPreviewAttachment}
                           />
                         ))
                       ) : (
@@ -1883,6 +1890,7 @@ export default function CrmTimelinePage() {
         </div>
         </div>
       </section>
+      {previewAttachment ? <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} /> : null}
     </CustomerAppShell>
   );
 }
@@ -2655,13 +2663,31 @@ function EditableField({
   );
 }
 
-function AttachmentRow({ icon: Icon, label, storagePath = "", url = "", value }: { icon: typeof PackageCheck; label: string; storagePath?: string; url?: string; value: string }) {
+function AttachmentRow({
+  icon: Icon,
+  label,
+  mimeType = "",
+  onPreview,
+  storagePath = "",
+  url = "",
+  value
+}: {
+  icon: typeof PackageCheck;
+  label: string;
+  mimeType?: string;
+  onPreview?: (attachment: { mimeType: string; title: string; url: string }) => void;
+  storagePath?: string;
+  url?: string;
+  value: string;
+}) {
   const statusLabel = storagePath ? "Storage 저장" : url ? "외부 링크" : "파일 대기";
   const statusClassName = storagePath
     ? "bg-emerald-50 text-emerald-800 ring-emerald-100"
     : url
       ? "bg-blue-50 text-blue-800 ring-blue-100"
       : "bg-slate-100 text-slate-600 ring-slate-200";
+  // 이미지·PDF·영상은 화면에서 바로 미리보기가 가능합니다. 그 외 형식은 새창 링크만 제공합니다.
+  const canPreviewInline = /^image\/|^video\/|^application\/pdf/.test(mimeType);
 
   return (
     <div className="grid grid-cols-[32px_minmax(0,1fr)_minmax(0,auto)] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
@@ -2676,16 +2702,85 @@ function AttachmentRow({ icon: Icon, label, storagePath = "", url = "", value }:
         <p className="mt-1 text-xs font-bold text-slate-500">{value}</p>
       </div>
       {url ? (
-        <a
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-          href={url}
-          rel="noreferrer"
-          target="_blank"
-        >
-          <LinkIcon className="h-3.5 w-3.5" />
-          열기
-        </a>
+        <div className="flex items-center gap-1.5">
+          {canPreviewInline ? (
+            <button
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-black text-blue-700 hover:bg-blue-100"
+              onClick={() => onPreview?.({ mimeType, title: label, url })}
+              type="button"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              미리보기
+            </button>
+          ) : null}
+          <a
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+            href={url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <LinkIcon className="h-3.5 w-3.5" />
+            새창
+          </a>
+        </div>
       ) : null}
+    </div>
+  );
+}
+
+function AttachmentPreviewModal({
+  attachment,
+  onClose
+}: {
+  attachment: { mimeType: string; title: string; url: string };
+  onClose: () => void;
+}) {
+  const isImage = attachment.mimeType.startsWith("image/");
+  const isVideo = attachment.mimeType.startsWith("video/");
+  const isPdf = attachment.mimeType === "application/pdf";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <p className="truncate text-sm font-black text-slate-950">{attachment.title}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+              href={attachment.url}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <LinkIcon className="h-3.5 w-3.5" />
+              새창에서 열기
+            </a>
+            <button
+              className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3">
+          {isImage ? (
+            <img alt={attachment.title} className="mx-auto max-h-[75vh] w-auto object-contain" src={attachment.url} />
+          ) : isVideo ? (
+            <video className="mx-auto max-h-[75vh] w-full" controls src={attachment.url} />
+          ) : isPdf ? (
+            <iframe className="h-[75vh] w-full rounded-md border border-slate-200 bg-white" src={attachment.url} title={attachment.title} />
+          ) : (
+            <div className="maju-empty-state p-6 text-center">
+              <p className="text-sm font-black text-slate-800">이 형식은 화면 미리보기를 지원하지 않습니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">위의 "새창에서 열기"를 눌러 확인하세요.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
