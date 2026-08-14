@@ -2992,7 +2992,7 @@ function StoreDetail({
                   <SelectRow label="배송권역" onChange={setDraftDeliveryArea} options={areaOptions.map((area) => ({ label: area, value: area }))} value={draftDeliveryArea} />
                 </div>
                 <div className="mt-3">
-                  <p className="mb-1.5 text-xs font-black text-slate-500">외부 매장 정보</p>
+                  <p className="mb-1.5 text-xs font-black text-slate-500">외부 거래처 정보</p>
                   <PlaceLinkRow store={store} />
                 </div>
               </CollapsibleSection>
