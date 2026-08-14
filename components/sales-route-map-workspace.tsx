@@ -1424,23 +1424,21 @@ function StoreQuickCard({
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
-        {!isEditing && (store.businessHours || store.menuSummary) ? (
-          <div className="mt-1.5 space-y-1">
+        {!isEditing ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {store.businessHours ? (
-              <p className="flex gap-2 text-[12px] font-bold leading-5 text-slate-600">
-                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600" />
-                <span className="line-clamp-1">{store.businessHours}</span>
-              </p>
+              <IconBadge title={`영업시간 · ${store.businessHours}`} tone="bg-teal-50 text-teal-700 ring-teal-200">
+                <Clock className="h-3.5 w-3.5" />
+              </IconBadge>
             ) : null}
             {store.menuSummary ? (
-              <p className="flex gap-2 text-[12px] font-bold leading-5 text-slate-600">
-                <Store className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                <span className="line-clamp-2">{store.menuSummary}</span>
-              </p>
+              <IconBadge title={`주요 메뉴 · ${store.menuSummary}`} tone="bg-orange-50 text-orange-700 ring-orange-200">
+                <Store className="h-3.5 w-3.5" />
+              </IconBadge>
             ) : null}
+            <PlaceLinkRow compact store={store} />
           </div>
         ) : null}
-        {!isEditing ? <PlaceLinkRow className="mt-2" store={store} /> : null}
         {isEditing ? (
           <div className="mt-2 space-y-1.5">
             <input
@@ -1516,13 +1514,55 @@ const isGenericNaverSearchLink = (url?: string) => {
   return !trimmed || /^https:\/\/map\.naver\.com\/p\/search\//.test(trimmed);
 };
 
-function PlaceLinkRow({ className = "", store }: { readonly className?: string; readonly store: StoreRow }) {
+// 네이버·카카오맵·구글맵처럼 클릭 시 새 탭으로 열리는 링크형 아이콘과 영업시간·메뉴처럼
+// 클릭 동작 없이 마우스오버로만 내용을 보여주는 정보형 아이콘에 공통으로 쓰는 원형 배지입니다.
+function IconBadge({
+  children,
+  className = "",
+  href,
+  title,
+  tone
+}: {
+  readonly children: React.ReactNode;
+  readonly className?: string;
+  readonly href?: string;
+  readonly title: string;
+  readonly tone: string;
+}) {
+  const sharedClassName = `grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-black ring-1 ring-inset transition hover:scale-105 ${tone} ${className}`;
+  if (href) {
+    return (
+      <a className={sharedClassName} href={href} rel="noreferrer" target="_blank" title={title}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <span className={sharedClassName} title={title}>
+      {children}
+    </span>
+  );
+}
+
+function PlaceLinkRow({ className = "", compact = false, store }: { readonly className?: string; readonly compact?: boolean; readonly store: StoreRow }) {
   const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
   const links = [
-    { label: "네이버", url: isGenericNaverSearchLink(store.naverPlaceUrl) ? searchLinks.naverPlaceUrl : store.naverPlaceUrl!.trim() },
-    { label: "카카오맵", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
-    { label: "구글맵", url: store.googleMapUrl?.trim() || searchLinks.googleMapUrl }
+    { label: "네이버", tone: "bg-emerald-50 text-emerald-700 ring-emerald-200", url: isGenericNaverSearchLink(store.naverPlaceUrl) ? searchLinks.naverPlaceUrl : store.naverPlaceUrl!.trim() },
+    { label: "카카오맵", tone: "bg-amber-50 text-amber-700 ring-amber-200", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
+    { label: "구글맵", tone: "bg-blue-50 text-blue-700 ring-blue-200", url: store.googleMapUrl?.trim() || searchLinks.googleMapUrl }
   ];
+
+  if (compact) {
+    return (
+      <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+        {links.map((link) => (
+          <IconBadge href={link.url} key={link.label} title={`${link.label}에서 보기`} tone={link.tone}>
+            {link.label[0]}
+          </IconBadge>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
