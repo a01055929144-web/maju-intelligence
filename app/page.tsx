@@ -2096,7 +2096,6 @@ function DataRegistrationQuickPanel({
     { description: "신규 매장 1곳 등록", icon: Building2, id: "manual" as EntryMode, label: "수기 1건", value: "단건" },
     { description: "서류에서 후보값 추출", icon: FileSpreadsheet, id: "document" as EntryMode, label: "OCR 보조", value: "보조" }
   ];
-  const selectedType = typeOptions.find((option) => option.id === activeType) || typeOptions[0];
   const selectedMode = modeOptions.find((option) => option.id === entryMode) || modeOptions[0];
   const statusTone = persisted ? "bg-emerald-50 text-emerald-800 ring-emerald-100" : canAnalyze ? "bg-blue-50 text-blue-800 ring-blue-100" : rows ? "bg-amber-50 text-amber-800 ring-amber-100" : "bg-slate-100 text-slate-700 ring-slate-200";
   const nextLabel = persisted ? "반영 완료" : canAnalyze ? "저장 실행" : rows ? "검수 필요" : "등록 시작";
@@ -2133,21 +2132,19 @@ function DataRegistrationQuickPanel({
                   const Icon = option.icon;
                   return (
                     <button
-                      className={`min-h-[88px] rounded-lg border p-3 text-left transition ${
+                      className={`rounded-lg border p-3 text-left transition ${
                         selected ? "border-teal-300 bg-teal-50 text-teal-950 ring-2 ring-teal-100" : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50/50"
                       }`}
                       key={option.id}
                       onClick={() => onSelectType(option.id)}
                       type="button"
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-2 text-sm font-black">
-                          <Icon className={selected ? "h-4 w-4 text-teal-700" : "h-4 w-4 text-slate-400"} />
-                          {option.label}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>{option.value}</span>
+                      <span className="flex items-center gap-2">
+                        <Icon className={selected ? "h-4 w-4 shrink-0 text-teal-700" : "h-4 w-4 shrink-0 text-slate-400"} />
+                        <span className="truncate text-sm font-black">{option.label}</span>
+                        <span className={`ml-auto shrink-0 text-[10px] font-bold ${selected ? "text-teal-700" : "text-slate-400"}`}>{option.value}</span>
                       </span>
-                      <span className="mt-2 block text-xs font-bold leading-5 text-slate-500">{option.description}</span>
+                      <span className="mt-1.5 block text-xs font-semibold leading-5 text-slate-500">{option.description}</span>
                     </button>
                   );
                 })}
@@ -2162,19 +2159,18 @@ function DataRegistrationQuickPanel({
                   const Icon = option.icon;
                   return (
                     <button
-                      className={`h-[88px] rounded-lg border p-3 text-left transition ${
+                      className={`rounded-lg border p-3 text-left transition ${
                         selected ? "border-slate-950 bg-slate-950 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
                       }`}
                       key={option.id}
                       onClick={() => onSelectMode(option.id)}
                       type="button"
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{option.value}</span>
+                      <span className="flex items-center gap-2">
+                        <Icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+                        <span className="text-sm font-black">{option.label}</span>
                       </span>
-                      <span className="mt-3 block text-sm font-black">{option.label}</span>
-                      <span className={`mt-1 block truncate text-[11px] font-bold ${selected ? "text-white/70" : "text-slate-500"}`}>{option.description}</span>
+                      <span className={`mt-1.5 block text-xs font-semibold leading-5 ${selected ? "text-white/70" : "text-slate-500"}`}>{option.description}</span>
                     </button>
                   );
                 })}
@@ -2185,11 +2181,9 @@ function DataRegistrationQuickPanel({
 
         <div className="border-t border-slate-200 bg-slate-50/80 p-4 xl:border-l xl:border-t-0">
           <p className="text-xs font-black text-slate-400">현재 작업</p>
-          <p className="mt-1 text-lg font-black text-slate-950">{typeLabel}</p>
+          <p className="mt-1 text-lg font-black text-slate-950">{typeLabel} · {selectedMode.label}</p>
           <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
             {[
-              ["데이터 구분", selectedType.label],
-              ["입력 방식", selectedMode.label],
               ["대기 행", rows ? `${rows.toLocaleString()}행` : "없음"],
               ["파일", rows ? filename : "선택 전"]
             ].map(([label, value]) => (
