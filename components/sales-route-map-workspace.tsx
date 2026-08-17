@@ -55,6 +55,12 @@ type ExternalBusinessResult = {
   roadAddress: string;
 };
 
+// 검색으로 찾은 미등록 매장은 아직 거래처 id가 없으므로, 지도 마커/클릭 매칭에 쓸 안정적인
+// id를 상호명+주소로 만들어 씁니다. 같은 상호명이 검색 결과에 여러 번 나와도 주소가 다르면 구분됩니다.
+function externalResultId(result: ExternalBusinessResult) {
+  return `external-${result.name}-${result.roadAddress || result.address}`;
+}
+
 type StoreRow = RoutePlanStop & {
   accountCopyStatus: "missing" | "received";
   bankAccount: string;
@@ -316,6 +322,23 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
+  // 검색으로 찾은 미등록 매장을 지도 위에 별도 마커(점선 "+" 배지)로 보여줍니다. 실제 위치는 카카오맵이
+  // 주소를 지오코딩해서 찾으므로 x/y는 지오코딩 실패 시의 예비 표시용으로만 쓰이는 임의값입니다.
+  // 경유 코스(TMAP 연동) 탭에서 쓰는 markers/mapMarkers는 건드리지 않고, 메인 지도 화면에서만 합쳐서 씁니다.
+  const unregisteredMapMarkers = useMemo(
+    () =>
+      unregisteredResults.map((result, index) => ({
+        address: result.roadAddress || result.address,
+        id: externalResultId(result),
+        label: "미등록",
+        name: result.name,
+        tone: "unregistered" as const,
+        x: 50,
+        y: 50 + index
+      })),
+    [unregisteredResults]
+  );
+  const mapDisplayMarkers = useMemo(() => [...markers, ...unregisteredMapMarkers], [markers, unregisteredMapMarkers]);
   const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
@@ -814,8 +837,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     controlsOffsetClassName={`top-3 xl:top-20 ${rightCollapsed ? "xl:right-[76px]" : "xl:right-[364px]"}`}
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
-                    markers={markers}
+                    markers={mapDisplayMarkers}
                     onMarkerClick={(marker) => {
+                      if (marker.tone === "unregistered") {
+                        const target = unregisteredResults.find((result) => externalResultId(result) === marker.id);
+                        if (target) setQuickRegisterTarget(target);
+                        return;
+                      }
                       if (!marker.id || marker.tone === "origin") return;
                       setMapFocusId("");
                       setPreviewStoreId(marker.id);

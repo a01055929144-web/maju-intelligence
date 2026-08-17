@@ -11,7 +11,7 @@ export type KakaoMapMarker = {
   readonly label: string;
   readonly markerColor?: string;
   readonly name: string;
-  readonly tone: "customer" | "lead" | "origin";
+  readonly tone: "customer" | "lead" | "origin" | "unregistered";
   readonly x: number;
   readonly y: number;
 };
@@ -487,6 +487,17 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
     `);
   }
 
+  // 아직 거래처로 등록하지 않은, 검색으로 찾은 매장입니다. 클릭하면 그 자리에서 바로 등록할 수 있도록
+  // 점선 테두리의 "+" 배지로 눈에 띄게 구분해, 확정된 거래처 마커와 헷갈리지 않게 합니다.
+  if (marker.tone === "unregistered") {
+    return htmlToElement(`
+      <button type="button" title="${name} · 미등록 매장 (클릭해서 등록)" style="cursor:pointer;background:#ffffff;color:#b45309;border:2px dashed #f59e0b;border-radius:999px;display:flex;align-items:center;gap:5px;padding:5px 9px;box-shadow:0 8px 18px rgba(245,158,11,.30);font-size:11px;font-weight:900;white-space:nowrap;">
+        <span style="width:14px;height:14px;shrink:0;border-radius:999px;background:#f59e0b;color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;">+</span>
+        ${name}
+      </button>
+    `);
+  }
+
   if ((marker.tone === "customer" || marker.markerColor) && /^\d+$/.test(marker.label)) {
     return htmlToElement(`
       <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
@@ -602,9 +613,11 @@ function FallbackAddressMap({
                       ? "bg-slate-500"
                       : marker.tone === "origin"
                         ? "bg-teal-600"
-                        : marker.tone === "lead"
-                          ? "bg-emerald-600"
-                          : "bg-primary"
+                        : marker.tone === "unregistered"
+                          ? "bg-amber-500"
+                          : marker.tone === "lead"
+                            ? "bg-emerald-600"
+                            : "bg-primary"
               }`}
               style={marker.markerColor ? { backgroundColor: marker.markerColor } : undefined}
             >
