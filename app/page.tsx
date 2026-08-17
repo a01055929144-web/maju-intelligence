@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { ExcelHeaderMappingPreview } from "@/components/excel-mapping-preview";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Progress } from "@/components/ui/progress";
@@ -140,6 +141,7 @@ export default function Home() {
   const [uploadedFilename, setUploadedFilename] = useState<string>("등록 전");
   const [uploadHistory, setUploadHistory] = useState<UploadHistoryRow[]>([]);
   const [lastManualCustomerHref, setLastManualCustomerHref] = useState("");
+  const [lastManualCustomer, setLastManualCustomer] = useState<{ id: string; name: string } | null>(null);
   const [manualSaveMessage, setManualSaveMessage] = useState("");
   const [isManualSaving, setIsManualSaving] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
@@ -274,10 +276,14 @@ export default function Home() {
   }
 
   async function saveManualEntry() {
-    if (uploadType === "customer-master" && !isValidBusinessRegistrationNumber(String(manualDraft.businessRegistrationNumber ?? ""))) return;
+    // 사업자등록번호는 입력했을 때만 형식을 검증합니다. 지도 검색으로 찾은 미등록 매장을
+    // 현장에서 빠르게 등록할 때는 사업자등록증이 아직 없을 수 있으므로 번호 없이도 저장할 수 있어야 합니다.
+    const manualBusinessNumberInput = String(manualDraft.businessRegistrationNumber ?? "").trim();
+    if (uploadType === "customer-master" && manualBusinessNumberInput && !isValidBusinessRegistrationNumber(manualBusinessNumberInput)) return;
 
     setIsManualSaving(true);
     setLastManualCustomerHref("");
+    setLastManualCustomer(null);
     const nextHeaders = currentTemplate.fields.map((field) => field.key);
     const nextRow = currentTemplate.fields.reduce<RawRow>((row, field) => {
       row[field.key] = field.key === "businessRegistrationNumber" ? formatBusinessRegistrationNumber(String(manualDraft[field.key] ?? "")) : manualDraft[field.key] ?? "";
@@ -310,6 +316,7 @@ export default function Home() {
         if (response?.ok) {
           const customerId = String(payload?.customer?.id || "");
           setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
+          setLastManualCustomer(customerId ? { id: customerId, name: String(nextRow.customerName || nextRow.name || "신규 거래처") } : null);
           setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. DB 반영 상태는 관리자 시스템 점검에서 확인하세요." : "DB에 저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
           setRegistrationStatus({
             actionLabel: payload?.persisted === false ? "DB 반영 확인" : "DB 저장 완료",
@@ -484,6 +491,7 @@ export default function Home() {
             uploadHistory={uploadHistory}
             isManualSaving={isManualSaving}
             lastManualCustomerHref={lastManualCustomerHref}
+            lastManualCustomer={lastManualCustomer}
             manualSaveMessage={manualSaveMessage}
             onFile={handleFile}
             onMap={setFieldMap}
@@ -892,6 +900,7 @@ function Onboarding({
   registrationStatus,
   isManualSaving,
   lastManualCustomerHref,
+  lastManualCustomer,
   manualSaveMessage,
   onFile,
   onMap,
@@ -917,6 +926,7 @@ function Onboarding({
   registrationStatus: RegistrationStatus;
   isManualSaving: boolean;
   lastManualCustomerHref: string;
+  lastManualCustomer: { id: string; name: string } | null;
   manualSaveMessage: string;
   onFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onMap: (map: FieldMap) => void;
@@ -1013,8 +1023,19 @@ function Onboarding({
   const manualCoreFields = template.fields.filter((field) => !externalPlaceLinkKeys.includes(field.key));
   const manualPlaceLinkFields = template.fields.filter((field) => externalPlaceLinkKeys.includes(field.key));
   const manualBusinessNumber = String(manualDraft.businessRegistrationNumber ?? "");
-  const manualBusinessNumberValid = !isMaster || isValidBusinessRegistrationNumber(manualBusinessNumber);
-  const manualMissingRequiredFields = template.fields.filter((field) => field.required && !String(manualDraft[field.key] ?? "").trim());
+  // 지도 검색으로 찾은 미등록 매장을 현장에서 바로 등록할 때는 사업자등록증이 아직 없을 수 있습니다.
+  // 그래서 빠른 등록(entryMode === "manual")에서는 사업자번호·대표자명을 필수에서 제외하고,
+  // 저장 후 서류(사업자등록증) 업로드로 보완하도록 합니다. OCR 서류 검토 모드(entryMode === "document")는
+  // 서류를 보며 입력하는 화면이므로 기존 필수값 그대로 유지합니다.
+  const relaxedManualFieldKeys = entryMode === "manual" ? new Set(["businessRegistrationNumber", "representativeName"]) : new Set<string>();
+  const manualBusinessNumberValid = !isMaster
+    ? true
+    : relaxedManualFieldKeys.has("businessRegistrationNumber")
+      ? !manualBusinessNumber || isValidBusinessRegistrationNumber(manualBusinessNumber)
+      : isValidBusinessRegistrationNumber(manualBusinessNumber);
+  const manualMissingRequiredFields = template.fields.filter(
+    (field) => field.required && !relaxedManualFieldKeys.has(field.key) && !String(manualDraft[field.key] ?? "").trim()
+  );
   const manualAddressSelected = !isMaster || Boolean(String(manualDraft.address ?? "").trim());
   const manualComplete =
     manualMissingRequiredFields.length === 0 && manualBusinessNumberValid;
@@ -1632,6 +1653,7 @@ function Onboarding({
             <DocumentOcrRegistrationPanel
               filename={documentOcrFilename}
               isManualSaving={isManualSaving}
+              lastManualCustomer={lastManualCustomer}
               manualComplete={manualComplete}
               manualDraft={manualDraft}
               ocrMeta={documentOcrMeta}
@@ -1647,7 +1669,7 @@ function Onboarding({
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h3 className="text-base font-black text-slate-950">수기 등록</h3>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">주소 검색과 사업자번호 검증 후 바로 저장합니다.</p>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처명과 주소만 있으면 바로 저장할 수 있습니다. 사업자번호는 나중에 서류로 등록해도 됩니다.</p>
                     {manualSaveMessage ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
                         <p className="text-xs font-black text-blue-700">{manualSaveMessage}</p>
@@ -1665,9 +1687,16 @@ function Onboarding({
                   </Button>
                 </div>
 
+                {isMaster && lastManualCustomer ? (
+                  <div className="mt-4">
+                    <CustomerAttachmentUploadPanel customerId={lastManualCustomer.id} customerName={lastManualCustomer.name} />
+                  </div>
+                ) : null}
+
                 {isMaster ? (
                   <ManualEntryProgress
                     addressSelected={manualAddressSelected}
+                    businessNumber={manualBusinessNumber}
                     businessNumberValid={manualBusinessNumberValid}
                     missingFields={manualMissingRequiredFields}
                     ready={manualComplete}
@@ -1684,7 +1713,8 @@ function Onboarding({
                       <label key={field.key} className={`relative space-y-1.5 rounded-md border bg-white p-3 shadow-sm ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
                         <span className="text-xs font-black text-slate-500">
                           {field.label}
-                          {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                          {field.required && !relaxedManualFieldKeys.has(field.key) ? <span className="ml-1 text-destructive">*</span> : null}
+                          {relaxedManualFieldKeys.has(field.key) ? <span className="ml-1 font-bold text-slate-400">(나중에 서류로 보완 가능)</span> : null}
                         </span>
                         <input
                           className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
@@ -3490,6 +3520,7 @@ function MiniDecisionMetric({ icon: Icon, label, value }: { icon: typeof Buildin
 function DocumentOcrRegistrationPanel({
   filename,
   isManualSaving,
+  lastManualCustomer,
   manualComplete,
   manualDraft,
   ocrMeta,
@@ -3501,6 +3532,7 @@ function DocumentOcrRegistrationPanel({
 }: {
   filename: string;
   isManualSaving: boolean;
+  lastManualCustomer: { id: string; name: string } | null;
   manualComplete: boolean;
   manualDraft: RawRow;
   ocrMeta: OcrMeta | null;
@@ -3520,38 +3552,9 @@ function DocumentOcrRegistrationPanel({
     ["연락처", "phone"],
     ["이메일", "email"]
   ] as const;
-  const attachmentSlots = [
-    { accept: "image/*,.pdf", description: "사업자 정보 원본", key: "businessLicense", label: "사업자등록증", required: true },
-    { accept: "image/*,.pdf", description: "필요 시 마스킹 후 보관", key: "identity", label: "신분증", required: false },
-    { accept: "image/*,.pdf", description: "정산 계좌 확인", key: "bankbook", label: "통장사본", required: false },
-    { accept: "image/*,video/*", description: "후문, 냉장고, 적재 위치", key: "loadingSpot", label: "배송 적재위치", required: false }
-  ];
-  const [attachmentFiles, setAttachmentFiles] = useState<Record<string, string[]>>({});
-  const attachedCount = Object.values(attachmentFiles).reduce((total, files) => total + files.length, 0);
   const confidencePercent = ocrMeta ? Math.round(ocrMeta.confidence * 100) : 0;
   const providerLabel = getOcrProviderLabel(ocrMeta?.provider);
   const ocrModeLabel = ocrMeta?.mode === "sample" || ocrMeta?.mode === "assistive-check" ? "보조 검증" : ocrMeta?.mode === "provider-ready" ? "공급자 준비" : ocrMeta?.mode || "대기";
-  const hasBusinessLicense = Boolean(filename || attachmentFiles.businessLicense?.length);
-  const requiredAttachmentCount = attachmentSlots.filter((slot) => slot.required).length;
-  const readyAttachmentCount = attachmentSlots.filter((slot) => !slot.required || (attachmentFiles[slot.key] || []).length || (slot.key === "businessLicense" && filename)).length;
-  const attachmentReady = hasBusinessLicense;
-
-  function onAttachmentFiles(slotKey: string, files: FileList | null) {
-    const names = Array.from(files || []).map((file) => file.name);
-    if (!names.length) return;
-
-    setAttachmentFiles((current) => ({
-      ...current,
-      [slotKey]: [...(current[slotKey] || []), ...names]
-    }));
-  }
-
-  function removeAttachmentFile(slotKey: string, filenameToRemove: string) {
-    setAttachmentFiles((current) => ({
-      ...current,
-      [slotKey]: (current[slotKey] || []).filter((name) => name !== filenameToRemove)
-    }));
-  }
 
   return (
     <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -3631,61 +3634,16 @@ function DocumentOcrRegistrationPanel({
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-sm font-black text-slate-950">첨부자료</p>
-              <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">사업자 서류와 배송 적재위치 자료를 매장 원장에 함께 보관합니다.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge className={attachmentReady ? "w-fit bg-emerald-100 text-emerald-800" : "w-fit bg-amber-100 text-amber-800"}>
-                필수 {hasBusinessLicense ? requiredAttachmentCount : 0}/{requiredAttachmentCount}
-              </Badge>
-              <Badge className="w-fit bg-slate-100 text-slate-700">{attachedCount + (filename ? 1 : 0)}개 선택됨</Badge>
-            </div>
+        {lastManualCustomer ? (
+          <CustomerAttachmentUploadPanel customerId={lastManualCustomer.id} customerName={lastManualCustomer.name} />
+        ) : (
+          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-black text-slate-950">첨부자료</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+              사업자등록증, 신분증, 통장사본, 배송 적재위치 파일은 위 정보를 확인하고 &quot;확인 후 매장 생성&quot;을 눌러 저장한 뒤 업로드할 수 있습니다.
+            </p>
           </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <MiniStatus label="필수 첨부" value={attachmentReady ? "충족" : "사업자등록증 필요"} />
-            <MiniStatus label="보관 상태" value={`${readyAttachmentCount}/${attachmentSlots.length} 항목 확인`} />
-            <MiniStatus label="확인 필요" value={ocrMeta?.warnings.length ? `${ocrMeta.warnings.length}건` : "없음"} />
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {attachmentSlots.map((slot) => (
-              <div key={slot.label} className={`rounded-md border p-3 ${slot.required && !hasBusinessLicense ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-black text-slate-950">{slot.label}</p>
-                  <Badge className={slot.required ? (hasBusinessLicense ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800") : "bg-white text-slate-500"}>
-                    {slot.required ? (hasBusinessLicense ? "충족" : "필수") : "선택"}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{slot.description}</p>
-                {slot.key === "businessLicense" && filename ? (
-                  <p className="mt-3 truncate rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
-                    OCR 원본: {filename}
-                  </p>
-                ) : null}
-                {(attachmentFiles[slot.key] || []).length ? (
-                  <div className="mt-3 space-y-1">
-                    {(attachmentFiles[slot.key] || []).map((name) => (
-                      <div key={name} className="flex items-center gap-2 rounded-md bg-white px-2 py-1 ring-1 ring-inset ring-blue-100">
-                        <p className="min-w-0 flex-1 truncate text-xs font-black text-blue-700">{name}</p>
-                        <button className="shrink-0 text-[11px] font-black text-slate-400 hover:text-rose-600" onClick={() => removeAttachmentFile(slot.key, name)} type="button">
-                          삭제
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : !filename || slot.key !== "businessLicense" ? (
-                  <p className="mt-3 rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">아직 선택된 파일 없음</p>
-                ) : null}
-                <label className="mt-3 flex h-9 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
-                  + 파일 추가
-                  <input className="sr-only" type="file" accept={slot.accept} multiple onChange={(event) => onAttachmentFiles(slot.key, event.target.files)} />
-                </label>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -3758,11 +3716,13 @@ function PlaceLinkCapturePanel({
 
 function ManualEntryProgress({
   addressSelected,
+  businessNumber,
   businessNumberValid,
   missingFields,
   ready
 }: {
   addressSelected: boolean;
+  businessNumber: string;
   businessNumberValid: boolean;
   missingFields: UploadTemplateField[];
   ready: boolean;
@@ -3779,7 +3739,7 @@ function ManualEntryProgress({
       ok: addressSelected
     },
     {
-      detail: businessNumberValid ? "사업자번호 검증 완료" : "10자리 번호 확인",
+      detail: businessNumber ? (businessNumberValid ? "사업자번호 검증 완료" : "10자리 번호 확인") : "선택 입력 · 서류로 나중에 보완 가능",
       label: "사업자번호",
       ok: businessNumberValid
     }
@@ -4002,7 +3962,7 @@ function ManualValidationPanel({
           ? businessNumberValid
             ? `${formatBusinessRegistrationNumber(businessNumber)} 확인 완료`
             : "사업자번호 체크값이 맞지 않습니다."
-          : "사업자번호를 입력하세요."
+          : "선택 입력입니다. 지금 없으면 저장 후 사업자등록증으로 등록해도 됩니다."
         : "매출 업로드에서는 선택값입니다.",
       label: "사업자번호",
       ok: businessNumberValid
