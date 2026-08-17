@@ -516,6 +516,18 @@ function isMissingCustomerRelationshipStatusColumnError(error: unknown) {
   return ["relationship_status", "relationship_status_updated_at", "relationship_status_note"].some((column) => message.includes(column));
 }
 
+// Generic "column does not exist" detector (PostgREST error code 42703). Used to cascade through
+// progressively narrower select lists WITHOUT naming specific columns. This matters because
+// PostgREST only reports the FIRST unresolvable column when validating a select= list — if a select
+// stacks multiple possibly-missing columns from different migrations, a narrow per-column check on
+// just the newest column can miss an older, unrelated missing column that happens to be named first,
+// incorrectly rethrow, and break a previously-working fallback. Prefer this generic check when adding
+// new optional columns to an existing select cascade.
+function isMissingColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("42703") || message.includes("does not exist");
+}
+
 function isMissingTelegramChatIdColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("telegram_chat_id");
@@ -2044,32 +2056,32 @@ export async function getCustomerMaster(
   };
   let rows: CustomerMasterRow[];
 
-  // relationship_status(거래중/거래종료) 컬럼은 아직 프로덕션 DB에 마이그레이션이 적용되지 않아,
-  // 잠시 select 대상에서 제외합니다(원인 조사 중). 마이그레이션 적용 확인 후 다시 추가할 예정입니다.
-  try {
-    rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-    );
-  } catch (error) {
-    if (isMissingCustomerHoursMenuColumnError(error)) {
-      try {
-        rows = await supabaseRequest<Array<CustomerMasterRow>>(
-          `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-        );
-      } catch (innerError) {
-        if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
-        rows = await supabaseRequest<Array<CustomerMasterRow>>(
-          `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-        );
-      }
-    } else if (isMissingCustomerPlaceLinksColumnError(error)) {
-      rows = await supabaseRequest<Array<CustomerMasterRow>>(
-        `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+  // 가장 완전한 select부터 시도하고, 컬럼이 없다는 에러(42703/does not exist)를 만나면 더 좁은
+  // select로 재시도합니다. 어떤 컬럼 이름을 특정해서 매칭하지 않고 "컬럼 없음" 에러 자체를 generic하게
+  // 판별하는 이유: PostgREST는 select= 목록을 검증할 때 처음 걸리는 컬럼 하나만 에러 메시지에 담기
+  // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
+  // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
+  const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS,
+    CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU,
+    CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS,
+    CUSTOMER_MASTER_SELECT
+  ];
+  let lastFetchError: unknown;
+  let fetched: CustomerMasterRow[] | null = null;
+  for (const select of CUSTOMER_MASTER_SELECT_TIERS) {
+    try {
+      fetched = await supabaseRequest<Array<CustomerMasterRow>>(
+        `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
-    } else {
-      throw error;
+      break;
+    } catch (error) {
+      if (!isMissingColumnError(error)) throw error;
+      lastFetchError = error;
     }
   }
+  if (!fetched) throw lastFetchError instanceof Error ? lastFetchError : new Error(String(lastFetchError));
+  rows = fetched;
 
   return {
     customers: rows.map((row, index) => toCustomerMasterItem(row, offset + index)),
@@ -3841,24 +3853,35 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   const id = companyId || getDefaultCompanyId();
   if (!isProductionStoreConfigured()) return [];
 
-  // relationship_status 컬럼은 아직 프로덕션 DB에 마이그레이션이 적용되지 않아, 잠시 select 대상에서
-  // 제외합니다(원인 조사 중). 마이그레이션 적용 확인 후 다시 추가할 예정입니다.
+  type ChurnRiskCustomerRow = {
+    id: string;
+    customer_name: string;
+    region: string | null;
+    address: string | null;
+    monthly_revenue: number | string | null;
+    normalized_key: string | null;
+    business_status: string | null;
+    relationship_status?: string | null;
+  };
+  const CHURN_RISK_SELECT_WITH_RELATIONSHIP_STATUS =
+    "id,customer_name,region,address,monthly_revenue,normalized_key,business_status,relationship_status";
+  const CHURN_RISK_SELECT_BASE = "id,customer_name,region,address,monthly_revenue,normalized_key,business_status";
+
+  async function fetchChurnRiskCustomers(): Promise<ChurnRiskCustomerRow[]> {
+    for (const select of [CHURN_RISK_SELECT_WITH_RELATIONSHIP_STATUS, CHURN_RISK_SELECT_BASE]) {
+      try {
+        return await supabaseRequest<Array<ChurnRiskCustomerRow>>(
+          `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&limit=2000`
+        );
+      } catch (error) {
+        if (!isMissingColumnError(error)) throw error;
+      }
+    }
+    return [];
+  }
+
   const [customers, transactions] = await Promise.all([
-    supabaseRequest<
-      Array<{
-        id: string;
-        customer_name: string;
-        region: string | null;
-        address: string | null;
-        monthly_revenue: number | string | null;
-        normalized_key: string | null;
-        business_status: string | null;
-      }>
-    >(
-      `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status&company_id=eq.${encodeURIComponent(
-        id
-      )}&limit=2000`
-    ).catch(() => []),
+    fetchChurnRiskCustomers().catch(() => []),
     supabaseRequest<Array<{ customer_key: string | null; sales_date: string | null }>>(
       `sales_transactions?select=customer_key,sales_date&company_id=eq.${encodeURIComponent(id)}&sales_date=not.is.null&limit=10000`
     ).catch(() => [])
@@ -3875,6 +3898,7 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   const results: ChurnRiskCustomer[] = [];
   for (const customer of customers) {
     if (customer.business_status === "폐업") continue;
+    if (customer.relationship_status === RELATIONSHIP_STATUS_TERMINATED) continue;
     if (!customer.normalized_key) continue;
     const lastOrderDate = latestByKey.get(customer.normalized_key);
     if (!lastOrderDate) continue;
