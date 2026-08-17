@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
   HeartPulse,
   History,
+  Info,
   LucideIcon,
   MapPin,
   Save,
@@ -965,6 +966,9 @@ function Onboarding({
   const [businessNameSearchMessage, setBusinessNameSearchMessage] = useState("");
   const [isSearchingBusinessName, setIsSearchingBusinessName] = useState(false);
   const [showBusinessNameResults, setShowBusinessNameResults] = useState(false);
+  // 카카오 주소·매장 검색으로 채운 필드는 사업자등록증 원본 값이 아니라 카카오 지도 기준 정보입니다.
+  // 사업자등록증 값과 섞여 보이지 않도록 어떤 필드가 카카오에서 왔는지 별도로 추적합니다.
+  const [kakaoSourcedFields, setKakaoSourcedFields] = useState<Set<string>>(new Set());
   const [documentOcrFilename, setDocumentOcrFilename] = useState("");
   const [documentOcrMeta, setDocumentOcrMeta] = useState<OcrMeta | null>(null);
   const [documentOcrStatus, setDocumentOcrStatus] = useState("");
@@ -1284,6 +1288,12 @@ function Onboarding({
     setAddressQuery(result.address);
     setAddressResults([]);
     setAddressSearchMessage("선택한 주소를 배송주소에 반영했습니다.");
+    setKakaoSourcedFields((previous) => {
+      const next = new Set(previous);
+      next.add("address");
+      next.add("region");
+      return next;
+    });
   }
 
   const businessNameQuery = String(manualDraft.customerName || "").trim();
@@ -1329,6 +1339,17 @@ function Onboarding({
     setBusinessNameResults([]);
     setShowBusinessNameResults(false);
     setBusinessNameSearchMessage("선택한 매장 정보를 반영했습니다.");
+    // 사업자등록증에 없는 카카오 지도 기준 값이므로 어떤 필드가 채워졌는지 표시해 둡니다.
+    setKakaoSourcedFields((previous) => {
+      const next = new Set(previous);
+      if (resolvedAddress) {
+        next.add("address");
+        next.add("region");
+      }
+      if (result.phone) next.add("phone");
+      if (result.industry) next.add("industry");
+      return next;
+    });
   }
 
   async function applyDocumentOcr(event: ChangeEvent<HTMLInputElement>) {
@@ -1738,6 +1759,7 @@ function Onboarding({
                     const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
                     const isAddressField = field.key === "address" && isMaster;
                     const isBusinessNameField = field.key === "customerName" && isMaster;
+                    const isKakaoSourced = isMaster && kakaoSourcedFields.has(field.key);
                     return (
                       <label key={field.key} className={`relative space-y-1.5 rounded-md border bg-white p-3 shadow-sm ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
                         <span className="text-xs font-black text-slate-500">
@@ -1759,6 +1781,14 @@ function Onboarding({
                                   : rawValue;
                             onManualChange({ ...manualDraft, [field.key]: nextValue });
                             if (isBusinessNameField) setShowBusinessNameResults(true);
+                            // 사람이 직접 값을 고쳤으면 더 이상 카카오 원본 그대로가 아니므로 출처 표시를 지웁니다.
+                            if (kakaoSourcedFields.has(field.key)) {
+                              setKakaoSourcedFields((previous) => {
+                                const next = new Set(previous);
+                                next.delete(field.key);
+                                return next;
+                              });
+                            }
                           }}
                           onFocus={isBusinessNameField ? () => setShowBusinessNameResults(true) : undefined}
                           onBlur={isBusinessNameField ? () => setTimeout(() => setShowBusinessNameResults(false), 150) : undefined}
@@ -1771,7 +1801,13 @@ function Onboarding({
                           </span>
                         ) : null}
                         {isAddressField ? <span className="block text-xs font-bold text-blue-700">검색 결과 선택 시 지역이 자동 반영됩니다.</span> : null}
-                        {isBusinessNameField ? <span className="block text-xs font-bold text-blue-700">실제 매장을 검색해 선택하면 주소·전화·업종이 자동 반영됩니다.</span> : null}
+                        {isBusinessNameField ? <span className="block text-xs font-bold text-blue-700">실제 매장을 검색해 선택하면 카카오 지도 기준 주소·전화·업종이 자동 반영됩니다. 사업자등록증 원본과는 다를 수 있어요.</span> : null}
+                        {isKakaoSourced ? (
+                          <span className="flex items-center gap-1 text-[11px] font-bold text-amber-700">
+                            <Info className="h-3 w-3 shrink-0" />
+                            카카오 지도 정보 · 사업자등록증 값 아님, 원본과 대조하세요
+                          </span>
+                        ) : null}
                         {isBusinessNameField && showBusinessNameResults && businessNameQuery.length >= 2 ? (
                           <div className="absolute left-3 right-3 top-full z-20 mt-1 max-h-64 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
                             {isSearchingBusinessName ? (
