@@ -3749,7 +3749,7 @@ function ManualEntryProgress({
       ok: missingFields.length === 0
     },
     {
-      detail: addressSelected ? "배송주소 선택 완료" : "주소 검색 후 선택",
+      detail: addressSelected ? "배송주소 입력 완료" : "거래처명 검색 또는 직접 입력",
       label: "주소",
       ok: addressSelected
     },
@@ -3967,7 +3967,7 @@ function ManualValidationPanel({
       ok: missingFields.length === 0
     },
     {
-      description: isMaster ? (addressSelected ? "배송주소가 선택되었습니다." : "주소 검색 후 배송주소를 선택하세요.") : "매출 데이터는 거래처 key 기준으로 저장됩니다.",
+      description: isMaster ? (addressSelected ? "배송주소가 입력되었습니다." : "거래처명 검색으로 자동 반영하거나 배송주소를 직접 입력하세요.") : "매출 데이터는 거래처 key 기준으로 저장됩니다.",
       label: "주소",
       ok: addressSelected
     },
