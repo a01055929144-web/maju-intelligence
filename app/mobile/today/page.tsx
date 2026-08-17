@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, MessageSquareText, Navigation, Phone, Route, Truck } from "lucide-react";
+import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, MessageSquareText, Navigation, Phone, PlusCircle, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
@@ -180,9 +180,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </section>
         </div>
 
-        <footer className="grid grid-cols-3 border-t border-slate-200 bg-white px-3 py-2">
+        <footer className="grid grid-cols-4 border-t border-slate-200 bg-white px-3 py-2">
           <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
           <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="거래처" />
+          <FooterItem href="/mobile/register" icon={PlusCircle} label="등록" />
           <FooterItem href="/mobile/today#field-records" icon={CheckCircle2} label="기록" />
         </footer>
       </section>
