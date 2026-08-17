@@ -38,14 +38,6 @@ export default function CustomerLoginPage() {
     await login();
   }
 
-  async function handleDemoLogin() {
-    const demoEmail = "dyoung456@naver.com";
-    const demoPassword = "0000";
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    await login(demoEmail, demoPassword);
-  }
-
   return (
     <main className="flex min-h-screen items-center justify-center maju-app-bg px-4 py-10">
       <Card className="w-full max-w-md">
@@ -54,10 +46,7 @@ export default function CustomerLoginPage() {
             <Building2 className="mr-1 h-3.5 w-3.5" />
             MAJU Company
           </Badge>
-          <CardTitle className="text-2xl">고객사 로그인</CardTitle>
-          <p className="text-sm leading-6 text-muted-foreground">
-            관리자가 생성한 고객사 운영계정으로 로그인합니다. 로그인하면 관리자 세션은 자동으로 종료되고, 내 회사 데이터만 접근합니다.
-          </p>
+          <CardTitle className="text-2xl">로그인</CardTitle>
         </CardHeader>
         <CardContent>
           <Link
@@ -72,37 +61,25 @@ export default function CustomerLoginPage() {
             또는 이메일로 로그인
             <span className="h-px flex-1 bg-border" />
           </div>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <label className="space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground">이메일</span>
-              <input
-                className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-              />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground">비밀번호</span>
-              <input
-                className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type="password"
-              />
-            </label>
+          <form className="space-y-2.5" onSubmit={handleSubmit}>
+            <input
+              className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              placeholder="이메일"
+            />
+            <input
+              className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              placeholder="비밀번호"
+            />
             {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
-            <div className="rounded-md border border-border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
-              <p className="font-bold text-foreground">현재 고객사 계정</p>
-              <p>이메일: dyoung456@naver.com</p>
-              <p>비밀번호: 0000</p>
-            </div>
-            <Button className="w-full" disabled={loading}>
+            <Button className="mt-1.5 w-full" disabled={loading}>
               {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
               로그인
-            </Button>
-            <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleDemoLogin}>
-              현재 계정으로 로그인
             </Button>
             <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/admin/login">
               관리자 계정으로 로그인
