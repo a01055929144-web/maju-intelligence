@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { Building2, Lock, LogIn, MessageCircle } from "lucide-react";
+import { Building2, Lock, LogIn } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 
 export default function CustomerLoginPage() {
   const [email, setEmail] = useState("dyoung456@naver.com");
@@ -49,13 +50,9 @@ export default function CustomerLoginPage() {
           <CardTitle className="text-2xl">로그인</CardTitle>
         </CardHeader>
         <CardContent>
-          <Link
-            className="mb-4 flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition hover:brightness-95"
-            href="/api/auth/kakao/start"
-          >
-            <MessageCircle className="h-4 w-4" />
-            카카오로 가입한 직원은 카카오로 로그인
-          </Link>
+          <div className="mb-4">
+            <OAuthLoginButtons />
+          </div>
           <div className="mb-4 flex items-center gap-3 text-xs font-bold text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
             또는 이메일로 로그인

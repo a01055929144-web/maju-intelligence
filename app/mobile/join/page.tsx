@@ -1,25 +1,23 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ChevronRight, ClipboardCheck, KeyRound, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, LogIn, MapPinned, ShieldCheck, Smartphone, Truck, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 
 export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string; error?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const inviteCode = resolvedSearchParams?.invite || "";
   const errorCode = resolvedSearchParams?.error || "";
 
-  // 초대 코드도 없고 오류도 없는 "그냥 카카오로 로그인" 진입은 /dashboard/login과
-  // 화면이 사실상 중복이었습니다. /dashboard/login의 카카오 버튼이 이제
-  // /api/auth/kakao/start로 바로 이동하므로, 이 화면은 초대 코드가 있는 직원 가입
-  // 딥링크와 오류 발생 시 재시도 화면으로만 남겨두고 나머지는 로그인 화면 하나로 합칩니다.
+  // 초대 코드도 없고 오류도 없는 "그냥 로그인" 진입은 /dashboard/login과 화면이 사실상
+  // 중복이었습니다. /dashboard/login에 이미 같은 소셜 로그인 버튼들이 있으므로, 이 화면은
+  // 초대 코드가 있는 직원 가입 딥링크와 오류 발생 시 재시도 화면으로만 남겨둡니다.
   if (!inviteCode && !errorCode) {
     redirect("/dashboard/login");
   }
 
-  const kakaoLoginUrl = createKakaoLoginUrl(inviteCode);
-  const kakaoReady = Boolean(kakaoLoginUrl);
   const joinMode = inviteCode ? "company" : "personal";
-  const errorMessage = describeKakaoError(errorCode);
+  const errorMessage = describeOAuthError(errorCode);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -30,7 +28,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]">M</span>
               <div>
                 <p className="text-sm font-black">MAJU Intelligence</p>
-                <p className="text-xs font-bold text-slate-500">{joinMode === "company" ? "직원 모바일 가입" : "카카오 로그인"}</p>
+                <p className="text-xs font-bold text-slate-500">{joinMode === "company" ? "직원 모바일 가입" : "소셜 로그인"}</p>
               </div>
             </div>
             <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">Mobile</Badge>
@@ -40,16 +38,16 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
         <div className="flex-1 space-y-5 px-5 py-6">
           <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <Badge className="mb-4 bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-200">
-              <MessageCircle className="mr-1 h-3.5 w-3.5" />
-              {joinMode === "company" ? "카카오톡 초대" : "카카오 로그인"}
+              {joinMode === "company" ? <UserPlus className="mr-1 h-3.5 w-3.5" /> : <LogIn className="mr-1 h-3.5 w-3.5" />}
+              {joinMode === "company" ? "직원 초대" : "소셜 로그인"}
             </Badge>
             <h1 className="text-[28px] font-black leading-tight text-slate-950">
-              {joinMode === "company" ? "카카오로 가입하고 오늘 코스를 바로 확인하세요." : "카카오 계정으로 로그인하세요."}
+              {joinMode === "company" ? "네이버·카카오·구글로 가입하고 오늘 코스를 바로 확인하세요." : "네이버·카카오·구글 계정으로 로그인하세요."}
             </h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
               {joinMode === "company"
                 ? "직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다. 역할은 업무 구분과 필터 기준으로 사용합니다."
-                : "이미 회사 초대를 수락한 카카오 계정이면 자동으로 같은 회사로 연결됩니다. 처음 사용하는 카카오 계정이면 개인 워크스페이스가 새로 만들어집니다."}
+                : "이미 회사 초대를 수락한 계정이면 자동으로 같은 회사로 연결됩니다. 처음 사용하는 계정이면 개인 워크스페이스가 새로 만들어집니다."}
             </p>
           </section>
 
@@ -74,45 +72,24 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" />
                 <div>
-                  <p className="font-black text-rose-950">카카오 가입에 실패했습니다</p>
+                  <p className="font-black text-rose-950">로그인에 실패했습니다</p>
                   <p className="mt-1 text-sm font-bold leading-6 text-rose-800">{errorMessage}</p>
                 </div>
               </div>
             </div>
           ) : null}
 
-          {kakaoReady ? (
-            <a
-              className="flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-4 text-base font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition hover:brightness-95"
-              href={kakaoLoginUrl}
-            >
-              <MessageCircle className="h-5 w-5" />
-              {joinMode === "company" ? "카카오로 직원 가입" : "카카오로 로그인"}
-              <ChevronRight className="h-5 w-5" />
-            </a>
-          ) : (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <div className="flex items-start gap-3">
-                <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-                <div>
-                  <p className="font-black text-amber-950">카카오 OAuth 설정 필요</p>
-                  <p className="mt-1 text-sm font-bold leading-6 text-amber-800">
-                    Vercel 환경변수 `KAKAO_CLIENT_ID`, `KAKAO_REDIRECT_URI`를 등록하면 이 버튼이 실제 카카오 로그인으로 연결됩니다.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          <OAuthLoginButtons inviteCode={inviteCode} />
 
           <section className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
               <div>
-                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대 코드로 확인합니다" : "기존 회사 연결은 카카오 계정으로 자동 확인합니다"}</p>
+                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대 코드로 확인합니다" : "기존 회사 연결은 로그인한 계정으로 자동 확인합니다"}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                   {joinMode === "company"
-                    ? "카카오 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
-                    : "이 카카오 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 개인 워크스페이스가 새로 만들어지며, 이후 관리자 초대를 받으면 회사로 전환할 수 있습니다."}
+                    ? "소셜 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
+                    : "이 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 개인 워크스페이스가 새로 만들어지며, 이후 관리자 초대를 받으면 회사로 전환할 수 있습니다."}
                 </p>
               </div>
             </div>
@@ -122,7 +99,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
         <footer className="border-t border-slate-200 bg-white px-5 py-4">
           <Link className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700" href="/dashboard/login">
             <Smartphone className="h-4 w-4" />
-            고객사 로그인으로 돌아가기
+            로그인 화면으로 돌아가기
           </Link>
         </footer>
       </section>
@@ -144,25 +121,10 @@ function MobileBenefit({ description, icon: Icon, title }: { description: string
   );
 }
 
-function createKakaoLoginUrl(inviteCode: string) {
-  const clientId = process.env.KAKAO_CLIENT_ID;
-  const redirectUri = process.env.KAKAO_REDIRECT_URI;
-  if (!clientId || !redirectUri) return "";
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    state: inviteCode || "personal"
-  });
-
-  return `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;
-}
-
-// 카카오 콜백(app/api/auth/kakao/callback/route.ts)이 실패하면 이유를 담은 error 코드로
-// 이 화면에 되돌아옵니다. 초대 관련 오류(lib/store.ts에서 던지는 메시지)는 이미 한글이라
-// 그대로 보여주고, 그 외 기술 코드만 안내 문구로 바꿔줍니다.
-function describeKakaoError(errorCode: string): string {
+// 각 프로바이더의 콜백(app/api/auth/{provider}/callback/route.ts)이 실패하면 이유를 담은
+// error 코드로 이 화면에 되돌아옵니다. 초대 관련 오류(lib/store.ts에서 던지는 메시지)는
+// 이미 한글이라 그대로 보여주고, 그 외 기술 코드만 안내 문구로 바꿔줍니다.
+function describeOAuthError(errorCode: string): string {
   if (!errorCode) return "";
 
   const knownCodes: Record<string, string> = {
@@ -170,7 +132,17 @@ function describeKakaoError(errorCode: string): string {
     kakao_token_failed: "카카오 인증 토큰 발급에 실패했습니다. 카카오 디벨로퍼스에 등록한 Redirect URI가 정확한지 확인해주세요.",
     kakao_user_failed: "카카오 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
     missing_kakao_code: "카카오 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
-    missing_kakao_env: "서버에 카카오 로그인 환경변수가 아직 설정되지 않았습니다."
+    missing_kakao_env: "서버에 카카오 로그인 환경변수가 아직 설정되지 않았습니다.",
+    naver_callback_failed: "네이버 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+    naver_token_failed: "네이버 인증 토큰 발급에 실패했습니다. 네이버 디벨로퍼스에 등록한 Callback URL이 정확한지 확인해주세요.",
+    naver_user_failed: "네이버 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
+    missing_naver_code: "네이버 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
+    missing_naver_env: "서버에 네이버 로그인 환경변수가 아직 설정되지 않았습니다.",
+    google_callback_failed: "구글 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+    google_token_failed: "구글 인증 토큰 발급에 실패했습니다. Google Cloud Console에 등록한 리디렉션 URI가 정확한지 확인해주세요.",
+    google_user_failed: "구글 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
+    missing_google_code: "구글 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
+    missing_google_env: "서버에 구글 로그인 환경변수가 아직 설정되지 않았습니다."
   };
 
   return knownCodes[errorCode] || errorCode;

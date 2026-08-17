@@ -409,6 +409,22 @@ export type PersonalKakaoWorkspaceResult = {
   persisted: boolean;
   workspaceRole: StaffInvitation["role"] | "owner";
 };
+export type OAuthProvider = "naver" | "google";
+export type StaffOAuthAcceptInput = {
+  avatarUrl?: string;
+  email?: string;
+  inviteCode: string;
+  name?: string;
+  provider: OAuthProvider;
+  providerUserId: string;
+};
+export type PersonalOAuthWorkspaceInput = {
+  avatarUrl?: string;
+  email?: string;
+  name?: string;
+  provider: OAuthProvider;
+  providerUserId: string;
+};
 export type DatabaseCheck = {
   name: string;
   status: "ready" | "fallback" | "missing";
@@ -1482,6 +1498,209 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     // 이미 초대를 수락해 회사에 소속된 직원이 재로그인하는 경우입니다.
     // 초대 코드 없이 다시 로그인해도 실제 직책(배송기사/영업직원 등)을 유지해야
     // PC 대시보드에서도 올바른 역할로 표시되고, 향후 역할별 권한 제한을 켜도 안전합니다.
+    return {
+      companyId: existing.company_id,
+      companyName: existing.companies?.name || `${displayName} 워크스페이스`,
+      email: user.email || loginEmail,
+      name: user.name || displayName,
+      persisted: true,
+      workspaceRole: existing.role || "owner"
+    };
+  }
+
+  const companyRows = await supabaseRequest<Array<{ id: string; name: string }>>("companies", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        business_type: "personal",
+        name: `${displayName} 워크스페이스`,
+        owner_name: displayName,
+        status: "active",
+        updated_at: now
+      }
+    ])
+  });
+
+  const company = companyRows[0];
+  await supabaseRequest("company_members", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        company_id: company.id,
+        role: "owner",
+        status: "active",
+        updated_at: now,
+        user_id: user.id
+      }
+    ])
+  });
+
+  return {
+    companyId: company.id,
+    companyName: company.name,
+    email: user.email || loginEmail,
+    name: user.name || displayName,
+    persisted: true,
+    workspaceRole: "owner"
+  };
+}
+
+// 네이버/구글 로그인은 카카오와 동일한 초대 수락 절차를 따르므로, 컬럼명(예: naver_user_id)만
+// 프로바이더별로 바꿔가며 같은 로직을 공유합니다. 카카오 전용 함수는 이미 검증되어 운영 중이라
+// 회귀 위험을 피하기 위해 그대로 두고, 신규 프로바이더만 이 공용 함수를 사용합니다.
+export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): Promise<StaffKakaoAcceptResult> {
+  const inviteCode = input.inviteCode.trim();
+  const providerUserId = input.providerUserId.trim();
+  const providerColumn = `${input.provider}_user_id`;
+  if (!inviteCode) throw new Error("초대 코드가 필요합니다.");
+  if (!providerUserId) throw new Error("소셜 계정 확인이 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    const companyId = getDefaultCompanyId();
+    const company = await getCompanySettings(companyId).catch(() => null);
+    return {
+      companyId,
+      companyName: company?.name || "마주식자재",
+      email: input.email || `${input.provider}-${providerUserId}@maju.local`,
+      name: input.name || "모바일 직원",
+      persisted: false,
+      workspaceRole: "driver"
+    };
+  }
+
+  const invitationRows = await staffStoreRequest(supabaseRequest<
+    Array<{
+      id: string;
+      company_id: string;
+      employee_name: string | null;
+      employee_phone: string | null;
+      role: StaffInvitation["role"];
+      status: StaffInvitation["status"];
+    }>
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
+
+  const invitation = invitationRows[0];
+  if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
+  if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
+
+  const company = await getCompanySettings(invitation.company_id);
+  const displayName = input.name || invitation.employee_name || "모바일 직원";
+  const loginEmail = input.email || `${input.provider}-${providerUserId}@maju.local`;
+  const now = new Date().toISOString();
+
+  const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>(`app_users?on_conflict=${providerColumn}`, {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        auth_provider: input.provider,
+        avatar_url: input.avatarUrl || null,
+        email: loginEmail,
+        [providerColumn]: providerUserId,
+        last_login_at: now,
+        name: displayName,
+        phone: invitation.employee_phone || null,
+        role: "customer_member",
+        status: "active"
+      }
+    ])
+  });
+
+  const user = userRows[0];
+  await supabaseRequest("company_members", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        company_id: invitation.company_id,
+        role: invitation.role || "member",
+        status: "active",
+        updated_at: now,
+        user_id: user.id
+      }
+    ])
+  }).catch(() => null);
+
+  await staffStoreRequest(supabaseRequest(`staff_invitations?id=eq.${encodeURIComponent(invitation.id)}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify({
+      accepted_at: now,
+      accepted_by: user.id,
+      status: "accepted"
+    })
+  }));
+
+  return {
+    companyId: invitation.company_id,
+    companyName: company.name,
+    email: user.email || loginEmail,
+    name: user.name || displayName,
+    persisted: true,
+    workspaceRole: invitation.role || "member"
+  };
+}
+
+export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspaceInput): Promise<PersonalKakaoWorkspaceResult> {
+  const providerUserId = input.providerUserId.trim();
+  const providerColumn = `${input.provider}_user_id`;
+  if (!providerUserId) throw new Error("소셜 계정 확인이 필요합니다.");
+
+  const displayName = input.name || "개인 사용자";
+  const loginEmail = input.email || `${input.provider}-${providerUserId}@maju.local`;
+
+  if (!isProductionStoreConfigured()) {
+    const companyId = getDefaultCompanyId();
+    return {
+      companyId,
+      companyName: `${displayName} 워크스페이스`,
+      email: loginEmail,
+      name: displayName,
+      persisted: false,
+      workspaceRole: "owner"
+    };
+  }
+
+  const now = new Date().toISOString();
+  const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>(`app_users?on_conflict=${providerColumn}`, {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        auth_provider: input.provider,
+        avatar_url: input.avatarUrl || null,
+        email: loginEmail,
+        [providerColumn]: providerUserId,
+        last_login_at: now,
+        name: displayName,
+        role: "customer_user",
+        status: "active"
+      }
+    ])
+  });
+
+  const user = userRows[0];
+  const existingMemberships = await supabaseRequest<
+    Array<{
+      company_id: string;
+      role: StaffInvitation["role"] | "owner" | "member";
+      companies: { business_type: string | null; name: string } | null;
+    }>
+  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&order=created_at.asc&limit=1`).catch(() => []);
+
+  const existing = existingMemberships[0];
+  if (existing?.company_id) {
     return {
       companyId: existing.company_id,
       companyName: existing.companies?.name || `${displayName} 워크스페이스`,
