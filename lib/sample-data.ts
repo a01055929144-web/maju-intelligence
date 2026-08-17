@@ -36,12 +36,12 @@ export type UploadTemplateType = "customer-master" | "sales-analysis";
 
 export const customerMasterFields = [
   { key: "customerName", label: "거래처/매장 상호명", aliases: ["거래처명", "매장명", "상호", "고객명", "업체명", "customer", "name"], required: true },
-  { key: "businessRegistrationNumber", label: "사업자등록번호", aliases: ["사업자등록번호", "사업자번호", "사업자", "bizno", "registration"], required: true },
+  { key: "businessRegistrationNumber", label: "사업자등록번호", aliases: ["사업자등록번호", "사업자번호", "사업자", "bizno", "registration"], required: true, description: "예: 123-45-67890 (10자리, 하이픈 자동 입력)" },
   { key: "representativeName", label: "대표자명", aliases: ["대표자", "대표자명", "대표", "owner", "ceo"], required: true },
-  { key: "openingDate", label: "개업일", aliases: ["개업일", "개업년월일", "open date", "opening"], required: false },
+  { key: "openingDate", label: "개업일", aliases: ["개업일", "개업년월일", "open date", "opening"], required: false, description: "예: 2024-01-01 (연도-월-일)" },
   { key: "address", label: "배송주소", aliases: ["주소", "배송주소", "소재지", "address"], required: true },
   { key: "deliveryKm", label: "기존 계산거리(km)", aliases: ["배송거리", "고정배송거리", "회사매장거리", "거리", "km", "delivery"], required: false, description: "선택값입니다. 운영에서는 회사 주소와 거래처 주소로 티맵이 1회 계산한 값을 저장합니다." },
-  { key: "phone", label: "연락처", aliases: ["연락처", "전화", "휴대폰", "phone", "mobile"], required: false },
+  { key: "phone", label: "연락처", aliases: ["연락처", "전화", "휴대폰", "phone", "mobile"], required: false, description: "예: 010-0000-0000 (하이픈 자동 입력)" },
   { key: "email", label: "이메일", aliases: ["이메일", "email", "메일"], required: false },
   { key: "birthDate", label: "생년월일", aliases: ["생년월일", "생일", "birth"], required: false },
   { key: "region", label: "지역", aliases: ["지역", "구", "동", "시군구", "권역", "region"], required: false },
@@ -53,7 +53,7 @@ export const customerMasterFields = [
 
 export const salesAnalysisFields = [
   { key: "customerName", label: "거래처/매장 상호명", aliases: ["거래처명", "매장명", "상호", "고객명", "업체명", "customer", "name"], required: true },
-  { key: "businessRegistrationNumber", label: "사업자등록번호", aliases: ["사업자등록번호", "사업자번호", "사업자", "bizno", "registration"], required: false },
+  { key: "businessRegistrationNumber", label: "사업자등록번호", aliases: ["사업자등록번호", "사업자번호", "사업자", "bizno", "registration"], required: false, description: "예: 123-45-67890 (10자리, 하이픈 자동 입력)" },
   { key: "salesDate", label: "매출일자", aliases: ["매출일자", "판매일", "거래일", "주문일", "일자", "date"], required: true },
   { key: "salesAmount", label: "매출금액", aliases: ["매출금액", "매출", "판매금액", "공급가", "합계", "실매출", "매출액", "amount", "sales"], required: true },
   { key: "productName", label: "품목명", aliases: ["품목", "품목명", "상품명", "제품명", "item", "product"], required: false },
