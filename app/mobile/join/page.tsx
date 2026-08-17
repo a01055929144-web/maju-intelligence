@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ClipboardCheck, LogIn, MapPinned, ShieldCheck, Smartphone, Truck, UserPlus } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 
@@ -28,7 +28,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]">M</span>
               <div>
                 <p className="text-sm font-black">MAJU Intelligence</p>
-                <p className="text-xs font-bold text-slate-500">{joinMode === "company" ? "직원 모바일 가입" : "소셜 로그인"}</p>
+                <p className="text-xs font-bold text-slate-500">{joinMode === "company" ? "직원 모바일 가입" : "카카오 로그인"}</p>
               </div>
             </div>
             <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">Mobile</Badge>
@@ -38,16 +38,16 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
         <div className="flex-1 space-y-5 px-5 py-6">
           <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <Badge className="mb-4 bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-200">
-              {joinMode === "company" ? <UserPlus className="mr-1 h-3.5 w-3.5" /> : <LogIn className="mr-1 h-3.5 w-3.5" />}
-              {joinMode === "company" ? "직원 초대" : "소셜 로그인"}
+              <MessageCircle className="mr-1 h-3.5 w-3.5" />
+              {joinMode === "company" ? "카카오톡 초대" : "카카오 로그인"}
             </Badge>
             <h1 className="text-[28px] font-black leading-tight text-slate-950">
-              {joinMode === "company" ? "네이버·카카오·구글로 가입하고 오늘 코스를 바로 확인하세요." : "네이버·카카오·구글 계정으로 로그인하세요."}
+              {joinMode === "company" ? "카카오로 가입하고 오늘 코스를 바로 확인하세요." : "카카오 계정으로 로그인하세요."}
             </h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
               {joinMode === "company"
                 ? "직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다. 역할은 업무 구분과 필터 기준으로 사용합니다."
-                : "이미 회사 초대를 수락한 계정이면 자동으로 같은 회사로 연결됩니다. 처음 사용하는 계정이면 개인 워크스페이스가 새로 만들어집니다."}
+                : "이미 회사 초대를 수락한 카카오 계정이면 자동으로 같은 회사로 연결됩니다. 처음 사용하는 카카오 계정이면 개인 워크스페이스가 새로 만들어집니다."}
             </p>
           </section>
 
@@ -72,7 +72,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" />
                 <div>
-                  <p className="font-black text-rose-950">로그인에 실패했습니다</p>
+                  <p className="font-black text-rose-950">카카오 로그인에 실패했습니다</p>
                   <p className="mt-1 text-sm font-bold leading-6 text-rose-800">{errorMessage}</p>
                 </div>
               </div>
@@ -85,11 +85,11 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
               <div>
-                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대 코드로 확인합니다" : "기존 회사 연결은 로그인한 계정으로 자동 확인합니다"}</p>
+                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대 코드로 확인합니다" : "기존 회사 연결은 카카오 계정으로 자동 확인합니다"}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                   {joinMode === "company"
-                    ? "소셜 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
-                    : "이 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 개인 워크스페이스가 새로 만들어지며, 이후 관리자 초대를 받으면 회사로 전환할 수 있습니다."}
+                    ? "카카오 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
+                    : "이 카카오 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 개인 워크스페이스가 새로 만들어지며, 이후 관리자 초대를 받으면 회사로 전환할 수 있습니다."}
                 </p>
               </div>
             </div>
