@@ -98,6 +98,14 @@ type AddressSearchResult = {
   region: string;
   roadAddress: string;
 };
+type BusinessSearchResult = {
+  address: string;
+  industry: string;
+  kakaoPlaceUrl: string;
+  name: string;
+  phone: string;
+  roadAddress: string;
+};
 
 const emptyMap: FieldMap = {};
 const mappingPresetStorageKey = "maju:data-registration:mapping-presets";
@@ -953,6 +961,10 @@ function Onboarding({
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [businessNameResults, setBusinessNameResults] = useState<BusinessSearchResult[]>([]);
+  const [businessNameSearchMessage, setBusinessNameSearchMessage] = useState("");
+  const [isSearchingBusinessName, setIsSearchingBusinessName] = useState(false);
+  const [showBusinessNameResults, setShowBusinessNameResults] = useState(false);
   const [documentOcrFilename, setDocumentOcrFilename] = useState("");
   const [documentOcrMeta, setDocumentOcrMeta] = useState<OcrMeta | null>(null);
   const [documentOcrStatus, setDocumentOcrStatus] = useState("");
@@ -1272,6 +1284,51 @@ function Onboarding({
     setAddressQuery(result.address);
     setAddressResults([]);
     setAddressSearchMessage("선택한 주소를 배송주소에 반영했습니다.");
+  }
+
+  const businessNameQuery = String(manualDraft.customerName || "").trim();
+
+  useEffect(() => {
+    if (!isMaster || businessNameQuery.length < 2) {
+      setBusinessNameResults([]);
+      setBusinessNameSearchMessage("");
+      setIsSearchingBusinessName(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearchingBusinessName(true);
+    const timer = setTimeout(async () => {
+      const response = await fetch(`/api/business-search?query=${encodeURIComponent(businessNameQuery)}`, { cache: "no-store" }).catch(() => null);
+      if (cancelled) return;
+      const payload = response?.ok ? await response.json().catch(() => null) : null;
+      const results = Array.isArray(payload?.results) ? payload.results : [];
+      setBusinessNameResults(results);
+      setBusinessNameSearchMessage(results.length ? "" : payload?.message || "일치하는 매장을 찾지 못했습니다.");
+      setIsSearchingBusinessName(false);
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [businessNameQuery, isMaster]);
+
+  function selectBusinessName(result: BusinessSearchResult) {
+    const resolvedAddress = result.roadAddress || result.address;
+    onManualChange({
+      ...manualDraft,
+      customerName: result.name,
+      address: resolvedAddress || manualDraft.address,
+      region: resolvedAddress ? extractRegion(resolvedAddress) : manualDraft.region,
+      phone: result.phone || manualDraft.phone,
+      industry: result.industry || manualDraft.industry,
+      kakaoPlaceUrl: result.kakaoPlaceUrl || manualDraft.kakaoPlaceUrl
+    });
+    setAddressQuery(resolvedAddress || addressQuery);
+    setBusinessNameResults([]);
+    setShowBusinessNameResults(false);
+    setBusinessNameSearchMessage("선택한 매장 정보를 반영했습니다.");
   }
 
   async function applyDocumentOcr(event: ChangeEvent<HTMLInputElement>) {
@@ -1680,8 +1737,9 @@ function Onboarding({
                   {manualCoreFields.map((field) => {
                     const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
                     const isAddressField = field.key === "address" && isMaster;
+                    const isBusinessNameField = field.key === "customerName" && isMaster;
                     return (
-                      <label key={field.key} className={`space-y-1.5 rounded-md border bg-white p-3 shadow-sm ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
+                      <label key={field.key} className={`relative space-y-1.5 rounded-md border bg-white p-3 shadow-sm ${isInvalidBusinessNumber ? "border-rose-200" : isAddressField && manualAddressSelected ? "border-emerald-200" : "border-slate-200"}`}>
                         <span className="text-xs font-black text-slate-500">
                           {field.label}
                           {field.required ? <span className="ml-1 text-destructive">*</span> : null}
@@ -1700,8 +1758,12 @@ function Onboarding({
                                   ? formatPhoneNumberInput(rawValue)
                                   : rawValue;
                             onManualChange({ ...manualDraft, [field.key]: nextValue });
+                            if (isBusinessNameField) setShowBusinessNameResults(true);
                           }}
+                          onFocus={isBusinessNameField ? () => setShowBusinessNameResults(true) : undefined}
+                          onBlur={isBusinessNameField ? () => setTimeout(() => setShowBusinessNameResults(false), 150) : undefined}
                           placeholder={field.description || `${field.label} 입력`}
+                          autoComplete="off"
                         />
                         {field.key === "businessRegistrationNumber" && isMaster ? (
                           <span className={`block text-xs font-black ${manualBusinessNumber ? (manualBusinessNumberValid ? "text-emerald-700" : "text-rose-600") : "text-slate-400"}`}>
@@ -1709,6 +1771,29 @@ function Onboarding({
                           </span>
                         ) : null}
                         {isAddressField ? <span className="block text-xs font-bold text-blue-700">검색 결과 선택 시 지역이 자동 반영됩니다.</span> : null}
+                        {isBusinessNameField ? <span className="block text-xs font-bold text-blue-700">실제 매장을 검색해 선택하면 주소·전화·업종이 자동 반영됩니다.</span> : null}
+                        {isBusinessNameField && showBusinessNameResults && businessNameQuery.length >= 2 ? (
+                          <div className="absolute left-3 right-3 top-full z-20 mt-1 max-h-64 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                            {isSearchingBusinessName ? (
+                              <p className="px-3 py-2 text-xs font-bold text-slate-400">검색 중...</p>
+                            ) : businessNameResults.length ? (
+                              businessNameResults.map((result) => (
+                                <button
+                                  className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-blue-50"
+                                  key={`${result.name}-${result.address}`}
+                                  onClick={() => selectBusinessName(result)}
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  type="button"
+                                >
+                                  <span className="block text-sm font-black text-slate-950">{result.name}</span>
+                                  <span className="mt-0.5 block text-xs font-bold text-slate-500">{result.roadAddress || result.address || "주소 정보 없음"}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <p className="px-3 py-2 text-xs font-bold text-slate-400">{businessNameSearchMessage || "일치하는 매장을 찾지 못했습니다."}</p>
+                            )}
+                          </div>
+                        ) : null}
                       </label>
                     );
                   })}
