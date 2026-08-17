@@ -61,6 +61,32 @@ function externalResultId(result: ExternalBusinessResult) {
   return `external-${result.name}-${result.roadAddress || result.address}`;
 }
 
+// 검색 결과를 편집 없이 그대로(상호명·주소·연락처·업종) 빠르게 거래처로 저장합니다. 개별 등록
+// 패널(QuickRegisterDrawer)의 저장 로직과 별개로, 여러 매장을 체크해 한 번에 등록할 때 씁니다.
+async function registerExternalBusinessResult(result: ExternalBusinessResult): Promise<{ id: string; name: string }> {
+  const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+  const response = await fetch("/api/customers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      address: result.roadAddress || result.address,
+      businessStatus: "확인 예정",
+      companyId: companyId || undefined,
+      customerName: result.name,
+      industry: result.industry || "미분류",
+      kakaoPlaceUrl: result.kakaoPlaceUrl,
+      phone: result.phone,
+      validateBusinessNumber: false
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.message || `${result.name} 등록에 실패했습니다.`);
+
+  const customerId = String(payload?.customer?.id || "");
+  if (!customerId) throw new Error(`${result.name}은(는) 저장됐지만 ID를 확인하지 못했습니다.`);
+  return { id: customerId, name: result.name };
+}
+
 type StoreRow = RoutePlanStop & {
   accountCopyStatus: "missing" | "received";
   bankAccount: string;
@@ -227,6 +253,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   // 검색에서 찾은 미등록 매장을 지도 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있도록 하는
   // 빠른 등록 패널의 대상입니다. null이면 닫힌 상태입니다.
   const [quickRegisterTarget, setQuickRegisterTarget] = useState<ExternalBusinessResult | null>(null);
+  // 검색 결과에서 여러 매장을 한 번에 체크해 일괄 등록할 수 있도록 하는 선택 상태입니다.
+  // externalResultId(result)를 키로 씁니다.
+  const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
+  const [isBulkRegistering, setIsBulkRegistering] = useState(false);
+  const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, 좌우 목록 패널은 기본적으로 접어두고
   // 얇은 토글 스트립만 남깁니다. 필요할 때 한 번 눌러서 펼치는 방식입니다.
@@ -271,6 +302,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     () => externalResults.filter((result) => result.name.trim() && !registeredStoreNames.has(result.name.trim().toLowerCase())),
     [externalResults, registeredStoreNames]
   );
+  // 검색어가 바뀌면 이전 검색 결과에 대한 체크 선택은 의미가 없으므로 함께 초기화합니다.
+  useEffect(() => {
+    setSelectedResultIds(new Set());
+    setBulkRegisterMessage("");
+  }, [query]);
   useEffect(() => {
     const keyword = query.trim();
     if (keyword.length < 2) {
@@ -573,6 +609,49 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return { ok: true };
   }
 
+  function toggleResultSelection(id: string) {
+    setSelectedResultIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllResults() {
+    setSelectedResultIds((current) =>
+      current.size === unregisteredResults.length ? new Set() : new Set(unregisteredResults.map((result) => externalResultId(result)))
+    );
+  }
+
+  // 체크한 미등록 매장을 한 번에 거래처로 등록합니다. 하나씩 순차 등록해, 하나가 실패해도
+  // 나머지는 계속 저장되도록 하고 마지막에 성공/실패 건수를 함께 보여줍니다.
+  async function registerSelectedResults() {
+    const targets = unregisteredResults.filter((result) => selectedResultIds.has(externalResultId(result)));
+    if (!targets.length || isBulkRegistering) return;
+
+    setIsBulkRegistering(true);
+    setBulkRegisterMessage("");
+    let succeeded = 0;
+    const failures: string[] = [];
+
+    for (const result of targets) {
+      try {
+        await registerExternalBusinessResult(result);
+        succeeded += 1;
+      } catch (error) {
+        failures.push(`${result.name}: ${error instanceof Error ? error.message : "등록 실패"}`);
+      }
+    }
+
+    setIsBulkRegistering(false);
+    setSelectedResultIds(new Set());
+    setBulkRegisterMessage(
+      failures.length ? `${succeeded}곳 등록 완료, ${failures.length}곳 실패 (${failures.join(", ")})` : `${succeeded}곳을 거래처로 등록했습니다.`
+    );
+    if (succeeded) router.refresh();
+  }
+
   return (
     <div
       className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0 ${isFullscreen ? "!rounded-none" : ""}`}
@@ -746,38 +825,84 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               value={query}
             />
             {showExternalResults && query.trim().length >= 2 ? (
-              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
-                <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
-                  미등록 매장 · 카카오맵 검색
-                </p>
+              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">미등록 매장 · 카카오맵 검색</p>
+                  {unregisteredResults.length ? (
+                    <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-black text-slate-500">
+                      <input
+                        checked={selectedResultIds.size > 0 && selectedResultIds.size === unregisteredResults.length}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
+                        onChange={toggleSelectAllResults}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="checkbox"
+                      />
+                      전체 선택
+                    </label>
+                  ) : null}
+                </div>
                 {isSearchingExternal ? (
                   <p className="px-3 py-2 text-xs font-bold text-slate-400">검색 중...</p>
                 ) : unregisteredResults.length ? (
-                  unregisteredResults.map((result) => (
-                    <div
-                      className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-teal-50"
-                      key={`${result.name}-${result.address}`}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-950">{result.name}</p>
-                        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{result.roadAddress || result.address || "주소 정보 없음"}</p>
-                      </div>
-                      <button
-                        className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
-                        onClick={() => {
-                          setQuickRegisterTarget(result);
-                          setShowExternalResults(false);
-                        }}
-                        onMouseDown={(event) => event.preventDefault()}
-                        type="button"
+                  unregisteredResults.map((result) => {
+                    const resultId = externalResultId(result);
+                    const isSelected = selectedResultIds.has(resultId);
+                    return (
+                      <div
+                        className={`flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-teal-50 ${
+                          isSelected ? "bg-teal-50" : ""
+                        }`}
+                        key={resultId}
                       >
-                        거래처로 등록
-                      </button>
-                    </div>
-                  ))
+                        <div className="flex min-w-0 items-center gap-2">
+                          <input
+                            checked={isSelected}
+                            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
+                            onChange={() => toggleResultSelection(resultId)}
+                            onMouseDown={(event) => event.preventDefault()}
+                            type="checkbox"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-slate-950">{result.name}</p>
+                            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
+                              {result.roadAddress || result.address || "주소 정보 없음"}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
+                          onClick={() => {
+                            setQuickRegisterTarget(result);
+                            setShowExternalResults(false);
+                          }}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                        >
+                          거래처로 등록
+                        </button>
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="px-3 py-2 text-xs font-bold text-slate-400">{externalSearchMessage || "새로 찾은 미등록 매장이 없습니다."}</p>
                 )}
+                {selectedResultIds.size > 0 ? (
+                  <div className="sticky bottom-0 flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-3 py-2">
+                    <p className="text-xs font-bold text-slate-500">{selectedResultIds.size}곳 선택됨</p>
+                    <button
+                      className="maju-button-primary flex h-8 shrink-0 items-center gap-1.5 px-3 text-xs disabled:opacity-60"
+                      disabled={isBulkRegistering}
+                      onClick={registerSelectedResults}
+                      onMouseDown={(event) => event.preventDefault()}
+                      type="button"
+                    >
+                      {isBulkRegistering ? "등록 중" : `선택 ${selectedResultIds.size}곳 일괄 등록`}
+                    </button>
+                  </div>
+                ) : null}
+                {bulkRegisterMessage ? (
+                  <p className="border-t border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{bulkRegisterMessage}</p>
+                ) : null}
               </div>
             ) : null}
           </label>

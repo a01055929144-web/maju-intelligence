@@ -138,38 +138,42 @@ function AttachmentSlot({
   const hasFile = Boolean(existingItems.length);
 
   return (
-    <div className={`rounded-md border p-3 ${required && !hasFile ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+    <div
+      className={`flex h-full flex-col rounded-md border p-3 ${required && !hasFile ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-black text-slate-950">{label}</p>
         <Badge className={required ? (hasFile ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800") : "bg-white text-slate-500"}>
           {required ? (hasFile ? "충족" : "필수") : hasFile ? `${existingItems.length}개` : "선택"}
         </Badge>
       </div>
-      <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{description}</p>
+      <p className="mt-2 min-h-[2.5rem] text-xs font-semibold leading-5 text-slate-500">{description}</p>
 
-      {existingItems.length ? (
-        <div className="mt-3 space-y-1">
-          {existingItems.map((item) => (
-            <a
-              className="flex items-center gap-2 rounded-md bg-white px-2 py-1 ring-1 ring-inset ring-blue-100 hover:bg-blue-50"
-              href={item.fileUrl || "#"}
-              key={item.id}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span className="shrink-0 text-slate-500">
-                {item.mimeType?.startsWith("video") ? <FileVideo className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
-              </span>
-              <p className="min-w-0 flex-1 truncate text-xs font-black text-blue-700">{item.title}</p>
-              <ExternalLink className="h-3 w-3 shrink-0 text-slate-400" />
-            </a>
-          ))}
-        </div>
-      ) : loadState === "loading" ? (
-        <p className="mt-3 rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">불러오는 중...</p>
-      ) : (
-        <p className="mt-3 rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">아직 업로드된 파일 없음</p>
-      )}
+      <div className="mt-3 flex-1">
+        {existingItems.length ? (
+          <div className="space-y-1">
+            {existingItems.map((item) => (
+              <a
+                className="flex items-center gap-2 rounded-md bg-white px-2 py-1 ring-1 ring-inset ring-blue-100 hover:bg-blue-50"
+                href={item.fileUrl || "#"}
+                key={item.id}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="shrink-0 text-slate-500">
+                  {item.mimeType?.startsWith("video") ? <FileVideo className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                </span>
+                <p className="min-w-0 flex-1 truncate text-xs font-black text-blue-700">{item.title}</p>
+                <ExternalLink className="h-3 w-3 shrink-0 text-slate-400" />
+              </a>
+            ))}
+          </div>
+        ) : loadState === "loading" ? (
+          <p className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">불러오는 중...</p>
+        ) : (
+          <p className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-400 ring-1 ring-inset ring-slate-200">아직 업로드된 파일 없음</p>
+        )}
+      </div>
 
       <label className="mt-3 flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
         <input accept={accept} className="sr-only" onChange={(event) => uploadFile(event.target.files?.[0] || null)} type="file" />
