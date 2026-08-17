@@ -62,7 +62,7 @@ export default function CustomerLoginPage() {
         <CardContent>
           <Link
             className="mb-4 flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition hover:brightness-95"
-            href="/mobile/join"
+            href="/api/auth/kakao/start"
           >
             <MessageCircle className="h-4 w-4" />
             카카오로 가입한 직원은 카카오로 로그인

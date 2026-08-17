@@ -1,14 +1,25 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AlertTriangle, ChevronRight, ClipboardCheck, KeyRound, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string; error?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const inviteCode = resolvedSearchParams?.invite || "";
+  const errorCode = resolvedSearchParams?.error || "";
+
+  // 초대 코드도 없고 오류도 없는 "그냥 카카오로 로그인" 진입은 /dashboard/login과
+  // 화면이 사실상 중복이었습니다. /dashboard/login의 카카오 버튼이 이제
+  // /api/auth/kakao/start로 바로 이동하므로, 이 화면은 초대 코드가 있는 직원 가입
+  // 딥링크와 오류 발생 시 재시도 화면으로만 남겨두고 나머지는 로그인 화면 하나로 합칩니다.
+  if (!inviteCode && !errorCode) {
+    redirect("/dashboard/login");
+  }
+
   const kakaoLoginUrl = createKakaoLoginUrl(inviteCode);
   const kakaoReady = Boolean(kakaoLoginUrl);
   const joinMode = inviteCode ? "company" : "personal";
-  const errorMessage = describeKakaoError(resolvedSearchParams?.error || "");
+  const errorMessage = describeKakaoError(errorCode);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
