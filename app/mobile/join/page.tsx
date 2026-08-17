@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { ChevronRight, ClipboardCheck, KeyRound, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
+import { AlertTriangle, ChevronRight, ClipboardCheck, KeyRound, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string }> }) {
+export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string; error?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const inviteCode = resolvedSearchParams?.invite || "";
   const kakaoLoginUrl = createKakaoLoginUrl(inviteCode);
   const kakaoReady = Boolean(kakaoLoginUrl);
   const joinMode = inviteCode ? "company" : "personal";
+  const errorMessage = describeKakaoError(resolvedSearchParams?.error || "");
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -54,6 +55,18 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             <MobileBenefit icon={MapPinned} title="거래처 위치" description="출발지, 경유지, 거래처 주소와 간략 정보를 바로 봅니다." />
             <MobileBenefit icon={ClipboardCheck} title="현장 기록" description="방문 결과, 배송 특이사항, 사진과 메모를 남깁니다." />
           </section>
+
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" />
+                <div>
+                  <p className="font-black text-rose-950">카카오 가입에 실패했습니다</p>
+                  <p className="mt-1 text-sm font-bold leading-6 text-rose-800">{errorMessage}</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {kakaoReady ? (
             <a
@@ -131,4 +144,21 @@ function createKakaoLoginUrl(inviteCode: string) {
   });
 
   return `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;
+}
+
+// 카카오 콜백(app/api/auth/kakao/callback/route.ts)이 실패하면 이유를 담은 error 코드로
+// 이 화면에 되돌아옵니다. 초대 관련 오류(lib/store.ts에서 던지는 메시지)는 이미 한글이라
+// 그대로 보여주고, 그 외 기술 코드만 안내 문구로 바꿔줍니다.
+function describeKakaoError(errorCode: string): string {
+  if (!errorCode) return "";
+
+  const knownCodes: Record<string, string> = {
+    kakao_callback_failed: "카카오 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+    kakao_token_failed: "카카오 인증 토큰 발급에 실패했습니다. 카카오 디벨로퍼스에 등록한 Redirect URI가 정확한지 확인해주세요.",
+    kakao_user_failed: "카카오 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
+    missing_kakao_code: "카카오 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
+    missing_kakao_env: "서버에 카카오 로그인 환경변수가 아직 설정되지 않았습니다."
+  };
+
+  return knownCodes[errorCode] || errorCode;
 }
