@@ -109,6 +109,9 @@ export type CustomerMasterItem = {
   openingDate?: string;
   phone?: string;
   region: string;
+  relationshipStatus?: string;
+  relationshipStatusNote?: string;
+  relationshipStatusUpdatedAt?: string;
   representativeName?: string;
   visitCount: number;
 };
@@ -196,6 +199,7 @@ export type RoutePlanStop = LeadItem & {
   openingDate?: string;
   order: number;
   phone?: string;
+  relationshipStatus?: string;
   representativeName?: string;
   routeCalculatedAt?: string;
   routeProvider?: "tmap" | "estimated" | "cached" | "sample";
@@ -445,6 +449,7 @@ const CUSTOMER_MASTER_SELECT =
   "id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url";
 const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS = `${CUSTOMER_MASTER_SELECT},naver_place_url,kakao_place_url,google_map_url,place_links_checked_at`;
 const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS},business_hours,menu_summary`;
+const CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU},relationship_status,relationship_status_updated_at,relationship_status_note`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -504,6 +509,11 @@ function isMissingCustomerPlaceLinksColumnError(error: unknown) {
 function isMissingCustomerHoursMenuColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return ["business_hours", "menu_summary"].some((column) => message.includes(column));
+}
+
+function isMissingCustomerRelationshipStatusColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return ["relationship_status", "relationship_status_updated_at", "relationship_status_note"].some((column) => message.includes(column));
 }
 
 function isMissingTelegramChatIdColumnError(error: unknown) {
@@ -2028,31 +2038,44 @@ export async function getCustomerMaster(
     loading_position: string | null;
     business_hours?: string | null;
     menu_summary?: string | null;
+    relationship_status?: string | null;
+    relationship_status_updated_at?: string | null;
+    relationship_status_note?: string | null;
   };
   let rows: CustomerMasterRow[];
 
+  // relationship_status(거래중/거래종료)는 가장 최근에 추가된 컬럼이라, 마이그레이션을 아직 실행하지
+  // 않은 환경에서는 select 자체가 실패합니다. 그 경우 한 단계씩 좁혀가며 재시도해서, 컬럼이 없어도
+  // 거래처 목록 조회 전체가 멈추지 않도록 합니다(이미 place_links/hours_menu에 쓰던 패턴과 동일).
   try {
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
     );
-  } catch (error) {
-    if (isMissingCustomerHoursMenuColumnError(error)) {
-      try {
-        rows = await supabaseRequest<Array<CustomerMasterRow>>(
-          `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-        );
-      } catch (innerError) {
-        if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
+  } catch (relationshipError) {
+    if (!isMissingCustomerRelationshipStatusColumnError(relationshipError)) throw relationshipError;
+    try {
+      rows = await supabaseRequest<Array<CustomerMasterRow>>(
+        `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      );
+    } catch (error) {
+      if (isMissingCustomerHoursMenuColumnError(error)) {
+        try {
+          rows = await supabaseRequest<Array<CustomerMasterRow>>(
+            `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+          );
+        } catch (innerError) {
+          if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
+          rows = await supabaseRequest<Array<CustomerMasterRow>>(
+            `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+          );
+        }
+      } else if (isMissingCustomerPlaceLinksColumnError(error)) {
         rows = await supabaseRequest<Array<CustomerMasterRow>>(
           `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
         );
+      } else {
+        throw error;
       }
-    } else if (isMissingCustomerPlaceLinksColumnError(error)) {
-      rows = await supabaseRequest<Array<CustomerMasterRow>>(
-        `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-      );
-    } else {
-      throw error;
     }
   }
 
@@ -3278,6 +3301,7 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         googleMapUrl: customer.googleMapUrl,
         openingDate: customer.openingDate,
         phone: customer.phone,
+        relationshipStatus: customer.relationshipStatus,
         representativeName: customer.representativeName,
         deliveryArea: customer.deliveryZone || customer.region || "미분류",
         deliveryDriver: customer.deliveryManager,
@@ -3835,12 +3859,36 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
         monthly_revenue: number | string | null;
         normalized_key: string | null;
         business_status: string | null;
+        relationship_status: string | null;
       }>
     >(
-      `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status&company_id=eq.${encodeURIComponent(
+      `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status,relationship_status&company_id=eq.${encodeURIComponent(
         id
       )}&limit=2000`
-    ).catch(() => []),
+    )
+      .catch((error) =>
+        // relationship_status 컬럼이 아직 없는 환경(마이그레이션 미실행)에서는 그 컬럼만 빼고 재시도해서,
+        // 이탈 위험 디지스트 전체가 조용히 빈 목록으로 죽어버리지 않게 합니다.
+        isMissingCustomerRelationshipStatusColumnError(error)
+          ? supabaseRequest<
+              Array<{
+                id: string;
+                customer_name: string;
+                region: string | null;
+                address: string | null;
+                monthly_revenue: number | string | null;
+                normalized_key: string | null;
+                business_status: string | null;
+              }>
+            >(
+              `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status&company_id=eq.${encodeURIComponent(
+                id
+              )}&limit=2000`
+            )
+              .then((rows) => rows.map((row) => ({ ...row, relationship_status: null })))
+              .catch(() => [])
+          : []
+      ),
     supabaseRequest<Array<{ customer_key: string | null; sales_date: string | null }>>(
       `sales_transactions?select=customer_key,sales_date&company_id=eq.${encodeURIComponent(id)}&sales_date=not.is.null&limit=10000`
     ).catch(() => [])
@@ -3857,6 +3905,7 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   const results: ChurnRiskCustomer[] = [];
   for (const customer of customers) {
     if (customer.business_status === "폐업") continue;
+    if (customer.relationship_status === RELATIONSHIP_STATUS_TERMINATED) continue;
     if (!customer.normalized_key) continue;
     const lastOrderDate = latestByKey.get(customer.normalized_key);
     if (!lastOrderDate) continue;
@@ -3918,6 +3967,46 @@ export async function bulkUpdateDeliveryManager(companyId: string, customerIds: 
   return { updated: customerIds.length };
 }
 
+export const RELATIONSHIP_STATUS_ACTIVE = "거래중";
+export const RELATIONSHIP_STATUS_TERMINATED = "거래종료";
+
+/**
+ * 사업자 휴폐업 상태(정부 API로 자동 조회하는 business_status)와는 별개로, "이 거래처와 더 이상
+ * 거래하지 않기로 했다"는 판단은 사람이 직접 내려야 합니다. 이 함수는 그 수동 판단을 저장합니다.
+ * 별도의 좁은 PATCH로 구현한 이유: 일반 upsertCustomerMaster()는 거래처의 다른 필드를 저장할 때도
+ * 매번 전체 페이로드를 보내는 upsert라서, 거기에 이 컬럼을 끼워 넣으면 마이그레이션을 아직 실행하지
+ * 않은 환경에서 거래처 저장 전체가 깨질 위험이 있습니다. 이 함수만 실패하면 이 기능만 못 쓸 뿐,
+ * 나머지 거래처 관리 기능에는 영향이 없습니다.
+ */
+export async function setCustomerRelationshipStatus(
+  companyId: string,
+  customerId: string,
+  status: typeof RELATIONSHIP_STATUS_ACTIVE | typeof RELATIONSHIP_STATUS_TERMINATED,
+  note?: string
+): Promise<{ updated: boolean }> {
+  if (!isProductionStoreConfigured()) return { updated: false };
+
+  try {
+    await supabaseRequest(`normalized_customers?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(customerId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        relationship_status: status,
+        relationship_status_updated_at: new Date().toISOString(),
+        relationship_status_note: note?.trim() || null
+      })
+    });
+    return { updated: true };
+  } catch (error) {
+    if (isMissingCustomerRelationshipStatusColumnError(error)) {
+      throw new Error(
+        "거래 상태를 저장할 수 없습니다. Supabase에 relationship_status 컬럼이 아직 없습니다. supabase/migrations의 최신 마이그레이션을 먼저 실행하세요."
+      );
+    }
+    throw error;
+  }
+}
+
 export async function refreshCustomerBusinessStatuses(companyId: string, customerIds?: string[]): Promise<BusinessStatusRefreshResult> {
   const emptyResult: BusinessStatusRefreshResult = {
     configured: isBusinessStatusApiConfigured(),
@@ -3930,8 +4019,8 @@ export async function refreshCustomerBusinessStatuses(companyId: string, custome
   if (!isProductionStoreConfigured()) return emptyResult;
 
   const idFilter = customerIds && customerIds.length ? `&id=in.(${customerIds.map(encodeURIComponent).join(",")})` : "";
-  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null }>>(
-    `normalized_customers?select=id,customer_name,business_registration_number&company_id=eq.${encodeURIComponent(
+  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null; business_status: string | null }>>(
+    `normalized_customers?select=id,customer_name,business_registration_number,business_status&company_id=eq.${encodeURIComponent(
       companyId
     )}${idFilter}&order=business_status_checked_at.asc.nullsfirst&limit=${BUSINESS_STATUS_REFRESH_LIMIT}`
   ).catch(() => []);
@@ -3951,7 +4040,10 @@ export async function refreshCustomerBusinessStatuses(companyId: string, custome
       const number = normalizeBusinessNumber(row.business_registration_number || "");
       const status: BusinessStatusResult | undefined = statusByNumber.get(number);
       const label = status?.label || "확인 필요";
-      if (label === "폐업") {
+      // 이미 폐업으로 저장돼 있던 거래처가 다시 조회 대상에 걸려 재확인되는 경우까지 알림에 포함하면
+      // 같은 폐업을 반복해서 알리게 됩니다. 그래서 "새로 폐업이 확인된" 경우, 즉 직전 상태가 폐업이
+      // 아니었던 경우만 closed[]에 담아서, 사용자에게는 진짜 새 소식만 전달되게 합니다.
+      if (label === "폐업" && row.business_status !== "폐업") {
         closed.push({ customerId: row.id, customerName: row.customer_name, closedDate: status?.closedDate || null });
       }
 
@@ -4013,6 +4105,77 @@ export async function refreshAllCompaniesBusinessStatuses(): Promise<BusinessSta
       closed: [...total.closed, ...result.closed.map((item) => ({ companyId, ...item }))]
     }),
     { ...emptyResult, configured: true }
+  );
+}
+
+export type BusinessClosureAlertResult = {
+  configured: boolean;
+  companiesNotified: number;
+  companiesFailed: Array<{ companyId: string; companyName: string; error: string }>;
+};
+
+/**
+ * refreshAllCompaniesBusinessStatuses()가 찾아낸 "새로 폐업 확인됨" 거래처를, 회사별로 묶어서
+ * 텔레그램으로 즉시 알립니다. 기존에는 closed[]가 cron 응답 JSON에만 담겨서 아무도 보지 못했는데,
+ * 그 결과를 실제로 소비하는 함수입니다. closed가 비어 있으면(새 폐업이 없으면) 아무 것도 보내지
+ * 않습니다. 텔레그램 chat_id를 설정하지 않은 회사는 조용히 건너뜁니다(이탈 위험 디지스트와 동일한
+ * opt-in 방식).
+ */
+export async function sendBusinessClosureAlerts(closed: BusinessStatusDailyRefreshResult["closed"]): Promise<BusinessClosureAlertResult> {
+  const empty: BusinessClosureAlertResult = { configured: isTelegramConfigured(), companiesNotified: 0, companiesFailed: [] };
+  if (!empty.configured || !closed.length || !isProductionStoreConfigured()) return empty;
+
+  const closedByCompany = new Map<string, BusinessStatusDailyRefreshResult["closed"]>();
+  for (const item of closed) {
+    const list = closedByCompany.get(item.companyId) || [];
+    list.push(item);
+    closedByCompany.set(item.companyId, list);
+  }
+
+  const companyIds = Array.from(closedByCompany.keys());
+  const companies = await supabaseRequest<Array<{ id: string; name: string; telegram_chat_id: string | null }>>(
+    `companies?select=id,name,telegram_chat_id&id=in.(${companyIds.map(encodeURIComponent).join(",")})`
+  ).catch(() => []);
+  const targets = companies.filter((company) => company.telegram_chat_id?.trim());
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
+
+  const results = await Promise.all(
+    targets.map(async (company) => {
+      const items = closedByCompany.get(company.id) || [];
+      if (!items.length) return { skipped: true as const };
+
+      try {
+        const timelineUrl = appUrl ? `${appUrl}/crm/timeline?companyId=${encodeURIComponent(company.id)}` : "";
+        const lines = items.map((item) => `- ${item.customerName}${item.closedDate ? ` (폐업일 ${item.closedDate})` : ""}`);
+        const text = [
+          `🚨 <b>${company.name} 신규 폐업 감지 ${items.length}곳</b>`,
+          "국세청 사업자 상태 조회에서 새로 폐업으로 확인되었습니다.",
+          "",
+          lines.join("\n"),
+          timelineUrl ? `\n거래처 원장: ${timelineUrl}` : ""
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const sendResult = await sendTelegramMessage(company.telegram_chat_id as string, text);
+        if (!sendResult.ok) throw new Error(sendResult.error || "발송 실패");
+        return { skipped: false as const };
+      } catch (error) {
+        return { skipped: false as const, error: error instanceof Error ? error.message : String(error), companyId: company.id, companyName: company.name };
+      }
+    })
+  );
+
+  return results.reduce<BusinessClosureAlertResult>(
+    (total, result) => {
+      if ("error" in result && result.error) {
+        return { ...total, companiesFailed: [...total.companiesFailed, { companyId: result.companyId as string, companyName: result.companyName as string, error: result.error }] };
+      }
+      if (result.skipped) return total;
+      return { ...total, companiesNotified: total.companiesNotified + 1 };
+    },
+    { ...empty }
   );
 }
 
@@ -4901,7 +5064,10 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     visit_count: typeof row.visit_count === "number" ? row.visit_count : 0,
     loading_position: asNullableString(row.loading_position),
     business_hours: asNullableString(row.business_hours),
-    menu_summary: asNullableString(row.menu_summary)
+    menu_summary: asNullableString(row.menu_summary),
+    relationship_status: asNullableString(row.relationship_status),
+    relationship_status_updated_at: asNullableString(row.relationship_status_updated_at),
+    relationship_status_note: asNullableString(row.relationship_status_note)
   };
 }
 
@@ -4936,6 +5102,9 @@ function toCustomerMasterItem(
     loading_position: string | null;
     business_hours?: string | null;
     menu_summary?: string | null;
+    relationship_status?: string | null;
+    relationship_status_updated_at?: string | null;
+    relationship_status_note?: string | null;
   },
   index: number
 ): CustomerMasterItem {
@@ -4971,6 +5140,9 @@ function toCustomerMasterItem(
     phone: row.phone || undefined,
     placeLinksCheckedAt: row.place_links_checked_at || undefined,
     region: row.region || "미분류",
+    relationshipStatus: row.relationship_status || "거래중",
+    relationshipStatusNote: row.relationship_status_note || undefined,
+    relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
     visitCount: Number(row.visit_count || 0)
   };

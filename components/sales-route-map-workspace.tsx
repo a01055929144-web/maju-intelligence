@@ -112,6 +112,7 @@ type StoreEdit = Partial<
     | "name"
     | "openingDate"
     | "phone"
+    | "relationshipStatus"
     | "representativeName"
     | "status"
   >
@@ -306,7 +307,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             .toLowerCase()
             .includes(keyword);
         const matchesVehicle = vehicleFilterId === "all" || store.deliveryVehicleId === vehicleFilterId;
-        const matchesStatus = !excludeClosedStores || store.businessStatus !== "closed";
+        // "이탈 제외" 토글은 사업자 상태가 폐업인 곳뿐 아니라, 수동으로 "거래 종료"로 표시한
+        // 거래처도 함께 빼줍니다. 둘 다 더 이상 영업 대상이 아니라는 점은 같습니다.
+        const matchesStatus = !excludeClosedStores || (store.businessStatus !== "closed" && store.relationshipStatus !== "거래종료");
         return matchesQuery && matchesVehicle && matchesStatus;
       }),
     [allStores, excludeClosedStores, query, vehicleFilterId]
@@ -492,6 +495,23 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     const payload = await response.json().catch(() => null);
     if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
     return { persisted: payload?.persisted !== false };
+  }
+
+  // 사업자 휴폐업 상태(자동 조회)와 별개로, "이 거래처와 더 이상 거래하지 않기로 했다"는 판단은
+  // 사람이 직접 내려서 저장합니다. /api/customers의 일반 upsert가 아니라 전용 엔드포인트를 쓰는 이유는
+  // lib/store.ts의 setCustomerRelationshipStatus() 주석 참고 — 이 컬럼이 없는 환경에서도 나머지 거래처
+  // 저장 기능이 함께 깨지지 않도록 하기 위해서입니다.
+  async function updateRelationshipStatus(storeId: string, status: string, note?: string) {
+    const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+    const response = await fetch("/api/customers/relationship-status", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: companyId || undefined, customerId: storeId, status, note })
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.message || "거래 상태 저장에 실패했습니다.");
+    setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], relationshipStatus: status } }));
+    return { persisted: payload?.updated !== false };
   }
 
   async function updateVehicle(vehicleId: string, edit: VehicleEdit): Promise<{ ok: boolean; message?: string }> {
@@ -981,6 +1001,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               }
             }))
           }
+          onUpdateRelationshipStatus={updateRelationshipStatus}
           onUpdateStore={updateStore}
           onWriteHistory={(storeId, memo) =>
             setStoreHistories((current) => ({
@@ -2206,14 +2227,16 @@ function CustomerDirectoryView({
   const totals = getStoreTotals(stores);
   const gradeCounts = countGrades(stores);
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
+  const terminatedCount = stores.filter((store) => store.relationshipStatus === "거래종료").length;
 
   return (
     <section className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:min-h-0">
-      <div className="grid shrink-0 gap-3 lg:grid-cols-4">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-5">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
         <DirectoryStat label="예상매출" value={`${totals.expectedRevenue.toLocaleString()}만원`} />
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
+        <DirectoryStat label="거래 종료" value={`${terminatedCount}곳`} tone={terminatedCount ? "rose" : "slate"} />
       </div>
 
       <div className="maju-section-card mt-4 min-h-[480px] flex-1 xl:min-h-0">
@@ -2264,6 +2287,9 @@ function CustomerDirectoryView({
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
                       <td className="px-4 py-3">
                         <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                        {store.relationshipStatus === "거래종료" ? (
+                          <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -3211,6 +3237,7 @@ function StoreDetail({
   onDeleteHistory,
   onSaveAttachment,
   onSaveLoadingMedia,
+  onUpdateRelationshipStatus,
   onUpdateStore,
   onWriteHistory,
   store
@@ -3225,6 +3252,7 @@ function StoreDetail({
   readonly onDeleteHistory: (storeId: string, historyId: string) => void;
   readonly onSaveAttachment: (slot: "bankbookCopy" | "businessCertificate", file: AttachmentFile) => void;
   readonly onSaveLoadingMedia: (files: AttachmentFile[]) => void;
+  readonly onUpdateRelationshipStatus: (storeId: string, status: string, note?: string) => Promise<{ persisted: boolean } | void>;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => Promise<{ persisted: boolean } | void>;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly store: StoreRow;
@@ -3246,11 +3274,14 @@ function StoreDetail({
   const [draftName, setDraftName] = useState(store.name);
   const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
   const [draftPhone, setDraftPhone] = useState(store.phone);
+  const [draftRelationshipStatus, setDraftRelationshipStatus] = useState(store.relationshipStatus || "거래중");
   const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
   const [historyMemo, setHistoryMemo] = useState("");
   const [ocrSuggestion, setOcrSuggestion] = useState<BusinessOcrSuggestion | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingRelationshipStatus, setIsSavingRelationshipStatus] = useState(false);
+  const [relationshipStatusError, setRelationshipStatusError] = useState("");
   const [savedAt, setSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
   const activeOcrSuggestion = ocrSuggestion || (attachments.businessCertificate ? createBusinessOcrSuggestion(store, attachments.businessCertificate.name) : null);
@@ -3295,6 +3326,22 @@ function StoreDetail({
     }
   };
 
+  const toggleRelationshipStatus = async () => {
+    const nextStatus = draftRelationshipStatus === "거래종료" ? "거래중" : "거래종료";
+    if (nextStatus === "거래종료" && !window.confirm(`${draftName}을(를) 거래 종료로 표시할까요? 이후 대시보드·이탈 위험 알림·경로 계획에서 제외됩니다.`)) return;
+
+    setIsSavingRelationshipStatus(true);
+    setRelationshipStatusError("");
+    try {
+      await onUpdateRelationshipStatus(store.id, nextStatus);
+      setDraftRelationshipStatus(nextStatus);
+    } catch (error) {
+      setRelationshipStatusError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSavingRelationshipStatus(false);
+    }
+  };
+
   return (
     <>
       <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
@@ -3310,14 +3357,30 @@ function StoreDetail({
                 <span className={businessNumberValid ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700" : "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700"}>
                   {businessNumberValid ? "사업자번호 유효" : "사업자번호 확인"}
                 </span>
+                {draftRelationshipStatus === "거래종료" ? (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
+                ) : null}
               </div>
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
+              {relationshipStatusError ? <p className="mt-2 text-xs font-black text-rose-600">{relationshipStatusError}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                className={
+                  draftRelationshipStatus === "거래종료"
+                    ? "maju-button-secondary inline-flex h-9 items-center gap-2 px-3 text-sm"
+                    : "inline-flex h-9 items-center gap-2 rounded-md border border-rose-200 bg-white px-3 text-sm font-black text-rose-700 transition hover:bg-rose-50"
+                }
+                disabled={isSavingRelationshipStatus}
+                onClick={toggleRelationshipStatus}
+                type="button"
+              >
+                {isSavingRelationshipStatus ? "저장 중..." : draftRelationshipStatus === "거래종료" ? "거래 재개로 표시" : "거래 종료로 표시"}
+              </button>
               <Link
                 className="maju-button-secondary inline-flex h-9 items-center gap-2 px-3 text-sm"
                 href={`/crm/timeline?customerId=${encodeURIComponent(store.id)}`}
