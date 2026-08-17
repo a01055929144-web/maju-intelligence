@@ -21,7 +21,6 @@ import {
   History,
   Info,
   LucideIcon,
-  MapPin,
   Save,
   Search,
   Route,
@@ -88,16 +87,6 @@ type RegistrationStatus = {
   nextAction: string;
   status: "idle" | "ready" | "running" | "success" | "warning" | "error";
   title: string;
-};
-type AddressSearchResult = {
-  address: string;
-  buildingName: string;
-  jibunAddress: string;
-  latitude: number;
-  longitude: number;
-  postalCode: string;
-  region: string;
-  roadAddress: string;
 };
 type BusinessSearchResult = {
   address: string;
@@ -958,10 +947,6 @@ function Onboarding({
     if (reviewTab === "save") setReviewTab("mapping");
     scrollToPanel("entry-panel");
   }
-  const [addressQuery, setAddressQuery] = useState("");
-  const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
-  const [addressSearchMessage, setAddressSearchMessage] = useState("");
-  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
   const [businessNameResults, setBusinessNameResults] = useState<BusinessSearchResult[]>([]);
   const [businessNameSearchMessage, setBusinessNameSearchMessage] = useState("");
   const [isSearchingBusinessName, setIsSearchingBusinessName] = useState(false);
@@ -969,9 +954,6 @@ function Onboarding({
   // 카카오 주소·매장 검색으로 채운 필드는 사업자등록증 원본 값이 아니라 카카오 지도 기준 정보입니다.
   // 사업자등록증 값과 섞여 보이지 않도록 어떤 필드가 카카오에서 왔는지 별도로 추적합니다.
   const [kakaoSourcedFields, setKakaoSourcedFields] = useState<Set<string>>(new Set());
-  // 거래처명 검색이 이미 주소를 채워주므로, 주소만 따로 찾는 검색창은 기본적으로 접어두고
-  // 매장 검색으로 못 찾은 경우에만 펼쳐서 쓰도록 합니다.
-  const [showAddressSearchPanel, setShowAddressSearchPanel] = useState(false);
   const [documentOcrFilename, setDocumentOcrFilename] = useState("");
   const [documentOcrMeta, setDocumentOcrMeta] = useState<OcrMeta | null>(null);
   const [documentOcrStatus, setDocumentOcrStatus] = useState("");
@@ -1264,41 +1246,6 @@ function Onboarding({
     }
   }, [complete, hasBlockingQualityIssues, hasDataRows, pipelineMeta.persisted, uploadType]);
 
-  async function searchAddress() {
-    const query = addressQuery.trim();
-    if (query.length < 2) {
-      setAddressSearchMessage("주소 검색어를 2글자 이상 입력하세요.");
-      return;
-    }
-
-    setIsSearchingAddress(true);
-    setAddressSearchMessage("");
-    const response = await fetch(`/api/address-search?query=${encodeURIComponent(query)}`, { cache: "no-store" }).catch(() => null);
-    const payload = response?.ok ? await response.json().catch(() => null) : null;
-    const results = Array.isArray(payload?.results) ? payload.results : [];
-
-    setAddressResults(results);
-    setAddressSearchMessage(results.length ? `${results.length}개 주소를 찾았습니다.` : payload?.message || "검색 결과가 없습니다.");
-    setIsSearchingAddress(false);
-  }
-
-  function selectAddress(result: AddressSearchResult) {
-    onManualChange({
-      ...manualDraft,
-      address: result.address,
-      region: result.region || extractRegion(result.address)
-    });
-    setAddressQuery(result.address);
-    setAddressResults([]);
-    setAddressSearchMessage("선택한 주소를 배송주소에 반영했습니다.");
-    setKakaoSourcedFields((previous) => {
-      const next = new Set(previous);
-      next.add("address");
-      next.add("region");
-      return next;
-    });
-  }
-
   const businessNameQuery = String(manualDraft.customerName || "").trim();
 
   useEffect(() => {
@@ -1338,7 +1285,6 @@ function Onboarding({
       industry: result.industry || manualDraft.industry,
       kakaoPlaceUrl: result.kakaoPlaceUrl || manualDraft.kakaoPlaceUrl
     });
-    setAddressQuery(resolvedAddress || addressQuery);
     setBusinessNameResults([]);
     setShowBusinessNameResults(false);
     setBusinessNameSearchMessage("선택한 매장 정보를 반영했습니다.");
@@ -1703,79 +1649,6 @@ function Onboarding({
                   />
                 ) : null}
 
-                {isMaster ? (
-                    <div className="maju-panel mt-4 bg-white p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-                        <MapPin className="h-4 w-4 text-blue-700" />
-                        배송주소
-                      </div>
-                      {!showAddressSearchPanel ? (
-                        <button className="text-xs font-bold text-blue-700 hover:underline" onClick={() => setShowAddressSearchPanel(true)} type="button">
-                          주소만 직접 검색
-                        </button>
-                      ) : null}
-                    </div>
-                    {!showAddressSearchPanel ? (
-                      String(manualDraft.address ?? "").trim() ? (
-                        <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
-                          선택 주소: {String(manualDraft.address)}
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-xs font-bold text-slate-500">거래처명 검색으로 선택하면 자동으로 채워집니다. 매장이 검색되지 않으면 위 버튼으로 주소만 검색하세요.</p>
-                      )
-                    ) : (
-                      <>
-                        <div className="mt-3 flex flex-col gap-2 lg:flex-row">
-                          <div className="relative flex-1">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <input
-                              className="maju-search-field h-11 w-full pl-9 pr-3"
-                              onChange={(event) => setAddressQuery(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  searchAddress();
-                                }
-                              }}
-                              placeholder="예: 서울 성동구 성수이로 88"
-                              value={addressQuery}
-                            />
-                          </div>
-                          <Button className="h-11 shrink-0" disabled={isSearchingAddress} onClick={searchAddress} type="button" variant="outline">
-                            <Search size={16} />
-                            {isSearchingAddress ? "검색 중" : "검색"}
-                          </Button>
-                        </div>
-                        {String(manualDraft.address ?? "").trim() ? (
-                          <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
-                            선택 주소: {String(manualDraft.address)}
-                          </div>
-                        ) : null}
-                        {addressSearchMessage ? <p className="mt-2 text-xs font-bold text-slate-500">{addressSearchMessage}</p> : null}
-                        {addressResults.length ? (
-                          <div className="mt-3 max-h-64 space-y-2 overflow-auto">
-                            {addressResults.map((result) => (
-                              <button
-                                className="maju-filter-box w-full p-3 text-left hover:border-blue-200 hover:bg-blue-50"
-                                key={`${result.address}-${result.longitude}-${result.latitude}`}
-                                onClick={() => selectAddress(result)}
-                                type="button"
-                              >
-                                <span className="block text-sm font-black text-slate-950">{result.address}</span>
-                                {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
-                                <span className="mt-1 block text-xs font-bold text-blue-700">
-                                  {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                ) : null}
-
                 <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                   {manualCoreFields.map((field) => {
                     const isInvalidBusinessNumber = field.key === "businessRegistrationNumber" && isMaster && Boolean(manualBusinessNumber) && !manualBusinessNumberValid;
@@ -1822,7 +1695,7 @@ function Onboarding({
                             {manualBusinessNumber ? (manualBusinessNumberValid ? `${formatBusinessRegistrationNumber(manualBusinessNumber)} 검증 완료` : "유효하지 않은 번호입니다. 10자리와 체크값을 확인하세요.") : "사업자등록번호 10자리를 입력하세요."}
                           </span>
                         ) : null}
-                        {isAddressField ? <span className="block text-xs font-bold text-blue-700">검색 결과 선택 시 지역이 자동 반영됩니다.</span> : null}
+                        {isAddressField ? <span className="block text-xs font-bold text-blue-700">위 거래처명 검색으로 선택하면 자동 반영됩니다. 매장이 검색되지 않으면 직접 입력하세요.</span> : null}
                         {isBusinessNameField ? <span className="block text-xs font-bold text-blue-700">실제 매장을 검색해 선택하면 카카오 지도 기준 주소·전화·업종이 자동 반영됩니다. 사업자등록증 원본과는 다를 수 있어요.</span> : null}
                         {isKakaoSourced ? (
                           <span className="flex items-center gap-1 text-[11px] font-bold text-amber-700">
