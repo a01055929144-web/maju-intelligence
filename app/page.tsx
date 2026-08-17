@@ -969,6 +969,9 @@ function Onboarding({
   // 카카오 주소·매장 검색으로 채운 필드는 사업자등록증 원본 값이 아니라 카카오 지도 기준 정보입니다.
   // 사업자등록증 값과 섞여 보이지 않도록 어떤 필드가 카카오에서 왔는지 별도로 추적합니다.
   const [kakaoSourcedFields, setKakaoSourcedFields] = useState<Set<string>>(new Set());
+  // 거래처명 검색이 이미 주소를 채워주므로, 주소만 따로 찾는 검색창은 기본적으로 접어두고
+  // 매장 검색으로 못 찾은 경우에만 펼쳐서 쓰도록 합니다.
+  const [showAddressSearchPanel, setShowAddressSearchPanel] = useState(false);
   const [documentOcrFilename, setDocumentOcrFilename] = useState("");
   const [documentOcrMeta, setDocumentOcrMeta] = useState<OcrMeta | null>(null);
   const [documentOcrStatus, setDocumentOcrStatus] = useState("");
@@ -1702,55 +1705,74 @@ function Onboarding({
 
                 {isMaster ? (
                     <div className="maju-panel mt-4 bg-white p-3">
-                    <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-                      <MapPin className="h-4 w-4 text-blue-700" />
-                      배송주소 API 검색
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
+                        <MapPin className="h-4 w-4 text-blue-700" />
+                        배송주소
+                      </div>
+                      {!showAddressSearchPanel ? (
+                        <button className="text-xs font-bold text-blue-700 hover:underline" onClick={() => setShowAddressSearchPanel(true)} type="button">
+                          주소만 직접 검색
+                        </button>
+                      ) : null}
                     </div>
-                    <div className="mt-3 flex flex-col gap-2 lg:flex-row">
-                      <div className="relative flex-1">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                          className="maju-search-field h-11 w-full pl-9 pr-3"
-                          onChange={(event) => setAddressQuery(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              searchAddress();
-                            }
-                          }}
-                          placeholder="예: 서울 성동구 성수이로 88"
-                          value={addressQuery}
-                        />
-                      </div>
-                      <Button className="h-11 shrink-0" disabled={isSearchingAddress} onClick={searchAddress} type="button" variant="outline">
-                        <Search size={16} />
-                        {isSearchingAddress ? "검색 중" : "검색"}
-                      </Button>
-                    </div>
-                    {String(manualDraft.address ?? "").trim() ? (
-                      <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
-                        선택 주소: {String(manualDraft.address)}
-                      </div>
-                    ) : null}
-                    {addressSearchMessage ? <p className="mt-2 text-xs font-bold text-slate-500">{addressSearchMessage}</p> : null}
-                    {addressResults.length ? (
-                      <div className="mt-3 max-h-64 space-y-2 overflow-auto">
-                        {addressResults.map((result) => (
-                          <button
-                            className="maju-filter-box w-full p-3 text-left hover:border-blue-200 hover:bg-blue-50"
-                            key={`${result.address}-${result.longitude}-${result.latitude}`}
-                            onClick={() => selectAddress(result)}
-                            type="button"
-                          >
-                            <span className="block text-sm font-black text-slate-950">{result.address}</span>
-                            {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
-                            <span className="mt-1 block text-xs font-bold text-blue-700">
-                              {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                    {!showAddressSearchPanel ? (
+                      String(manualDraft.address ?? "").trim() ? (
+                        <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
+                          선택 주소: {String(manualDraft.address)}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs font-bold text-slate-500">거래처명 검색으로 선택하면 자동으로 채워집니다. 매장이 검색되지 않으면 위 버튼으로 주소만 검색하세요.</p>
+                      )
+                    ) : (
+                      <>
+                        <div className="mt-3 flex flex-col gap-2 lg:flex-row">
+                          <div className="relative flex-1">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                              className="maju-search-field h-11 w-full pl-9 pr-3"
+                              onChange={(event) => setAddressQuery(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  searchAddress();
+                                }
+                              }}
+                              placeholder="예: 서울 성동구 성수이로 88"
+                              value={addressQuery}
+                            />
+                          </div>
+                          <Button className="h-11 shrink-0" disabled={isSearchingAddress} onClick={searchAddress} type="button" variant="outline">
+                            <Search size={16} />
+                            {isSearchingAddress ? "검색 중" : "검색"}
+                          </Button>
+                        </div>
+                        {String(manualDraft.address ?? "").trim() ? (
+                          <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
+                            선택 주소: {String(manualDraft.address)}
+                          </div>
+                        ) : null}
+                        {addressSearchMessage ? <p className="mt-2 text-xs font-bold text-slate-500">{addressSearchMessage}</p> : null}
+                        {addressResults.length ? (
+                          <div className="mt-3 max-h-64 space-y-2 overflow-auto">
+                            {addressResults.map((result) => (
+                              <button
+                                className="maju-filter-box w-full p-3 text-left hover:border-blue-200 hover:bg-blue-50"
+                                key={`${result.address}-${result.longitude}-${result.latitude}`}
+                                onClick={() => selectAddress(result)}
+                                type="button"
+                              >
+                                <span className="block text-sm font-black text-slate-950">{result.address}</span>
+                                {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
+                                <span className="mt-1 block text-xs font-bold text-blue-700">
+                                  {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 ) : null}
 
