@@ -407,7 +407,7 @@ export type PersonalKakaoWorkspaceResult = {
   email: string;
   name: string;
   persisted: boolean;
-  workspaceRole: "owner";
+  workspaceRole: StaffInvitation["role"] | "owner";
 };
 export type DatabaseCheck = {
   name: string;
@@ -1479,13 +1479,16 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
+    // 이미 초대를 수락해 회사에 소속된 직원이 재로그인하는 경우입니다.
+    // 초대 코드 없이 다시 로그인해도 실제 직책(배송기사/영업직원 등)을 유지해야
+    // PC 대시보드에서도 올바른 역할로 표시되고, 향후 역할별 권한 제한을 켜도 안전합니다.
     return {
       companyId: existing.company_id,
       companyName: existing.companies?.name || `${displayName} 워크스페이스`,
       email: user.email || loginEmail,
       name: user.name || displayName,
       persisted: true,
-      workspaceRole: "owner"
+      workspaceRole: existing.role || "owner"
     };
   }
 

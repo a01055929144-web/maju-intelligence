@@ -54,6 +54,12 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </div>
             <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">업무 구분 · {roleLabel}</Badge>
           </div>
+          <Link
+            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-teal-700 underline decoration-teal-200 underline-offset-2"
+            href="/dashboard"
+          >
+            PC 버전(전체 화면)으로 보기
+          </Link>
         </header>
 
         <div className="flex-1 space-y-4 px-5 py-5">

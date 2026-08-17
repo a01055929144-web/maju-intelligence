@@ -10,7 +10,8 @@ import {
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
-  Settings
+  Settings,
+  Smartphone
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -226,6 +227,12 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   <MessageSquareText className="h-4 w-4" />
                   AI 도우미
                 </Link>
+                {mode === "customer" ? (
+                  <Link className="maju-button-secondary h-9 shrink-0 px-3 text-sm" href="/mobile/today">
+                    <Smartphone className="h-4 w-4" />
+                    모바일로 보기
+                  </Link>
+                ) : null}
                 {rightAction}
                 {mode === "customer" ? <CustomerAccountActions /> : null}
               </div>
