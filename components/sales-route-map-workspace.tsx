@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
@@ -34,6 +35,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
+import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
@@ -207,6 +209,7 @@ const localStoreKeys = {
 };
 
 export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
   // 같이 보여주고 그 자리에서 바로 등록으로 넘어갈 수 있도록, 카카오 매장 검색 결과를 함께 붙입니다.
@@ -214,6 +217,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [isSearchingExternal, setIsSearchingExternal] = useState(false);
   const [externalSearchMessage, setExternalSearchMessage] = useState("");
   const [showExternalResults, setShowExternalResults] = useState(false);
+  // 검색에서 찾은 미등록 매장을 지도 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있도록 하는
+  // 빠른 등록 패널의 대상입니다. null이면 닫힌 상태입니다.
+  const [quickRegisterTarget, setQuickRegisterTarget] = useState<ExternalBusinessResult | null>(null);
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, 좌우 목록 패널은 기본적으로 접어두고
   // 얇은 토글 스트립만 남깁니다. 필요할 때 한 번 눌러서 펼치는 방식입니다.
@@ -367,18 +373,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     if (companyId) params.set("companyId", companyId);
     return `/?${params.toString()}`;
   }, []);
-  // 지도 검색에서 찾은 미등록 매장을 눌렀을 때, 데이터 등록 화면의 수기 등록 폼을 이 매장
-  // 정보로 미리 채운 채로 바로 열어줍니다(사업자등록증 등 첨부 업로드까지 그 화면에서 이어짐).
-  function buildQuickRegisterHref(result: ExternalBusinessResult) {
-    const params = new URLSearchParams(dataRegistrationHref.split("?")[1] || "");
-    params.set("prefill_name", result.name);
-    const address = result.roadAddress || result.address;
-    if (address) params.set("prefill_address", address);
-    if (result.phone) params.set("prefill_phone", result.phone);
-    if (result.industry) params.set("prefill_industry", result.industry);
-    if (result.kakaoPlaceUrl) params.set("prefill_kakao_place_url", result.kakaoPlaceUrl);
-    return `/?${params.toString()}`;
-  }
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -725,13 +719,17 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                         <p className="truncate text-sm font-black text-slate-950">{result.name}</p>
                         <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{result.roadAddress || result.address || "주소 정보 없음"}</p>
                       </div>
-                      <Link
+                      <button
                         className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
-                        href={buildQuickRegisterHref(result)}
+                        onClick={() => {
+                          setQuickRegisterTarget(result);
+                          setShowExternalResults(false);
+                        }}
                         onMouseDown={(event) => event.preventDefault()}
+                        type="button"
                       >
                         거래처로 등록
-                      </Link>
+                      </button>
                     </div>
                   ))
                 ) : (
@@ -972,10 +970,160 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           store={selectedStore}
         />
       ) : null}
+      {quickRegisterTarget ? (
+        <QuickRegisterDrawer
+          onClose={() => setQuickRegisterTarget(null)}
+          onRegistered={() => router.refresh()}
+          result={quickRegisterTarget}
+        />
+      ) : null}
     </div>
   );
 }
 
+// 지도 검색에서 찾은 미등록 매장을 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있게 하는 패널입니다.
+// 상호명만 있으면 저장할 수 있고(사업자등록번호는 나중에 서류로 보완), 저장에 성공하면 같은 패널 안에서
+// 바로 사업자등록증·신분증·적재위치 파일을 업로드할 수 있도록 이어집니다.
+function QuickRegisterDrawer({
+  onClose,
+  onRegistered,
+  result
+}: {
+  onClose: () => void;
+  onRegistered: () => void;
+  result: ExternalBusinessResult;
+}) {
+  const [customerName, setCustomerName] = useState(result.name);
+  const [address, setAddress] = useState(result.roadAddress || result.address);
+  const [phone, setPhone] = useState(result.phone);
+  const [industry, setIndustry] = useState(result.industry);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string } | null>(null);
+
+  async function saveCustomer() {
+    if (!customerName.trim() || isSaving) return;
+
+    setIsSaving(true);
+    setSaveError("");
+
+    try {
+      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+      const response = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address,
+          businessStatus: "확인 예정",
+          companyId: companyId || undefined,
+          customerName,
+          industry: industry || "미분류",
+          kakaoPlaceUrl: result.kakaoPlaceUrl,
+          phone,
+          validateBusinessNumber: false
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
+
+      const customerId = String(payload?.customer?.id || "");
+      if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리에서 확인해주세요.");
+
+      setCreatedCustomer({ id: customerId, name: customerName });
+      onRegistered();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <button aria-label="빠른 등록 닫기" className="fixed inset-0 z-40 bg-slate-950/20" onClick={onClose} type="button" />
+      <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <header className="maju-card-header border-b px-4 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-teal-700">지도 검색 · 빠른 등록</p>
+              <h3 className="mt-1 truncate text-xl font-black text-slate-950">{createdCustomer ? `${createdCustomer.name} 등록 완료` : "거래처로 등록"}</h3>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                {createdCustomer ? "서류를 업로드하면 바로 사용할 수 있습니다." : "이름과 주소만 있으면 바로 저장할 수 있습니다."}
+              </p>
+            </div>
+            <button
+              aria-label="닫기"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
+          {createdCustomer ? (
+            <div className="space-y-4">
+              <CustomerAttachmentUploadPanel customerId={createdCustomer.id} customerName={createdCustomer.name} />
+              <button className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm" onClick={onClose} type="button">
+                <Check className="h-4 w-4" />
+                완료
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">상호명 (필수)</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  value={customerName}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">주소</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setAddress(event.target.value)}
+                  value={address}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">연락처</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setPhone(formatPhoneNumberInput(event.target.value))}
+                  value={phone}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">업종</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setIndustry(event.target.value)}
+                  value={industry}
+                />
+              </label>
+              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-800">
+                사업자등록번호는 지금 없어도 됩니다. 저장 후 사업자등록증을 업로드해 보완할 수 있습니다.
+              </p>
+              {saveError ? <p className="text-xs font-bold text-rose-600">{saveError}</p> : null}
+              <button
+                className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm disabled:opacity-60"
+                disabled={!customerName.trim() || isSaving}
+                onClick={saveCustomer}
+                type="button"
+              >
+                {isSaving ? "저장 중" : "거래처로 등록"}
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
 
 function DeliveryAssignmentPanel({
   collapsed,
