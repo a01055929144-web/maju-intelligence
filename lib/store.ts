@@ -2044,38 +2044,30 @@ export async function getCustomerMaster(
   };
   let rows: CustomerMasterRow[];
 
-  // relationship_status(거래중/거래종료)는 가장 최근에 추가된 컬럼이라, 마이그레이션을 아직 실행하지
-  // 않은 환경에서는 select 자체가 실패합니다. 그 경우 한 단계씩 좁혀가며 재시도해서, 컬럼이 없어도
-  // 거래처 목록 조회 전체가 멈추지 않도록 합니다(이미 place_links/hours_menu에 쓰던 패턴과 동일).
+  // relationship_status(거래중/거래종료) 컬럼은 아직 프로덕션 DB에 마이그레이션이 적용되지 않아,
+  // 잠시 select 대상에서 제외합니다(원인 조사 중). 마이그레이션 적용 확인 후 다시 추가할 예정입니다.
   try {
     rows = await supabaseRequest<Array<CustomerMasterRow>>(
-      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
     );
-  } catch (relationshipError) {
-    if (!isMissingCustomerRelationshipStatusColumnError(relationshipError)) throw relationshipError;
-    try {
-      rows = await supabaseRequest<Array<CustomerMasterRow>>(
-        `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-      );
-    } catch (error) {
-      if (isMissingCustomerHoursMenuColumnError(error)) {
-        try {
-          rows = await supabaseRequest<Array<CustomerMasterRow>>(
-            `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-          );
-        } catch (innerError) {
-          if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
-          rows = await supabaseRequest<Array<CustomerMasterRow>>(
-            `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
-          );
-        }
-      } else if (isMissingCustomerPlaceLinksColumnError(error)) {
+  } catch (error) {
+    if (isMissingCustomerHoursMenuColumnError(error)) {
+      try {
+        rows = await supabaseRequest<Array<CustomerMasterRow>>(
+          `normalized_customers?select=${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        );
+      } catch (innerError) {
+        if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
         rows = await supabaseRequest<Array<CustomerMasterRow>>(
           `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
         );
-      } else {
-        throw error;
       }
+    } else if (isMissingCustomerPlaceLinksColumnError(error)) {
+      rows = await supabaseRequest<Array<CustomerMasterRow>>(
+        `normalized_customers?select=${CUSTOMER_MASTER_SELECT}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      );
+    } else {
+      throw error;
     }
   }
 
@@ -3849,6 +3841,8 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   const id = companyId || getDefaultCompanyId();
   if (!isProductionStoreConfigured()) return [];
 
+  // relationship_status 컬럼은 아직 프로덕션 DB에 마이그레이션이 적용되지 않아, 잠시 select 대상에서
+  // 제외합니다(원인 조사 중). 마이그레이션 적용 확인 후 다시 추가할 예정입니다.
   const [customers, transactions] = await Promise.all([
     supabaseRequest<
       Array<{
@@ -3859,36 +3853,12 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
         monthly_revenue: number | string | null;
         normalized_key: string | null;
         business_status: string | null;
-        relationship_status: string | null;
       }>
     >(
-      `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status,relationship_status&company_id=eq.${encodeURIComponent(
+      `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status&company_id=eq.${encodeURIComponent(
         id
       )}&limit=2000`
-    )
-      .catch((error) =>
-        // relationship_status 컬럼이 아직 없는 환경(마이그레이션 미실행)에서는 그 컬럼만 빼고 재시도해서,
-        // 이탈 위험 디지스트 전체가 조용히 빈 목록으로 죽어버리지 않게 합니다.
-        isMissingCustomerRelationshipStatusColumnError(error)
-          ? supabaseRequest<
-              Array<{
-                id: string;
-                customer_name: string;
-                region: string | null;
-                address: string | null;
-                monthly_revenue: number | string | null;
-                normalized_key: string | null;
-                business_status: string | null;
-              }>
-            >(
-              `normalized_customers?select=id,customer_name,region,address,monthly_revenue,normalized_key,business_status&company_id=eq.${encodeURIComponent(
-                id
-              )}&limit=2000`
-            )
-              .then((rows) => rows.map((row) => ({ ...row, relationship_status: null })))
-              .catch(() => [])
-          : []
-      ),
+    ).catch(() => []),
     supabaseRequest<Array<{ customer_key: string | null; sales_date: string | null }>>(
       `sales_transactions?select=customer_key,sales_date&company_id=eq.${encodeURIComponent(id)}&sales_date=not.is.null&limit=10000`
     ).catch(() => [])
@@ -3905,7 +3875,6 @@ export async function getChurnRiskCustomers(companyId?: string, thresholdDays = 
   const results: ChurnRiskCustomer[] = [];
   for (const customer of customers) {
     if (customer.business_status === "폐업") continue;
-    if (customer.relationship_status === RELATIONSHIP_STATUS_TERMINATED) continue;
     if (!customer.normalized_key) continue;
     const lastOrderDate = latestByKey.get(customer.normalized_key);
     if (!lastOrderDate) continue;
