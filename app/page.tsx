@@ -931,6 +931,31 @@ function Onboarding({
   const [entryMode, setEntryMode] = useState<EntryMode>("excel");
   const [reviewTab, setReviewTab] = useState<"mapping" | "quality" | "save">("mapping");
   const sidebarSection: DataRegistrationSection = reviewTab === "save" ? "history" : uploadType === "customer-master" ? "customer" : "sales";
+
+  // 지도 홈 검색에서 "거래처로 등록"을 누르면 이 화면으로 prefill_* 쿼리 파라미터와 함께
+  // 넘어옵니다. 엑셀 업로드 화면 대신 바로 수기 등록 폼을 열고 카카오 검색 결과로 필드를
+  // 채워서, 여기 이미 있는 사업자등록증/신분증/적재위치 첨부 업로드로 곧장 이어지게 합니다.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const prefillName = params.get("prefill_name");
+    if (!prefillName) return;
+
+    const prefillAddress = params.get("prefill_address") || "";
+    setEntryMode("manual");
+    onUploadType("customer-master");
+    onManualChange({
+      ...manualDraft,
+      customerName: prefillName,
+      address: prefillAddress || manualDraft.address,
+      region: prefillAddress ? extractRegion(prefillAddress) : manualDraft.region,
+      phone: params.get("prefill_phone") || manualDraft.phone,
+      industry: params.get("prefill_industry") || manualDraft.industry,
+      kakaoPlaceUrl: params.get("prefill_kakao_place_url") || manualDraft.kakaoPlaceUrl
+    });
+    // 최초 진입 시 한 번만 URL을 읽어 채우면 되므로 의도적으로 빈 deps를 씁니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   function scrollToPanel(id: string) {
     if (typeof document === "undefined") return;
     window.requestAnimationFrame(() => {

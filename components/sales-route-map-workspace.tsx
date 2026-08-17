@@ -44,6 +44,14 @@ type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course";
+type ExternalBusinessResult = {
+  address: string;
+  industry: string;
+  kakaoPlaceUrl: string;
+  name: string;
+  phone: string;
+  roadAddress: string;
+};
 
 type StoreRow = RoutePlanStop & {
   accountCopyStatus: "missing" | "received";
@@ -200,6 +208,12 @@ const localStoreKeys = {
 
 export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const [query, setQuery] = useState("");
+  // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
+  // 같이 보여주고 그 자리에서 바로 등록으로 넘어갈 수 있도록, 카카오 매장 검색 결과를 함께 붙입니다.
+  const [externalResults, setExternalResults] = useState<ExternalBusinessResult[]>([]);
+  const [isSearchingExternal, setIsSearchingExternal] = useState(false);
+  const [externalSearchMessage, setExternalSearchMessage] = useState("");
+  const [showExternalResults, setShowExternalResults] = useState(false);
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, 좌우 목록 패널은 기본적으로 접어두고
   // 얇은 토글 스트립만 남깁니다. 필요할 때 한 번 눌러서 펼치는 방식입니다.
@@ -238,6 +252,38 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return map;
   }, [baseDeliveryVehicles, vehicleFuelTypes]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
+  const registeredStoreNames = useMemo(() => new Set(allStores.map((store) => store.name.trim().toLowerCase())), [allStores]);
+  // 이미 거래처로 등록된 곳은 "미등록 매장" 목록에서 빼서 중복으로 보이지 않게 합니다.
+  const unregisteredResults = useMemo(
+    () => externalResults.filter((result) => result.name.trim() && !registeredStoreNames.has(result.name.trim().toLowerCase())),
+    [externalResults, registeredStoreNames]
+  );
+  useEffect(() => {
+    const keyword = query.trim();
+    if (keyword.length < 2) {
+      setExternalResults([]);
+      setExternalSearchMessage("");
+      setIsSearchingExternal(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearchingExternal(true);
+    const timer = setTimeout(async () => {
+      const response = await fetch(`/api/business-search?query=${encodeURIComponent(keyword)}`, { cache: "no-store" }).catch(() => null);
+      if (cancelled) return;
+      const payload = response?.ok ? await response.json().catch(() => null) : null;
+      const results = Array.isArray(payload?.results) ? payload.results : [];
+      setExternalResults(results);
+      setExternalSearchMessage(results.length ? "" : payload?.message || "");
+      setIsSearchingExternal(false);
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
   const gradeBaseStores = useMemo(
     () =>
       allStores.filter((store) => {
@@ -321,6 +367,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     if (companyId) params.set("companyId", companyId);
     return `/?${params.toString()}`;
   }, []);
+  // 지도 검색에서 찾은 미등록 매장을 눌렀을 때, 데이터 등록 화면의 수기 등록 폼을 이 매장
+  // 정보로 미리 채운 채로 바로 열어줍니다(사업자등록증 등 첨부 업로드까지 그 화면에서 이어짐).
+  function buildQuickRegisterHref(result: ExternalBusinessResult) {
+    const params = new URLSearchParams(dataRegistrationHref.split("?")[1] || "");
+    params.set("prefill_name", result.name);
+    const address = result.roadAddress || result.address;
+    if (address) params.set("prefill_address", address);
+    if (result.phone) params.set("prefill_phone", result.phone);
+    if (result.industry) params.set("prefill_industry", result.industry);
+    if (result.kakaoPlaceUrl) params.set("prefill_kakao_place_url", result.kakaoPlaceUrl);
+    return `/?${params.toString()}`;
+  }
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
     setGradeFilter("all");
@@ -644,10 +702,43 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
+              onBlur={() => setShowExternalResults(false)}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="거래처명·지역·주소 검색..."
+              onFocus={() => setShowExternalResults(true)}
+              placeholder="거래처명·지역·주소 검색... (미등록 매장도 함께 찾아드려요)"
               value={query}
             />
+            {showExternalResults && query.trim().length >= 2 ? (
+              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+                <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                  미등록 매장 · 카카오맵 검색
+                </p>
+                {isSearchingExternal ? (
+                  <p className="px-3 py-2 text-xs font-bold text-slate-400">검색 중...</p>
+                ) : unregisteredResults.length ? (
+                  unregisteredResults.map((result) => (
+                    <div
+                      className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-teal-50"
+                      key={`${result.name}-${result.address}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950">{result.name}</p>
+                        <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{result.roadAddress || result.address || "주소 정보 없음"}</p>
+                      </div>
+                      <Link
+                        className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
+                        href={buildQuickRegisterHref(result)}
+                        onMouseDown={(event) => event.preventDefault()}
+                      >
+                        거래처로 등록
+                      </Link>
+                    </div>
+                  ))
+                ) : (
+                  <p className="px-3 py-2 text-xs font-bold text-slate-400">{externalSearchMessage || "새로 찾은 미등록 매장이 없습니다."}</p>
+                )}
+              </div>
+            ) : null}
           </label>
           <div className="flex flex-wrap items-center justify-start gap-1.5 xl:justify-end">
             <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
