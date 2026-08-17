@@ -119,6 +119,7 @@ KAKAO_REDIRECT_URI=https://your-vercel-domain.vercel.app/api/auth/kakao/callback
 - 배송차(담당자)별 연료 타입을 저장해 유류비 계산에 반영하려면 `supabase/migrations/20260813_delivery_vehicles.sql`도 한 번 실행합니다.
 - **(중요) 운영 DB가 예전 버전의 schema.sql로 처음 생성되어 `admin_audit_logs`, `column_mappings`, `health_score_snapshots`, `lead_recommendations`, `raw_customer_rows` 5개 테이블이 아예 없는 경우가 있습니다.** `information_schema.tables`로 누락 여부를 확인한 뒤 없다면 `supabase/migrations/20260814_missing_core_tables.sql`을 실행합니다. 이 5개 테이블이 없으면 데이터 등록 저장 중 감사 로그·리드 추천·건강도 스냅샷 저장이 조용히 실패할 수 있습니다.
 - 위 마이그레이션 실행 후에도 방문 히스토리에서 "Could not find a relationship between 'visit_results' and 'lead_recommendations'" 오류가 보이면 `supabase/migrations/20260814_visit_results_lead_fk.sql`을 실행합니다.
+- 카카오 간편가입 시 "there is no unique or exclusion constraint matching the ON CONFLICT specification" (42P10) 오류가 나면 `supabase/migrations/20260817_app_users_kakao_unique_constraint.sql`을 실행합니다. `20260724_staff_kakao_mobile.sql`이 만든 partial 유니크 인덱스가 PostgREST의 upsert(on_conflict) 대상과 맞지 않아서 나는 오류입니다.
 - `AUTH_CREDENTIALS`를 DB에서 관리하려면 `supabase/migrations/20260711_auth_credentials.sql`도 한 번 실행합니다.
 - Supabase RLS 정책은 기본 운영 기준으로 켜져 있으며, 고객사별 사용자 초대와 세부 권한은 다음 운영 단계에서 강화합니다.
 - 실제 결제/민감정보를 받기 전에는 개인정보 처리방침과 약관 페이지를 추가합니다.
