@@ -1436,8 +1436,11 @@ function DeliveryAssignmentPanel({
         >
           <PanelLeftOpen className="h-3.5 w-3.5" />
         </button>
-        <span className="shrink-0" title="배송담당자 필터">
+        <span className="relative inline-flex shrink-0" title="배송담당자 필터">
           <Truck className="h-4 w-4 text-slate-500" />
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-slate-900 px-1 text-[9px] font-black leading-none text-white">
+            {vehicles.length}
+          </span>
         </span>
       </aside>
     );
