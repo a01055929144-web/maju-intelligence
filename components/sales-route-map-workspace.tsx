@@ -339,7 +339,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [leadRadiusOpen, setLeadRadiusOpen] = useState(false);
   const [leadRadiusAnchorMode, setLeadRadiusAnchorMode] = useState<"customer" | "all">("customer");
   const [leadRadiusCustomerId, setLeadRadiusCustomerId] = useState("");
-  const [leadRadiusKm, setLeadRadiusKm] = useState(5);
+  // 기본 반경은 5km였는데, 실제로 많이 쓰는 값은 1.5km라는 피드백에 따라 기본값을 낮췄습니다(2026-08-19).
+  const [leadRadiusKm, setLeadRadiusKm] = useState(1.5);
   const [leadRadiusSearching, setLeadRadiusSearching] = useState(false);
   const [leadRadiusResult, setLeadRadiusResult] = useState<NearbyPermitLeadResult | null>(null);
   const [leadRadiusError, setLeadRadiusError] = useState("");
@@ -1256,7 +1257,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                 className="h-8 w-14 rounded-md border border-teal-200 bg-white px-1.5 text-center text-[11px] font-bold text-slate-950 outline-none"
                 max={50}
                 min={0.5}
-                onChange={(event) => setLeadRadiusKm(Number(event.target.value) || 5)}
+                onChange={(event) => setLeadRadiusKm(Number(event.target.value) || 1.5)}
                 step={0.5}
                 type="number"
                 value={leadRadiusKm}
@@ -1272,6 +1273,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               </span>
             ) : null}
             {leadRadiusError ? <span className="text-[11px] font-black text-rose-600">{leadRadiusError}</span> : null}
+            <span className="text-[11px] font-bold text-teal-700">지도 위 원 가장자리의 흰 손잡이를 마우스로 드래그해도 반경을 조절할 수 있습니다.</span>
           </div>
         ) : null}
       </section>
@@ -2648,26 +2650,34 @@ function DriverSelectField({
   );
 }
 
-// 등급/배송차별 마커 색상 범례입니다. 예전에는 항목마다 색점+글자 라벨을 각각 펼쳐서 보여줘 검색바
-// 한 줄을 다 차지했는데, 지금은 색점만 모아 보여주고 전체 설명은 마우스오버 툴팁으로 옮겼습니다.
+// 등급/배송차별 마커 색상 범례입니다. 예전에는 색점만 모아 보여주고 전체 설명은 마우스오버
+// 툴팁으로 옮겼는데("마커 ●●●"), 어떤 색이 어떤 등급/배송차인지 hover 없이는 전혀 알 수 없다는
+// 피드백을 받아(2026-08-19) 각 점 옆에 짧은 글자 라벨을 항상 보이게 되돌렸습니다. 대신 공간을
+// 아끼기 위해 등급은 "A"처럼 한 글자로, 배송차는 이름을 그대로 쓰되 개수를 4개로 줄였습니다.
 function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; readonly vehicles: DeliveryVehicle[] }) {
   const items =
     mode === "grade"
       ? [
-          { color: "#7c3aed", label: "A등급" },
-          { color: "#2563eb", label: "B등급" },
-          { color: "#64748b", label: "C등급" }
+          { color: "#7c3aed", label: "A등급", shortLabel: "A" },
+          { color: "#2563eb", label: "B등급", shortLabel: "B" },
+          { color: "#64748b", label: "C등급", shortLabel: "C" }
         ]
-      : vehicles.slice(0, 8).map((vehicle, index) => ({ color: vehicleMarkerColors[index % vehicleMarkerColors.length], label: vehicle.name }));
+      : vehicles
+          .slice(0, 8)
+          .map((vehicle, index) => ({ color: vehicleMarkerColors[index % vehicleMarkerColors.length], label: vehicle.name, shortLabel: vehicle.name }));
+  const visibleCount = mode === "grade" ? items.length : 4;
   const title = items.length ? `마커 색상 안내 · ${items.map((item) => item.label).join(" · ")}` : "마커 색상 안내";
 
   return (
-    <span className="maju-filter-box inline-flex h-10 shrink-0 items-center gap-1 px-2" title={title}>
+    <span className="maju-filter-box inline-flex h-10 shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-1" title={title}>
       <span className="mr-0.5 text-xs font-black text-slate-500">마커</span>
-      {items.slice(0, 5).map((item) => (
-        <span className="h-2.5 w-2.5 rounded-full" key={item.label} style={{ backgroundColor: item.color }} />
+      {items.slice(0, visibleCount).map((item) => (
+        <span className="inline-flex items-center gap-1" key={item.label}>
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+          <span className="whitespace-nowrap text-[11px] font-bold text-slate-600">{item.shortLabel}</span>
+        </span>
       ))}
-      {items.length > 5 ? <span className="text-[11px] font-black text-slate-400">+{items.length - 5}</span> : null}
+      {items.length > visibleCount ? <span className="text-[11px] font-black text-slate-400">+{items.length - visibleCount}</span> : null}
     </span>
   );
 }

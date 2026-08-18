@@ -294,8 +294,20 @@ export function KakaoAddressMap({
     }
 
     const handlePoint = destinationPoint(centerLat, centerLng, radiusOverlay.radiusMeters, 90);
+    // 기본 마커 이미지(가는 핀 모양)는 원 가장자리에 있어도 "드래그 가능한 손잡이"로 보이지
+    // 않아 사용자가 마우스로 반경을 조절할 수 있다는 걸 알아채지 못했습니다. 눈에 띄는 흰색
+    // 원형 손잡이 아이콘으로 바꿔 드래그 가능한 컨트롤임을 시각적으로 분명히 합니다.
+    const handleImage = new kakao.maps.MarkerImage(
+      "data:image/svg+xml;charset=UTF-8," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"><circle cx="13" cy="13" r="10" fill="#ffffff" stroke="#0f766e" stroke-width="3"/><circle cx="13" cy="13" r="3.5" fill="#0f766e"/></svg>'
+        ),
+      new kakao.maps.Size(26, 26),
+      { offset: new kakao.maps.Point(13, 13) }
+    );
     const handleMarker = new kakao.maps.Marker({
       draggable: true,
+      image: handleImage,
       position: new kakao.maps.LatLng(handlePoint.lat, handlePoint.lng),
       title: "드래그해서 반경 조절",
       zIndex: 10
