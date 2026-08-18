@@ -300,7 +300,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   }, []);
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
-  const googleReviewAutoFetchAttempted = useRef<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState("");
   // /leads/permits 같은 예전 딥링크(?view=leads)로 들어와도 같은 탭이 바로 열리도록 초기값을 URL에서 읽습니다.
   const [activeView, setActiveView] = useState<WorkspaceView>(() => {
@@ -654,49 +653,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return { persisted: payload?.persisted !== false };
   }
 
-  // 구글 리뷰 자동 수집 비용을 최소화하기 위해(2026-08-18), 등록 시점이나 매일 배치로 미리 모두
-  // 조회하지 않고 담당자가 지도에서 실제로 카드를 연 거래처에 대해서만, 아직 리뷰가 없을 때 그
-  // 자리에서 조용히 한 번 수집합니다. 같은 세션에서 같은 거래처를 다시 열어도 재시도하지 않도록
-  // (검색 결과가 없었던 경우 등) googleReviewAutoFetchAttempted에 시도 여부를 기록해둡니다.
-  useEffect(() => {
-    if (!previewStoreId) return;
-    const targetStore = allStores.find((store) => store.id === previewStoreId);
-    if (!targetStore || targetStore.reviewSummary) return;
-    if (googleReviewAutoFetchAttempted.current.has(previewStoreId)) return;
-    googleReviewAutoFetchAttempted.current.add(previewStoreId);
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const companyId = permitLeadCompanyId();
-        const response = await fetch(`/api/customers/${previewStoreId}/sync-reviews`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(companyId ? { companyId } : {})
-        });
-        if (!response.ok || cancelled) return;
-        const payload = await response.json().catch(() => null);
-        if (!payload?.result) return;
-        setStoreEdits((current) => ({
-          ...current,
-          [previewStoreId]: {
-            ...current[previewStoreId],
-            reviewSummary: payload.result.summary,
-            reviewKeywords: payload.result.keywords,
-            reviewSource: payload.result.source
-          }
-        }));
-      } catch {
-        // 조용히 무시합니다 — API 키 미설정, 검색 결과 없음 등은 정상적인 케이스이고 카드
-        // 오픈 흐름을 방해해서는 안 됩니다("리뷰 새로고침" 버튼으로 언제든 수동 재시도 가능).
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewStoreId]);
+  // 구글 리뷰 자동 수집(Google Places API)은 호출당 비용이 발생합니다. 카드를 열 때마다 백그라운드로
+  // 자동 호출하던 방식(2026-08-18 도입)도 결국 "사용자가 요청하지 않아도 비용이 발생"하는 셈이라
+  // 완전히 제거했습니다(2026-08-19). 이제 구글 리뷰 API는 담당자가 "리뷰 새로고침" 버튼을 직접
+  // 눌렀을 때만 호출됩니다 — syncGoogleReviews() 핸들러 참고. 네이버·카카오 리뷰는 원래부터 API
+  // 비용이 전혀 없는 붙여넣기 방식이라 이 정책과 무관합니다.
 
   // 사업자 휴폐업 상태(자동 조회)와 별개로, "이 거래처와 더 이상 거래하지 않기로 했다"는 판단은
   // 사람이 직접 내려서 저장합니다. /api/customers의 일반 upsert가 아니라 전용 엔드포인트를 쓰는 이유는
