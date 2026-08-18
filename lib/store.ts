@@ -543,16 +543,19 @@ function isMissingCustomerRelationshipStatusColumnError(error: unknown) {
   return ["relationship_status", "relationship_status_updated_at", "relationship_status_note"].some((column) => message.includes(column));
 }
 
-// Generic "column does not exist" detector (PostgREST error code 42703). Used to cascade through
-// progressively narrower select lists WITHOUT naming specific columns. This matters because
-// PostgREST only reports the FIRST unresolvable column when validating a select= list — if a select
-// stacks multiple possibly-missing columns from different migrations, a narrow per-column check on
-// just the newest column can miss an older, unrelated missing column that happens to be named first,
-// incorrectly rethrow, and break a previously-working fallback. Prefer this generic check when adding
-// new optional columns to an existing select cascade.
+// Generic "column does not exist" detector. Used to cascade through progressively narrower
+// select lists AND progressively narrower insert/upsert payloads WITHOUT naming specific columns.
+// This matters because PostgREST reports missing columns differently depending on where they show
+// up: a SELECT referencing an unknown column fails with raw Postgres error 42703 ("column ... does
+// not exist"), while an INSERT/UPSERT body containing an unknown JSON key fails with PostgREST's
+// own code PGRST204 ("Could not find the 'x' column of 'y' in the schema cache") — no "42703" or
+// "does not exist" text at all. Matching only the SELECT-side signature silently breaks every
+// payload-tier cascade (UPSERT_PAYLOAD_TIERS etc.) whenever the newest column hasn't been migrated
+// yet: the first (widest) tier throws an error this function fails to recognize, so it's rethrown
+// instead of falling back. Match both signatures here so a single check covers reads and writes.
 function isMissingColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes("42703") || message.includes("does not exist");
+  return message.includes("42703") || message.includes("does not exist") || message.includes("PGRST204") || message.includes("schema cache");
 }
 
 function isMissingTelegramChatIdColumnError(error: unknown) {
