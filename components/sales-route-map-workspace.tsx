@@ -284,18 +284,31 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const workspaceRef = useRef<HTMLDivElement>(null);
   // 지도 탭에서 검색/필터/신규 리드 반경 바가 지도 위에 떠 있는 카드로 표시됩니다(xl:absolute).
   // "신규 리드 반경"을 켜면 이 카드에 한 줄이 더 늘어나 높이가 커지는데, 지도 오른쪽 위
-  // MapControls(내 위치·전체보기·로드뷰·전체화면 버튼)의 세로 위치가 고정값이면 늘어난 카드와
-  // 겹칩니다. ResizeObserver로 이 카드의 실제 렌더 높이를 재서 MapControls를 그 아래로 밀어냅니다.
+  // MapControls(내 위치 버튼)의 세로 위치가 고정값이면 늘어난 카드와 겹칩니다.
+  //
+  // 이 카드(mapHeaderRef)는 위쪽 KPI/이탈 위험 알림 블록을 건너뛰고 항상 지도 영역의 부모
+  // 기준 top-2에 뜨는데(xl:absolute), MapControls는 지도 영역 자신(mapAreaRef)의 top을
+  // 기준으로 위치합니다 — 두 기준점이 서로 다른 조상이라, 카드 높이만으로 오프셋을 계산하면
+  // KPI 패널이 펼쳐져 있거나 이탈 위험 알림 배너가 떠 있을 때 실제 카드 아래쪽 가장자리와
+  // MapControls 위치가 어긋납니다. getBoundingClientRect()로 카드의 실제 화면 아래쪽 가장자리와
+  // 지도 영역의 실제 화면 위쪽 가장자리를 직접 비교해 그 차이를 오프셋으로 써서, 위에 어떤 블록이
+  // 얼마나 있든 항상 카드 바로 아래에 오도록 합니다.
   const mapHeaderRef = useRef<HTMLElement>(null);
+  const mapAreaRef = useRef<HTMLDivElement>(null);
   const [mapHeaderHeightPx, setMapHeaderHeightPx] = useState(0);
   useEffect(() => {
-    const node = mapHeaderRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const next = entries[0]?.contentRect.height;
-      if (typeof next === "number") setMapHeaderHeightPx(next);
-    });
-    observer.observe(node);
+    const headerNode = mapHeaderRef.current;
+    const areaNode = mapAreaRef.current;
+    if (!headerNode || !areaNode || typeof ResizeObserver === "undefined") return;
+    const recompute = () => {
+      const headerRect = headerNode.getBoundingClientRect();
+      const areaRect = areaNode.getBoundingClientRect();
+      setMapHeaderHeightPx(Math.max(0, headerRect.bottom - areaRect.top + 16));
+    };
+    const observer = new ResizeObserver(recompute);
+    observer.observe(headerNode);
+    observer.observe(areaNode);
+    recompute();
     return () => observer.disconnect();
   }, []);
   const [mapFocusId, setMapFocusId] = useState("");
@@ -404,6 +417,17 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     () => externalResults.filter((result) => result.name.trim() && !registeredStoreNames.has(result.name.trim().toLowerCase())),
     [externalResults, registeredStoreNames]
   );
+  // 검색창은 원래 "미등록 매장" 카카오맵 검색 결과만 목록으로 보여줬습니다 — 이미 등록된 거래처는
+  // 지도 마커 필터링(gradeBaseStores)으로만 걸러져서, 목록에는 안 보이고 지도 위에서만 좁혀지다
+  // 보니 "검색하면 등록 안 된 곳만 나온다"는 오해를 샀습니다. 등록된 거래처 매치도 같은 드롭다운에
+  // 목록으로 보여주고, 클릭하면 그 거래처로 바로 이동하도록 추가합니다.
+  const registeredMatches = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (keyword.length < 2) return [];
+    return allStores
+      .filter((store) => `${store.name} ${store.region} ${store.address || ""}`.toLowerCase().includes(keyword))
+      .slice(0, 8);
+  }, [allStores, query]);
   // 검색어가 바뀌면 이전 검색 결과에 대한 체크 선택은 의미가 없으므로 함께 초기화합니다.
   useEffect(() => {
     setSelectedResultIds(new Set());
@@ -1021,6 +1045,31 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             />
             {showExternalResults && query.trim().length >= 2 ? (
               <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+                {registeredMatches.length ? (
+                  <div className="border-b border-slate-100">
+                    <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                      등록된 거래처 {registeredMatches.length.toLocaleString()}곳
+                    </p>
+                    {registeredMatches.map((store) => (
+                      <button
+                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
+                        key={store.id}
+                        onClick={() => {
+                          setPreviewStoreId(store.id || "");
+                          setShowExternalResults(false);
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="button"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-slate-950">{store.name}</p>
+                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">지도에서 보기</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5">
                   <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">미등록 매장 · 카카오맵 검색</p>
                   {unregisteredResults.length ? (
@@ -1228,14 +1277,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       </section>
 
       {activeView === "map" ? (
-        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0">
+        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0" ref={mapAreaRef}>
           <div className={`relative min-h-0 min-w-0 bg-slate-100 xl:absolute xl:inset-0 ${isFullscreen ? "h-full" : "h-[420px] xl:h-full"}`}>
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
                     controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}
-                    controlsOffsetPx={mapHeaderHeightPx ? mapHeaderHeightPx + 24 : undefined}
+                    controlsOffsetPx={mapHeaderHeightPx || undefined}
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={mapDisplayMarkers}

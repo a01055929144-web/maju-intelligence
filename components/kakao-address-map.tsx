@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Crosshair, ExternalLink, MapPin, RotateCcw } from "lucide-react";
+import { Crosshair, ExternalLink, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export type KakaoMapMarker = {
@@ -377,19 +377,6 @@ export function KakaoAddressMap({
     );
   };
 
-  const fitAllMarkers = () => {
-    if (mapInstanceRef.current && boundsRef.current) {
-      mapInstanceRef.current.setBounds(boundsRef.current);
-    }
-  };
-
-  const openLargeMap = () => {
-    openInternalLargeMap({
-      focusedMarkerId,
-      markers,
-      routePath
-    });
-  };
   const wrapperClassName = showList ? "space-y-4" : "h-full w-full";
 
   return (
@@ -399,8 +386,6 @@ export function KakaoAddressMap({
         <MapControls
           offsetClassName={controlsOffsetClassName}
           offsetPx={controlsOffsetPx}
-          onFitAll={fitAllMarkers}
-          onLargeMap={openLargeMap}
           onLocation={moveToCurrentLocation}
         />
         {status === "loading" && (
@@ -417,14 +402,10 @@ export function KakaoAddressMap({
 function MapControls({
   offsetClassName,
   offsetPx,
-  onFitAll,
-  onLargeMap,
   onLocation
 }: {
   readonly offsetClassName?: string;
   readonly offsetPx?: number;
-  readonly onFitAll: () => void;
-  readonly onLargeMap: () => void;
   readonly onLocation: () => void;
 }) {
   // 모바일에서는 검색·필터 바가 지도 위 일반 흐름(in-flow)에 있어 지도 자체가 그 아래에서
@@ -433,6 +414,10 @@ function MapControls({
   // offsetPx로 그 카드의 실제 렌더 높이를 CSS 변수로 넘겨받아 xl에서만 그 아래로 밀어내고,
   // offsetPx가 없으면(다른 화면들) 항상 top-3 그대로 사용합니다. offsetClassName은 가로 위치
   // (예: 우측 패널 접힘 여부에 따른 right-*)처럼 top과 무관한 값만 추가로 얹는 용도입니다.
+  //
+  // "전체 보기"·"전체화면 지도" 버튼은 2026-08-19 제거했습니다 — 상단 툴바에 이미 워크스페이스
+  // 전체를 확대하는 "전체 화면" 버튼이 있어 기능이 겹쳤고, 사용자 피드백에 따라 모서리에는
+  // "내 위치" 하나만 남겨 단순하게 정리했습니다.
   const style = offsetPx !== undefined ? ({ "--maju-map-controls-top": `${offsetPx}px` } as CSSProperties) : undefined;
 
   return (
@@ -444,12 +429,6 @@ function MapControls({
     >
       <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
         <Crosshair className="h-3.5 w-3.5" />
-      </button>
-      <button aria-label="전체 보기" title="전체 보기" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100" onClick={onFitAll} type="button">
-        <RotateCcw className="h-3.5 w-3.5" />
-      </button>
-      <button aria-label="전체화면 지도" title="전체화면 지도" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-teal-700 text-white transition hover:bg-teal-800" onClick={onLargeMap} type="button">
-        <ExternalLink className="h-3.5 w-3.5" />
       </button>
     </div>
   );
