@@ -3832,6 +3832,19 @@ export async function recordPermitLeadAction(
   return { ok: true, status: nextStatus };
 }
 
+/** 잘못 들어온 리드(테스트 데이터, 완전한 오탐 등)를 완전히 삭제합니다. 목록에서 숨기고 싶을 뿐이면
+ * exclude 액션(recordPermitLeadAction)을 쓰고, 이 함수는 데이터 자체를 지워야 할 때만 씁니다. */
+export async function deletePermitLead(companyId: string, leadId: string): Promise<{ ok: boolean }> {
+  if (!isProductionStoreConfigured()) return { ok: false };
+
+  await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+
+  return { ok: true };
+}
+
 /** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */
 export async function convertPermitLeadToCustomer(
   companyId: string,
