@@ -190,6 +190,22 @@ export function KakaoAddressMap({
     };
   }, [appKey, canUseKakao, focusedMarkerId, markers, onMarkerClick, routePath]);
 
+  // 카카오맵은 초기화 시점의 컨테이너 크기를 기준으로 캔버스를 그리기 때문에, 사이드 패널 접힘/펼침,
+  // 팝업 표시, 반응형 브레이크포인트 전환처럼 지도 영역 자체의 높이·너비가 나중에 바뀌면 위쪽에 빈
+  // 여백이 남는 등 타일이 실제 컨테이너 크기에 맞춰 다시 그려지지 않습니다. 컨테이너 크기 변화를 계속
+  // 감시하다가 바뀔 때마다 relayout()을 호출해 이 문제를 근본적으로 막습니다.
+  useEffect(() => {
+    const container = mapRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      mapInstanceRef.current?.relayout?.();
+    });
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, []);
+
   if (status === "fallback") {
     return (
       <FallbackAddressMap
