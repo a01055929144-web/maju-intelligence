@@ -3371,6 +3371,12 @@ type PermitSyncResult = {
   ingest: PermitUploadResult;
 };
 
+type GovSyncResult = {
+  configured: boolean;
+  fetched: number;
+  ingest: PermitUploadResult;
+};
+
 type NearbyPermitLeadResult = {
   anchorCount: number;
   leads: Array<PermitLeadItem & { distanceKm: number; nearestAnchor: { id: string; name: string } | null }>;
@@ -3406,6 +3412,9 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncResult, setSyncResult] = useState<PermitSyncResult | null>(null);
   const [syncWarning, setSyncWarning] = useState("");
+  const [govSyncBusy, setGovSyncBusy] = useState(false);
+  const [govSyncResult, setGovSyncResult] = useState<GovSyncResult | null>(null);
+  const [govSyncWarning, setGovSyncWarning] = useState("");
 
   const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
   const [actionMessage, setActionMessage] = useState("");
@@ -3523,6 +3532,31 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
       setSyncWarning(error instanceof Error ? error.message : "네트워크 오류로 자동 수집하지 못했습니다.");
     } finally {
       setSyncBusy(false);
+    }
+  }
+
+  // 전국 공공데이터(행정안전부_식품_일반음식점) 자동 수집: GOV_RESTAURANT_API_KEY 필요.
+  async function handleGovAutoSync() {
+    setGovSyncBusy(true);
+    setGovSyncResult(null);
+    setGovSyncWarning("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/gov-sync"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 3 })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setGovSyncWarning(payload?.message || "자동 수집에 실패했습니다.");
+        return;
+      }
+      setGovSyncResult(payload);
+      loadLeads();
+    } catch (error) {
+      setGovSyncWarning(error instanceof Error ? error.message : "네트워크 오류로 자동 수집하지 못했습니다.");
+    } finally {
+      setGovSyncBusy(false);
     }
   }
 
@@ -3703,10 +3737,16 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                 <Radar className="h-4 w-4" />
                 {syncBusy ? "가져오는 중..." : "인허가 데이터 지금 가져오기(API)"}
               </button>
+              <button className="maju-button-secondary inline-flex w-fit items-center gap-2" disabled={govSyncBusy} onClick={() => void handleGovAutoSync()} type="button">
+                <Radar className="h-4 w-4" />
+                {govSyncBusy ? "가져오는 중..." : "지금 가져오기(전국 공공데이터)"}
+              </button>
             </div>
             <p className="text-[11px] font-semibold leading-4 text-slate-400">
-              "지금 가져오기"는 localdata.go.kr Open API로 최근 3일 변경분을 자동으로 가져옵니다. LOCALDATA_API_KEY 환경변수가 설정된 회사만
-              사용할 수 있고, 매일 새벽 자동 실행도 함께 동작합니다.
+              "인허가 데이터 지금 가져오기"는 localdata.go.kr Open API로 최근 3일 변경분을 자동으로 가져옵니다. LOCALDATA_API_KEY 환경변수가 설정된
+              회사만 사용할 수 있고, 매일 새벽 자동 실행도 함께 동작합니다. "전국 공공데이터"는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만
+              건)에서 가져오며 GOV_RESTAURANT_API_KEY가 필요합니다 — 이 API는 최근 변경분만 걸러주지 않아 한 번에 전국을 다 훑을 수 없어, 매일
+              다른 구간을 훑도록 되어 있어 완전 커버리지까지 며칠~몇 주가 걸릴 수 있습니다.
             </p>
             {uploadWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{uploadWarning}</p> : null}
             {uploadResult ? (
@@ -3727,6 +3767,15 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                 <span className="text-emerald-700">신규 {syncResult.ingest.inserted.toLocaleString()}</span>
                 <span className="text-blue-700">갱신 {syncResult.ingest.updated.toLocaleString()}</span>
                 <span className="text-slate-500">기존 거래처 중복 {syncResult.ingest.duplicates.toLocaleString()}</span>
+              </div>
+            ) : null}
+            {govSyncWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{govSyncWarning}</p> : null}
+            {govSyncResult ? (
+              <div className="flex flex-wrap gap-2 rounded-md bg-teal-50 p-3 text-xs font-bold text-teal-800">
+                <span>수신 {govSyncResult.fetched.toLocaleString()}행</span>
+                <span className="text-emerald-700">신규 {govSyncResult.ingest.inserted.toLocaleString()}</span>
+                <span className="text-blue-700">갱신 {govSyncResult.ingest.updated.toLocaleString()}</span>
+                <span className="text-slate-500">기존 거래처 중복 {govSyncResult.ingest.duplicates.toLocaleString()}</span>
               </div>
             ) : null}
           </div>

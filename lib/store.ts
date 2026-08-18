@@ -1,6 +1,7 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
+import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { enrichLeadRecommendations } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
@@ -1859,7 +1860,8 @@ export function getSystemStatus(): SystemStatus {
       { key: "NAVER_SEARCH_CLIENT_ID + NAVER_SEARCH_CLIENT_SECRET", present: naverSearchConfigured, required: false, scope: "server" },
       { key: "NTS_BUSINESS_API_KEY", present: ntsBusinessConfigured, required: false, scope: "server" },
       { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" },
-      { key: "LOCALDATA_API_KEY", present: isLocalDataApiConfigured(), required: false, scope: "server" }
+      { key: "LOCALDATA_API_KEY", present: isLocalDataApiConfigured(), required: false, scope: "server" },
+      { key: "GOV_RESTAURANT_API_KEY", present: isGovRestaurantApiConfigured(), required: false, scope: "server" }
     ],
     services: [
       {
@@ -4124,6 +4126,62 @@ export async function syncAllCompaniesLocalDataPermitLeads(): Promise<LocalDataP
   const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id)));
 
   return results.reduce<LocalDataPermitDailySyncResult>(
+    (total, result) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalFetched: total.totalFetched + result.fetched,
+      totalInserted: total.totalInserted + result.ingest.inserted,
+      totalUpdated: total.totalUpdated + result.ingest.updated
+    }),
+    { ...empty, configured: true }
+  );
+}
+
+export type GovRestaurantSyncResult = {
+  configured: boolean;
+  fetched: number;
+  ingest: PermitLeadIngestResult;
+};
+
+/**
+ * 행정안전부_식품_일반음식점 조회서비스(공공데이터포털, 전국 약 229만 건)에서 최근 변경분을
+ * 가져와 ingestPermitLeadRows()로 흘려보냅니다. localdata.go.kr과 마찬가지로 수동 업로드와 완전히
+ * 같은 파이프라인을 타며, GOV_RESTAURANT_API_KEY가 없으면 configured: false를 반환합니다.
+ */
+export async function syncGovRestaurantLeads(companyId: string, days = 3): Promise<GovRestaurantSyncResult> {
+  if (!isGovRestaurantApiConfigured()) {
+    return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
+  }
+
+  const rows = await fetchRecentGovRestaurantRows(days);
+  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
+
+  return { configured: true, fetched: rows.length, ingest };
+}
+
+export type GovRestaurantDailySyncResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalFetched: number;
+  totalInserted: number;
+  totalUpdated: number;
+};
+
+/** 일일 cron에서 모든 회사에 대해 전국 음식점 공공데이터 자동 수집을 실행합니다. */
+export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestaurantDailySyncResult> {
+  const empty: GovRestaurantDailySyncResult = {
+    configured: isGovRestaurantApiConfigured(),
+    companiesProcessed: 0,
+    totalFetched: 0,
+    totalInserted: 0,
+    totalUpdated: 0
+  };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map((company) => syncGovRestaurantLeads(company.id)));
+
+  return results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({
       configured: true,
       companiesProcessed: total.companiesProcessed + 1,

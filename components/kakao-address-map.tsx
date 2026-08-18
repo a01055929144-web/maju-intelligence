@@ -89,6 +89,7 @@ export function KakaoAddressMap({
   const onMarkerClickRef = useRef(onMarkerClick);
   const radiusCircleRef = useRef<any>(null);
   const radiusHandleMarkerRef = useRef<any>(null);
+  const radiusLabelOverlayRef = useRef<any>(null);
   const radiusOnChangeRef = useRef(radiusOverlay?.onRadiusChange);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const [fallbackReason, setFallbackReason] = useState("");
@@ -258,8 +259,10 @@ export function KakaoAddressMap({
   useEffect(() => {
     radiusCircleRef.current?.setMap(null);
     radiusHandleMarkerRef.current?.setMap(null);
+    radiusLabelOverlayRef.current?.setMap(null);
     radiusCircleRef.current = null;
     radiusHandleMarkerRef.current = null;
+    radiusLabelOverlayRef.current = null;
 
     const kakao = window.kakao;
     const map = mapInstanceRef.current;
@@ -315,20 +318,37 @@ export function KakaoAddressMap({
     handleMarker.setMap(map);
     radiusHandleMarkerRef.current = handleMarker;
 
+    // 손잡이를 드래그하는 동안 반경(km) 숫자를 바로 옆에 띄워, 놓기 전에 지금 얼마나 늘렸는지
+    // 바로 볼 수 있게 합니다. 이 값을 React state(부모의 leadRadiusKm)로 매 드래그마다 올리면
+    // radiusOverlay.radiusMeters가 바뀔 때마다 이 effect 전체가 다시 실행돼 손잡이가 매번 다시
+    // 만들어지며 드래그가 끊기므로, 커밋은 dragend에서만 하고 드래그 중 표시는 이 오버레이를
+    // 직접 setContent()로 갱신해 React 리렌더 없이 처리합니다.
+    const labelOverlay = new kakao.maps.CustomOverlay({
+      content: radiusLabelHtml(radiusOverlay.radiusMeters / 1000),
+      map,
+      position: new kakao.maps.LatLng(handlePoint.lat, handlePoint.lng),
+      yAnchor: 1.6,
+      zIndex: 11
+    });
+    radiusLabelOverlayRef.current = labelOverlay;
+
     kakao.maps.event.addListener(handleMarker, "drag", () => {
       const pos = handleMarker.getPosition();
-      const meters = haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng());
-      circle.setRadius(Math.max(meters, 100));
+      const meters = Math.max(haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng()), 100);
+      circle.setRadius(meters);
+      labelOverlay.setPosition(pos);
+      labelOverlay.setContent(radiusLabelHtml(meters / 1000));
     });
     kakao.maps.event.addListener(handleMarker, "dragend", () => {
       const pos = handleMarker.getPosition();
-      const meters = haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng());
-      radiusOnChangeRef.current?.(Math.max(meters, 100));
+      const meters = Math.max(haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng()), 100);
+      radiusOnChangeRef.current?.(meters);
     });
 
     return () => {
       circle.setMap(null);
       handleMarker.setMap(null);
+      labelOverlay.setMap(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.radiusMeters, markersSignature]);
@@ -517,6 +537,12 @@ function destinationPoint(lat: number, lng: number, distanceMeters: number, bear
     );
 
   return { lat: toDeg(lat2), lng: toDeg(lng2) };
+}
+
+// 반경 손잡이를 드래그하는 동안 옆에 띄우는 "X.Xkm" 말풍선입니다.
+function radiusLabelHtml(km: number) {
+  const formatted = km >= 10 ? Math.round(km).toString() : (Math.round(km * 10) / 10).toString();
+  return `<div style="pointer-events:none;background:#0f766e;color:#ffffff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 6px 14px rgba(15,23,42,.25);">${formatted}km</div>`;
 }
 
 function splitRoutePath(routePath: ReadonlyArray<KakaoRoutePoint>) {
