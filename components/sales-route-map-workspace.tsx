@@ -130,6 +130,7 @@ type StoreEdit = Partial<
     | "businessHours"
     | "deliveryArea"
     | "deliveryDriver"
+    | "deliveryVehicleName"
     | "email"
     | "expectedRevenue"
     | "grade"
@@ -238,6 +239,7 @@ const localStoreKeys = {
   deliveryProofs: "maju:sales-route:delivery-proofs",
   histories: "maju:sales-route:histories",
   manualDrivers: "maju:sales-route:manual-drivers",
+  manualVehicles: "maju:sales-route:manual-vehicles",
   storeEdits: "maju:sales-route:store-edits",
   vehicleEdits: "maju:sales-route:vehicle-edits"
 };
@@ -276,6 +278,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
   const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
   const [manualDrivers, setManualDrivers] = useState<string[]>(() => readLocalJson(localStoreKeys.manualDrivers, []));
+  // 배송차는 담당자와 별개로 지정될 수 있어(같은 트럭을 여러 담당자가 나눠 쓰거나, 한 담당자가
+  // 상황에 따라 다른 차량을 몰 수 있음), 아직 어떤 거래처에도 배정되지 않은 배송차 이름을 미리
+  // 등록해 두는 목록입니다. manualDrivers와 동일한 로컬 저장 방식을 씁니다.
+  const [manualVehicles, setManualVehicles] = useState<string[]>(() => readLocalJson(localStoreKeys.manualVehicles, []));
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
@@ -296,6 +302,16 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return map;
   }, [baseDeliveryVehicles, vehicleFuelTypes]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
+  // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
+  // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
+  const vehicleNameOptions = useMemo(() => {
+    const names = new Set<string>();
+    allStores.forEach((store) => {
+      if (store.deliveryVehicleName) names.add(store.deliveryVehicleName);
+    });
+    manualVehicles.forEach((name) => names.add(name));
+    return Array.from(names).sort();
+  }, [allStores, manualVehicles]);
   const registeredStoreNames = useMemo(() => new Set(allStores.map((store) => store.name.trim().toLowerCase())), [allStores]);
   // 이미 거래처로 등록된 곳은 "미등록 매장" 목록에서 빼서 중복으로 보이지 않게 합니다.
   const unregisteredResults = useMemo(
@@ -474,6 +490,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
   useEffect(() => saveLocalJson(localStoreKeys.manualDrivers, manualDrivers), [manualDrivers]);
+  useEffect(() => saveLocalJson(localStoreKeys.manualVehicles, manualVehicles), [manualVehicles]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
@@ -604,6 +621,21 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     }
 
     setManualDrivers((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    return { ok: true };
+  }
+
+  /**
+   * 위 addManualDriver()는 "코스 계산용 배송차 그룹(담당자 기준)" 목록에 이름을 추가하는 함수이고,
+   * 이 함수는 그것과 별개로 거래처마다 독립적으로 지정할 수 있는 "배송차" 값(정식 명칭, 예: "냉동
+   * 1호차")을 드롭다운 제안 목록에 미리 추가해 두는 함수입니다. 담당자와 달리 서버에 별도로 저장할
+   * 부가 속성(연료 타입 등)이 없어 이 화면 전용 로컬 저장값만으로 충분합니다.
+   */
+  async function addManualVehicle(vehicleName: string): Promise<{ ok: boolean; message?: string }> {
+    const trimmed = vehicleName.trim();
+    if (!trimmed) return { ok: false, message: "배송차 이름을 입력하세요." };
+    if (vehicleNameOptions.includes(trimmed)) return { ok: false, message: "이미 등록된 배송차입니다." };
+
+    setManualVehicles((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
     return { ok: true };
   }
 
@@ -997,6 +1029,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     driverOptions={deliveryDefaults.drivers}
                     leftPanelCollapsed={leftCollapsed}
                     onAddDriver={addManualDriver}
+                    onAddVehicle={addManualVehicle}
                     onClose={() => setPreviewStoreId("")}
                     onOpenDetail={() => {
                       setSelectedId(previewStore.id);
@@ -1005,6 +1038,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     onSave={(edit) => updateStore(previewStore.id, edit)}
                     originAddress={originMarker?.address || ""}
                     store={previewStore}
+                    vehicleOptions={vehicleNameOptions}
                   />
                 ) : null}
               </>
@@ -1091,6 +1125,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           history={storeHistories[selectedStore.id] || []}
           key={selectedStore.id}
           onAddDriver={addManualDriver}
+          onAddVehicle={addManualVehicle}
           onClose={() => setSelectedId("")}
           onClearHistory={(storeId) =>
             setStoreHistories((current) => ({
@@ -1138,13 +1173,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             }))
           }
           store={selectedStore}
+          vehicleOptions={vehicleNameOptions}
         />
       ) : null}
       {quickRegisterTarget ? (
         <QuickRegisterDrawer
+          driverOptions={deliveryDefaults.drivers}
+          onAddDriver={addManualDriver}
+          onAddVehicle={addManualVehicle}
           onClose={() => setQuickRegisterTarget(null)}
           onRegistered={() => router.refresh()}
           result={quickRegisterTarget}
+          vehicleOptions={vehicleNameOptions}
         />
       ) : null}
     </div>
@@ -1155,18 +1195,28 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 // 상호명만 있으면 저장할 수 있고(사업자등록번호는 나중에 서류로 보완), 저장에 성공하면 같은 패널 안에서
 // 바로 사업자등록증·신분증·적재위치 파일을 업로드할 수 있도록 이어집니다.
 function QuickRegisterDrawer({
+  driverOptions,
+  onAddDriver,
+  onAddVehicle,
   onClose,
   onRegistered,
-  result
+  result,
+  vehicleOptions
 }: {
+  driverOptions?: string[];
+  onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
   onClose: () => void;
   onRegistered: () => void;
   result: ExternalBusinessResult;
+  vehicleOptions?: string[];
 }) {
   const [customerName, setCustomerName] = useState(result.name);
   const [address, setAddress] = useState(result.roadAddress || result.address);
   const [phone, setPhone] = useState(result.phone);
   const [industry, setIndustry] = useState(result.industry);
+  const [deliveryManager, setDeliveryManager] = useState("");
+  const [deliveryVehicle, setDeliveryVehicle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string } | null>(null);
@@ -1187,6 +1237,8 @@ function QuickRegisterDrawer({
           businessStatus: "확인 예정",
           companyId: companyId || undefined,
           customerName,
+          deliveryManager: deliveryManager || undefined,
+          deliveryVehicle: deliveryVehicle || undefined,
           industry: industry || "미분류",
           kakaoPlaceUrl: result.kakaoPlaceUrl,
           phone,
@@ -1275,6 +1327,22 @@ function QuickRegisterDrawer({
                   value={industry}
                 />
               </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-black text-slate-500">담당자</span>
+                  <DriverSelectField driverOptions={driverOptions || []} onAddDriver={onAddDriver} onChange={setDeliveryManager} value={deliveryManager} />
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-black text-slate-500">배송차</span>
+                  <DriverSelectField
+                    driverOptions={vehicleOptions || []}
+                    entityLabel="배송차"
+                    onAddDriver={onAddVehicle}
+                    onChange={setDeliveryVehicle}
+                    value={deliveryVehicle}
+                  />
+                </label>
+              </div>
               <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-800">
                 사업자등록번호는 지금 없어도 됩니다. 저장 후 사업자등록증을 업로드해 보완할 수 있습니다.
               </p>
@@ -1844,16 +1912,19 @@ function StoreQuickCard({
   driverOptions,
   leftPanelCollapsed,
   onAddDriver,
+  onAddVehicle,
   onClose,
   onOpenDetail,
   onSave,
   originAddress,
   store,
-  variant = "floating"
+  variant = "floating",
+  vehicleOptions
 }: {
   readonly driverOptions?: string[];
   readonly leftPanelCollapsed?: boolean;
   readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onOpenDetail: () => void;
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
@@ -1865,6 +1936,7 @@ function StoreQuickCard({
    * 안쪽에서 안전한 고정 여백만 사용해 옆 패널을 절대 침범하지 않습니다.
    */
   readonly variant?: "floating" | "grid";
+  readonly vehicleOptions?: string[];
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1872,6 +1944,7 @@ function StoreQuickCard({
     name: store.name,
     phone: store.phone || "",
     deliveryDriver: store.deliveryDriver || "",
+    deliveryVehicleName: store.deliveryVehicleName || "",
     memo: store.memo || "",
     businessHours: store.businessHours || "",
     menuSummary: store.menuSummary || ""
@@ -1882,6 +1955,7 @@ function StoreQuickCard({
       name: store.name,
       phone: store.phone || "",
       deliveryDriver: store.deliveryDriver || "",
+      deliveryVehicleName: store.deliveryVehicleName || "",
       memo: store.memo || "",
       businessHours: store.businessHours || "",
       menuSummary: store.menuSummary || ""
@@ -1990,6 +2064,14 @@ function StoreQuickCard({
               onChange={(value) => setDraft((current) => ({ ...current, deliveryDriver: value }))}
               value={draft.deliveryDriver}
             />
+            <DriverSelectField
+              compact
+              driverOptions={vehicleOptions || []}
+              entityLabel="배송차"
+              onAddDriver={onAddVehicle}
+              onChange={(value) => setDraft((current) => ({ ...current, deliveryVehicleName: value }))}
+              value={draft.deliveryVehicleName}
+            />
             <input
               className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
               onChange={(event) => setDraft((current) => ({ ...current, businessHours: event.target.value }))}
@@ -2020,7 +2102,9 @@ function StoreQuickCard({
         ) : (
           <>
             <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">{store.deliveryVehicleName || "담당자 미지정"}</span>
+              <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">
+                {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
+              </span>
               {onSave ? (
                 <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
                   <Edit3 className="h-3.5 w-3.5" />
@@ -2132,16 +2216,23 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
   );
 }
 
-/** 담당자·배송차 선택 드롭다운. 목록 맨 아래 "+ 새 담당자 추가"를 고르면 이름을 입력해 바로 등록합니다. */
+/**
+ * 담당자·배송차 선택 드롭다운. 목록 맨 아래 "+ 새 OO 추가"를 고르면 이름을 입력해 바로 등록합니다.
+ * entityLabel로 "담당자"/"배송차" 등 어떤 항목을 고르는 드롭다운인지 문구를 바꿔 재사용합니다.
+ * 담당자와 배송차는 서로 다른 값일 수 있어(같은 트럭을 여러 담당자가 나눠 쓰거나, 한 담당자가
+ * 상황에 따라 다른 차량을 몰 수 있음) 완전히 독립된 값으로 취급합니다.
+ */
 function DriverSelectField({
   compact,
   driverOptions,
+  entityLabel = "담당자",
   onAddDriver,
   onChange,
   value
 }: {
   readonly compact?: boolean;
   readonly driverOptions: string[];
+  readonly entityLabel?: string;
   readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onChange: (value: string) => void;
   readonly value: string;
@@ -2163,7 +2254,7 @@ function DriverSelectField({
     const result = await onAddDriver(newName);
     setSaving(false);
     if (!result.ok) {
-      setError(result.message || "담당자 추가에 실패했습니다.");
+      setError(result.message || `${entityLabel} 추가에 실패했습니다.`);
       return;
     }
     onChange(newName.trim());
@@ -2179,7 +2270,7 @@ function DriverSelectField({
             autoFocus
             className={compact ? "h-8 w-full rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400" : "h-10 w-full rounded-md border border-teal-200 bg-white px-3 font-bold outline-none focus:border-teal-400"}
             onChange={(event) => setNewName(event.target.value)}
-            placeholder="새 담당자 이름"
+            placeholder={`새 ${entityLabel} 이름`}
             value={newName}
           />
           <button className="maju-button-secondary h-8 shrink-0 px-2 text-xs" disabled={saving} onClick={() => setIsAddingNew(false)} type="button">
@@ -2206,13 +2297,13 @@ function DriverSelectField({
       }}
       value={value}
     >
-      <option value="">담당자 미지정</option>
+      <option value="">{entityLabel} 미지정</option>
       {options.map((driver) => (
         <option key={driver} value={driver}>
           {driver}
         </option>
       ))}
-      {onAddDriver ? <option value={ADD_NEW}>+ 새 담당자 추가</option> : null}
+      {onAddDriver ? <option value={ADD_NEW}>+ 새 {entityLabel} 추가</option> : null}
     </select>
   );
 }
@@ -3456,6 +3547,7 @@ function StoreDetail({
   driverOptions,
   history,
   onAddDriver,
+  onAddVehicle,
   onClose,
   onClearHistory,
   onDeleteHistory,
@@ -3464,13 +3556,15 @@ function StoreDetail({
   onUpdateRelationshipStatus,
   onUpdateStore,
   onWriteHistory,
-  store
+  store,
+  vehicleOptions
 }: {
   readonly areaOptions: string[];
   readonly attachments: StoreAttachment;
   readonly driverOptions: string[];
   readonly history: StoreHistoryItem[];
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onAddVehicle: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onClearHistory: (storeId: string) => void;
   readonly onDeleteHistory: (storeId: string, historyId: string) => void;
@@ -3480,6 +3574,7 @@ function StoreDetail({
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => Promise<{ persisted: boolean } | void>;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly store: StoreRow;
+  readonly vehicleOptions: string[];
 }) {
   const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
@@ -3492,6 +3587,7 @@ function StoreDetail({
   const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
   const [draftDeliveryArea, setDraftDeliveryArea] = useState(store.deliveryArea || store.region);
   const [draftDeliveryDriver, setDraftDeliveryDriver] = useState(store.deliveryDriver || "");
+  const [draftDeliveryVehicleName, setDraftDeliveryVehicleName] = useState(store.deliveryVehicleName || "");
   const [draftEmail, setDraftEmail] = useState(store.email);
   const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
   const [draftIndustry, setDraftIndustry] = useState(store.industry);
@@ -3532,6 +3628,7 @@ function StoreDetail({
       menuSummary: draftMenuSummary,
       deliveryArea: draftDeliveryArea,
       deliveryDriver: draftDeliveryDriver,
+      deliveryVehicleName: draftDeliveryVehicleName,
       email: draftEmail,
       expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
       grade: draftGrade,
@@ -3676,6 +3773,16 @@ function StoreDetail({
                   <label className="grid gap-1.5 text-sm">
                     <span className="text-xs font-black text-slate-500">담당자</span>
                     <DriverSelectField driverOptions={driverOptions} onAddDriver={onAddDriver} onChange={setDraftDeliveryDriver} value={draftDeliveryDriver} />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">배송차</span>
+                    <DriverSelectField
+                      driverOptions={vehicleOptions}
+                      entityLabel="배송차"
+                      onAddDriver={onAddVehicle}
+                      onChange={setDraftDeliveryVehicleName}
+                      value={draftDeliveryVehicleName}
+                    />
                   </label>
                   <SelectRow label="배송권역" onChange={setDraftDeliveryArea} options={areaOptions.map((area) => ({ label: area, value: area }))} value={draftDeliveryArea} />
                 </div>
@@ -4317,7 +4424,10 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
         deliveryArea: vehicle.area,
         deliveryDriver: vehicle.driver,
         deliveryVehicleId: vehicle.id,
-        deliveryVehicleName: vehicle.name,
+        // 배송차는 담당자와 독립적으로 거래처별로 지정할 수 있습니다. 거래처에 직접 지정된 배송차
+        // 이름(store.deliveryVehicle, 서버에 저장된 값)이 있으면 그 값을 우선 보여주고, 아직 지정한
+        // 적 없는 거래처는 예전처럼 담당자 기준 자동 그룹명(vehicle.name)을 그대로 보여줍니다.
+        deliveryVehicleName: store.deliveryVehicle || vehicle.name,
         email: store.email || details.email || "",
         grade: getRevenueGrade(store.expectedRevenue),
         industry: store.industry || details.industry || "미분류",
@@ -4373,6 +4483,7 @@ function toCustomerPayload(store: StoreRow) {
     deliveryKm: Number(store.distanceKm || 0),
     deliveryManager: store.deliveryDriver || "",
     deliveryMinutes: Number(store.durationMinutes || 0),
+    deliveryVehicle: store.deliveryVehicleName || "",
     deliveryZone: store.deliveryArea || store.region,
     email: store.email,
     industry: store.industry,

@@ -92,6 +92,7 @@ export type CustomerMasterItem = {
   deliveryKm: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
+  deliveryVehicle?: string;
   deliveryZone?: string;
   email?: string;
   grade: "A" | "B" | "C";
@@ -126,6 +127,7 @@ export type CustomerMasterInput = {
   deliveryKm?: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
+  deliveryVehicle?: string;
   deliveryZone?: string;
   email?: string;
   industry?: string;
@@ -186,6 +188,7 @@ export type RoutePlanStop = LeadItem & {
   businessStatus?: string;
   deliveryArea?: string;
   deliveryDriver?: string;
+  deliveryVehicle?: string;
   distanceKm?: number;
   durationMinutes?: number;
   email?: string;
@@ -450,6 +453,10 @@ const CUSTOMER_MASTER_SELECT =
 const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS = `${CUSTOMER_MASTER_SELECT},naver_place_url,kakao_place_url,google_map_url,place_links_checked_at`;
 const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS},business_hours,menu_summary`;
 const CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU},relationship_status,relationship_status_updated_at,relationship_status_note`;
+// 배송차(deliveryVehicle)는 담당자(deliveryDriver)와 별개로 지정할 수 있는 독립된 값입니다.
+// supabase/migrations/20260818_customer_delivery_vehicle.sql을 아직 실행하지 않은 환경에서도
+// 나머지 거래처 조회가 함께 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
+const CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE = `${CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS},delivery_vehicle`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -1995,6 +2002,7 @@ export async function getCustomerMaster(
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
+    delivery_vehicle?: string | null;
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
@@ -2024,6 +2032,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE,
     CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS,
     CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU,
     CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS,
@@ -2091,6 +2100,7 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       delivery_km: input.deliveryKm || 0,
       delivery_manager: input.deliveryManager || null,
       delivery_minutes: input.deliveryMinutes || null,
+      delivery_vehicle: input.deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
@@ -2171,19 +2181,30 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     business_hours: input.businessHours || null,
     menu_summary: input.menuSummary || null
   };
-  const rows = await upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...placeLinks, ...hoursMenuFields }).catch((error) => {
-    if (isMissingCustomerHoursMenuColumnError(error)) {
-      return upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...placeLinks }).catch((innerError) => {
-        if (!isMissingCustomerPlaceLinksColumnError(innerError)) throw innerError;
-        return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
-      });
+  const deliveryVehicleField = {
+    delivery_vehicle: input.deliveryVehicle || null
+  };
+  // 가장 넓은 페이로드(모든 선택 컬럼 포함)부터 시도하고, "컬럼 없음" 에러를 만나면 그 선택 컬럼
+  // 묶음만 제외한 다음 티어로 재시도합니다. 위 getCustomerMaster()의 select 캐스케이드와 동일한
+  // 원칙(특정 컬럼 이름을 매칭하지 않고 generic한 42703/does not exist 판별만 사용)을 씁니다.
+  const UPSERT_PAYLOAD_TIERS = [
+    { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField },
+    { ...customerPayload, ...placeLinks, ...hoursMenuFields },
+    { ...customerPayload, ...placeLinks },
+    customerPayload
+  ];
+  let lastUpsertError: unknown;
+  let rows: Array<Record<string, unknown>> | null = null;
+  for (const payload of UPSERT_PAYLOAD_TIERS) {
+    try {
+      rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload);
+      break;
+    } catch (error) {
+      if (!isMissingColumnError(error)) throw error;
+      lastUpsertError = error;
     }
-    if (!isMissingCustomerPlaceLinksColumnError(error)) throw error;
-    return upsertNormalizedCustomerWithOptionalPlaceLinks({ ...customerPayload, ...hoursMenuFields }).catch((innerError) => {
-      if (!isMissingCustomerHoursMenuColumnError(innerError)) throw innerError;
-      return upsertNormalizedCustomerWithOptionalPlaceLinks(customerPayload);
-    });
-  });
+  }
+  if (!rows) throw lastUpsertError instanceof Error ? lastUpsertError : new Error(String(lastUpsertError));
   const savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
 
   await writeAdminAuditLog({
@@ -3256,6 +3277,7 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         representativeName: customer.representativeName,
         deliveryArea: customer.deliveryZone || customer.region || "미분류",
         deliveryDriver: customer.deliveryManager,
+        deliveryVehicle: customer.deliveryVehicle,
         order: index + 1,
         routeCalculatedAt: cached?.calculatedAt,
         routeProvider
@@ -4988,6 +5010,7 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     delivery_km: row.delivery_km as number | string | null,
     delivery_manager: asNullableString(row.delivery_manager),
     delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
+    delivery_vehicle: asNullableString(row.delivery_vehicle),
     delivery_zone: asNullableString(row.delivery_zone),
     email: asNullableString(row.email),
     google_map_url: asNullableString(row.google_map_url),
@@ -5025,6 +5048,7 @@ function toCustomerMasterItem(
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
+    delivery_vehicle?: string | null;
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
@@ -5063,6 +5087,7 @@ function toCustomerMasterItem(
     deliveryKm: Number(row.delivery_km || 0),
     deliveryManager: row.delivery_manager || undefined,
     deliveryMinutes: row.delivery_minutes || undefined,
+    deliveryVehicle: row.delivery_vehicle || undefined,
     deliveryZone: row.delivery_zone || undefined,
     email: row.email || undefined,
     grade: getRevenueGrade(monthlyRevenue),
