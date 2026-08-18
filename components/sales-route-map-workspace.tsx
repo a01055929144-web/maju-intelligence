@@ -292,8 +292,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return routeStores.length ? routeStores : ledgerFallbackStores;
   }, [ledgerFallbackStores, mapMarkers, routePlan]);
   const baseDeliveryVehicles = useMemo(
-    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualDrivers),
-    [routeSeedStores, vehicleFuelTypes, manualDrivers]
+    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualVehicles),
+    [routeSeedStores, vehicleFuelTypes, manualVehicles]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   const fuelTypeConfiguredByVehicleId = useMemo(() => {
@@ -600,7 +600,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   async function addManualDriver(driverName: string, fuelType: "gasoline" | "diesel" = "diesel"): Promise<{ ok: boolean; message?: string }> {
     const trimmed = driverName.trim();
     if (!trimmed) return { ok: false, message: "담당자 이름을 입력하세요." };
-    if (deliveryVehicles.some((vehicle) => vehicle.driver === trimmed)) {
+    // 배송차 하나에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우), 배송차의 대표
+    // 담당자(vehicle.driver)만으로는 중복 여부를 놓칠 수 있습니다. deliveryDefaults.drivers는 모든
+    // 거래처의 담당자를 모은 목록이라 이걸로 확인합니다.
+    if (deliveryDefaults.drivers.includes(trimmed)) {
       return { ok: false, message: "이미 등록된 담당자입니다." };
     }
 
@@ -4422,7 +4425,9 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
         businessRegistrationNumber: details.businessRegistrationNumber || details.businessNumber || "",
         businessStatus: normalizeStoreBusinessStatus(details.businessStatus),
         deliveryArea: vehicle.area,
-        deliveryDriver: vehicle.driver,
+        // 배송차 하나에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우),
+        // vehicle.driver(대표 담당자)로 덮어쓰지 않고 이 거래처에 실제 배정된 담당자를 그대로 씁니다.
+        deliveryDriver: store.deliveryDriver || vehicle.driver,
         deliveryVehicleId: vehicle.id,
         // 배송차는 담당자와 독립적으로 거래처별로 지정할 수 있습니다. 거래처에 직접 지정된 배송차
         // 이름(store.deliveryVehicle, 서버에 저장된 값)이 있으면 그 값을 우선 보여주고, 아직 지정한
@@ -4499,43 +4504,76 @@ function toCustomerPayload(store: StoreRow) {
   };
 }
 
+/**
+ * 배송차(코스 계산·연료비·지도 필터에 쓰이는 "배송차 목록")를 실제 배차 기준으로 묶습니다.
+ * 담당자와 배송차는 이제 서로 독립된 값이라, 거래처에 직접 지정된 배송차 이름(deliveryVehicleName)이
+ * 있으면 그 이름으로 묶고, 아직 지정하지 않은 거래처는 예전처럼 담당자 이름을 임시 배송차로 써서
+ * 묶습니다(담당자 1인당 트럭 1대라는 기존 기본값). 한 배송차에 담당자가 여러 명 섞여 있을 수 있어
+ * (같은 트럭을 나눠 쓰는 경우), 그 배송차의 "담당자" 표시값은 거래처 수가 가장 많은 담당자로 대표합니다.
+ */
 function createDeliveryVehiclesFromStores(
   stores: StoreRow[],
   vehicleFuelTypes?: Record<string, "gasoline" | "diesel">,
-  extraDrivers: string[] = []
+  extraVehicles: string[] = []
 ): DeliveryVehicle[] {
   const groups = new Map<string, StoreRow[]>();
+  const explicitVehicleKeys = new Set<string>();
 
   stores.forEach((store, index) => {
     const driver = store.deliveryDriver || defaultDriverByIndex(index);
     const area = store.deliveryArea || store.region || "미분류";
-    groups.set(driver, [...(groups.get(driver) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
+    const vehicleKey = store.deliveryVehicleName || driver;
+    if (store.deliveryVehicleName) explicitVehicleKeys.add(vehicleKey);
+    groups.set(vehicleKey, [...(groups.get(vehicleKey) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
   });
 
-  // 아직 배정된 거래처가 없는, 방금 추가한 담당자·배송차도 빈 그룹으로 목록에 나타나야 합니다.
-  extraDrivers.forEach((driver) => {
-    if (!groups.has(driver)) groups.set(driver, []);
+  // 아직 거래처가 배정되지 않은, 방금 추가한 배송차도 빈 그룹으로 목록에 나타나야 합니다.
+  extraVehicles.forEach((vehicleName) => {
+    explicitVehicleKeys.add(vehicleName);
+    if (!groups.has(vehicleName)) groups.set(vehicleName, []);
   });
 
-  return Array.from(groups.entries()).map(([driver, stops], index) => {
+  return Array.from(groups.entries()).map(([vehicleKey, stops], index) => {
     const orderedStops = stops.map((stop, stopIndex) => ({
       ...stop,
       order: stopIndex + 1
     }));
+    const isExplicitVehicle = explicitVehicleKeys.has(vehicleKey);
+    const representativeDriver = mostFrequentDriver(orderedStops) || (isExplicitVehicle ? "" : vehicleKey);
+    const vehicleName = isExplicitVehicle ? vehicleKey : `배송 ${index + 1}호차`;
 
     return {
       addresses: orderedStops.map((stop) => stop.address || stop.region),
       area: summarizeVehicleArea(orderedStops),
-      driver,
+      driver: representativeDriver,
       expectedRevenue: orderedStops.reduce((total, stop) => total + Number(stop.expectedRevenue || 0), 0),
-      fuelType: vehicleFuelTypes?.[driver] || "diesel",
+      fuelType: vehicleFuelTypes?.[representativeDriver] || "diesel",
       id: `vehicle-${index + 1}`,
-      name: `배송 ${index + 1}호차`,
+      name: vehicleName,
       stops: orderedStops,
       totalDistanceKm: roundToOneDecimal(orderedStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
       totalDurationMinutes: orderedStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
     };
   });
+}
+
+// 한 배송차 그룹 안에 담당자가 여러 명 섞여 있을 때, 거래처 수가 가장 많은 담당자를 대표로 고릅니다.
+function mostFrequentDriver(stops: StoreRow[]): string {
+  const counts = new Map<string, number>();
+  stops.forEach((stop) => {
+    if (!stop.deliveryDriver) return;
+    counts.set(stop.deliveryDriver, (counts.get(stop.deliveryDriver) || 0) + 1);
+  });
+
+  let best = "";
+  let bestCount = 0;
+  counts.forEach((count, driver) => {
+    if (count > bestCount) {
+      best = driver;
+      bestCount = count;
+    }
+  });
+  return best;
 }
 
 function summarizeVehicleArea(stops: StoreRow[]) {
@@ -4712,7 +4750,17 @@ function applyVehicleEdits(vehicles: DeliveryVehicle[], edits: Record<string, Ve
 }
 
 function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {
-  const drivers = Array.from(new Set(vehicles.map((vehicle) => vehicle.driver).filter(Boolean))).sort();
+  // 배송차 안에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우), 배송차의 대표
+  // 담당자(vehicle.driver)만 모으면 일부 담당자를 놓칠 수 있습니다. 각 배송차에 실제로 배정된
+  // 모든 거래처의 담당자를 함께 모아 정확한 담당자 목록을 만듭니다.
+  const driverSet = new Set<string>();
+  vehicles.forEach((vehicle) => {
+    if (vehicle.driver) driverSet.add(vehicle.driver);
+    vehicle.stops.forEach((stop) => {
+      if (stop.deliveryDriver) driverSet.add(stop.deliveryDriver);
+    });
+  });
+  const drivers = Array.from(driverSet).sort();
   const areas = Array.from(new Set(vehicles.map((vehicle) => vehicle.area).filter(Boolean))).sort();
   return { areas, drivers };
 }
