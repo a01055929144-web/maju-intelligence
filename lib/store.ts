@@ -2246,6 +2246,128 @@ async function upsertNormalizedCustomerWithOptionalPlaceLinks(payload: Record<st
   });
 }
 
+// 거래처 하나에 대표/실장/부장/매니저 등 여러 연락처를 등록·관리합니다. 대표 연락처 한 명(기존
+// representative_name/phone)과 별개로, 실무에서 자주 마주치는 다른 담당자들을 추가로 남길 수 있습니다.
+export type CustomerContactItem = {
+  id: string;
+  customerId: string;
+  isPrimary: boolean;
+  memo?: string;
+  name: string;
+  phone?: string;
+  role: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CustomerContactRow = {
+  id: string;
+  customer_id: string;
+  role: string;
+  name: string;
+  phone: string | null;
+  memo: string | null;
+  is_primary: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+function toCustomerContactItem(row: CustomerContactRow): CustomerContactItem {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    isPrimary: row.is_primary,
+    memo: row.memo || undefined,
+    name: row.name,
+    phone: row.phone || undefined,
+    role: row.role,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function isMissingCustomerContactsTableError(error: unknown) {
+  return error instanceof Error && error.message.includes("customer_contacts");
+}
+
+export async function listCustomerContacts(companyId: string, customerId: string): Promise<CustomerContactItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+  try {
+    const rows = await supabaseRequest<CustomerContactRow[]>(
+      `customer_contacts?select=*&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(customerId)}&order=sort_order.asc,created_at.asc`
+    );
+    return rows.map(toCustomerContactItem);
+  } catch (error) {
+    if (isMissingCustomerContactsTableError(error)) return [];
+    throw error;
+  }
+}
+
+export type CustomerContactInput = {
+  id?: string;
+  isPrimary?: boolean;
+  memo?: string;
+  name: string;
+  phone?: string;
+  role: string;
+};
+
+export async function upsertCustomerContact(
+  companyId: string,
+  customerId: string,
+  input: CustomerContactInput
+): Promise<{ contact: CustomerContactItem | null; ok: boolean; message?: string }> {
+  if (!isProductionStoreConfigured()) return { contact: null, ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+  if (!input.name.trim()) return { contact: null, ok: false, message: "담당자 이름은 필수입니다." };
+
+  try {
+    const payload = {
+      company_id: companyId,
+      customer_id: customerId,
+      role: input.role.trim() || "담당자",
+      name: input.name.trim(),
+      phone: input.phone?.trim() || null,
+      memo: input.memo?.trim() || null,
+      is_primary: Boolean(input.isPrimary),
+      updated_at: new Date().toISOString()
+    };
+
+    if (input.id) {
+      const rows = await supabaseRequest<CustomerContactRow[]>(
+        `customer_contacts?id=eq.${encodeURIComponent(input.id)}&company_id=eq.${encodeURIComponent(companyId)}`,
+        { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) }
+      );
+      return { contact: rows[0] ? toCustomerContactItem(rows[0]) : null, ok: true };
+    }
+
+    const rows = await supabaseRequest<CustomerContactRow[]>("customer_contacts", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([payload])
+    });
+    return { contact: rows[0] ? toCustomerContactItem(rows[0]) : null, ok: true };
+  } catch (error) {
+    if (isMissingCustomerContactsTableError(error)) {
+      return { contact: null, ok: false, message: "연락처 저장소가 아직 준비되지 않았습니다. 마이그레이션을 먼저 실행해주세요." };
+    }
+    throw error;
+  }
+}
+
+export async function deleteCustomerContact(companyId: string, contactId: string): Promise<{ ok: boolean }> {
+  if (!isProductionStoreConfigured()) return { ok: false };
+  await supabaseRequest(`customer_contacts?id=eq.${encodeURIComponent(contactId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  }).catch((error) => {
+    if (!isMissingCustomerContactsTableError(error)) throw error;
+  });
+  return { ok: true };
+}
+
 export type BusinessNumberException = {
   id: string;
   businessRegistrationNumber: string;
