@@ -1045,7 +1045,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName={`top-3 xl:top-20 ${rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}`}
+                    controlsOffsetClassName={`top-3 ${rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}`}
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={mapDisplayMarkers}
@@ -1091,7 +1091,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </div>
 
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:top-20 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
+            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:top-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
               leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[300px]"
             }`}
           >
@@ -1109,7 +1109,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </div>
 
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:top-20 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
+            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:top-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
               rightCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[340px]"
             }`}
           >
