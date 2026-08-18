@@ -3239,6 +3239,648 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
   return { persisted: true, id: rows[0]?.id || leadId, status: rows[0]?.status || status };
 }
 
+// ── 신규 영업 리드(사업자 인허가 기반) ──────────────────────────────────────────
+// lead_recommendations(위 getLatestLeads)는 AI 리포트가 만드는 기존 거래처 기반 기회 리드이고,
+// 아래는 완전히 별개인 "사업자 인허가 신규 데이터"를 원천으로 하는 신규 영업 후보입니다.
+// 지도 홈에서 "오늘 새로 문 연 곳"을 찾아 전화/DM/방문으로 이어가는 용도입니다.
+
+export type PermitLeadPeriod = "today" | "week" | "month" | "recent";
+
+export type PermitLeadIngestRow = {
+  businessName: string;
+  businessNumber?: string;
+  representativeName?: string;
+  permitStatus?: string;
+  permitDate?: string;
+  openDate?: string;
+  address?: string;
+  phone?: string;
+  jurisdiction?: string;
+  industry?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type PermitLeadItem = {
+  id: string;
+  businessName: string;
+  businessNumber?: string;
+  representativeName?: string;
+  permitStatus?: string;
+  isActive: boolean;
+  permitDate?: string;
+  openDate?: string;
+  address?: string;
+  phone?: string;
+  jurisdiction?: string;
+  leadPeriod: PermitLeadPeriod;
+  industryPrimary: string;
+  industryTags: string[];
+  isTargetIndustry: boolean;
+  isDuplicate: boolean;
+  matchedCustomerId?: string;
+  status: string;
+  nextAction?: string;
+  nextActionReasons: string[];
+  excludeReason?: string;
+  scoreTotal: number;
+  scoreBreakdown: Record<string, number>;
+  grade: "A" | "B" | "C" | null;
+  naverPlaceUrl?: string;
+  kakaoPlaceUrl?: string;
+  googlePlaceUrl?: string;
+  instagramUrl?: string;
+  reviewCount?: number;
+  rating?: number;
+  keywordVolume?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PermitLeadRow = {
+  id: string;
+  business_name: string;
+  business_number: string | null;
+  representative_name: string | null;
+  permit_status: string | null;
+  is_active: boolean;
+  permit_date: string | null;
+  open_date: string | null;
+  address: string | null;
+  phone: string | null;
+  jurisdiction: string | null;
+  lead_period: PermitLeadPeriod;
+  industry_raw: string | null;
+  industry_primary: string | null;
+  industry_tags: string[] | null;
+  is_target_industry: boolean;
+  matched_customer_id: string | null;
+  is_duplicate: boolean;
+  status: string;
+  next_action: string | null;
+  next_action_reasons: string[] | null;
+  exclude_reason: string | null;
+  score_total: number;
+  score_breakdown: Record<string, number> | null;
+  grade: string | null;
+  naver_place_url: string | null;
+  kakao_place_url: string | null;
+  google_place_url: string | null;
+  instagram_url: string | null;
+  review_count: number | null;
+  rating: number | null;
+  keyword_volume: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// 유통사가 취급하는 식자재와 무관해 영업 대상에서 자동 제외할 업종 키워드입니다.
+const PERMIT_EXCLUDED_INDUSTRY_KEYWORDS = [
+  "미용실", "이용원", "네일", "피부관리", "학원", "교습소", "공인중개사", "부동산중개",
+  "병원", "의원", "약국", "한의원", "동물병원", "세탁", "정비", "카센터", "숙박업", "모텔",
+  "여관", "고시원", "PC방", "노래연습장", "당구장", "골프연습장", "체육시설", "독서실", "안경"
+];
+
+// 업종 원문/상호명에서 대표 업종을 분류하는 규칙입니다. 필요에 따라 계속 추가할 수 있습니다.
+const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: string[] }> = [
+  { primary: "한식", keywords: ["한식", "국밥", "해장국", "백반", "찌개", "곰탕", "설렁탕", "분식"] },
+  { primary: "카페/디저트", keywords: ["카페", "커피", "디저트", "베이커리", "제과", "빵집"] },
+  { primary: "일식", keywords: ["일식", "이자카야", "스시", "라멘", "돈카츠", "우동"] },
+  { primary: "중식", keywords: ["중식", "마라탕", "양꼬치", "짬뽕", "짜장"] },
+  { primary: "프랜차이즈/배달", keywords: ["치킨", "피자", "버거", "패스트푸드"] },
+  { primary: "주점", keywords: ["주점", "포차", "호프", "술집"] },
+  { primary: "양식", keywords: ["양식", "파스타", "스테이크", "브런치"] },
+  { primary: "뷔페/단체급식", keywords: ["뷔페", "단체급식", "구내식당", "케이터링"] }
+];
+
+/**
+ * 인허가 원본 업종명/상호명에서 대표 업종과 보조 키워드 태그를 뽑고, 식자재 유통 영업 대상
+ * 업종인지 판단합니다. 명확히 비대상인 키워드가 있으면 즉시 제외하고, 규칙에 없는 일반
+ * 음식점류는 "미분류(확인 필요)"로 남겨 영업자가 직접 판단하게 합니다(무리하게 제외하지 않음).
+ */
+export function classifyPermitLeadIndustry(rawIndustryText: string, businessName: string) {
+  const haystack = `${rawIndustryText || ""} ${businessName || ""}`;
+
+  for (const excluded of PERMIT_EXCLUDED_INDUSTRY_KEYWORDS) {
+    if (haystack.includes(excluded)) {
+      return { primary: rawIndustryText?.trim() || "비대상 업종", tags: [] as string[], isTarget: false };
+    }
+  }
+
+  for (const rule of PERMIT_INDUSTRY_RULES) {
+    const matchedTags = rule.keywords.filter((keyword) => haystack.includes(keyword));
+    if (matchedTags.length) return { primary: rule.primary, tags: matchedTags, isTarget: true };
+  }
+
+  const looksLikeFoodService = /음식점|식당|분식|급식|주점|카페|제과|호프|포차/.test(rawIndustryText || "");
+  return {
+    primary: rawIndustryText?.trim() || "미분류",
+    tags: [] as string[],
+    isTarget: looksLikeFoodService || !rawIndustryText?.trim()
+  };
+}
+
+/** 인허가일 기준으로 오늘/이번 주(월요일 시작)/이번 달/최근 90일 중 어느 구간에 속하는지 계산합니다. */
+export function computePermitLeadPeriod(permitDateText: string | null | undefined, referenceDate: Date = new Date()): PermitLeadPeriod {
+  if (!permitDateText) return "recent";
+  const permitDate = new Date(permitDateText);
+  if (Number.isNaN(permitDate.getTime())) return "recent";
+
+  const startOfToday = new Date(referenceDate);
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayOfWeek = startOfToday.getDay() || 7; // 일요일(0)을 7로 취급해 월요일 시작 주간을 계산
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfWeek.getDate() - (dayOfWeek - 1));
+  const startOfMonth = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), 1);
+
+  if (permitDate >= startOfToday) return "today";
+  if (permitDate >= startOfWeek) return "week";
+  if (permitDate >= startOfMonth) return "month";
+  return "recent";
+}
+
+function isPermitStatusActive(statusText?: string) {
+  if (!statusText) return true;
+  const inactiveKeywords = ["폐업", "말소", "취소", "영업정지", "직권말소", "휴업"];
+  return !inactiveKeywords.some((keyword) => statusText.includes(keyword));
+}
+
+/**
+ * v1 점수 산식입니다. 설계 문서의 6개 축 중 실데이터로 바로 계산 가능한 3개(인허가 신선도,
+ * 업종 적합도, 연락처/주소 기반 영업 접근성)만 계산하고, 나머지 3개(키워드 검색량, 리뷰·활성도,
+ * 동선 적합도)는 외부 보강 데이터가 들어오기 전까지 0점으로 둡니다. 그래서 보강 전 리드는
+ * A등급(85점 이상)에 도달하기 어려운데, 이는 의도된 것입니다 — 화면은 등급보다 "다음 액션"을
+ * 우선 노출하므로(computePermitLeadNextAction 참고) 보강 전이라도 오늘 전화할 곳은 놓치지 않습니다.
+ */
+function computePermitLeadScoreBreakdown(input: {
+  leadPeriod: PermitLeadPeriod;
+  isTarget: boolean;
+  industryKnown: boolean;
+  hasPhone: boolean;
+  hasAddress: boolean;
+}) {
+  const freshness = input.leadPeriod === "today" ? 30 : input.leadPeriod === "week" ? 22 : input.leadPeriod === "month" ? 14 : 6;
+  const industryFit = !input.isTarget ? 0 : input.industryKnown ? 20 : 10;
+  const outreachFit = (input.hasPhone ? 6 : 0) + (input.hasAddress ? 2 : 0);
+
+  return {
+    license_freshness_score: freshness,
+    industry_fit_score: industryFit,
+    keyword_demand_score: 0,
+    place_activity_score: 0,
+    route_fit_score: 0,
+    outreach_fit_score: outreachFit
+  };
+}
+
+function permitLeadGradeFromScore(scoreTotal: number): "A" | "B" | "C" | null {
+  if (scoreTotal >= 85) return "A";
+  if (scoreTotal >= 70) return "B";
+  if (scoreTotal >= 55) return "C";
+  return null;
+}
+
+/** 화면에 점수 대신 먼저 보여줄 "다음 액션"과 근거 3줄 이내를 계산합니다. */
+function computePermitLeadNextAction(input: {
+  isActive: boolean;
+  isDuplicate: boolean;
+  isTarget: boolean;
+  industryKnown: boolean;
+  leadPeriod: PermitLeadPeriod;
+  hasPhone: boolean;
+  hasAddress: boolean;
+  industryPrimary: string;
+}): { action: string; reasons: string[] } {
+  if (!input.isActive) return { action: "제외 검토", reasons: ["사업장 상태가 폐업·휴업·영업정지 등 비활성"] };
+  if (input.isDuplicate) return { action: "제외 검토", reasons: ["이미 등록된 거래처와 사업자번호 일치"] };
+  if (!input.isTarget) return { action: "제외 검토", reasons: ["식자재 유통 영업 대상 업종이 아님"] };
+
+  if (!input.hasAddress || !input.industryKnown) {
+    const reasons: string[] = [];
+    if (!input.hasAddress) reasons.push("주소 정보 부족");
+    if (!input.industryKnown) reasons.push("업종 분류 확인 필요");
+    if (!input.hasPhone) reasons.push("전화번호 없음");
+    return { action: "정보 보강", reasons };
+  }
+
+  const periodLabel =
+    input.leadPeriod === "today"
+      ? "오늘 신규 인허가"
+      : input.leadPeriod === "week"
+        ? "이번 주 신규 인허가"
+        : input.leadPeriod === "month"
+          ? "이번 달 신규 인허가"
+          : "최근 90일 신규 인허가";
+
+  if (input.leadPeriod === "today" && input.hasPhone) {
+    return { action: "오늘 바로 전화", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 확인됨"] };
+  }
+  if (!input.hasPhone) {
+    return { action: "오늘 DM 발송", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 미확인 · 온라인 채널 확인 필요"] };
+  }
+  return { action: "전화·DM 검토", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 확인됨"] };
+}
+
+function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
+  return {
+    id: row.id,
+    businessName: row.business_name,
+    businessNumber: row.business_number || undefined,
+    representativeName: row.representative_name || undefined,
+    permitStatus: row.permit_status || undefined,
+    isActive: row.is_active,
+    permitDate: row.permit_date || undefined,
+    openDate: row.open_date || undefined,
+    address: row.address || undefined,
+    phone: row.phone || undefined,
+    jurisdiction: row.jurisdiction || undefined,
+    leadPeriod: row.lead_period,
+    industryPrimary: row.industry_primary || "미분류",
+    industryTags: row.industry_tags || [],
+    isTargetIndustry: row.is_target_industry,
+    isDuplicate: row.is_duplicate,
+    matchedCustomerId: row.matched_customer_id || undefined,
+    status: row.status,
+    nextAction: row.next_action || undefined,
+    nextActionReasons: row.next_action_reasons || [],
+    excludeReason: row.exclude_reason || undefined,
+    scoreTotal: row.score_total,
+    scoreBreakdown: row.score_breakdown || {},
+    grade: (row.grade as "A" | "B" | "C" | null) || null,
+    naverPlaceUrl: row.naver_place_url || undefined,
+    kakaoPlaceUrl: row.kakao_place_url || undefined,
+    googlePlaceUrl: row.google_place_url || undefined,
+    instagramUrl: row.instagram_url || undefined,
+    reviewCount: row.review_count ?? undefined,
+    rating: row.rating ?? undefined,
+    keywordVolume: row.keyword_volume ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export type PermitLeadIngestResult = {
+  total: number;
+  inserted: number;
+  updated: number;
+  duplicates: number;
+  excludedInactive: number;
+  excludedNonTarget: number;
+  skippedNoName: number;
+};
+
+/**
+ * 사업자 인허가 데이터 업로드(엑셀/CSV) 결과를 일괄 적재합니다. 이미 저장된 사업자번호는
+ * 최신 인허가 상태로 갱신(upsert)하고, 처음 보는 사업자번호는 새 리드로 추가합니다.
+ * 기존 거래처(normalized_customers)와 사업자번호가 일치하면 중복으로 표시하되 삭제하지 않고
+ * "제외" 상태로 남겨 왜 제외됐는지 추적할 수 있게 합니다.
+ */
+export async function ingestPermitLeadRows(companyId: string, rows: PermitLeadIngestRow[]): Promise<PermitLeadIngestResult> {
+  const result: PermitLeadIngestResult = {
+    total: rows.length,
+    inserted: 0,
+    updated: 0,
+    duplicates: 0,
+    excludedInactive: 0,
+    excludedNonTarget: 0,
+    skippedNoName: 0
+  };
+  if (!rows.length || !isProductionStoreConfigured()) return result;
+
+  await upsertCompany(companyId, "마주식자재");
+
+  const businessNumbers = Array.from(new Set(rows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)));
+  const [existingCustomersByBizNo, existingLeadsByBizNo] = await Promise.all([
+    businessNumbers.length
+      ? supabaseRequest<Array<{ id: string; business_registration_number: string }>>(
+          `normalized_customers?select=id,business_registration_number&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=in.(${businessNumbers
+            .map(encodeURIComponent)
+            .join(",")})`
+        ).catch(() => [])
+      : Promise.resolve([]),
+    businessNumbers.length
+      ? supabaseRequest<Array<{ id: string; business_number: string }>>(
+          `business_permit_leads?select=id,business_number&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${businessNumbers
+            .map(encodeURIComponent)
+            .join(",")})`
+        ).catch(() => [])
+      : Promise.resolve([])
+  ]);
+  const customerBizNoSet = new Set(existingCustomersByBizNo.map((row) => row.business_registration_number));
+  const leadBizNoToId = new Map(existingLeadsByBizNo.map((row) => [row.business_number, row.id]));
+
+  const today = new Date();
+  const inserts: Record<string, unknown>[] = [];
+  const updates: Array<{ id: string; payload: Record<string, unknown> }> = [];
+
+  for (const row of rows) {
+    const businessName = (row.businessName || "").trim();
+    if (!businessName) {
+      result.skippedNoName += 1;
+      continue;
+    }
+
+    const businessNumber = normalizeBusinessNumber(row.businessNumber || "");
+    const isActive = isPermitStatusActive(row.permitStatus);
+    if (!isActive) result.excludedInactive += 1;
+
+    const classification = classifyPermitLeadIndustry(row.industry || "", businessName);
+    if (!classification.isTarget) result.excludedNonTarget += 1;
+
+    const isDuplicate = businessNumber ? customerBizNoSet.has(businessNumber) : false;
+    if (isDuplicate) result.duplicates += 1;
+
+    const leadPeriod = computePermitLeadPeriod(row.permitDate, today);
+    const industryKnown = classification.primary !== "미분류";
+    const hasPhone = Boolean(row.phone);
+    const hasAddress = Boolean(row.address);
+
+    const scoreBreakdown = computePermitLeadScoreBreakdown({
+      leadPeriod,
+      isTarget: classification.isTarget,
+      industryKnown,
+      hasPhone,
+      hasAddress
+    });
+    const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
+    const grade = permitLeadGradeFromScore(scoreTotal);
+    const nextAction = computePermitLeadNextAction({
+      isActive,
+      isDuplicate,
+      isTarget: classification.isTarget,
+      industryKnown,
+      leadPeriod,
+      hasPhone,
+      hasAddress,
+      industryPrimary: classification.primary
+    });
+    const excluded = !isActive || !classification.isTarget || isDuplicate;
+
+    const payload = {
+      company_id: companyId,
+      business_name: businessName,
+      business_number: businessNumber || null,
+      representative_name: row.representativeName || null,
+      permit_status: row.permitStatus || null,
+      is_active: isActive,
+      permit_date: toPostgresDate(row.permitDate),
+      open_date: toPostgresDate(row.openDate) || toPostgresDate(row.permitDate),
+      address: row.address || null,
+      phone: row.phone || null,
+      latitude: row.latitude ?? null,
+      longitude: row.longitude ?? null,
+      jurisdiction: row.jurisdiction || null,
+      source: "manual_upload",
+      lead_period: leadPeriod,
+      industry_raw: row.industry || null,
+      industry_primary: classification.primary,
+      industry_tags: classification.tags,
+      is_target_industry: classification.isTarget,
+      is_duplicate: isDuplicate,
+      exclude_reason: !isActive
+        ? "폐업·휴업 등 비활성 상태"
+        : !classification.isTarget
+          ? "영업 대상 업종 아님"
+          : isDuplicate
+            ? "이미 등록된 거래처(사업자번호 일치)"
+            : null,
+      status: excluded ? "제외" : "신규 수집",
+      next_action: nextAction.action,
+      next_action_reasons: nextAction.reasons,
+      score_total: scoreTotal,
+      score_breakdown: scoreBreakdown,
+      grade,
+      raw_payload: row,
+      updated_at: new Date().toISOString()
+    };
+
+    const existingId = businessNumber ? leadBizNoToId.get(businessNumber) : undefined;
+    if (existingId) updates.push({ id: existingId, payload });
+    else inserts.push(payload);
+  }
+
+  if (inserts.length) {
+    await supabaseRequest("business_permit_leads", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(inserts)
+    });
+    result.inserted = inserts.length;
+  }
+  for (const update of updates) {
+    await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(update.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(update.payload)
+    });
+  }
+  result.updated = updates.length;
+
+  return result;
+}
+
+export type PermitLeadFilters = {
+  action?: string;
+  excludeExcluded?: boolean;
+  grade?: string;
+  hasPhone?: boolean;
+  industry?: string;
+  limit?: number;
+  period?: PermitLeadPeriod | "all";
+  status?: string;
+};
+
+export async function listPermitLeads(companyId: string, filters: PermitLeadFilters = {}): Promise<{ leads: PermitLeadItem[]; total: number }> {
+  if (!isProductionStoreConfigured()) return { leads: [], total: 0 };
+
+  const params = [`company_id=eq.${encodeURIComponent(companyId)}`];
+  if (filters.period && filters.period !== "all") params.push(`lead_period=eq.${encodeURIComponent(filters.period)}`);
+  if (filters.industry) params.push(`industry_primary=eq.${encodeURIComponent(filters.industry)}`);
+  if (filters.action) params.push(`next_action=eq.${encodeURIComponent(filters.action)}`);
+  if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
+  if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
+  if (filters.excludeExcluded) params.push(`status=neq.제외`);
+  const limit = Math.min(500, filters.limit || 300);
+
+  const rows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}`
+  ).catch(() => []);
+
+  let leads = rows.map(toPermitLeadItem);
+  if (filters.hasPhone) leads = leads.filter((lead) => Boolean(lead.phone));
+
+  return { leads, total: leads.length };
+}
+
+function extractPermitLeadRegionKey(address?: string) {
+  if (!address) return null;
+  const parts = address.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).join(" ") || null;
+}
+
+export type PermitLeadQueues = {
+  callToday: PermitLeadItem[];
+  dmCandidates: PermitLeadItem[];
+  needsEnrichment: PermitLeadItem[];
+  summary: {
+    active: number;
+    gradeA: number;
+    hasPhone: number;
+    todayNew: number;
+    total: number;
+  };
+  visitThisWeek: PermitLeadItem[];
+};
+
+/**
+ * 화면 첫 진입 시 보여줄 4개 액션 큐입니다. 점수 순이 아니라 "오늘 뭘 할지"로 먼저 나눕니다.
+ * 방문 큐는 같은 동/구역(주소 앞 2단어 기준)에 리드가 3곳 이상 밀집된 경우만 넣어 코스로
+ * 묶일 때만 방문을 권장합니다. 큐당 기본 20곳까지만 노출해 하루 작업량을 넘기지 않습니다.
+ */
+export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20): Promise<PermitLeadQueues> {
+  const { leads } = await listPermitLeads(companyId, { excludeExcluded: true, limit: 500 });
+  const active = leads.filter((lead) => lead.status !== "제외" && lead.isActive);
+
+  const regionCounts = new Map<string, number>();
+  for (const lead of active) {
+    const key = extractPermitLeadRegionKey(lead.address);
+    if (key) regionCounts.set(key, (regionCounts.get(key) || 0) + 1);
+  }
+
+  const callToday = active.filter((lead) => lead.nextAction === "오늘 바로 전화").slice(0, limitPerQueue);
+  const dmCandidates = active.filter((lead) => lead.nextAction === "오늘 DM 발송").slice(0, limitPerQueue);
+  const needsEnrichment = active.filter((lead) => lead.nextAction === "정보 보강").slice(0, limitPerQueue);
+  const visitThisWeek = active
+    .filter((lead) => lead.nextAction !== "오늘 바로 전화" && lead.nextAction !== "오늘 DM 발송" && lead.nextAction !== "정보 보강")
+    .filter((lead) => {
+      const key = extractPermitLeadRegionKey(lead.address);
+      return Boolean(key && (regionCounts.get(key) || 0) >= 3);
+    })
+    .slice(0, limitPerQueue);
+
+  return {
+    callToday,
+    dmCandidates,
+    needsEnrichment,
+    visitThisWeek,
+    summary: {
+      total: leads.length,
+      active: active.length,
+      gradeA: active.filter((lead) => lead.grade === "A").length,
+      todayNew: active.filter((lead) => lead.leadPeriod === "today").length,
+      hasPhone: active.filter((lead) => Boolean(lead.phone)).length
+    }
+  };
+}
+
+export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude";
+
+const PERMIT_LEAD_ACTION_TO_STATUS: Record<PermitLeadActionType, string> = {
+  call: "전화 대상",
+  dm: "DM 대상",
+  visit: "방문 대상",
+  hold: "검토 필요",
+  exclude: "제외"
+};
+
+const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
+  "통화 성공": "연락 완료",
+  부재중: "전화 대상",
+  "관심 있음": "미팅 예정",
+  "견적 요청": "견적 요청",
+  "다음 방문": "방문 대상",
+  거절: "제외",
+  제외: "제외"
+};
+
+/** 전화/DM/방문/보류/제외 등 영업 행동을 기록하고, 그 결과로 리드 상태를 갱신합니다. */
+export async function recordPermitLeadAction(
+  companyId: string,
+  leadId: string,
+  input: { actionType: PermitLeadActionType; actorName?: string; memo?: string; result?: string }
+): Promise<{ ok: boolean; status: string }> {
+  if (!isProductionStoreConfigured()) return { ok: false, status: "" };
+
+  await supabaseRequest("lead_actions", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: input.actionType,
+      result: input.result || null,
+      memo: input.memo || null,
+      actor_name: input.actorName || null
+    })
+  });
+
+  const nextStatus = (input.result && PERMIT_LEAD_RESULT_TO_STATUS[input.result]) || PERMIT_LEAD_ACTION_TO_STATUS[input.actionType] || "검토 필요";
+  await supabaseRequest(
+    `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: nextStatus, updated_at: new Date().toISOString() })
+    }
+  );
+
+  return { ok: true, status: nextStatus };
+}
+
+/** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */
+export async function convertPermitLeadToCustomer(
+  companyId: string,
+  leadId: string,
+  auditContext: CustomerMasterAuditContext = {}
+): Promise<{ ok: boolean; customerId?: string; message?: string }> {
+  if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+
+  const rows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  ).catch(() => []);
+  const lead = rows[0];
+  if (!lead) return { ok: false, message: "리드를 찾을 수 없습니다." };
+
+  const created = await upsertCustomerMaster(
+    {
+      customerName: lead.business_name,
+      businessNumber: lead.business_number || undefined,
+      representativeName: lead.representative_name || undefined,
+      address: lead.address || undefined,
+      phone: lead.phone || undefined,
+      industry: lead.industry_primary || undefined,
+      openingDate: lead.open_date || undefined,
+      naverPlaceUrl: lead.naver_place_url || undefined,
+      kakaoPlaceUrl: lead.kakao_place_url || undefined
+    },
+    companyId,
+    auditContext
+  );
+
+  await supabaseRequest(
+    `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "거래처 전환", matched_customer_id: created.customer.id, updated_at: new Date().toISOString() })
+    }
+  );
+
+  await supabaseRequest("lead_actions", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "convert",
+      result: "거래처 전환",
+      actor_name: auditContext.actorName || null
+    })
+  }).catch(() => null);
+
+  return { ok: true, customerId: created.customer.id };
+}
+
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
   const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
   const customerMaster = await getCustomerMaster(companyId);

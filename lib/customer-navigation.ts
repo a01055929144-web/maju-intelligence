@@ -8,6 +8,7 @@ import {
   LucideIcon,
   MapPinned,
   MessageSquareText,
+  Radar,
   ReceiptText,
   Settings,
   Sparkles
@@ -20,6 +21,7 @@ export type CustomerWorkspaceKey =
   | "routes"
   | "revenue"
   | "revenue-ledger"
+  | "leads-permits"
   | "assistant"
   | "report"
   | "settings"
@@ -94,6 +96,18 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
             label: "저장 이력"
           }
         ]
+      }
+    ]
+  },
+  {
+    label: "신규 영업",
+    items: [
+      {
+        active: "leads-permits",
+        description: "사업자 인허가 신규 데이터 기반 영업 후보",
+        href: "/leads/permits",
+        icon: Radar,
+        label: "신규 리드"
       }
     ]
   },
