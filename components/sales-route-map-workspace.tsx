@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
+  AlertTriangle,
   CalendarDays,
   Camera,
   Check,
@@ -974,7 +975,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName={`top-3 xl:top-20 ${rightCollapsed ? "xl:right-[76px]" : "xl:right-[364px]"}`}
+                    controlsOffsetClassName={`top-3 xl:top-20 ${rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}`}
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={mapDisplayMarkers}
@@ -1019,7 +1020,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 
           <div
             className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:top-20 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              leftCollapsed ? "xl:w-[52px]" : "xl:bottom-3 xl:w-[300px]"
+              leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[300px]"
             }`}
           >
             <DeliveryAssignmentPanel
@@ -1037,7 +1038,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 
           <div
             className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:top-20 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              rightCollapsed ? "xl:w-[52px]" : "xl:bottom-3 xl:w-[340px]"
+              rightCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[340px]"
             }`}
           >
             <StoreManagementPanel
@@ -1320,17 +1321,17 @@ function DeliveryAssignmentPanel({
 
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-2 border-r border-slate-200/80 bg-white py-2.5">
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-r border-slate-200/80 bg-white px-1.5 py-2">
         <button
           aria-label="배송 담당자 패널 펼치기"
-          className="maju-button-secondary h-9 w-9 px-0"
+          className="maju-button-secondary h-8 w-8 shrink-0 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelLeftOpen className="h-4 w-4" />
+          <PanelLeftOpen className="h-3.5 w-3.5" />
         </button>
-        <span title="배송담당자 필터">
-          <Truck className="h-5 w-5 text-slate-500" />
+        <span className="shrink-0" title="배송담당자 필터">
+          <Truck className="h-4 w-4 text-slate-500" />
         </span>
       </aside>
     );
@@ -2338,19 +2339,21 @@ function StoreManagementPanel({
 }) {
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-2 border-l border-slate-200/80 bg-white py-2.5">
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
         <button
           aria-label="거래처 목록 패널 펼치기"
-          className="maju-button-secondary h-9 w-9 px-0"
+          className="maju-button-secondary h-8 w-8 shrink-0 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelRightOpen className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
         </button>
-        <span title={title}>
-          <Store className="h-5 w-5 text-slate-500" />
+        <span className="relative inline-flex shrink-0" title={title}>
+          <Store className="h-4 w-4 text-slate-500" />
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-slate-900 px-1 text-[9px] font-black leading-none text-white">
+            {stores.length}
+          </span>
         </span>
-        <span className="rounded-md bg-slate-100 px-1.5 py-1 text-[11px] font-black text-slate-700">{stores.length}</span>
       </aside>
     );
   }
@@ -2437,6 +2440,7 @@ function CustomerDirectoryView({
   const totals = getStoreTotals(stores);
   const gradeCounts = countGrades(stores);
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
+  const unknownCount = stores.filter((store) => store.businessStatus === "unknown").length;
   const terminatedCount = stores.filter((store) => store.relationshipStatus === "거래종료").length;
 
   return (
@@ -2449,7 +2453,17 @@ function CustomerDirectoryView({
         <DirectoryStat label="거래 종료" value={`${terminatedCount}곳`} tone={terminatedCount ? "rose" : "slate"} />
       </div>
 
-      <div className="maju-section-card mt-4 min-h-[480px] flex-1 xl:min-h-0">
+      {sourceReady && unknownCount ? (
+        <div className="mt-3 flex shrink-0 items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+          <p className="text-xs font-bold leading-5 text-amber-900">
+            사업자 상태가 아직 확인되지 않은 거래처가 <span className="font-black">{unknownCount}곳</span> 있습니다. 아래 목록에서 거래처를 눌러 상세
+            패널의 &quot;사업자 상태 조회&quot;를 실행하세요.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="maju-section-card mt-4 flex-1 overflow-hidden xl:min-h-0">
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
@@ -2460,7 +2474,7 @@ function CustomerDirectoryView({
         ) : null}
         {sourceReady ? (
           stores.length ? (
-            <div className="h-full overflow-auto">
+            <div className="max-h-[calc(100vh-360px)] overflow-auto xl:h-full xl:max-h-none">
               <table className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
