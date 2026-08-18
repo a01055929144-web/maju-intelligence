@@ -94,6 +94,16 @@ export function KakaoAddressMap({
   const [fallbackReason, setFallbackReason] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
+  // 부모(sales-route-map-workspace.tsx)는 markers를 렌더마다 새 배열/새 객체로 다시 만듭니다.
+  // 이 원본 배열을 boot effect·반경 effect의 의존성으로 그대로 쓰면, 실제 마커 구성은 그대로인데
+  // 배열 참조만 바뀐 리렌더(다른 화면의 주기적 새로고침 등)마다 지도 전체가 다시 만들어지고 모든
+  // 주소가 재지오코딩되며, 그 끝에 항상 실행되는 "전체 마커에 맞추기(map.setBounds)"가 사용자가
+  // 막 확대했던 화면이나 반경 원 화면을 계속 원래대로 되돌리는 문제가 있었습니다. 실제 내용이
+  // 같으면 같은 값을 내는 문자열 키로 바꿔, 마커 구성이 진짜로 바뀔 때만 재생성되게 합니다.
+  const markersSignature = useMemo(
+    () => markers.map((marker) => `${marker.id || ""}|${marker.name || ""}|${marker.address || ""}|${marker.tone || ""}`).join(";;"),
+    [markers]
+  );
 
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
@@ -224,7 +234,7 @@ export function KakaoAddressMap({
     // 멈추는 현상을 유발) 안 되기 때문입니다. 포커스 이동은 아래의 가벼운 effect가 캐시된
     // 좌표로만 처리하고, 클릭 콜백은 onMarkerClickRef로 최신 값을 유지합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appKey, canUseKakao, markers, routePath]);
+  }, [appKey, canUseKakao, markersSignature, routePath]);
 
   // 마커 선택(focusedMarkerId 변경)은 지도를 다시 만들지 않고, 최초 로드 때 이미 지오코딩해
   // 캐시해둔 좌표로 지도만 살짝 이동시킵니다 — 이게 없으면 마커 클릭마다 위 boot effect 전체가
@@ -309,7 +319,7 @@ export function KakaoAddressMap({
       handleMarker.setMap(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.radiusMeters, markers]);
+  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.radiusMeters, markersSignature]);
 
   // 카카오맵은 초기화 시점의 컨테이너 크기를 기준으로 캔버스를 그리기 때문에, 사이드 패널 접힘/펼침,
   // 팝업 표시, 반응형 브레이크포인트 전환처럼 지도 영역 자체의 높이·너비가 나중에 바뀌면 위쪽에 빈
