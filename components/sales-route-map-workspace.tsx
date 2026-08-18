@@ -152,6 +152,9 @@ type StoreEdit = Partial<
     | "phone"
     | "relationshipStatus"
     | "representativeName"
+    | "reviewSummary"
+    | "reviewKeywords"
+    | "reviewSource"
     | "status"
   >
 >;
@@ -2281,6 +2284,21 @@ function StoreQuickCard({
             ) : null}
             <PlaceLinkRow compact store={store} />
           </div>
+        ) : null}
+        {!isEditing && store.reviewKeywords?.length ? (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {store.reviewKeywords.slice(0, 6).map((keyword) => (
+              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" key={keyword}>
+                #{keyword}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {!isEditing && store.reviewSummary ? (
+          <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-500">
+            <MessageCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+            <span className="line-clamp-2">{store.reviewSummary}</span>
+          </p>
         ) : null}
         {isEditing ? (
           <div className="mt-2 space-y-1.5">
@@ -4870,6 +4888,9 @@ function StoreDetail({
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
   const [draftBusinessHours, setDraftBusinessHours] = useState(store.businessHours || "");
   const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
+  const [draftReviewSummary, setDraftReviewSummary] = useState(store.reviewSummary || "");
+  const [draftReviewKeywords, setDraftReviewKeywords] = useState((store.reviewKeywords || []).join(", "));
+  const [draftReviewSource, setDraftReviewSource] = useState(store.reviewSource || "");
   const [draftDeliveryArea, setDraftDeliveryArea] = useState(store.deliveryArea || store.region);
   const [draftDeliveryDriver, setDraftDeliveryDriver] = useState(store.deliveryDriver || "");
   const [draftDeliveryVehicleName, setDraftDeliveryVehicleName] = useState(store.deliveryVehicleName || "");
@@ -4911,6 +4932,12 @@ function StoreDetail({
       businessStatus: draftBusinessStatus,
       businessHours: draftBusinessHours,
       menuSummary: draftMenuSummary,
+      reviewSummary: draftReviewSummary,
+      reviewKeywords: draftReviewKeywords
+        .split(",")
+        .map((keyword) => keyword.trim())
+        .filter(Boolean),
+      reviewSource: draftReviewSource,
       deliveryArea: draftDeliveryArea,
       deliveryDriver: draftDeliveryDriver,
       deliveryVehicleName: draftDeliveryVehicleName,
@@ -5079,6 +5106,55 @@ function StoreDetail({
 
               <CollapsibleSection title="담당자 연락처">
                 <CustomerContactsSection customerId={store.id} />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="리뷰 요약 · 키워드 (AI)">
+                <div className="mt-4 space-y-3">
+                  <p className="maju-filter-box border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+                    네이버플레이스·카카오맵·구글 리뷰를 참고해 자유롭게 요약과 키워드를 남겨두면 거래처 카드에 표시됩니다. 아직 자동 수집 기능은 없어 수동 입력 방식입니다.
+                  </p>
+                  {draftReviewKeywords.split(",").map((keyword) => keyword.trim()).filter(Boolean).length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {draftReviewKeywords
+                        .split(",")
+                        .map((keyword) => keyword.trim())
+                        .filter(Boolean)
+                        .map((keyword) => (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700" key={keyword}>
+                            #{keyword}
+                          </span>
+                        ))}
+                    </div>
+                  ) : null}
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">키워드 뱃지 (쉼표로 구분)</span>
+                    <input
+                      className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
+                      onChange={(event) => setDraftReviewKeywords(event.target.value)}
+                      placeholder="예: 친절해요, 재료가 신선해요, 회전율 빠름"
+                      value={draftReviewKeywords}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">AI 리뷰 요약</span>
+                    <textarea
+                      className="min-h-24 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setDraftReviewSummary(event.target.value)}
+                      placeholder="리뷰 전반의 분위기를 2~3문장으로 요약해두세요."
+                      value={draftReviewSummary}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">출처</span>
+                    <input
+                      className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
+                      onChange={(event) => setDraftReviewSource(event.target.value)}
+                      placeholder="예: 네이버플레이스"
+                      value={draftReviewSource}
+                    />
+                  </label>
+                  {store.reviewsUpdatedAt ? <p className="text-[11px] font-bold text-slate-400">마지막 업데이트: {new Date(store.reviewsUpdatedAt).toLocaleString("ko-KR")}</p> : null}
+                </div>
               </CollapsibleSection>
 
               <CollapsibleSection defaultOpen title="첨부자료">
@@ -6020,6 +6096,9 @@ function toCustomerPayload(store: StoreRow) {
     phone: store.phone,
     region: store.region,
     representativeName: store.representativeName,
+    reviewSummary: store.reviewSummary,
+    reviewKeywords: store.reviewKeywords,
+    reviewSource: store.reviewSource,
     visitCount: Number(store.order || 0)
   };
 }

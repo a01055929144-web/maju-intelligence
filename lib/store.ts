@@ -114,6 +114,10 @@ export type CustomerMasterItem = {
   relationshipStatusNote?: string;
   relationshipStatusUpdatedAt?: string;
   representativeName?: string;
+  reviewSummary?: string;
+  reviewKeywords?: string[];
+  reviewSource?: string;
+  reviewsUpdatedAt?: string;
   visitCount: number;
 };
 export type CustomerMasterInput = {
@@ -143,6 +147,9 @@ export type CustomerMasterInput = {
   phone?: string;
   region?: string;
   representativeName?: string;
+  reviewSummary?: string;
+  reviewKeywords?: string[];
+  reviewSource?: string;
   visitCount?: number;
 };
 export type CustomerMasterAuditContext = {
@@ -204,6 +211,10 @@ export type RoutePlanStop = LeadItem & {
   phone?: string;
   relationshipStatus?: string;
   representativeName?: string;
+  reviewSummary?: string;
+  reviewKeywords?: string[];
+  reviewSource?: string;
+  reviewsUpdatedAt?: string;
   routeCalculatedAt?: string;
   routeProvider?: "tmap" | "estimated" | "cached";
 };
@@ -457,6 +468,10 @@ const CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS = `${CUSTOMER_MASTER_SELEC
 // supabase/migrations/20260818_customer_delivery_vehicle.sql을 아직 실행하지 않은 환경에서도
 // 나머지 거래처 조회가 함께 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
 const CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE = `${CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS},delivery_vehicle`;
+// 거래처 카드에 리뷰 기반 키워드 뱃지·AI 요약을 보여주기 위한 컬럼입니다.
+// supabase/migrations/20260818b_customer_contacts_and_review_enrichment.sql을 아직 실행하지 않은 환경에서도
+// 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
+const CUSTOMER_MASTER_SELECT_WITH_REVIEWS = `${CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE},review_summary,review_keywords,review_source,reviews_updated_at`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -2028,6 +2043,10 @@ export async function getCustomerMaster(
     relationship_status?: string | null;
     relationship_status_updated_at?: string | null;
     relationship_status_note?: string | null;
+    review_summary?: string | null;
+    review_keywords?: string[] | null;
+    review_source?: string | null;
+    reviews_updated_at?: string | null;
   };
   let rows: CustomerMasterRow[];
 
@@ -2037,6 +2056,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_REVIEWS,
     CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE,
     CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS,
     CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU,
@@ -2122,7 +2142,10 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
       business_hours: input.businessHours || null,
-      menu_summary: input.menuSummary || null
+      menu_summary: input.menuSummary || null,
+      review_summary: input.reviewSummary || null,
+      review_keywords: input.reviewKeywords || [],
+      review_source: input.reviewSource || null
     },
     0
   );
@@ -2189,10 +2212,18 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
   const deliveryVehicleField = {
     delivery_vehicle: input.deliveryVehicle || null
   };
+  // 리뷰 요약/키워드는 아직 자동 수집 파이프라인이 없어 수동 입력값만 반영합니다.
+  // undefined면(즉 이 저장 요청에서 손대지 않은 값이면) 기존 값을 덮어쓰지 않도록 payload에서 뺍니다.
+  const reviewFields: Record<string, unknown> = {};
+  if (input.reviewSummary !== undefined) reviewFields.review_summary = input.reviewSummary || null;
+  if (input.reviewKeywords !== undefined) reviewFields.review_keywords = input.reviewKeywords || [];
+  if (input.reviewSource !== undefined) reviewFields.review_source = input.reviewSource || null;
+  if (Object.keys(reviewFields).length) reviewFields.reviews_updated_at = new Date().toISOString();
   // 가장 넓은 페이로드(모든 선택 컬럼 포함)부터 시도하고, "컬럼 없음" 에러를 만나면 그 선택 컬럼
   // 묶음만 제외한 다음 티어로 재시도합니다. 위 getCustomerMaster()의 select 캐스케이드와 동일한
   // 원칙(특정 컬럼 이름을 매칭하지 않고 generic한 42703/does not exist 판별만 사용)을 씁니다.
   const UPSERT_PAYLOAD_TIERS = [
+    { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields },
     { ...customerPayload, ...placeLinks },
@@ -4196,6 +4227,10 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         phone: customer.phone,
         relationshipStatus: customer.relationshipStatus,
         representativeName: customer.representativeName,
+        reviewSummary: customer.reviewSummary,
+        reviewKeywords: customer.reviewKeywords,
+        reviewSource: customer.reviewSource,
+        reviewsUpdatedAt: customer.reviewsUpdatedAt,
         deliveryArea: customer.deliveryZone || customer.region || "미분류",
         deliveryDriver: customer.deliveryManager,
         deliveryVehicle: customer.deliveryVehicle,
@@ -6013,6 +6048,10 @@ function toCustomerMasterItem(
     relationship_status?: string | null;
     relationship_status_updated_at?: string | null;
     relationship_status_note?: string | null;
+    review_summary?: string | null;
+    review_keywords?: string[] | null;
+    review_source?: string | null;
+    reviews_updated_at?: string | null;
   },
   index: number
 ): CustomerMasterItem {
@@ -6053,6 +6092,10 @@ function toCustomerMasterItem(
     relationshipStatusNote: row.relationship_status_note || undefined,
     relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
+    reviewSummary: row.review_summary || undefined,
+    reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,
+    reviewSource: row.review_source || undefined,
+    reviewsUpdatedAt: row.reviews_updated_at || undefined,
     visitCount: Number(row.visit_count || 0)
   };
 }
