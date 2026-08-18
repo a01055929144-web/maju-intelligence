@@ -4522,8 +4522,12 @@ function createDeliveryVehiclesFromStores(
   stores.forEach((store, index) => {
     const driver = store.deliveryDriver || defaultDriverByIndex(index);
     const area = store.deliveryArea || store.region || "미분류";
-    const vehicleKey = store.deliveryVehicleName || driver;
-    if (store.deliveryVehicleName) explicitVehicleKeys.add(vehicleKey);
+    // routeSeedStores(서버 원본 데이터)에는 deliveryVehicleName이 아니라 deliveryVehicle 필드로
+    // 값이 들어옵니다(RoutePlanStop.deliveryVehicle). deliveryVehicleName은 createDeliveryStoreRows가
+    // 그룹핑 이후 화면 표시용으로 파생시키는 필드라 여기서는 아직 존재하지 않아, 이 값으로 확인하면
+    // 항상 비어 있어 그룹핑이 담당자 기준 자동 그룹으로만 폴백해버립니다.
+    const vehicleKey = store.deliveryVehicle || driver;
+    if (store.deliveryVehicle) explicitVehicleKeys.add(vehicleKey);
     groups.set(vehicleKey, [...(groups.get(vehicleKey) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
   });
 
