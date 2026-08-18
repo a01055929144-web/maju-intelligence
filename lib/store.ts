@@ -3929,6 +3929,29 @@ export async function bulkUpdateDeliveryManager(companyId: string, customerIds: 
   return { updated: customerIds.length };
 }
 
+/**
+ * 배송차 이름("냉동 1호차" 같은 호차명)을 여러 거래처에 한 번에 지정합니다. 지도 화면의 배송차
+ * 편집 폼에서 "호차명"을 바꿀 때 쓰는데, 화면 표시값만 바꾸는 게 아니라 그 배송차에 실제로 배정된
+ * 거래처들의 delivery_vehicle 값을 서버에 저장해야 새로고침 후에도, 코스 계산 그룹핑에도 새
+ * 이름이 그대로 유지됩니다. bulkUpdateDeliveryManager와 동일한 패턴의 좁은 PATCH입니다.
+ */
+export async function bulkUpdateDeliveryVehicle(companyId: string, customerIds: string[], deliveryVehicle: string): Promise<{ updated: number }> {
+  if (!customerIds.length) return { updated: 0 };
+  if (!isProductionStoreConfigured()) return { updated: 0 };
+
+  const trimmed = deliveryVehicle.trim();
+  await supabaseRequest(
+    `normalized_customers?company_id=eq.${encodeURIComponent(companyId)}&id=in.(${customerIds.map((id) => encodeURIComponent(id)).join(",")})`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ delivery_vehicle: trimmed || null })
+    }
+  );
+
+  return { updated: customerIds.length };
+}
+
 export const RELATIONSHIP_STATUS_ACTIVE = "거래중";
 export const RELATIONSHIP_STATUS_TERMINATED = "거래종료";
 

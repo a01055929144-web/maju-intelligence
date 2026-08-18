@@ -566,10 +566,45 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   }
 
   async function updateVehicle(vehicleId: string, edit: VehicleEdit): Promise<{ ok: boolean; message?: string }> {
+    const baseVehicle = baseDeliveryVehicles.find((vehicle) => vehicle.id === vehicleId);
+
+    // 호차명(vehicle.name) 변경은 화면 표시값만 바꾸는 게 아니라, 이 배송차에 실제로 배정된
+    // 거래처들의 deliveryVehicle 값을 서버에 일괄 저장합니다. 그래야 새로고침 후에도, 코스 계산
+    // 그룹핑에도 새 이름이 그대로 유지됩니다. 아직 거래처가 없는 빈(수동 등록) 배송차는 저장할
+    // 거래처가 없으니 로컬 배송차 이름 목록(manualVehicles)의 이름만 바꿉니다.
+    if (baseVehicle && edit.name !== undefined) {
+      const trimmedName = edit.name.trim();
+      if (!trimmedName) return { ok: false, message: "호차명을 입력하세요." };
+
+      if (trimmedName !== baseVehicle.name) {
+        if (baseVehicle.stops.length) {
+          try {
+            const response = await fetch("/api/customers/bulk-vehicle", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+                customerIds: baseVehicle.stops.map((stop) => stop.id),
+                deliveryVehicle: trimmedName
+              })
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) return { ok: false, message: payload?.message || "호차명 저장에 실패했습니다." };
+          } catch {
+            return { ok: false, message: "호차명 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
+          }
+        }
+
+        setManualVehicles((current) =>
+          current.includes(baseVehicle.name) ? current.map((name) => (name === baseVehicle.name ? trimmedName : name)) : current
+        );
+        router.refresh();
+      }
+    }
+
     setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }));
 
     if (edit.fuelType === undefined) return { ok: true };
-    const baseVehicle = baseDeliveryVehicles.find((vehicle) => vehicle.id === vehicleId);
     if (!baseVehicle) return { ok: true };
 
     try {
@@ -2376,7 +2411,9 @@ function VehicleEditForm({
         <span className="font-black text-slate-500">구역</span>
         <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
       </label>
-      <p className="text-[11px] font-bold leading-4 text-slate-400">호차명·담당자·구역 표시값을 저장합니다.</p>
+      <p className="text-[11px] font-bold leading-4 text-slate-400">
+        호차명은 이 배송차에 배정된 거래처 전체에 반영되어 저장됩니다. 담당자·구역은 화면 표시값만 바뀝니다.
+      </p>
       {!fuelTypeConfigured ? (
         <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] font-bold leading-4 text-amber-800">
           연료 타입 기본값은 경유입니다.
