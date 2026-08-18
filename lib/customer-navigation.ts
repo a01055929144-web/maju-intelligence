@@ -8,7 +8,6 @@ import {
   LucideIcon,
   MapPinned,
   MessageSquareText,
-  Radar,
   ReceiptText,
   Settings,
   Sparkles
@@ -21,7 +20,6 @@ export type CustomerWorkspaceKey =
   | "routes"
   | "revenue"
   | "revenue-ledger"
-  | "leads-permits"
   | "assistant"
   | "report"
   | "settings"
@@ -50,7 +48,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       {
         active: "dashboard",
         badge: "실시간",
-        description: "지도, 거래처 위치, 영업·배송 코스",
+        description: "지도, 거래처 위치, 영업·배송 코스, 신규 리드",
         href: "/dashboard",
         icon: MapPinned,
         label: "지도 홈"
@@ -96,18 +94,6 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
             label: "저장 이력"
           }
         ]
-      }
-    ]
-  },
-  {
-    label: "신규 영업",
-    items: [
-      {
-        active: "leads-permits",
-        description: "사업자 인허가 신규 데이터 기반 영업 후보",
-        href: "/leads/permits",
-        icon: Radar,
-        label: "신규 리드"
       }
     ]
   },

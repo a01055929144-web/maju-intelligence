@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
   AlertTriangle,
@@ -11,14 +11,19 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  CircleSlash,
   Clock,
   Copy,
+  Crosshair,
+  Download,
   Edit3,
   ExternalLink,
   FileImage,
+  ListFilter,
   Maximize2,
   Minimize2,
   MapPin,
+  MessageCircle,
   MessageSquareText,
   Navigation,
   PanelLeftClose,
@@ -27,26 +32,30 @@ import {
   PanelRightOpen,
   Phone,
   Plus,
+  Radar,
   RefreshCw,
   Search,
   Store,
   Truck,
+  Upload,
+  UserCheck,
   UserRound,
   X,
   type LucideIcon
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import { DeliveryVehicle, RoutePlan, RoutePlanStop } from "@/lib/store";
+import { DeliveryVehicle, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues, RoutePlan, RoutePlanStop } from "@/lib/store";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 type MarkerViewMode = "grade" | "vehicle";
-type WorkspaceView = "map" | "customers" | "course";
+type WorkspaceView = "map" | "customers" | "course" | "leads";
 type ExternalBusinessResult = {
   address: string;
   industry: string;
@@ -223,11 +232,13 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
 const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
   { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치 확인", value: "map" },
   { helper: "검색·상세·편집", icon: Store, label: "원장", shortLabel: "거래처 관리", value: "customers" },
-  { helper: "선택·경유·티맵", icon: Navigation, label: "코스", shortLabel: "경유 계산", value: "course" }
+  { helper: "선택·경유·티맵", icon: Navigation, label: "코스", shortLabel: "경유 계산", value: "course" },
+  { helper: "표·업로드·탐색", icon: Radar, label: "신규 리드", shortLabel: "신규 영업", value: "leads" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차와 거래처를 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
   customers: "거래처 원장 검색·필터",
+  leads: "사업자 인허가 신규 데이터 기반 리드 목록·업로드·반경 리드 탐색",
   map: "등급·배송차별 마커"
 };
 const originMarkerId = "origin-hub";
@@ -270,7 +281,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
-  const [activeView, setActiveView] = useState<WorkspaceView>("map");
+  // /leads/permits 같은 예전 딥링크(?view=leads)로 들어와도 같은 탭이 바로 열리도록 초기값을 URL에서 읽습니다.
+  const [activeView, setActiveView] = useState<WorkspaceView>(() => {
+    if (typeof window === "undefined") return "map";
+    const requested = new URLSearchParams(window.location.search).get("view");
+    return requested === "leads" || requested === "customers" || requested === "course" ? requested : "map";
+  });
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
@@ -735,7 +751,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             {sourceReady ? `${deliveryVehicles.length}대` : "배송차 대기"}
           </span>
           <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200">
-            {activeView === "map" ? "마커 중심" : activeView === "customers" ? "원장 작업" : "경유 계산"}
+            {activeView === "map" ? "마커 중심" : activeView === "customers" ? "원장 작업" : activeView === "leads" ? "신규 영업" : "경유 계산"}
           </span>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-1.5">
@@ -1154,6 +1170,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           vehicles={deliveryVehicles}
         />
       ) : null}
+
+      {activeView === "leads" ? <PermitLeadsView stores={allStores} /> : null}
       </div>
       {selectedStore ? (
         <StoreDetail
@@ -1639,7 +1657,8 @@ function RouteWorkspaceGuide({
   readonly sourceReady: boolean;
   readonly visibleStoreCount: number;
 }) {
-  const viewLabel = activeView === "map" ? "지도 확인" : activeView === "customers" ? "거래처 목록" : "경유 코스";
+  const viewLabel =
+    activeView === "map" ? "지도 확인" : activeView === "customers" ? "거래처 목록" : activeView === "leads" ? "신규 리드" : "경유 코스";
   const markerLabel = markerViewMode === "grade" ? "거래처 등급별 마커" : "배송차별 마커";
   const guide =
     !sourceReady
@@ -1650,7 +1669,9 @@ function RouteWorkspaceGuide({
         : `${selectedVehicleLabel} 기준 경유 거래처를 선택한 뒤 티맵 계산을 실행하세요.`
       : activeView === "customers"
         ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
-        : "마커 선택 후 상세로 이동합니다.";
+        : activeView === "leads"
+          ? "사업자 인허가 데이터를 업로드하고, 기존 거래처 주변 반경에서 신규 리드를 탐색하세요."
+          : "마커 선택 후 상세로 이동합니다.";
 
   return (
     <section className="shrink-0 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
@@ -2665,6 +2686,789 @@ function CustomerDirectoryView({
         ) : null}
       </div>
     </section>
+  );
+}
+
+const PERMIT_PERIOD_OPTIONS: Array<{ label: string; value: "all" | PermitLeadPeriod }> = [
+  { label: "전체 기간", value: "all" },
+  { label: "오늘 신규", value: "today" },
+  { label: "이번 주 신규", value: "week" },
+  { label: "이번 달 신규", value: "month" },
+  { label: "최근 90일", value: "recent" }
+];
+const PERMIT_PERIOD_BADGE_LABEL: Record<PermitLeadPeriod, string> = {
+  today: "오늘 신규",
+  week: "이번 주 신규",
+  month: "이번 달 신규",
+  recent: "최근 90일"
+};
+const PERMIT_ACTION_OPTIONS = ["오늘 바로 전화", "오늘 DM 발송", "전화·DM 검토", "정보 보강", "제외 검토"];
+
+function permitGradeToneClassName(grade: PermitLeadItem["grade"]) {
+  if (grade === "A") return "bg-emerald-100 text-emerald-800";
+  if (grade === "B") return "bg-blue-100 text-blue-800";
+  if (grade === "C") return "bg-slate-100 text-slate-700";
+  return "bg-slate-50 text-slate-400";
+}
+
+function permitLeadCompanyId() {
+  return typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") || "" : "";
+}
+
+function withPermitLeadCompanyQuery(path: string) {
+  const companyId = permitLeadCompanyId();
+  if (!companyId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
+}
+
+// 지방행정 인허가 데이터 표준 컬럼명(공공데이터포털/LOCALDATA 기준)과 흔히 쓰는 변형을 함께 인식합니다.
+const PERMIT_HEADER_ALIASES: Record<string, string[]> = {
+  businessName: ["사업장명", "상호명", "업체명", "거래처명"],
+  businessNumber: ["사업자번호", "사업자등록번호"],
+  representativeName: ["대표자명", "대표자"],
+  permitStatus: ["영업상태명", "상세영업상태명", "영업상태"],
+  permitDate: ["인허가일자", "인허가일"],
+  openDate: ["개업일자", "개업일"],
+  address: ["도로명전체주소", "소재지전체주소", "지번주소", "도로명주소", "주소"],
+  phone: ["소재지전화", "전화번호", "연락처"],
+  jurisdiction: ["개방자치단체명", "관할기관"],
+  industry: ["업태구분명", "업종명", "위생업태명", "업종"]
+};
+
+function normalizePermitHeaderText(text: string) {
+  return text.replace(/[\s()（）]/g, "").toLowerCase();
+}
+
+function matchPermitHeaderField(header: string): string | null {
+  const normalized = normalizePermitHeaderText(header);
+  for (const [field, aliases] of Object.entries(PERMIT_HEADER_ALIASES)) {
+    if (aliases.some((alias) => normalizePermitHeaderText(alias) === normalized)) return field;
+  }
+  return null;
+}
+
+async function parsePermitExcelFile(file: File) {
+  // 엑셀 읽기 라이브러리는 업로드 버튼을 눌렀을 때만 불러옵니다(초기 번들 크기 절약).
+  const { readSheet } = await import("read-excel-file/browser");
+  const rows = (await readSheet(file, 1)) as unknown[][];
+  const headerIndex = rows.findIndex((row) => row.some((cell) => String(cell ?? "").trim()));
+  if (headerIndex < 0) return { rows: [] as Record<string, string>[], unmatchedHeaders: [] as string[] };
+
+  const headers = rows[headerIndex].map((cell) => String(cell ?? "").trim());
+  const fieldByColumn = headers.map((header) => (header ? matchPermitHeaderField(header) : null));
+  const unmatchedHeaders = Array.from(new Set(headers.filter((header, index) => header && !fieldByColumn[index])));
+
+  const parsedRows = rows
+    .slice(headerIndex + 1)
+    .map((row) => {
+      const record: Record<string, string> = {};
+      fieldByColumn.forEach((field, index) => {
+        if (!field) return;
+        const cell = row[index];
+        const value = cell instanceof Date ? cell.toISOString().slice(0, 10) : String(cell ?? "").trim();
+        if (value) record[field] = value;
+      });
+      return record;
+    })
+    .filter((record) => record.businessName);
+
+  return { rows: parsedRows, unmatchedHeaders };
+}
+
+type PermitUploadResult = {
+  duplicates: number;
+  excludedInactive: number;
+  excludedNonTarget: number;
+  inserted: number;
+  skippedNoName: number;
+  total: number;
+  updated: number;
+};
+
+type NearbyPermitLeadResult = {
+  anchorCount: number;
+  leads: Array<PermitLeadItem & { distanceKm: number; nearestAnchor: { id: string; name: string } | null }>;
+  radiusKm: number;
+  unresolvedAnchorCount: number;
+  unresolvedLeadCount: number;
+};
+
+/**
+ * "신규 리드" 탭입니다. 지도 홈 안의 내부 탭으로, 사업자 인허가 신규 데이터를 CRM 표로 보여주고
+ * (표가 기본, 지도는 보조), 업로드·엑셀 다운로드·기존 거래처 반경 안 "리드 탐색"(AI 영업 세일즈)을
+ * 한 화면에서 처리합니다. 별도 페이지가 아니라 지도 홈의 데이터를 그대로 씁니다.
+ */
+function PermitLeadsView({ stores }: { readonly stores: StoreRow[] }) {
+  const [leads, setLeads] = useState<PermitLeadItem[]>([]);
+  const [queues, setQueues] = useState<PermitLeadQueues | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [viewMode, setViewMode] = useState<"table" | "map">("table");
+
+  const [periodFilter, setPeriodFilter] = useState<"all" | PermitLeadPeriod>("all");
+  const [industryFilter, setIndustryFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
+  const [excludeExcluded, setExcludeExcluded] = useState(true);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [tableSearch, setTableSearch] = useState("");
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadResult, setUploadResult] = useState<PermitUploadResult | null>(null);
+  const [uploadWarning, setUploadWarning] = useState("");
+
+  const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
+
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [anchorMode, setAnchorMode] = useState<"customer" | "all">("customer");
+  const [anchorCustomerId, setAnchorCustomerId] = useState("");
+  const [radiusKm, setRadiusKm] = useState(5);
+  const [nearbySearching, setNearbySearching] = useState(false);
+  const [nearbyResult, setNearbyResult] = useState<NearbyPermitLeadResult | null>(null);
+  const [nearbyError, setNearbyError] = useState("");
+  const [showNearbyOnly, setShowNearbyOnly] = useState(false);
+
+  const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
+
+  const loadLeads = useCallback(() => {
+    setLoadState((current) => (current === "ready" ? current : "loading"));
+    const params = new URLSearchParams();
+    if (periodFilter !== "all") params.set("period", periodFilter);
+    if (industryFilter) params.set("industry", industryFilter);
+    if (actionFilter) params.set("action", actionFilter);
+    if (gradeFilter) params.set("grade", gradeFilter);
+    if (hasPhoneOnly) params.set("hasPhone", "true");
+    if (!excludeExcluded) params.set("excludeExcluded", "false");
+
+    fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!payload) {
+          setLoadState("error");
+          return;
+        }
+        setLeads(Array.isArray(payload.leads) ? payload.leads : []);
+        setQueues(payload.queues || null);
+        setLoadState("ready");
+      })
+      .catch(() => setLoadState("error"));
+  }, [periodFilter, industryFilter, actionFilter, gradeFilter, hasPhoneOnly, excludeExcluded]);
+
+  useEffect(() => {
+    loadLeads();
+  }, [loadLeads]);
+
+  const industryOptions = useMemo(() => Array.from(new Set(leads.map((lead) => lead.industryPrimary))).sort(), [leads]);
+
+  const nearbyLeadIds = useMemo(() => new Set((nearbyResult?.leads || []).map((lead) => lead.id)), [nearbyResult]);
+  const nearbyDistanceById = useMemo(() => {
+    const map = new Map<string, number>();
+    (nearbyResult?.leads || []).forEach((lead) => map.set(lead.id, lead.distanceKm));
+    return map;
+  }, [nearbyResult]);
+
+  const filteredLeads = useMemo(() => {
+    const keyword = tableSearch.trim().toLowerCase();
+    return leads
+      .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
+      .filter(
+        (lead) =>
+          !keyword ||
+          [lead.businessName, lead.address, lead.phone, lead.representativeName, lead.industryPrimary]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(keyword))
+      );
+  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds]);
+
+  async function handleFileUpload(file: File) {
+    setUploadBusy(true);
+    setUploadResult(null);
+    setUploadWarning("");
+    try {
+      const { rows, unmatchedHeaders } = await parsePermitExcelFile(file);
+      if (!rows.length) {
+        setUploadWarning("인식 가능한 행이 없습니다. '사업장명' 컬럼이 있는 파일인지 확인하세요.");
+        return;
+      }
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setUploadWarning(payload?.message || "업로드에 실패했습니다.");
+        return;
+      }
+      setUploadResult(payload);
+      if (unmatchedHeaders.length) setUploadWarning(`인식하지 못한 컬럼(무시됨): ${unmatchedHeaders.join(", ")}`);
+      loadLeads();
+    } catch (error) {
+      setUploadWarning(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
+  async function runLeadAction(lead: PermitLeadItem, actionType: "call" | "dm" | "visit" | "hold" | "exclude", result?: string) {
+    setActionMessage("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType, result })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setActionMessage(payload?.message || "처리에 실패했습니다.");
+        return;
+      }
+      setActionMessage(`${lead.businessName} · "${payload.status}"로 갱신했습니다.`);
+      setSelectedLead(null);
+      loadLeads();
+    } catch {
+      setActionMessage("네트워크 오류로 처리하지 못했습니다.");
+    }
+  }
+
+  async function convertToCustomer(lead: PermitLeadItem) {
+    setActionMessage("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setActionMessage(payload?.message || "거래처 전환에 실패했습니다.");
+        return;
+      }
+      setActionMessage(`${lead.businessName}을(를) 거래처로 전환했습니다.`);
+      setSelectedLead(null);
+      loadLeads();
+    } catch {
+      setActionMessage("네트워크 오류로 처리하지 못했습니다.");
+    }
+  }
+
+  async function runNearbySearch() {
+    setNearbyError("");
+    if (anchorMode === "customer" && !anchorCustomerId) {
+      setNearbyError("기준 거래처를 선택하세요.");
+      return;
+    }
+    const anchorStore = geocodableStores.find((store) => store.id === anchorCustomerId);
+    if (anchorMode === "customer" && !anchorStore) {
+      setNearbyError("선택한 거래처에 주소 정보가 없습니다.");
+      return;
+    }
+
+    setNearbySearching(true);
+    setNearbyResult(null);
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/nearby"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anchorMode,
+          anchorCustomer: anchorStore ? { id: anchorStore.id, name: anchorStore.name, address: anchorStore.address } : undefined,
+          radiusKm
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setNearbyError(payload?.message || "리드 탐색에 실패했습니다.");
+        return;
+      }
+      setNearbyResult(payload);
+      setShowNearbyOnly(true);
+    } catch {
+      setNearbyError("네트워크 오류로 리드 탐색을 완료하지 못했습니다.");
+    } finally {
+      setNearbySearching(false);
+    }
+  }
+
+  async function downloadPermitLeadsExcel() {
+    setActionMessage("");
+    try {
+      const writeXlsxFileModule = await import("write-excel-file/browser");
+      const headerRow = [
+        "상호명",
+        "사업자번호",
+        "대표자",
+        "업종",
+        "인허가일",
+        "영업상태",
+        "주소",
+        "전화",
+        "관할기관",
+        "추천등급",
+        "다음 액션",
+        "상태",
+        ...(showNearbyOnly && nearbyResult ? ["거리(km)"] : [])
+      ].map((value) => ({ fontWeight: "bold" as const, value }));
+      const dataRows = filteredLeads.map((lead) => [
+        { value: lead.businessName },
+        { value: lead.businessNumber || "" },
+        { value: lead.representativeName || "" },
+        { value: lead.industryPrimary },
+        { value: lead.permitDate || "" },
+        { value: lead.permitStatus || "" },
+        { value: lead.address || "" },
+        { value: lead.phone || "" },
+        { value: lead.jurisdiction || "" },
+        { value: lead.grade || "" },
+        { value: lead.nextAction || "" },
+        { value: lead.status },
+        ...(showNearbyOnly && nearbyResult ? [{ value: nearbyDistanceById.get(lead.id) ?? "" }] : [])
+      ]);
+      await writeXlsxFileModule.default([headerRow, ...dataRows], { sheet: "신규 리드" }).toFile("신규_리드.xlsx");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "엑셀 다운로드에 실패했습니다.");
+    }
+  }
+
+  const mapLeadMarkers: KakaoMapMarker[] = useMemo(() => {
+    if (viewMode !== "map") return [];
+    return filteredLeads
+      .filter((lead) => lead.status !== "제외" && lead.address)
+      .map((lead) => ({
+        id: lead.id,
+        name: lead.businessName,
+        address: lead.address!,
+        label: lead.leadPeriod === "today" ? "오늘" : lead.grade || "신규",
+        tone: "lead" as const,
+        grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
+        x: 0,
+        y: 0
+      }));
+  }, [filteredLeads, viewMode]);
+
+  const summary = queues?.summary;
+
+  return (
+    <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-auto rounded-b-xl bg-[#f6f8fb] p-4 xl:min-h-0">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <DirectoryStat label="신규 리드" value={summary ? `${summary.active.toLocaleString()}곳` : "—"} />
+        <DirectoryStat label="오늘 신규" value={summary ? `${summary.todayNew.toLocaleString()}곳` : "—"} />
+        <DirectoryStat label="A등급" value={summary ? `${summary.gradeA.toLocaleString()}곳` : "—"} />
+        <DirectoryStat label="전화 가능" value={summary ? `${summary.hasPhone.toLocaleString()}곳` : "—"} />
+      </div>
+
+      <div className="maju-section-card">
+        <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setUploadOpen((value) => !value)} type="button">
+          <span className="flex items-center gap-2">
+            <Upload className="h-4 w-4 text-slate-400" />
+            <span className="text-sm font-black text-slate-950">사업자 인허가 데이터 업로드</span>
+          </span>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition ${uploadOpen ? "rotate-180" : ""}`} />
+        </button>
+        {uploadOpen ? (
+          <div className="space-y-2 p-3">
+            <p className="text-xs font-semibold leading-5 text-slate-500">
+              공공데이터포털(지방행정 인허가) 또는 자체 수집한 엑셀/CSV 파일을 업로드하세요. 사업장명, 인허가일자, 영업상태명, 업종명, 주소, 소재지전화
+              컬럼을 자동으로 인식합니다. 같은 사업자번호는 최신 인허가 상태로 갱신되고, 이미 거래처로 등록된 사업자번호는 자동으로 제외 처리됩니다.
+            </p>
+            <label className="maju-button-primary inline-flex w-fit cursor-pointer">
+              <Upload className="h-4 w-4" />
+              {uploadBusy ? "업로드 중..." : "파일 선택"}
+              <input
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                disabled={uploadBusy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleFileUpload(file);
+                  event.target.value = "";
+                }}
+                type="file"
+              />
+            </label>
+            {uploadWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{uploadWarning}</p> : null}
+            {uploadResult ? (
+              <div className="flex flex-wrap gap-2 rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-600">
+                <span>총 {uploadResult.total.toLocaleString()}행</span>
+                <span className="text-emerald-700">신규 {uploadResult.inserted.toLocaleString()}</span>
+                <span className="text-blue-700">갱신 {uploadResult.updated.toLocaleString()}</span>
+                <span className="text-slate-500">기존 거래처 중복 {uploadResult.duplicates.toLocaleString()}</span>
+                <span className="text-slate-500">비활성 제외 {uploadResult.excludedInactive.toLocaleString()}</span>
+                <span className="text-slate-500">비대상 업종 제외 {uploadResult.excludedNonTarget.toLocaleString()}</span>
+                {uploadResult.skippedNoName ? <span className="text-rose-600">상호명 없음 건너뜀 {uploadResult.skippedNoName.toLocaleString()}</span> : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="maju-section-card">
+        <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setNearbyOpen((value) => !value)} type="button">
+          <span className="flex items-center gap-2">
+            <Crosshair className="h-4 w-4 text-teal-600" />
+            <span className="text-sm font-black text-slate-950">리드 탐색 · AI 영업 세일즈</span>
+            <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">
+              기존 거래처 반경 안 신규 인허가
+            </span>
+          </span>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition ${nearbyOpen ? "rotate-180" : ""}`} />
+        </button>
+        {nearbyOpen ? (
+          <div className="space-y-3 p-3">
+            <p className="text-xs font-semibold leading-5 text-slate-500">
+              기존 거래처 1곳 또는 전체 거래처를 기준으로, 지정한 반경 안에 새로 인허가된 사업장이 있는지 찾습니다. 결과는 아래 표에서 거리순으로
+              바로 확인할 수 있습니다.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
+                {[
+                  { label: "거래처 1곳 기준", value: "customer" as const },
+                  { label: "전체 거래처 합집합", value: "all" as const }
+                ].map((item) => (
+                  <button
+                    className={`h-7 rounded-md px-3 text-xs font-black transition ${
+                      anchorMode === item.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                    }`}
+                    key={item.value}
+                    onClick={() => setAnchorMode(item.value)}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {anchorMode === "customer" ? (
+                <select
+                  className="h-9 min-w-[220px] rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setAnchorCustomerId(event.target.value)}
+                  value={anchorCustomerId}
+                >
+                  <option value="">기준 거래처 선택</option>
+                  {geocodableStores.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name} · {store.address}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="rounded-md bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-500 ring-1 ring-inset ring-slate-200">
+                  주소가 확인된 거래처 {geocodableStores.length.toLocaleString()}곳 기준
+                </span>
+              )}
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                반경
+                <input
+                  className="h-9 w-20 rounded-md border border-slate-200 bg-white px-2 text-center text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  min={0.5}
+                  max={50}
+                  onChange={(event) => setRadiusKm(Number(event.target.value) || 5)}
+                  step={0.5}
+                  type="number"
+                  value={radiusKm}
+                />
+                km
+              </label>
+              <button className="maju-button-primary h-9 text-xs" disabled={nearbySearching} onClick={() => void runNearbySearch()} type="button">
+                <Crosshair className="h-3.5 w-3.5" />
+                {nearbySearching ? "탐색 중..." : "탐색"}
+              </button>
+              {nearbyResult ? (
+                <button
+                  className="maju-button-secondary h-9 text-xs"
+                  onClick={() => {
+                    setNearbyResult(null);
+                    setShowNearbyOnly(false);
+                  }}
+                  type="button"
+                >
+                  탐색 결과 지우기
+                </button>
+              ) : null}
+            </div>
+            {nearbyError ? <p className="rounded-md bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{nearbyError}</p> : null}
+            {nearbyResult ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-teal-50/70 px-3 py-2 text-xs font-bold text-teal-800">
+                <span>
+                  기준 {nearbyResult.anchorCount.toLocaleString()}곳 · 반경 {nearbyResult.radiusKm}km 안 리드 {nearbyResult.leads.length.toLocaleString()}곳
+                </span>
+                {nearbyResult.unresolvedAnchorCount ? <span className="text-amber-700">주소 확인 실패 거래처 {nearbyResult.unresolvedAnchorCount}곳</span> : null}
+                {nearbyResult.unresolvedLeadCount ? <span className="text-amber-700">주소 확인 실패 리드 {nearbyResult.unresolvedLeadCount}곳</span> : null}
+                <label className="ml-auto flex items-center gap-1.5">
+                  <input checked={showNearbyOnly} onChange={(event) => setShowNearbyOnly(event.target.checked)} type="checkbox" />
+                  표에 탐색 결과만 표시
+                </label>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="maju-section-card flex-1 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["table", "map"] as const).map((mode) => (
+              <button
+                className={`rounded-md border px-3 py-1.5 text-xs font-black transition ${
+                  viewMode === mode ? "border-slate-900 bg-slate-900 text-white" : "border-transparent bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                type="button"
+              >
+                {mode === "table" ? "표" : "지도"}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadPermitLeadsExcel()} type="button">
+              <Download className="h-3.5 w-3.5" />
+              엑셀 다운로드
+            </button>
+            <button className="maju-button-secondary h-8 text-xs" onClick={loadLeads} type="button">
+              <RefreshCw className="h-3.5 w-3.5" />
+              새로고침
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="maju-search-field relative h-9 min-w-[200px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-xs font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
+                onChange={(event) => setTableSearch(event.target.value)}
+                placeholder="상호명·주소·전화 검색"
+                value={tableSearch}
+              />
+            </label>
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setPeriodFilter(event.target.value as "all" | PermitLeadPeriod)} value={periodFilter}>
+              {PERMIT_PERIOD_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
+              <option value="">업종 전체</option>
+              {industryOptions.map((industry) => (
+                <option key={industry} value={industry}>
+                  {industry}
+                </option>
+              ))}
+            </select>
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setActionFilter(event.target.value)} value={actionFilter}>
+              <option value="">액션 전체</option>
+              {PERMIT_ACTION_OPTIONS.map((action) => (
+                <option key={action} value={action}>
+                  {action}
+                </option>
+              ))}
+            </select>
+            <button
+              className="flex items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-100"
+              onClick={() => setShowAdvancedFilters((value) => !value)}
+              type="button"
+            >
+              <ListFilter className="h-3.5 w-3.5" />
+              고급 필터
+              <ChevronDown className={`h-3.5 w-3.5 transition ${showAdvancedFilters ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+          {showAdvancedFilters ? (
+            <div className="flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-2">
+              <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setGradeFilter(event.target.value)} value={gradeFilter}>
+                <option value="">추천 등급 전체</option>
+                <option value="A">A등급</option>
+                <option value="B">B등급</option>
+                <option value="C">C등급</option>
+              </select>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={hasPhoneOnly} onChange={(event) => setHasPhoneOnly(event.target.checked)} type="checkbox" />
+                연락처 있는 곳만
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />
+                제외 처리된 리드도 표시
+              </label>
+            </div>
+          ) : null}
+        </div>
+
+        {actionMessage ? <p className="mx-3 mt-3 rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{actionMessage}</p> : null}
+
+        <div className="p-3">
+          {loadState === "loading" ? (
+            <p className="rounded-md border border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-500">신규 리드를 불러오는 중입니다.</p>
+          ) : loadState === "error" ? (
+            <p className="rounded-md border border-dashed border-rose-200 bg-rose-50 p-8 text-center text-sm font-bold text-rose-700">
+              신규 리드를 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.
+            </p>
+          ) : !filteredLeads.length ? (
+            <div className="rounded-md border border-dashed border-slate-200 p-8 text-center">
+              <p className="text-sm font-bold text-slate-600">{leads.length ? "조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">사업자 인허가 데이터를 업로드하면 여기에 표시됩니다.</p>
+            </div>
+          ) : viewMode === "map" ? (
+            <div className="h-[560px] overflow-hidden rounded-lg border border-slate-200">
+              <KakaoAddressMap mapClassName="h-full w-full rounded-none border-0" markers={mapLeadMarkers} onMarkerClick={(marker) => setSelectedLead(filteredLeads.find((lead) => lead.id === marker.id) || null)} showList={false} />
+            </div>
+          ) : (
+            <div className="max-h-[calc(100vh-360px)] overflow-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
+                  <tr>
+                    <th className="w-[26%] border-r border-slate-200 px-4 py-3">거래처</th>
+                    <th className="w-[90px] border-r border-slate-200 px-4 py-3">업종</th>
+                    <th className="w-[72px] border-r border-slate-200 px-4 py-3">등급</th>
+                    <th className="w-[130px] border-r border-slate-200 px-4 py-3">전화</th>
+                    <th className="w-[110px] border-r border-slate-200 px-4 py-3">인허가일</th>
+                    <th className="w-[140px] border-r border-slate-200 px-4 py-3">다음 액션</th>
+                    {showNearbyOnly && nearbyResult ? <th className="w-[90px] border-r border-slate-200 px-4 py-3 text-right">거리</th> : null}
+                    <th className="px-4 py-3">상태</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredLeads.map((lead) => (
+                    <tr
+                      className="cursor-pointer bg-white transition hover:bg-slate-50"
+                      key={lead.id}
+                      onClick={() => setSelectedLead(lead)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") setSelectedLead(lead);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <td className="min-w-0 border-r border-slate-100 px-4 py-3">
+                        <p className="truncate font-black text-slate-950">{lead.businessName}</p>
+                        <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                      </td>
+                      <td className="max-w-[90px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.industryPrimary}</td>
+                      <td className="border-r border-slate-100 px-4 py-3">
+                        <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade || "-"}</Badge>
+                      </td>
+                      <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.phone || "미확인"}</td>
+                      <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{lead.permitDate || "-"}</td>
+                      <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.nextAction || "-"}</td>
+                      {showNearbyOnly && nearbyResult ? (
+                        <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-teal-700">
+                          {nearbyDistanceById.get(lead.id)?.toLocaleString() ?? "-"}km
+                        </td>
+                      ) : null}
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.status}</span>
+                        {lead.leadPeriod === "today" ? (
+                          <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
+                            {PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selectedLead ? (
+        <PermitLeadDetailPanel lead={selectedLead} onAction={runLeadAction} onClose={() => setSelectedLead(null)} onConvert={convertToCustomer} />
+      ) : null}
+    </section>
+  );
+}
+
+function PermitLeadDetailPanel({
+  lead,
+  onAction,
+  onClose,
+  onConvert
+}: {
+  readonly lead: PermitLeadItem;
+  readonly onAction: (lead: PermitLeadItem, actionType: "call" | "dm" | "visit" | "hold" | "exclude", result?: string) => void;
+  readonly onClose: () => void;
+  readonly onConvert: (lead: PermitLeadItem) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/30" onClick={onClose}>
+      <div className="h-full w-full max-w-sm overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
+          <div className="min-w-0">
+            <span className="flex items-center gap-1.5">
+              <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade ? `${lead.grade}등급` : "등급 미산정"}</Badge>
+              <span className="text-[11px] font-black text-slate-400">{PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}</span>
+            </span>
+            <h3 className="mt-1 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
+            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
+              {lead.industryPrimary}
+              {lead.permitStatus ? ` · ${lead.permitStatus}` : ""}
+            </p>
+          </div>
+          <button aria-label="닫기" className="maju-button-secondary h-8 w-8 shrink-0 px-0" onClick={onClose} type="button">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
+            <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
+            <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
+            <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
+            <PermitDetailRow label="인허가일" value={lead.permitDate || "확인 필요"} />
+            <PermitDetailRow label="관할기관" value={lead.jurisdiction || "확인 필요"} />
+          </div>
+
+          {lead.nextActionReasons.length ? (
+            <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3">
+              <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">추천 근거</p>
+              <ul className="mt-1.5 space-y-1 text-xs font-bold text-teal-900">
+                {lead.nextActionReasons.slice(0, 3).map((reason) => (
+                  <li key={reason}>· {reason}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {lead.isDuplicate || lead.excludeReason ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">제외 사유: {lead.excludeReason}</p>
+          ) : null}
+
+          <p className="text-[11px] font-semibold text-slate-400">현재 상태: {lead.status}</p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <PermitActionButton disabled={!lead.phone} icon={Phone} label="전화" onClick={() => onAction(lead, "call", "통화 성공")} />
+            <PermitActionButton icon={MessageCircle} label="DM 발송" onClick={() => onAction(lead, "dm")} />
+            <PermitActionButton icon={MapPin} label="방문 예정" onClick={() => onAction(lead, "visit", "다음 방문")} />
+            <PermitActionButton icon={CircleSlash} label="보류" onClick={() => onAction(lead, "hold")} />
+          </div>
+          <button className="maju-button-primary w-full" onClick={() => onConvert(lead)} type="button">
+            <UserCheck className="h-4 w-4" />
+            거래처로 전환
+          </button>
+          <button className="maju-button-secondary w-full text-rose-600" onClick={() => onAction(lead, "exclude", "제외")} type="button">
+            영업 제외
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PermitDetailRow({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <p className="flex items-center justify-between gap-2 border-b border-slate-100 py-1 last:border-0">
+      <span className="shrink-0 text-slate-400">{label}</span>
+      <span className="truncate text-right text-slate-800">{value}</span>
+    </p>
+  );
+}
+
+function PermitActionButton({ disabled, icon: Icon, label, onClick }: { readonly disabled?: boolean; readonly icon: LucideIcon; readonly label: string; readonly onClick: () => void }) {
+  return (
+    <button className="maju-button-secondary justify-center disabled:cursor-not-allowed disabled:opacity-50" disabled={disabled} onClick={onClick} type="button">
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }
 

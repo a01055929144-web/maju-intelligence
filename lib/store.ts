@@ -4,7 +4,7 @@ import { enrichLeadRecommendations } from "./leads";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
-import { RouteDistanceResult } from "./tmap";
+import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -3278,6 +3278,8 @@ export type PermitLeadItem = {
   address?: string;
   phone?: string;
   jurisdiction?: string;
+  latitude?: number;
+  longitude?: number;
   leadPeriod: PermitLeadPeriod;
   industryPrimary: string;
   industryTags: string[];
@@ -3314,6 +3316,8 @@ type PermitLeadRow = {
   address: string | null;
   phone: string | null;
   jurisdiction: string | null;
+  latitude: number | null;
+  longitude: number | null;
   lead_period: PermitLeadPeriod;
   industry_raw: string | null;
   industry_primary: string | null;
@@ -3499,6 +3503,8 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     address: row.address || undefined,
     phone: row.phone || undefined,
     jurisdiction: row.jurisdiction || undefined,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
     leadPeriod: row.lead_period,
     industryPrimary: row.industry_primary || "미분류",
     industryTags: row.industry_tags || [],
@@ -3897,6 +3903,139 @@ export async function convertPermitLeadToCustomer(
   }).catch(() => null);
 
   return { ok: true, customerId: created.customer.id };
+}
+
+export type PermitLeadAnchor = {
+  address: string;
+  distanceKm: number;
+  id: string;
+  name: string;
+};
+
+export type NearbyPermitLead = PermitLeadItem & {
+  distanceKm: number;
+  nearestAnchor: { id: string; name: string } | null;
+};
+
+export type FindNearbyPermitLeadsInput = {
+  /** "customer": 지정한 거래처 1곳 기준 반경 검색. "all": 활성 거래처 전체 합집합(각 리드에서 가장 가까운 거래처까지 거리). */
+  anchorMode: "customer" | "all";
+  /** anchorMode가 "customer"일 때 기준이 되는 거래처 id·이름·주소입니다. */
+  anchorCustomer?: { address: string; id: string; name: string };
+  radiusKm: number;
+};
+
+export type FindNearbyPermitLeadsResult = {
+  anchorCount: number;
+  leads: NearbyPermitLead[];
+  radiusKm: number;
+  unresolvedAnchorCount: number;
+  unresolvedLeadCount: number;
+};
+
+const NEARBY_LEAD_GEOCODE_CONCURRENCY = 6;
+
+/** 배열을 일정 크기로 나눠 지정한 동시성 안에서 처리합니다. Tmap 지오코딩 API를 한 번에 너무 많이 호출하지 않기 위한 용도입니다. */
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function runNext(): Promise<void> {
+    const index = cursor;
+    cursor += 1;
+    if (index >= items.length) return;
+    results[index] = await worker(items[index]);
+    await runNext();
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runNext()));
+  return results;
+}
+
+/**
+ * "리드 탐색"(AI 영업 세일즈) 기능의 핵심입니다. 기존 거래처(1곳 또는 전체) 주변 반경 안에
+ * 있는 신규 인허가 리드를 찾습니다. 거래처·리드 주소는 처음 조회될 때만 Tmap으로 지오코딩하고,
+ * 리드 좌표는 business_permit_leads.latitude/longitude에 lazy backfill로 저장해 다음 조회부터는
+ * 재지오코딩하지 않습니다(거래처 좌표는 캐시 테이블이 없어 매 요청 재지오코딩합니다 — 거래처 수가
+ * 많아지면 route_distance_cache처럼 좌표 캐시 테이블을 추가하는 게 좋습니다).
+ */
+export async function findNearbyPermitLeads(companyId: string, input: FindNearbyPermitLeadsInput): Promise<FindNearbyPermitLeadsResult> {
+  const radiusKm = Math.max(0.5, Math.min(50, input.radiusKm || 5));
+  if (!isProductionStoreConfigured()) {
+    return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: 0, unresolvedLeadCount: 0 };
+  }
+
+  // 1) 기준점(들)을 지오코딩합니다. anchorPoints는 이후 거리 계산에 바로 쓸 수 있도록 좌표를 함께 들고 있습니다.
+  const anchorPoints: Array<{ anchor: PermitLeadAnchor; point: GeoPoint }> = [];
+  let unresolvedAnchorCount = 0;
+
+  if (input.anchorMode === "customer") {
+    if (!input.anchorCustomer?.address) return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: 0, unresolvedLeadCount: 0 };
+    const point = await resolveAddressPoint(input.anchorCustomer.address);
+    if (!point) return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: 1, unresolvedLeadCount: 0 };
+    anchorPoints.push({
+      anchor: { id: input.anchorCustomer.id, name: input.anchorCustomer.name, address: input.anchorCustomer.address, distanceKm: 0 },
+      point
+    });
+  } else {
+    const customerMaster = await getCustomerMaster(companyId);
+    const activeCustomers = customerMaster.customers
+      .filter((customer) => customer.address?.trim() && customer.businessStatus !== "closed" && customer.relationshipStatus !== "거래종료")
+      .slice(0, 300); // v1 상한: 거래처가 매우 많은 회사는 좌표 캐시 테이블 도입 전까지 상위 300곳만 기준점으로 씁니다.
+
+    const points = await mapWithConcurrency(activeCustomers, NEARBY_LEAD_GEOCODE_CONCURRENCY, (customer) => resolveAddressPoint(customer.address!));
+    activeCustomers.forEach((customer, index) => {
+      const point = points[index];
+      if (!point) {
+        unresolvedAnchorCount += 1;
+        return;
+      }
+      anchorPoints.push({ anchor: { id: customer.id, name: customer.customerName, address: customer.address!, distanceKm: 0 }, point });
+    });
+  }
+  if (!anchorPoints.length) return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: unresolvedAnchorCount || 1, unresolvedLeadCount: 0 };
+
+  // 2) 활성·비제외·비중복 리드 중 주소가 있는 것만 대상으로, 좌표가 없으면 지오코딩 후 DB에 백필합니다.
+  const rows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?select=*&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&is_duplicate=eq.false&status=neq.제외&address=not.is.null&limit=500`
+  ).catch(() => []);
+
+  let unresolvedLeadCount = 0;
+  const leadPoints = await mapWithConcurrency(rows, NEARBY_LEAD_GEOCODE_CONCURRENCY, async (row) => {
+    if (row.latitude != null && row.longitude != null) return { lat: row.latitude, lng: row.longitude } as GeoPoint;
+    const point = await resolveAddressPoint(row.address || "");
+    if (point) {
+      await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ latitude: point.lat, longitude: point.lng })
+      }).catch(() => null);
+    }
+    return point;
+  });
+
+  const nearby: NearbyPermitLead[] = [];
+  rows.forEach((row, index) => {
+    const point = leadPoints[index];
+    if (!point) {
+      unresolvedLeadCount += 1;
+      return;
+    }
+    let nearestDistanceKm = Infinity;
+    let nearestAnchor: { id: string; name: string } | null = null;
+    for (const { anchor, point: anchorPoint } of anchorPoints) {
+      const distanceKm = haversineDistanceKm(anchorPoint, point);
+      if (distanceKm < nearestDistanceKm) {
+        nearestDistanceKm = distanceKm;
+        nearestAnchor = { id: anchor.id, name: anchor.name };
+      }
+    }
+    if (nearestDistanceKm <= radiusKm) {
+      nearby.push({ ...toPermitLeadItem(row), distanceKm: nearestDistanceKm, nearestAnchor });
+    }
+  });
+
+  nearby.sort((a, b) => a.distanceKm - b.distanceKm);
+
+  return { anchorCount: anchorPoints.length, leads: nearby, radiusKm, unresolvedAnchorCount, unresolvedLeadCount };
 }
 
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {

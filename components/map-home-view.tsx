@@ -118,7 +118,6 @@ export function MapHomeView({
     dashboard: mapHomeHref,
     data: quickNav.dataRegistrationHref,
     "data-management": quickNav.dataManagementHref,
-    "leads-permits": "/leads/permits",
     report: quickNav.reportHref,
     revenue: quickNav.pipelineHref,
     "revenue-ledger": quickNav.transactionsHref,
