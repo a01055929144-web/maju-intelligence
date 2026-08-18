@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as
-    | { companyId?: string; isPrimary?: boolean; memo?: string; name?: string; phone?: string; role?: string }
+    | { birthDate?: string; companyId?: string; isPrimary?: boolean; memo?: string; name?: string; phone?: string; role?: string }
     | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const result = await upsertCustomerContact(scope.companyId!, id, {
+      birthDate: body.birthDate,
       isPrimary: body.isPrimary,
       memo: body.memo,
       name: body.name,

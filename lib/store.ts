@@ -2266,14 +2266,11 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     }
   }).catch(() => null);
 
-  // 신규 거래처를 등록했고, 이 저장 요청에 리뷰 요약을 직접 입력하지 않았다면(즉 담당자가 방금
-  // 수기로 리뷰를 채운 것이 아니라면), 구글 리뷰 자동 수집을 백그라운드로 실행합니다. 저장
-  // 응답을 기다리게 하지 않으려고 await하지 않으며(fire-and-forget), 실패해도 저장 자체는
-  // 이미 성공한 뒤이므로 조용히 무시합니다. GOOGLE_PLACES_API_KEY가 없으면 함수 내부에서
-  // 즉시 no-op으로 끝납니다.
-  if (!existingRows.length && input.reviewSummary === undefined && isGoogleReviewsApiConfigured()) {
-    void syncCustomerGoogleReviews(id, savedCustomer.id).catch(() => null);
-  }
+  // 신규 거래처 등록 시 구글 리뷰를 즉시 자동 수집하던 로직은 제거했습니다(2026-08-18) — Places
+  // API는 호출당 비용이 발생하는데, 등록만 해두고 한동안 열어보지 않는 거래처까지 전부 미리
+  // 조회하면 실제로 쓰이지 않는 호출이 쌓여 비용만 늘어납니다. 대신 담당자가 지도에서 해당
+  // 거래처 카드를 실제로 열었을 때만(리뷰가 아직 없는 경우) 그 자리에서 수집합니다 — 사용한
+  // 만큼만 비용이 발생하도록 sales-route-map-workspace.tsx의 카드 오픈 시점에서 호출합니다.
 
   return {
     customer: savedCustomer,
@@ -2296,6 +2293,7 @@ async function upsertNormalizedCustomerWithOptionalPlaceLinks(payload: Record<st
 export type CustomerContactItem = {
   id: string;
   customerId: string;
+  birthDate?: string;
   isPrimary: boolean;
   memo?: string;
   name: string;
@@ -2313,6 +2311,7 @@ type CustomerContactRow = {
   name: string;
   phone: string | null;
   memo: string | null;
+  birth_date?: string | null;
   is_primary: boolean;
   sort_order: number;
   created_at: string;
@@ -2323,6 +2322,7 @@ function toCustomerContactItem(row: CustomerContactRow): CustomerContactItem {
   return {
     id: row.id,
     customerId: row.customer_id,
+    birthDate: row.birth_date || undefined,
     isPrimary: row.is_primary,
     memo: row.memo || undefined,
     name: row.name,
@@ -2353,6 +2353,7 @@ export async function listCustomerContacts(companyId: string, customerId: string
 
 export type CustomerContactInput = {
   id?: string;
+  birthDate?: string;
   isPrimary?: boolean;
   memo?: string;
   name: string;
@@ -2368,32 +2369,50 @@ export async function upsertCustomerContact(
   if (!isProductionStoreConfigured()) return { contact: null, ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
   if (!input.name.trim()) return { contact: null, ok: false, message: "담당자 이름은 필수입니다." };
 
-  try {
-    const payload = {
-      company_id: companyId,
-      customer_id: customerId,
-      role: input.role.trim() || "담당자",
-      name: input.name.trim(),
-      phone: input.phone?.trim() || null,
-      memo: input.memo?.trim() || null,
-      is_primary: Boolean(input.isPrimary),
-      updated_at: new Date().toISOString()
-    };
+  const basePayload = {
+    company_id: companyId,
+    customer_id: customerId,
+    role: input.role.trim() || "담당자",
+    name: input.name.trim(),
+    phone: input.phone?.trim() || null,
+    memo: input.memo?.trim() || null,
+    is_primary: Boolean(input.isPrimary),
+    updated_at: new Date().toISOString()
+  };
+  // birth_date는 20260818c 마이그레이션으로 추가된 컬럼입니다. 아직 마이그레이션을 실행하지 않은
+  // 환경에서도 나머지 연락처 저장 기능(이름/직책/전화/메모)이 함께 깨지지 않도록, 컬럼이 없다는
+  // 오류(PGRST204/schema cache)를 만나면 이 필드만 빼고 한 번 더 시도합니다.
+  const payloadWithBirthDate = { ...basePayload, birth_date: input.birthDate?.trim() || null };
 
+  async function runUpsert(payload: Record<string, unknown>) {
     if (input.id) {
-      const rows = await supabaseRequest<CustomerContactRow[]>(
-        `customer_contacts?id=eq.${encodeURIComponent(input.id)}&company_id=eq.${encodeURIComponent(companyId)}`,
+      return supabaseRequest<CustomerContactRow[]>(
+        `customer_contacts?id=eq.${encodeURIComponent(input.id!)}&company_id=eq.${encodeURIComponent(companyId)}`,
         { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) }
       );
-      return { contact: rows[0] ? toCustomerContactItem(rows[0]) : null, ok: true };
     }
-
-    const rows = await supabaseRequest<CustomerContactRow[]>("customer_contacts", {
+    return supabaseRequest<CustomerContactRow[]>("customer_contacts", {
       method: "POST",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify([payload])
     });
-    return { contact: rows[0] ? toCustomerContactItem(rows[0]) : null, ok: true };
+  }
+
+  try {
+    let rows: CustomerContactRow[];
+    let birthDateSaved = true;
+    try {
+      rows = await runUpsert(payloadWithBirthDate);
+    } catch (error) {
+      if (!isMissingColumnError(error) || !input.birthDate?.trim()) throw error;
+      birthDateSaved = false;
+      rows = await runUpsert(basePayload);
+    }
+    return {
+      contact: rows[0] ? toCustomerContactItem(rows[0]) : null,
+      ok: true,
+      message: birthDateSaved ? undefined : "생일 항목은 아직 저장되지 않았습니다 — 관리자가 마이그레이션을 실행해야 합니다."
+    };
   } catch (error) {
     if (isMissingCustomerContactsTableError(error)) {
       return { contact: null, ok: false, message: "연락처 저장소가 아직 준비되지 않았습니다. 마이그레이션을 먼저 실행해주세요." };

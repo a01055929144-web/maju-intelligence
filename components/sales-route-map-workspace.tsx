@@ -282,8 +282,25 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
+  // 지도 탭에서 검색/필터/신규 리드 반경 바가 지도 위에 떠 있는 카드로 표시됩니다(xl:absolute).
+  // "신규 리드 반경"을 켜면 이 카드에 한 줄이 더 늘어나 높이가 커지는데, 지도 오른쪽 위
+  // MapControls(내 위치·전체보기·로드뷰·전체화면 버튼)의 세로 위치가 고정값이면 늘어난 카드와
+  // 겹칩니다. ResizeObserver로 이 카드의 실제 렌더 높이를 재서 MapControls를 그 아래로 밀어냅니다.
+  const mapHeaderRef = useRef<HTMLElement>(null);
+  const [mapHeaderHeightPx, setMapHeaderHeightPx] = useState(0);
+  useEffect(() => {
+    const node = mapHeaderRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.height;
+      if (typeof next === "number") setMapHeaderHeightPx(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
+  const googleReviewAutoFetchAttempted = useRef<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState("");
   // /leads/permits 같은 예전 딥링크(?view=leads)로 들어와도 같은 탭이 바로 열리도록 초기값을 URL에서 읽습니다.
   const [activeView, setActiveView] = useState<WorkspaceView>(() => {
@@ -637,6 +654,50 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return { persisted: payload?.persisted !== false };
   }
 
+  // 구글 리뷰 자동 수집 비용을 최소화하기 위해(2026-08-18), 등록 시점이나 매일 배치로 미리 모두
+  // 조회하지 않고 담당자가 지도에서 실제로 카드를 연 거래처에 대해서만, 아직 리뷰가 없을 때 그
+  // 자리에서 조용히 한 번 수집합니다. 같은 세션에서 같은 거래처를 다시 열어도 재시도하지 않도록
+  // (검색 결과가 없었던 경우 등) googleReviewAutoFetchAttempted에 시도 여부를 기록해둡니다.
+  useEffect(() => {
+    if (!previewStoreId) return;
+    const targetStore = allStores.find((store) => store.id === previewStoreId);
+    if (!targetStore || targetStore.reviewSummary) return;
+    if (googleReviewAutoFetchAttempted.current.has(previewStoreId)) return;
+    googleReviewAutoFetchAttempted.current.add(previewStoreId);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const companyId = permitLeadCompanyId();
+        const response = await fetch(`/api/customers/${previewStoreId}/sync-reviews`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(companyId ? { companyId } : {})
+        });
+        if (!response.ok || cancelled) return;
+        const payload = await response.json().catch(() => null);
+        if (!payload?.result) return;
+        setStoreEdits((current) => ({
+          ...current,
+          [previewStoreId]: {
+            ...current[previewStoreId],
+            reviewSummary: payload.result.summary,
+            reviewKeywords: payload.result.keywords,
+            reviewSource: payload.result.source
+          }
+        }));
+      } catch {
+        // 조용히 무시합니다 — API 키 미설정, 검색 결과 없음 등은 정상적인 케이스이고 카드
+        // 오픈 흐름을 방해해서는 안 됩니다("리뷰 새로고침" 버튼으로 언제든 수동 재시도 가능).
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewStoreId]);
+
   // 사업자 휴폐업 상태(자동 조회)와 별개로, "이 거래처와 더 이상 거래하지 않기로 했다"는 판단은
   // 사람이 직접 내려서 저장합니다. /api/customers의 일반 upsert가 아니라 전용 엔드포인트를 쓰는 이유는
   // lib/store.ts의 setCustomerRelationshipStatus() 주석 참고 — 이 컬럼이 없는 환경에서도 나머지 거래처
@@ -984,6 +1045,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             ? "xl:absolute xl:inset-x-2 xl:top-2 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:px-3 xl:py-2 xl:shadow-[0_10px_28px_rgba(15,23,42,.12)]"
             : ""
         }`}
+        ref={mapHeaderRef}
       >
         <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
@@ -1211,7 +1273,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName={`top-3 ${rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}`}
+                    controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}
+                    controlsOffsetPx={mapHeaderHeightPx ? mapHeaderHeightPx + 24 : undefined}
                     focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={mapDisplayMarkers}
@@ -1231,6 +1294,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                       setPreviewLeadId("");
                       setPreviewStoreId(marker.id);
                     }}
+                    radiusOverlay={
+                      leadRadiusOpen
+                        ? {
+                            centerMarkerId: leadRadiusAnchorMode === "customer" ? leadRadiusCustomerId || undefined : undefined,
+                            onRadiusChange: (meters) => setLeadRadiusKm(Math.min(50, Math.max(0.5, Math.round((meters / 1000) * 10) / 10))),
+                            radiusMeters: leadRadiusKm * 1000
+                          }
+                        : undefined
+                    }
                     showList={false}
                   />
                 </div>
@@ -5402,11 +5474,13 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
   const [draftRole, setDraftRole] = useState(CONTACT_ROLE_PRESETS[0]);
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
+  const [draftBirthDate, setDraftBirthDate] = useState("");
   const [draftMemo, setDraftMemo] = useState("");
   const [editingId, setEditingId] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editBirthDate, setEditBirthDate] = useState("");
   const [editMemo, setEditMemo] = useState("");
   const [rowBusyId, setRowBusyId] = useState("");
 
@@ -5440,7 +5514,13 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
       const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: draftRole || "담당자", name: draftName.trim(), phone: draftPhone.trim(), memo: draftMemo.trim() })
+        body: JSON.stringify({
+          role: draftRole || "담당자",
+          name: draftName.trim(),
+          phone: draftPhone.trim(),
+          birthDate: draftBirthDate,
+          memo: draftMemo.trim()
+        })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -5449,8 +5529,10 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
       }
       setDraftName("");
       setDraftPhone("");
+      setDraftBirthDate("");
       setDraftMemo("");
       setDraftRole(CONTACT_ROLE_PRESETS[0]);
+      if (data?.message) setAddError(data.message);
       await loadContacts();
     } catch (error) {
       setAddError(error instanceof Error ? error.message : "연락처 저장에 실패했습니다.");
@@ -5464,6 +5546,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setEditRole(contact.role);
     setEditName(contact.name);
     setEditPhone(contact.phone || "");
+    setEditBirthDate(contact.birthDate || "");
     setEditMemo(contact.memo || "");
   };
 
@@ -5474,7 +5557,13 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
       const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: editRole || "담당자", name: editName.trim(), phone: editPhone.trim(), memo: editMemo.trim() })
+        body: JSON.stringify({
+          role: editRole || "담당자",
+          name: editName.trim(),
+          phone: editPhone.trim(),
+          birthDate: editBirthDate,
+          memo: editMemo.trim()
+        })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "연락처 수정에 실패했습니다.");
@@ -5523,50 +5612,37 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
           {contacts.map((contact) => (
             <div className="maju-stat-card p-3" key={contact.id}>
               {editingId === contact.id ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <label className="grid gap-1 text-xs">
-                    <span className="font-black text-slate-500">직책</span>
-                    <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setEditRole(event.target.value)} value={editRole} />
-                  </label>
-                  <label className="grid gap-1 text-xs">
-                    <span className="font-black text-slate-500">이름</span>
-                    <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditName(event.target.value)} value={editName} />
-                  </label>
-                  <label className="grid gap-1 text-xs">
-                    <span className="font-black text-slate-500">연락처</span>
-                    <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumberInput(event.target.value))} value={editPhone} />
-                  </label>
-                  <label className="grid gap-1 text-xs">
-                    <span className="font-black text-slate-500">메모</span>
-                    <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditMemo(event.target.value)} value={editMemo} />
-                  </label>
-                  <div className="flex items-center gap-2 sm:col-span-2">
-                    <button className="maju-button-primary h-8 px-3 text-xs" disabled={rowBusyId === contact.id} onClick={() => saveEdit(contact.id)} type="button">
-                      {rowBusyId === contact.id ? "저장 중..." : "저장"}
-                    </button>
-                    <button className="maju-button-secondary h-8 px-3 text-xs" onClick={() => setEditingId("")} type="button">
-                      취소
-                    </button>
-                  </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setEditRole(event.target.value)} placeholder="직책" value={editRole} />
+                  <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditName(event.target.value)} placeholder="이름" value={editName} />
+                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumberInput(event.target.value))} placeholder="연락처" value={editPhone} />
+                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditBirthDate(event.target.value)} type="date" value={editBirthDate} />
+                  <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditMemo(event.target.value)} placeholder="메모" value={editMemo} />
+                  <button className="maju-button-primary h-9 px-3 text-xs" disabled={rowBusyId === contact.id} onClick={() => saveEdit(contact.id)} type="button">
+                    {rowBusyId === contact.id ? "저장 중..." : "저장"}
+                  </button>
+                  <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => setEditingId("")} type="button">
+                    취소
+                  </button>
                 </div>
               ) : (
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{contact.role}</span>
-                      <span className="text-sm font-black text-slate-950">{contact.name}</span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold text-slate-500">
-                      {contact.phone ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Phone className="h-3.5 w-3.5" />
-                          {contact.phone}
-                        </span>
-                      ) : null}
-                      {contact.memo ? <span className="truncate">{contact.memo}</span> : null}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{contact.role}</span>
+                  <span className="shrink-0 text-sm font-black text-slate-950">{contact.name}</span>
+                  {contact.phone ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500">
+                      <Phone className="h-3.5 w-3.5" />
+                      {contact.phone}
+                    </span>
+                  ) : null}
+                  {contact.birthDate ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {contact.birthDate}
+                    </span>
+                  ) : null}
+                  {contact.memo ? <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{contact.memo}</span> : null}
+                  <div className="ml-auto flex shrink-0 items-center gap-1.5">
                     <button aria-label="연락처 수정" className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100" onClick={() => startEdit(contact)} type="button">
                       <Edit3 className="h-4 w-4" />
                     </button>
@@ -5595,30 +5671,19 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         ))}
       </datalist>
 
-      <div className="maju-filter-box grid gap-2 border-slate-200 bg-white p-3 sm:grid-cols-2">
-        <label className="grid gap-1 text-xs">
-          <span className="font-black text-slate-500">직책</span>
-          <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setDraftRole(event.target.value)} placeholder="대표/실장/부장/매니저" value={draftRole} />
-        </label>
-        <label className="grid gap-1 text-xs">
-          <span className="font-black text-slate-500">이름</span>
-          <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftName(event.target.value)} placeholder="담당자 이름" value={draftName} />
-        </label>
-        <label className="grid gap-1 text-xs">
-          <span className="font-black text-slate-500">연락처</span>
-          <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumberInput(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
-        </label>
-        <label className="grid gap-1 text-xs">
-          <span className="font-black text-slate-500">메모</span>
-          <input className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftMemo(event.target.value)} placeholder="선택 입력" value={draftMemo} />
-        </label>
-        <div className="sm:col-span-2">
-          {addError ? <p className="mb-1.5 text-xs font-black text-rose-600">{addError}</p> : null}
-          <button className="maju-button-primary inline-flex h-9 items-center gap-1.5 px-3 text-sm" disabled={isAdding} onClick={addContact} type="button">
+      <div className="maju-filter-box border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setDraftRole(event.target.value)} placeholder="직책" value={draftRole} />
+          <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftName(event.target.value)} placeholder="담당자 이름" value={draftName} />
+          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumberInput(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
+          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold text-slate-500 outline-none focus:border-teal-300 focus:text-slate-950" onChange={(event) => setDraftBirthDate(event.target.value)} type="date" value={draftBirthDate} />
+          <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftMemo(event.target.value)} placeholder="메모(선택)" value={draftMemo} />
+          <button className="maju-button-primary inline-flex h-9 shrink-0 items-center gap-1.5 px-3 text-sm" disabled={isAdding} onClick={addContact} type="button">
             <Plus className="h-4 w-4" />
             {isAdding ? "추가 중..." : "담당자 추가"}
           </button>
         </div>
+        {addError ? <p className="mt-1.5 text-xs font-black text-rose-600">{addError}</p> : null}
       </div>
     </div>
   );

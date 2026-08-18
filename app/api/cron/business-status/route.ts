@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  refreshAllCompaniesBusinessStatuses,
-  refreshAllCompaniesGoogleReviews,
-  sendBusinessClosureAlerts,
-  sendDailyChurnRiskDigests
-} from "@/lib/store";
+import { refreshAllCompaniesBusinessStatuses, sendBusinessClosureAlerts, sendDailyChurnRiskDigests } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -12,12 +7,17 @@ export const maxDuration = 60;
 /**
  * Daily cron target (see vercel.json "crons") that (1) refreshes every company's 사업자 휴업/폐업
  * status against the NTS API, (2) alerts (Telegram) any company whose refresh just found a
- * newly-closed 거래처, (3) sends a Telegram 이탈 위험 거래처 digest to any company that has
- * configured a telegram_chat_id in 회사 설정, and (4) refreshes stale/missing 구글 리뷰 자동 수집
- * (GOOGLE_PLACES_API_KEY가 설정된 경우만, 회사당 최대 GOOGLE_REVIEWS_REFRESH_LIMIT곳). All four
- * share one Vercel Hobby cron slot. (2) depends on (1)'s result (it only fires on customers that
- * flipped to 폐업 in this run), so it runs after; (3)과 (4)는 서로 독립적이라 (2)와 함께 병렬로
+ * newly-closed 거래처, and (3) sends a Telegram 이탈 위험 거래처 digest to any company that has
+ * configured a telegram_chat_id in 회사 설정. (2) depends on (1)'s result (it only fires on
+ * customers that flipped to 폐업 in this run), so it runs after; (3)은 독립적이라 (2)와 병렬로
  * 실행해 전체 실행시간을 줄입니다.
+ *
+ * 구글 리뷰 자동 수집은 예전에 여기서 매일 전체 회사를 일괄 새로고침했지만(2026-08-18 제거) —
+ * Places API는 호출당 비용이 발생하는데, 아무도 열어보지 않는 거래처까지 매일 재조회하면 실제
+ * 쓰이지 않는 비용만 쌓입니다. 지금은 담당자가 지도에서 거래처 카드를 열 때만(리뷰가 없거나
+ * 오래된 경우) 그 자리에서 수집합니다 — /api/customers/[id]/sync-reviews, lib/store.ts의
+ * syncCustomerGoogleReviews() 참고.
+ *
  * Vercel signs cron requests with an Authorization: Bearer header matching CRON_SECRET — see
  * https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs. Without CRON_SECRET
  * configured, the endpoint refuses all requests rather than running unauthenticated.
@@ -32,10 +32,9 @@ export async function GET(request: NextRequest) {
   }
 
   const businessStatus = await refreshAllCompaniesBusinessStatuses();
-  const [closureAlerts, churnRiskDigest, googleReviews] = await Promise.all([
+  const [closureAlerts, churnRiskDigest] = await Promise.all([
     sendBusinessClosureAlerts(businessStatus.closed),
-    sendDailyChurnRiskDigests(),
-    refreshAllCompaniesGoogleReviews()
+    sendDailyChurnRiskDigests()
   ]);
-  return NextResponse.json({ businessStatus, closureAlerts, churnRiskDigest, googleReviews });
+  return NextResponse.json({ businessStatus, closureAlerts, churnRiskDigest });
 }

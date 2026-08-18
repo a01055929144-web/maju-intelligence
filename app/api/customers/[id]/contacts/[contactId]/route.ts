@@ -6,7 +6,7 @@ import { deleteCustomerContact, upsertCustomerContact } from "@/lib/store";
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string; contactId: string }> }) {
   const { id, contactId } = await params;
   const body = (await request.json().catch(() => null)) as
-    | { companyId?: string; isPrimary?: boolean; memo?: string; name?: string; phone?: string; role?: string }
+    | { birthDate?: string; companyId?: string; isPrimary?: boolean; memo?: string; name?: string; phone?: string; role?: string }
     | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
@@ -21,6 +21,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const result = await upsertCustomerContact(scope.companyId!, id, {
       id: contactId,
+      birthDate: body.birthDate,
       isPrimary: body.isPrimary,
       memo: body.memo,
       name: body.name,

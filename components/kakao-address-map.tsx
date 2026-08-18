@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Crosshair, ExternalLink, MapPin, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -21,6 +22,16 @@ export type KakaoRoutePoint = {
   readonly lng: number;
 };
 
+// "신규 리드 반경"처럼 특정 중심점 주위 반경을 지도 위에 원으로 시각화하고, 원 가장자리의 손잡이를
+// 네이버·카카오 지도처럼 드래그해서 반경을 직접 조절할 수 있게 합니다. centerMarkerId를 주면 이미
+// 지오코딩된 마커 좌표(markerPositionsRef)를 중심으로 쓰고, 주지 않으면(예: "전체 거래처" 기준)
+// 현재 지도 중심을 기준으로 씁니다.
+export type KakaoRadiusOverlay = {
+  readonly centerMarkerId?: string;
+  readonly onRadiusChange?: (radiusMeters: number) => void;
+  readonly radiusMeters: number;
+};
+
 type KakaoAddressMapProps = {
   readonly controlsOffsetClassName?: string;
   readonly controlsOffsetPx?: number;
@@ -29,6 +40,7 @@ type KakaoAddressMapProps = {
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
+  readonly radiusOverlay?: KakaoRadiusOverlay;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
   readonly showList?: boolean;
 };
@@ -58,17 +70,35 @@ export function KakaoAddressMap({
   mapClassName = defaultMapClassName,
   markers,
   onMarkerClick,
+  radiusOverlay,
   routePath = emptyRoutePath,
   showList = true
 }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const boundsRef = useRef<any>(null);
+  // marker.id -> 지오코딩된 LatLng 캐시. 마커를 선택(focusedMarkerId 변경)할 때마다 지도를
+  // 통째로 다시 만들고 모든 주소를 재지오코딩하면(과거 버그) 마커가 많을수록 브라우저가 몇 초씩
+  // 멈추는 현상이 생깁니다. 최초 로드 때 한 번만 계산해 여기 저장해두고, 이후 포커스 이동은
+  // 이 캐시를 읽어 지도만 살짝 이동시키는 훨씬 가벼운 두 번째 effect에서 처리합니다.
+  const markerPositionsRef = useRef<Map<string, any>>(new Map());
+  // onMarkerClick은 부모(sales-route-map-workspace.tsx)에서 매 렌더마다 새로 만들어지는 인라인
+  // 함수일 수 있습니다. 이 값을 boot effect의 의존성 배열에 그대로 두면 부모가 리렌더될 때마다
+  // (마커 클릭과 무관하게) 지도가 통째로 재생성됩니다. ref로 최신 콜백만 따로 추적해 boot effect가
+  // 이 값 변화에 반응하지 않도록 분리합니다.
+  const onMarkerClickRef = useRef(onMarkerClick);
+  const radiusCircleRef = useRef<any>(null);
+  const radiusHandleMarkerRef = useRef<any>(null);
+  const radiusOnChangeRef = useRef(radiusOverlay?.onRadiusChange);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const [fallbackReason, setFallbackReason] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
   const focusedMarker = useMemo(() => markers.find((marker) => marker.id === focusedMarkerId), [focusedMarkerId, markers]);
+
+  useEffect(() => {
+    onMarkerClickRef.current = onMarkerClick;
+  }, [onMarkerClick]);
 
   useEffect(() => {
     let ignore = false;
@@ -101,6 +131,7 @@ export function KakaoAddressMap({
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
+        markerPositionsRef.current = new Map();
         let focusedPosition: any = null;
         let found = 0;
         const roadPathSegments = splitRoutePath(routePath).map((segment) => segment.map((point) => new kakao.maps.LatLng(point.lat, point.lng)));
@@ -120,7 +151,7 @@ export function KakaoAddressMap({
                   if (geocodeStatus === kakao.maps.services.Status.OK && result[0]) {
                     const position = new kakao.maps.LatLng(Number(result[0].y), Number(result[0].x));
                     const overlayContent = createMarkerOverlay(marker);
-                    overlayContent.addEventListener("click", () => onMarkerClick?.(marker));
+                    overlayContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
                     new kakao.maps.CustomOverlay({
                       content: overlayContent,
                       map,
@@ -130,6 +161,7 @@ export function KakaoAddressMap({
 
                     bounds.extend(position);
                     found += 1;
+                    if (marker.id) markerPositionsRef.current.set(marker.id, position);
                     if (focusedMarkerId && marker.id === focusedMarkerId) {
                       focusedPosition = position;
                     }
@@ -188,7 +220,90 @@ export function KakaoAddressMap({
     return () => {
       ignore = true;
     };
-  }, [appKey, canUseKakao, focusedMarkerId, markers, onMarkerClick, routePath]);
+    // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도
+    // 전체를 재생성하고 모든 주소를 재지오코딩하면(과거 버그, 실제로 몇 초 이상 브라우저가
+    // 멈추는 현상을 유발) 안 되기 때문입니다. 포커스 이동은 아래의 가벼운 effect가 캐시된
+    // 좌표로만 처리하고, 클릭 콜백은 onMarkerClickRef로 최신 값을 유지합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appKey, canUseKakao, markers, routePath]);
+
+  // 마커 선택(focusedMarkerId 변경)은 지도를 다시 만들지 않고, 최초 로드 때 이미 지오코딩해
+  // 캐시해둔 좌표로 지도만 살짝 이동시킵니다 — 이게 없으면 마커 클릭마다 위 boot effect 전체가
+  // 다시 돌면서 모든 마커를 재지오코딩해 브라우저가 멈추는 원인이 됩니다.
+  useEffect(() => {
+    if (status !== "ready" || !focusedMarkerId) return;
+    const map = mapInstanceRef.current;
+    const position = markerPositionsRef.current.get(focusedMarkerId);
+    if (!map || !position) return;
+    map.setCenter(position);
+    map.setLevel(5);
+  }, [focusedMarkerId, status]);
+
+  useEffect(() => {
+    radiusOnChangeRef.current = radiusOverlay?.onRadiusChange;
+  }, [radiusOverlay?.onRadiusChange]);
+
+  // "신규 리드 반경" 원 시각화 + 드래그 손잡이. 매번 지도를 다시 만들지 않고(위 boot effect와
+  // 분리) 원과 손잡이 마커만 독립적으로 그리고 지웁니다. centerMarkerId가 있으면 이미
+  // 지오코딩된 좌표를, 없으면(전체 거래처 기준) 현재 지도 중심을 원의 중심으로 씁니다.
+  useEffect(() => {
+    radiusCircleRef.current?.setMap(null);
+    radiusHandleMarkerRef.current?.setMap(null);
+    radiusCircleRef.current = null;
+    radiusHandleMarkerRef.current = null;
+
+    const kakao = window.kakao;
+    const map = mapInstanceRef.current;
+    if (status !== "ready" || !radiusOverlay || !kakao?.maps || !map) return;
+
+    const centerPosition = radiusOverlay.centerMarkerId
+      ? markerPositionsRef.current.get(radiusOverlay.centerMarkerId)
+      : map.getCenter();
+    if (!centerPosition) return;
+
+    const centerLat = centerPosition.getLat();
+    const centerLng = centerPosition.getLng();
+
+    const circle = new kakao.maps.Circle({
+      center: centerPosition,
+      fillColor: "#14b8a6",
+      fillOpacity: 0.12,
+      radius: radiusOverlay.radiusMeters,
+      strokeColor: "#0f766e",
+      strokeOpacity: 0.85,
+      strokeStyle: "solid",
+      strokeWeight: 2
+    });
+    circle.setMap(map);
+    radiusCircleRef.current = circle;
+
+    const handlePoint = destinationPoint(centerLat, centerLng, radiusOverlay.radiusMeters, 90);
+    const handleMarker = new kakao.maps.Marker({
+      draggable: true,
+      position: new kakao.maps.LatLng(handlePoint.lat, handlePoint.lng),
+      title: "드래그해서 반경 조절",
+      zIndex: 10
+    });
+    handleMarker.setMap(map);
+    radiusHandleMarkerRef.current = handleMarker;
+
+    kakao.maps.event.addListener(handleMarker, "drag", () => {
+      const pos = handleMarker.getPosition();
+      const meters = haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng());
+      circle.setRadius(Math.max(meters, 100));
+    });
+    kakao.maps.event.addListener(handleMarker, "dragend", () => {
+      const pos = handleMarker.getPosition();
+      const meters = haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng());
+      radiusOnChangeRef.current?.(Math.max(meters, 100));
+    });
+
+    return () => {
+      circle.setMap(null);
+      handleMarker.setMap(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.radiusMeters, markers]);
 
   // 카카오맵은 초기화 시점의 컨테이너 크기를 기준으로 캔버스를 그리기 때문에, 사이드 패널 접힘/펼침,
   // 팝업 표시, 반응형 브레이크포인트 전환처럼 지도 영역 자체의 높이·너비가 나중에 바뀌면 위쪽에 빈
@@ -318,13 +433,20 @@ function MapControls({
   readonly onLocation: () => void;
   readonly onRoadview: () => void;
 }) {
-  // offsetClassName이 있으면 반응형 브레이크포인트별로 다른 여백을 줄 수 있어(예: 모바일은 그대로,
-  // xl 이상에서는 지도 위에 뜨는 검색·필터 바 아래로 내림) 이를 우선 사용하고, 없을 때만
-  // 기존처럼 고정 px 오프셋(모든 화면 크기에서 동일)을 인라인 스타일로 적용합니다.
+  // 모바일에서는 검색·필터 바가 지도 위 일반 흐름(in-flow)에 있어 지도 자체가 그 아래에서
+  // 시작하므로 작은 고정값(top-3= 0.75rem)이면 충분합니다. xl 이상에서는 그 바가 지도 위에 뜨는
+  // 카드(xl:absolute)로 바뀌는데, "신규 리드 반경"처럼 줄이 늘어나면 카드 높이가 달라집니다 —
+  // offsetPx로 그 카드의 실제 렌더 높이를 CSS 변수로 넘겨받아 xl에서만 그 아래로 밀어내고,
+  // offsetPx가 없으면(다른 화면들) 항상 top-3 그대로 사용합니다. offsetClassName은 가로 위치
+  // (예: 우측 패널 접힘 여부에 따른 right-*)처럼 top과 무관한 값만 추가로 얹는 용도입니다.
+  const style = offsetPx !== undefined ? ({ "--maju-map-controls-top": `${offsetPx}px` } as CSSProperties) : undefined;
+
   return (
     <div
-      className={`absolute right-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur ${offsetClassName || ""}`}
-      style={offsetClassName ? undefined : { top: offsetPx !== undefined ? `${offsetPx}px` : "0.75rem" }}
+      className={`absolute right-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur top-3 ${
+        offsetPx !== undefined ? "xl:top-[var(--maju-map-controls-top)]" : ""
+      } ${offsetClassName || ""}`}
+      style={style}
     >
       <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
         <Crosshair className="h-3.5 w-3.5" />
@@ -390,6 +512,39 @@ function drawRoadRoutePolylines(kakao: any, map: any, roadPathSegments: any[][])
       strokeWeight: 5
     });
   });
+}
+
+const EARTH_RADIUS_METERS = 6371000;
+
+// 두 좌표 사이 직선거리(m) — 반경 손잡이를 드래그한 위치가 중심에서 얼마나 떨어졌는지 계산합니다.
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 중심 좌표에서 특정 방위각(도, 0=북쪽·90=동쪽)으로 distanceMeters만큼 떨어진 좌표를 계산합니다 —
+// 반경 원의 가장자리에 드래그 손잡이를 배치하는 데 씁니다.
+function destinationPoint(lat: number, lng: number, distanceMeters: number, bearingDeg: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toDeg = (rad: number) => (rad * 180) / Math.PI;
+  const angularDistance = distanceMeters / EARTH_RADIUS_METERS;
+  const bearing = toRad(bearingDeg);
+  const lat1 = toRad(lat);
+  const lng1 = toRad(lng);
+
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDistance) + Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing));
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+  return { lat: toDeg(lat2), lng: toDeg(lng2) };
 }
 
 function splitRoutePath(routePath: ReadonlyArray<KakaoRoutePoint>) {
