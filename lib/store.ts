@@ -494,8 +494,13 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
     throw new Error(`Supabase request failed: ${response.status} ${message}`);
   }
 
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  // Prefer: return=minimal은 PATCH/DELETE에서는 204(본문 없음)로 오지만, POST(insert)에서는
+  // 201에 빈 본문으로 옵니다. 상태 코드 204만 특별 취급하면 이 201-빈 본문 케이스에서
+  // response.json()이 "Unexpected end of JSON input"으로 죽습니다. 상태 코드 대신 본문이
+  // 실제로 비어 있는지로 판단해 두 경우 모두 안전하게 처리합니다.
+  const text = await response.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 function isMissingStaffInvitationTableError(error: unknown) {
