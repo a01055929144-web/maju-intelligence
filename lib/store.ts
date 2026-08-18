@@ -2,6 +2,7 @@ import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { enrichLeadRecommendations } from "./leads";
+import { summarizePastedReviewText } from "./review-summarizer";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
@@ -2457,6 +2458,50 @@ export async function syncCustomerGoogleReviews(companyId: string, customerId: s
   });
 
   return { ok: true, updated: true, result };
+}
+
+// 네이버플레이스·카카오맵은 공식 리뷰 API가 없고, 자동으로 페이지를 읽어오는 것(스크래핑)은
+// 하지 않기로 했습니다(리뷰_자동수집_파이프라인_설계.md 참고 — map.naver.com 등은 자동 접근 대상이
+// 아닙니다). 대신 담당자가 링크를 열어 리뷰를 직접 읽고 텍스트를 복사해서 붙여넣으면, 그 텍스트를
+// AI(규칙 기반 요약기, 별도 API 키 불필요)가 즉시 요약·키워드화합니다. 어떤 URL도 이 함수 내부에서
+// 가져오지 않습니다 — 오직 사람이 이미 붙여넣은 텍스트만 다룹니다.
+export type ManualReviewSummaryOutcome = {
+  ok: boolean;
+  message?: string;
+  result?: { summary: string; keywords: string[]; source: string };
+};
+
+export async function summarizeCustomerReviewText(
+  companyId: string,
+  customerId: string,
+  input: { rawText: string; source: string }
+): Promise<ManualReviewSummaryOutcome> {
+  if (!isProductionStoreConfigured()) return { ok: false, message: "저장소가 준비되지 않았습니다." };
+
+  const rawText = (input.rawText || "").trim();
+  if (!rawText) return { ok: false, message: "붙여넣은 리뷰 텍스트가 없습니다." };
+  const source = (input.source || "").trim() || "직접 입력";
+
+  const summarized = summarizePastedReviewText(rawText);
+  if (!summarized) return { ok: false, message: "텍스트에서 요약할 내용을 찾지 못했습니다." };
+
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(customerId)}&limit=1`
+  ).catch(() => []);
+  if (!rows.length) return { ok: false, message: "거래처를 찾을 수 없습니다." };
+
+  await supabaseRequest(`normalized_customers?id=eq.${encodeURIComponent(customerId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      review_summary: summarized.summary,
+      review_keywords: summarized.keywords,
+      review_source: source,
+      reviews_updated_at: new Date().toISOString()
+    })
+  });
+
+  return { ok: true, result: { ...summarized, source } };
 }
 
 const GOOGLE_REVIEWS_REFRESH_LIMIT = 30;

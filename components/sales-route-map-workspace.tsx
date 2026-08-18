@@ -4912,6 +4912,10 @@ function StoreDetail({
   const [saveError, setSaveError] = useState("");
   const [isSyncingReviews, setIsSyncingReviews] = useState(false);
   const [reviewSyncMessage, setReviewSyncMessage] = useState("");
+  const [pasteReviewSource, setPasteReviewSource] = useState("네이버");
+  const [pasteReviewText, setPasteReviewText] = useState("");
+  const [isSummarizingPaste, setIsSummarizingPaste] = useState(false);
+  const [pasteSummaryMessage, setPasteSummaryMessage] = useState("");
   const activeOcrSuggestion = ocrSuggestion || (attachments.businessCertificate ? createBusinessOcrSuggestion(store, attachments.businessCertificate.name) : null);
   const businessNumberValid = isValidBusinessRegistrationNumber(draftBusinessNumber);
   const saveDraft = async () => {
@@ -4993,6 +4997,44 @@ function StoreDetail({
       setReviewSyncMessage(error instanceof Error ? error.message : "리뷰 새로고침 중 오류가 발생했습니다.");
     } finally {
       setIsSyncingReviews(false);
+    }
+  };
+  // 네이버·카카오 리뷰는 자동으로 가져오지 않습니다(설계 문서 참고). 담당자가 링크를 열어 직접
+  // 읽고 복사해온 텍스트만 받아서, 그 텍스트를 AI(규칙 기반 요약기)로 즉시 요약·키워드화합니다.
+  const summarizePastedReviews = async () => {
+    if (!pasteReviewText.trim()) {
+      setPasteSummaryMessage("붙여넣은 리뷰 텍스트가 없습니다.");
+      return;
+    }
+    setIsSummarizingPaste(true);
+    setPasteSummaryMessage("");
+    try {
+      const companyId = permitLeadCompanyId();
+      const response = await fetch(`/api/customers/${store.id}/summarize-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(companyId ? { companyId } : {}),
+          rawText: pasteReviewText,
+          source: pasteReviewSource
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        result?: { summary?: string; keywords?: string[]; source?: string };
+      } | null;
+      if (!response.ok || !payload?.result) {
+        setPasteSummaryMessage(payload?.message || "리뷰 요약에 실패했습니다.");
+        return;
+      }
+      setDraftReviewSummary(payload.result.summary || "");
+      setDraftReviewKeywords((payload.result.keywords || []).join(", "));
+      setDraftReviewSource(payload.result.source || pasteReviewSource);
+      setPasteSummaryMessage(`요약 반영 완료 · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
+    } catch (error) {
+      setPasteSummaryMessage(error instanceof Error ? error.message : "리뷰 요약 중 오류가 발생했습니다.");
+    } finally {
+      setIsSummarizingPaste(false);
     }
   };
 
@@ -5161,6 +5203,37 @@ function StoreDetail({
                     </button>
                   </div>
                   {reviewSyncMessage ? <p className="text-[11px] font-bold text-teal-600">{reviewSyncMessage}</p> : null}
+                  <div className="maju-filter-box space-y-2 border-slate-200 bg-white px-3 py-3">
+                    <p className="text-xs font-black text-slate-500">
+                      네이버·카카오 리뷰 붙여넣기 — 위 "외부 거래처 정보"의 링크를 열어 리뷰를 확인한 뒤, 리뷰 텍스트를 복사해서 아래에 붙여넣고 버튼을 누르면 AI가 즉시 요약합니다.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 rounded-md border border-slate-200 px-2 text-xs font-bold outline-none focus:border-teal-300"
+                        onChange={(event) => setPasteReviewSource(event.target.value)}
+                        value={pasteReviewSource}
+                      >
+                        <option value="네이버">네이버</option>
+                        <option value="카카오">카카오</option>
+                        <option value="기타">기타</option>
+                      </select>
+                      <button
+                        className="shrink-0 rounded-md border border-teal-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isSummarizingPaste}
+                        onClick={summarizePastedReviews}
+                        type="button"
+                      >
+                        {isSummarizingPaste ? "요약 중…" : "AI 요약 생성"}
+                      </button>
+                    </div>
+                    <textarea
+                      className="min-h-20 w-full rounded-md border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setPasteReviewText(event.target.value)}
+                      placeholder="네이버·카카오 리뷰 원문을 여기에 붙여넣으세요 (여러 개면 줄바꿈으로 구분)"
+                      value={pasteReviewText}
+                    />
+                    {pasteSummaryMessage ? <p className="text-[11px] font-bold text-teal-600">{pasteSummaryMessage}</p> : null}
+                  </div>
                   {draftReviewKeywords.split(",").map((keyword) => keyword.trim()).filter(Boolean).length ? (
                     <div className="flex flex-wrap gap-1.5">
                       {draftReviewKeywords
