@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { refreshAllCompaniesBusinessStatuses, sendBusinessClosureAlerts, sendDailyChurnRiskDigests } from "@/lib/store";
+import { refreshAllCompaniesBusinessStatuses, sendBusinessClosureAlerts, sendDailyChurnRiskDigests, syncAllCompaniesLocalDataPermitLeads } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +18,11 @@ export const maxDuration = 60;
  * 오래된 경우) 그 자리에서 수집합니다 — /api/customers/[id]/sync-reviews, lib/store.ts의
  * syncCustomerGoogleReviews() 참고.
  *
+ * (4) 지방행정 인허가 데이터개방(localdata.go.kr) 신규 리드 자동 수집 — 기존에는 사용자가
+ * 엑셀을 직접 내려받아 업로드해야 했는데(2026-08-19 자동화 추가), LOCALDATA_API_KEY가 설정된
+ * 회사에 한해 매일 최근 3일 변경분을 자동으로 가져와 신규 리드로 적재합니다. 키가 없으면
+ * syncAllCompaniesLocalDataPermitLeads()가 즉시 빈 결과를 반환하므로(1)~(3)에는 영향이 없습니다.
+ *
  * Vercel signs cron requests with an Authorization: Bearer header matching CRON_SECRET — see
  * https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs. Without CRON_SECRET
  * configured, the endpoint refuses all requests rather than running unauthenticated.
@@ -32,9 +37,10 @@ export async function GET(request: NextRequest) {
   }
 
   const businessStatus = await refreshAllCompaniesBusinessStatuses();
-  const [closureAlerts, churnRiskDigest] = await Promise.all([
+  const [closureAlerts, churnRiskDigest, permitLeadSync] = await Promise.all([
     sendBusinessClosureAlerts(businessStatus.closed),
-    sendDailyChurnRiskDigests()
+    sendDailyChurnRiskDigests(),
+    syncAllCompaniesLocalDataPermitLeads()
   ]);
-  return NextResponse.json({ businessStatus, closureAlerts, churnRiskDigest });
+  return NextResponse.json({ businessStatus, closureAlerts, churnRiskDigest, permitLeadSync });
 }

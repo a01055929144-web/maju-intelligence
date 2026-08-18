@@ -1,5 +1,6 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
+import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { enrichLeadRecommendations } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
@@ -1857,7 +1858,8 @@ export function getSystemStatus(): SystemStatus {
       { key: "OPINET_API_KEY", present: opinetConfigured, required: false, scope: "server" },
       { key: "NAVER_SEARCH_CLIENT_ID + NAVER_SEARCH_CLIENT_SECRET", present: naverSearchConfigured, required: false, scope: "server" },
       { key: "NTS_BUSINESS_API_KEY", present: ntsBusinessConfigured, required: false, scope: "server" },
-      { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" }
+      { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" },
+      { key: "LOCALDATA_API_KEY", present: isLocalDataApiConfigured(), required: false, scope: "server" }
     ],
     services: [
       {
@@ -3914,7 +3916,11 @@ export type PermitLeadIngestResult = {
  * 기존 거래처(normalized_customers)와 사업자번호가 일치하면 중복으로 표시하되 삭제하지 않고
  * "제외" 상태로 남겨 왜 제외됐는지 추적할 수 있게 합니다.
  */
-export async function ingestPermitLeadRows(companyId: string, rows: PermitLeadIngestRow[]): Promise<PermitLeadIngestResult> {
+export async function ingestPermitLeadRows(
+  companyId: string,
+  rows: PermitLeadIngestRow[],
+  options: { source?: string } = {}
+): Promise<PermitLeadIngestResult> {
   const result: PermitLeadIngestResult = {
     total: rows.length,
     inserted: 0,
@@ -4009,7 +4015,7 @@ export async function ingestPermitLeadRows(companyId: string, rows: PermitLeadIn
       latitude: row.latitude ?? null,
       longitude: row.longitude ?? null,
       jurisdiction: row.jurisdiction || null,
-      source: "manual_upload",
+      source: options.source || "manual_upload",
       lead_period: leadPeriod,
       industry_raw: row.industry || null,
       industry_primary: classification.primary,
@@ -4056,6 +4062,77 @@ export async function ingestPermitLeadRows(companyId: string, rows: PermitLeadIn
   result.updated = updates.length;
 
   return result;
+}
+
+export type LocalDataPermitSyncResult = {
+  configured: boolean;
+  opnSvcIds: string[];
+  fetched: number;
+  ingest: PermitLeadIngestResult;
+};
+
+const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
+  total: 0,
+  inserted: 0,
+  updated: 0,
+  duplicates: 0,
+  excludedInactive: 0,
+  excludedNonTarget: 0,
+  skippedNoName: 0
+};
+
+/**
+ * 지방행정 인허가 데이터개방(localdata.go.kr) Open API에서 최근 변경분을 가져와 곧바로
+ * ingestPermitLeadRows()에 흘려보냅니다. 수동 엑셀 업로드와 완전히 같은 분류·점수·중복판정
+ * 로직을 타므로 두 경로의 결과가 서로 다르게 계산될 일이 없습니다. LOCALDATA_API_KEY가 없으면
+ * configured: false로 조용히 빈 결과를 반환합니다 — 온디맨드 버튼과 일일 cron 양쪽에서 그대로
+ * "API 키 필요" 안내에 사용할 수 있습니다.
+ */
+export async function syncLocalDataPermitLeads(companyId: string, days = 3): Promise<LocalDataPermitSyncResult> {
+  const opnSvcIds = getConfiguredOpnSvcIds();
+  if (!isLocalDataApiConfigured()) {
+    return { configured: false, opnSvcIds, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
+  }
+
+  const rowSets = await Promise.all(opnSvcIds.map((opnSvcId) => fetchLocalDataPermitRows(opnSvcId, days)));
+  const rows = rowSets.flat();
+  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "localdata_api" });
+
+  return { configured: true, opnSvcIds, fetched: rows.length, ingest };
+}
+
+export type LocalDataPermitDailySyncResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalFetched: number;
+  totalInserted: number;
+  totalUpdated: number;
+};
+
+/** 일일 cron(app/api/cron/business-status)에서 모든 회사에 대해 인허가 데이터 자동 수집을 실행합니다. */
+export async function syncAllCompaniesLocalDataPermitLeads(): Promise<LocalDataPermitDailySyncResult> {
+  const empty: LocalDataPermitDailySyncResult = {
+    configured: isLocalDataApiConfigured(),
+    companiesProcessed: 0,
+    totalFetched: 0,
+    totalInserted: 0,
+    totalUpdated: 0
+  };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id)));
+
+  return results.reduce<LocalDataPermitDailySyncResult>(
+    (total, result) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalFetched: total.totalFetched + result.fetched,
+      totalInserted: total.totalInserted + result.ingest.inserted,
+      totalUpdated: total.totalUpdated + result.ingest.updated
+    }),
+    { ...empty, configured: true }
+  );
 }
 
 export type PermitLeadFilters = {

@@ -3263,6 +3263,13 @@ type PermitUploadResult = {
   updated: number;
 };
 
+type PermitSyncResult = {
+  configured: boolean;
+  opnSvcIds: string[];
+  fetched: number;
+  ingest: PermitUploadResult;
+};
+
 type NearbyPermitLeadResult = {
   anchorCount: number;
   leads: Array<PermitLeadItem & { distanceKm: number; nearestAnchor: { id: string; name: string } | null }>;
@@ -3295,6 +3302,9 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadResult, setUploadResult] = useState<PermitUploadResult | null>(null);
   const [uploadWarning, setUploadWarning] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncResult, setSyncResult] = useState<PermitSyncResult | null>(null);
+  const [syncWarning, setSyncWarning] = useState("");
 
   const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
   const [actionMessage, setActionMessage] = useState("");
@@ -3387,6 +3397,31 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
       setUploadWarning(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
     } finally {
       setUploadBusy(false);
+    }
+  }
+
+  // 인허가 데이터 자동 수집: 수동 업로드와 같은 파이프라인을 API 호출로 대체합니다(LOCALDATA_API_KEY 필요).
+  async function handleAutoSync() {
+    setSyncBusy(true);
+    setSyncResult(null);
+    setSyncWarning("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/sync"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 3 })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setSyncWarning(payload?.message || "자동 수집에 실패했습니다.");
+        return;
+      }
+      setSyncResult(payload);
+      loadLeads();
+    } catch (error) {
+      setSyncWarning(error instanceof Error ? error.message : "네트워크 오류로 자동 수집하지 못했습니다.");
+    } finally {
+      setSyncBusy(false);
     }
   }
 
@@ -3547,21 +3582,31 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
               공공데이터포털(지방행정 인허가) 또는 자체 수집한 엑셀/CSV 파일을 업로드하세요. 사업장명, 인허가일자, 영업상태명, 업종명, 주소, 소재지전화
               컬럼을 자동으로 인식합니다. 같은 사업자번호는 최신 인허가 상태로 갱신되고, 이미 거래처로 등록된 사업자번호는 자동으로 제외 처리됩니다.
             </p>
-            <label className="maju-button-primary inline-flex w-fit cursor-pointer">
-              <Upload className="h-4 w-4" />
-              {uploadBusy ? "업로드 중..." : "파일 선택"}
-              <input
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                disabled={uploadBusy}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void handleFileUpload(file);
-                  event.target.value = "";
-                }}
-                type="file"
-              />
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="maju-button-primary inline-flex w-fit cursor-pointer">
+                <Upload className="h-4 w-4" />
+                {uploadBusy ? "업로드 중..." : "파일 선택"}
+                <input
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  disabled={uploadBusy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleFileUpload(file);
+                    event.target.value = "";
+                  }}
+                  type="file"
+                />
+              </label>
+              <button className="maju-button-secondary inline-flex w-fit items-center gap-2" disabled={syncBusy} onClick={() => void handleAutoSync()} type="button">
+                <Radar className="h-4 w-4" />
+                {syncBusy ? "가져오는 중..." : "인허가 데이터 지금 가져오기(API)"}
+              </button>
+            </div>
+            <p className="text-[11px] font-semibold leading-4 text-slate-400">
+              "지금 가져오기"는 localdata.go.kr Open API로 최근 3일 변경분을 자동으로 가져옵니다. LOCALDATA_API_KEY 환경변수가 설정된 회사만
+              사용할 수 있고, 매일 새벽 자동 실행도 함께 동작합니다.
+            </p>
             {uploadWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{uploadWarning}</p> : null}
             {uploadResult ? (
               <div className="flex flex-wrap gap-2 rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-600">
@@ -3572,6 +3617,15 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                 <span className="text-slate-500">비활성 제외 {uploadResult.excludedInactive.toLocaleString()}</span>
                 <span className="text-slate-500">비대상 업종 제외 {uploadResult.excludedNonTarget.toLocaleString()}</span>
                 {uploadResult.skippedNoName ? <span className="text-rose-600">상호명 없음 건너뜀 {uploadResult.skippedNoName.toLocaleString()}</span> : null}
+              </div>
+            ) : null}
+            {syncWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{syncWarning}</p> : null}
+            {syncResult ? (
+              <div className="flex flex-wrap gap-2 rounded-md bg-teal-50 p-3 text-xs font-bold text-teal-800">
+                <span>업종 {syncResult.opnSvcIds.length}종 · 수신 {syncResult.fetched.toLocaleString()}행</span>
+                <span className="text-emerald-700">신규 {syncResult.ingest.inserted.toLocaleString()}</span>
+                <span className="text-blue-700">갱신 {syncResult.ingest.updated.toLocaleString()}</span>
+                <span className="text-slate-500">기존 거래처 중복 {syncResult.ingest.duplicates.toLocaleString()}</span>
               </div>
             ) : null}
           </div>
