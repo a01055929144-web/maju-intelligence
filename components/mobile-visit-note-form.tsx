@@ -109,7 +109,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           {saving ? "저장 중" : status === "saved" ? "저장 완료" : "히스토리에 저장"}
         </Button>
 
-        {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 DB 연결을 확인해주세요.</p> : null}
+        {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 저장 연결을 확인해주세요.</p> : null}
         {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장되었습니다. 거래처 원장에서 같은 기록을 확인할 수 있습니다.</p> : null}
       </div>
     </section>

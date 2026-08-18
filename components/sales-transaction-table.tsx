@@ -84,7 +84,7 @@ export function SalesTransactionTable({
             {!items.length ? (
               <tr>
                 <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
-                  아직 업로드된 매출 거래내역이 없습니다. 매출 거래내역서를 업로드하면 이곳에 누적됩니다.
+                  아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다.
                 </td>
               </tr>
             ) : null}

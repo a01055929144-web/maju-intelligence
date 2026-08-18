@@ -245,7 +245,7 @@ function MobileOperationalEmptyState() {
         <div className="min-w-0">
           <p className="font-black text-slate-950">운영 거래처 등록이 필요합니다.</p>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">
-            관리자 또는 고객사 담당자가 거래처 마스터를 등록하면 오늘 코스, 지도, 전화, 배송완료 기록이 모바일에 표시됩니다.
+            관리자 또는 고객사 담당자가 거래처를 등록하면 오늘 코스, 지도, 전화, 배송완료 기록이 모바일에 표시됩니다.
           </p>
           <Link className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm" href="/?type=customer-master">
             거래처 등록 화면으로 이동

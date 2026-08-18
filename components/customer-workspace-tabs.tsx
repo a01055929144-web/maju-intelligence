@@ -16,7 +16,7 @@ type WorkspaceTab = {
 const WORKSPACE_TABS: readonly WorkspaceTab[] = [
   { href: "/", icon: FileSpreadsheet, label: "데이터 등록", helper: "거래처·매출 입력" },
   { href: "/crm/timeline", icon: Building2, label: "거래처 관리", helper: "상세·메모·첨부" },
-  { href: "/customers/data", icon: Database, label: "저장 이력", helper: "업로드·DB 상태" }
+  { href: "/customers/data", icon: Database, label: "저장 이력", helper: "업로드·저장 상태" }
 ];
 
 /**
@@ -40,36 +40,36 @@ export function CustomerWorkspaceTabs() {
   }
 
   return (
-    <div className="mb-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="mb-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <SectionHeader
         badge={
-          <span className="w-fit shrink-0 rounded-md bg-teal-50 px-2.5 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
-            DB 기준 작업공간
+          <span className="w-fit shrink-0 rounded-md bg-teal-700 px-2.5 py-1 text-[11px] font-black text-white ring-1 ring-inset ring-teal-700">
+            거래처 작업
           </span>
         }
-        description="등록, 거래처 관리, 저장 이력을 같은 거래처 기준으로 확인합니다."
-        title="거래처 데이터 관리"
+        description="등록, 원장, 저장 이력을 한 흐름으로 봅니다."
+        title="거래처 관리"
       />
-      <div className="grid gap-2 bg-slate-50/70 p-2 sm:grid-cols-3">
+      <div className="grid gap-1.5 border-t border-slate-200 bg-slate-50 p-1.5 sm:grid-cols-3">
         {WORKSPACE_TABS.map((tab, index) => {
           const selected = pathname === tab.href;
           return (
             <Link
-              className={`flex min-h-12 items-center gap-3 rounded-md border px-3 py-2 text-sm font-black transition ${
+              className={`flex min-h-11 items-center gap-2.5 rounded-md border px-3 py-2 text-sm font-black transition ${
                 selected
-                  ? "border-teal-200 bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                  ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
               }`}
               href={hrefWithCompany(tab.href)}
               key={tab.href}
             >
-              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
                 {index + 1}
               </span>
-              <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
+              <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{tab.label}</span>
-                <span className={`mt-0.5 block truncate text-[11px] font-bold ${selected ? "text-teal-700" : "text-slate-400"}`}>{tab.helper}</span>
+                <span className={`mt-0.5 block truncate text-[11px] font-bold ${selected ? "text-white/70" : "text-slate-400"}`}>{tab.helper}</span>
               </span>
             </Link>
           );

@@ -44,7 +44,7 @@ export default async function ReportDetailPage({
     {
       label: "핵심 거래권",
       title: topRegion ? `${topRegion.region} ${topRegion.count}개 거래처` : "거래권 확인 필요",
-      body: topRegion ? `${topRegion.region} 비중이 가장 높습니다. 기존 강점 지역의 밀도를 유지하면서 인접 지역으로 확장하세요.` : "거래처 마스터 업로드 후 핵심 거래권을 확인할 수 있습니다."
+      body: topRegion ? `${topRegion.region} 비중이 가장 높습니다. 기존 강점 지역의 밀도를 유지하면서 인접 지역으로 확장하세요.` : "거래처 등록 후 핵심 거래권을 확인할 수 있습니다."
     },
     {
       label: "확장 여지",
@@ -82,7 +82,7 @@ export default async function ReportDetailPage({
       label: "신규영업",
       score: report.health.newSales,
       title: "매출/거래처 업데이트",
-      description: "거래처 마스터와 매출 거래내역을 갱신해 등급과 추천 리드를 재계산합니다."
+      description: "거래처와 매출 원장을 갱신해 등급과 추천 리드를 재계산합니다."
     },
     {
       href: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
@@ -120,7 +120,7 @@ export default async function ReportDetailPage({
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
       subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 월 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
-      title="AI 리포트"
+      title="운영 리포트"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
@@ -174,7 +174,7 @@ export default async function ReportDetailPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <HeartPulse className="h-5 w-5 text-primary" />
-                Company Health Score
+                회사 건강도
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -371,7 +371,7 @@ function ReportBasisPanel({
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">운영 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
           리포트 점수는 확정 판단이 아니라 운영 우선순위입니다. 거래처 기본정보, 매출 원장, 배송 코스가 보완될수록 진단 품질이 올라갑니다.

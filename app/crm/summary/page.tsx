@@ -96,7 +96,7 @@ export default function CrmSummaryPage() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [dbError, setDbError] = useState("");
   const [customers, setCustomers] = useState<CustomerSummaryRow[]>([]);
-  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "sample" | "error">("loading");
+  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "empty" | "error">("loading");
   const [operationsSummary, setOperationsSummary] = useState<Record<string, OperationsSummaryEntry>>({});
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -116,7 +116,7 @@ export default function CrmSummaryPage() {
       })
       .catch(() => {
         if (!active) return;
-        setDbError("DB 상태를 확인하지 못했습니다.");
+        setDbError("원장 상태를 확인하지 못했습니다.");
       });
 
     return () => {
@@ -131,7 +131,7 @@ export default function CrmSummaryPage() {
       const collected: CustomerSummaryRow[] = [];
       let offset = 0;
       let truncated = true;
-      let source: "supabase" | "sample" | "error" = "sample";
+      let source: "supabase" | "empty" | "error" = "empty";
       let iterations = 0;
 
       while (truncated && iterations < 20) {
@@ -143,7 +143,7 @@ export default function CrmSummaryPage() {
         }
         const payload = await response.json();
         if (payload?.source !== "supabase") {
-          source = payload?.source === "sample" ? "sample" : "error";
+          source = payload?.source === "empty" ? "empty" : "error";
           break;
         }
         source = "supabase";
@@ -208,10 +208,10 @@ export default function CrmSummaryPage() {
   const hasOperationalLedger = customerSource === "supabase";
   const hasCustomers = customers.length > 0;
   const ledgerStatusLabel =
-    customerSource === "loading" ? "원장 확인 중" : hasOperationalLedger ? "DB 거래처 원장 연결" : "DB 거래처 원장 미연결";
+    customerSource === "loading" ? "원장 확인 중" : hasOperationalLedger ? "거래처 원장 연결" : "거래처 원장 미연결";
   const ledgerStatusDescription = hasOperationalLedger
     ? "Supabase 거래처 원장 기준으로 목록과 상세를 표시합니다."
-    : "데이터 등록에서 거래처 마스터를 저장하면 이 화면에 실제 원장이 표시됩니다.";
+    : "데이터 등록에서 거래처를 저장하면 이 화면에 실제 원장이 표시됩니다.";
   const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
   const addressMissingCount = customers.filter((customer) => !customer.address).length;
   const businessNumberMissingCount = customers.filter((customer) => !customer.businessNumber).length;
@@ -299,11 +299,11 @@ export default function CrmSummaryPage() {
 
   return (
     <CustomerAppShell
-      active="customers"
+      active="customers-summary"
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="전체 거래처 기준값과 국세청 사업자상태, 메모·첨부 현황을 한 화면에서 확인합니다."
+      subtitle="전체 거래처, 사업자 상태, 메모·첨부 현황"
       title="거래처 전체 현황"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
@@ -312,7 +312,7 @@ export default function CrmSummaryPage() {
           <SectionHeader
             eyebrow="지도 작업공간"
             title="거래처 전체 현황"
-            description="지도 홈이 사용하는 거래처 기준값입니다. 개별 거래처 수정은 거래처 관리에서 진행합니다."
+            description="지도 홈이 사용하는 거래처 기준입니다."
           />
           <div className="p-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(3,minmax(0,1fr))]">
@@ -323,21 +323,21 @@ export default function CrmSummaryPage() {
                 </div>
                 <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
               </div>
-              <SummaryCard helper={hasOperationalLedger ? "지도 홈 기준" : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
+              <SummaryCard helper={hasOperationalLedger ? "지도 홈 기준" : "거래처 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
               <SummaryCard helper="매출 상위 등급" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
               <SummaryCard helper={hasOperationalLedger ? "방문 결과 기준" : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
             </div>
-            {dbError ? <p className="mt-2 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
+            {dbError ? <p className="mt-2 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">원장 확인 메시지: {dbError}</p> : null}
             {!hasCustomers ? (
               <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
                 <p className="text-sm font-black text-amber-900">
                   {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
                 </p>
                 <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                  데이터 등록에서 거래처 마스터를 저장하면 지도 홈과 거래처 원장이 같은 DB 기준으로 연결됩니다.
+                  데이터 등록에서 거래처를 저장하면 지도 홈과 거래처 원장이 같은 기준으로 연결됩니다.
                 </p>
                 <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
-                  거래처 마스터 등록하기
+                  거래처 등록하기
                 </Link>
               </div>
             ) : null}
@@ -345,7 +345,7 @@ export default function CrmSummaryPage() {
         </div>
 
         <div className="maju-section-card">
-          <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="보완이 필요한 거래처를 먼저 정리하세요." />
+          <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="보완 대상부터 정리합니다." />
           <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_260px]">
             <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -400,7 +400,7 @@ export default function CrmSummaryPage() {
             <SectionHeader
               eyebrow="국세청 상태조회"
               title="사업자 상태·메모·첨부 현황"
-              description="거래처명, 대표자명, 연락처, 사업자번호, 사업자 상태값, 메모, 사업자등록증, 적재위치 사진을 한 표에서 확인합니다."
+              description="기본정보, 메모, 첨부자료를 한 표에서 봅니다."
             />
             <div className="no-print flex shrink-0 flex-wrap gap-1.5 p-3">
               <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadExcel()} type="button">

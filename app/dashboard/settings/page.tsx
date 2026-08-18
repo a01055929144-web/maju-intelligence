@@ -31,7 +31,7 @@ export default async function CompanySettingsPage() {
             대시보드
           </Link>
       }
-      subtitle="회사명, 담당자, 물류 출발지 주소를 운영 기준값으로 관리합니다."
+      subtitle="회사 정보와 물류 출발지"
       title="회사 설정"
       userName={session.name}
       workspaceRole={session.workspaceRole}

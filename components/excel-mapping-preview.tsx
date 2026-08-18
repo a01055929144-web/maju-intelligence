@@ -39,7 +39,6 @@ export function ExcelHeaderMappingPreview({
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
   const mappedHeaderCount = Object.keys(mappedByHeader).length;
-  const unusedHeaderCount = Math.max(0, headers.length - mappedHeaderCount);
   const normalizedCardQuery = cardQuery.trim().toLowerCase();
   const visibleHeaders = headers.filter((header) => {
     const mapped = Boolean(mappedByHeader[header]);
@@ -75,61 +74,41 @@ export function ExcelHeaderMappingPreview({
 
   return (
     <div className="maju-section-card">
-      <div className="maju-card-header p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <Badge className="mb-2 bg-slate-900 text-white">1. 필드 매칭</Badge>
+      <div className="maju-card-header p-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
             <p className="flex items-center gap-2 text-base font-black text-slate-950">
               <FileSpreadsheet className="h-4 w-4 text-blue-700" />
-              ERP 엑셀 필드 매칭
+              엑셀 헤더 매칭
             </p>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-              실제 엑셀 컬럼과 행 미리보기 값을 확인한 뒤 MAJU 표준 필드를 지정합니다.
-            </p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">원본 컬럼을 표준 필드에 연결합니다.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{rows.length.toLocaleString()}행 전체 보기</Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{rows.length.toLocaleString()}행</Badge>
+            <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{headers.length.toLocaleString()}컬럼</Badge>
+            <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">연결 {mappedHeaderCount.toLocaleString()}개</Badge>
             <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 완료"}
             </Badge>
-            <Button className="maju-button-blue h-10 bg-blue-700 px-4 text-white hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
-              {missingRequiredFields.length ? "필수 매핑 보완" : "매핑 전용화면 열기"}
+            <Button className="maju-button-blue h-9 bg-blue-700 px-3 text-white hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
+              매칭 화면 열기
             </Button>
           </div>
         </div>
-        <div className={`maju-panel mt-3 p-3 ${missingRequiredFields.length ? "border-amber-200 bg-white" : "border-emerald-200 bg-emerald-50"}`}>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-black text-slate-950">필수 컬럼 연결 상태</p>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                {missingRequiredFields.length ? "아래 필수 필드를 먼저 연결하면 저장 가능 상태로 바뀝니다." : "필수 표준 필드가 모두 연결됐습니다. 데이터 검수 탭에서 이상값을 확인하세요."}
-              </p>
-            </div>
-            <Badge className={missingRequiredFields.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
-              {requiredMappedCount}/{requiredFields.length} 연결
-            </Badge>
+        {missingRequiredFields.length ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+            <span className="text-xs font-black text-amber-900">필수 연결 필요</span>
+            {missingRequiredFields.map((field) => (
+              <span key={field.key} className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-amber-800 ring-1 ring-inset ring-amber-100">
+                {field.label}
+              </span>
+            ))}
           </div>
-          {missingRequiredFields.length ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {missingRequiredFields.map((field) => (
-                <span key={field.key} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-800">
-                  {field.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          <MappingStage active label="1" title="원본 확인" value={`${rows.length.toLocaleString()}행`} />
-          <MappingStage active={mappedHeaderCount > 0} label="2" title="헤더 매칭" value={`${mappedHeaderCount.toLocaleString()}개 연결`} />
-          <MappingStage active={!missingRequiredFields.length} label="3" title="저장 준비" value={missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "완료"} />
-        </div>
-        <div className="maju-panel mt-3 grid overflow-hidden text-xs sm:grid-cols-4">
-          <MappingCounter label="엑셀 컬럼" value={`${headers.length.toLocaleString()}개`} />
-          <MappingCounter label="연결 컬럼" value={`${mappedHeaderCount.toLocaleString()}개`} />
-          <MappingCounter label="미사용 컬럼" value={`${unusedHeaderCount.toLocaleString()}개`} />
-          <MappingCounter label="필수 연결" value={`${requiredMappedCount}/${requiredFields.length}`} />
-        </div>
+        ) : (
+          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
+            필수 필드 연결 완료. 데이터 검수 후 저장할 수 있습니다.
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
         <input
@@ -180,7 +159,7 @@ export function ExcelHeaderMappingPreview({
             return (
               <div
                 key={header}
-                className={`flex flex-col rounded-lg border bg-white p-3 shadow-sm transition ${
+                className={`flex min-h-[188px] flex-col rounded-lg border bg-white p-3 shadow-sm transition ${
                   mappedField ? (mappedField.required ? "border-blue-200" : "border-slate-200") : "border-slate-200"
                 }`}
               >
@@ -199,10 +178,10 @@ export function ExcelHeaderMappingPreview({
                     <Badge className="shrink-0 bg-slate-100 text-slate-500">미사용</Badge>
                   )}
                 </div>
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <div className="mt-2.5 grid min-h-[68px] content-start gap-1.5">
                   {samples.length ? (
                     samples.map((sample) => (
-                      <span key={`${header}-${sample.index}`} className="max-w-[160px] truncate rounded-md bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-700">
+                      <span key={`${header}-${sample.index}`} className="truncate rounded-md bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-700">
                         <span className="mr-1 text-slate-400">{sample.index}행</span>
                         {sample.value}
                       </span>
@@ -250,15 +229,6 @@ export function ExcelHeaderMappingPreview({
           onHeaderMap={updateHeaderMapping}
         />
       ) : null}
-    </div>
-  );
-}
-
-function MappingCounter({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-b border-r border-slate-200 px-3 py-2.5 last:border-r-0 sm:border-b-0">
-      <p className="text-[11px] font-black text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
     </div>
   );
 }
@@ -311,7 +281,6 @@ function MappingWorkspaceModal({
   const optionalFields = fields.filter((field) => !field.required);
   const mappedCount = fields.filter((field) => fieldMap[field.key]).length;
   const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
-  const completionRate = fields.length ? Math.round((mappedCount / fields.length) * 100) : 0;
   const filteredHeaders = useMemo(() => {
     const normalizedQuery = columnQuery.trim().toLowerCase();
 
@@ -438,7 +407,7 @@ function MappingWorkspaceModal({
                 <div>
                   <p className="text-sm font-black text-slate-950">{missingRequiredFields.length ? "먼저 연결할 필수 필드" : "필수 필드 연결 완료"}</p>
                   <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-                    {missingRequiredFields.length ? "필수 필드를 모두 연결해야 DB 저장 버튼이 활성화됩니다." : "선택 필드는 운영 품질을 높이기 위해 가능한 만큼 연결하세요."}
+                    {missingRequiredFields.length ? "필수 필드를 모두 연결해야 저장 버튼이 활성화됩니다." : "선택 필드는 운영 품질을 높이기 위해 가능한 만큼 연결하세요."}
                   </p>
                 </div>
                 <Badge className={missingRequiredFields.length ? "bg-white text-amber-800" : "bg-white text-emerald-800"}>

@@ -53,7 +53,7 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
     setExceptions((current) => [payload.exception as BusinessNumberException, ...current.filter((item) => item.businessRegistrationNumber !== payload.exception.businessRegistrationNumber)]);
     setBusinessNumber("");
     setMemo("");
-    setMessage(payload.persisted ? "중복 허용 사업자번호가 DB에 저장되었습니다." : "화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "중복 허용 사업자번호 저장이 완료되었습니다." : "화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function removeException(exception: BusinessNumberException) {

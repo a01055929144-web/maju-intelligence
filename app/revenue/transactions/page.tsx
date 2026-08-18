@@ -33,7 +33,7 @@ export default async function RevenueTransactionsPage({
     {
       actionHref: companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/",
       actionLabel: "매출 업로드",
-      description: hasSalesData ? `${sales.transactionCount.toLocaleString()}건의 거래내역이 원장에 누적되어 있습니다.` : "ERP 매출 거래내역서를 업로드하면 거래처별, 품목별 분석이 시작됩니다.",
+      description: hasSalesData ? `${sales.transactionCount.toLocaleString()}건의 매출 행이 원장에 누적되어 있습니다.` : "ERP 매출 원장을 업로드하면 거래처별, 품목별 분석이 시작됩니다.",
       label: "원장 적재",
       ready: hasSalesData,
       value: hasSalesData ? `${sales.transactionCount.toLocaleString()}건` : "업로드 필요"
@@ -69,20 +69,20 @@ export default async function RevenueTransactionsPage({
           원장 업로드
         </Link>
       }
-      subtitle="ERP 거래원장 기준으로 거래처·품목·금액을 확인합니다."
-      title="매출 거래내역"
+      subtitle="ERP 원장 기준으로 거래처·품목·금액을 확인합니다."
+      title="매출 원장"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <WorkspaceSectionNav
           items={[
-            { active: true, badge: hasSalesData ? "연결" : "필요", description: "매출액, 행 수, 거래처 수를 먼저 확인합니다.", href: "#ledger-summary", icon: ReceiptText, label: "원장 현황" },
-            { description: "거래처 원장과 매출 거래내역 매칭 상태를 봅니다.", href: "#ledger-basis", icon: Store, label: "매칭·기준" },
-            { description: "거래처별, 품목별 매출 집중도를 확인합니다.", href: "#ledger-analysis", icon: BarChart3, label: "매출 분석" },
-            { description: "최근 업로드된 원장 행을 ERP 테이블처럼 검토합니다.", href: "#ledger-table", icon: FileSpreadsheet, label: "원장 테이블" }
+            { active: true, badge: hasSalesData ? "연결" : "필요", description: "매출액·행 수·거래처 수", href: "#ledger-summary", icon: ReceiptText, label: "현황" },
+            { description: "거래처 매칭 상태", href: "#ledger-basis", icon: Store, label: "매칭" },
+            { description: "거래처·품목 집중도", href: "#ledger-analysis", icon: BarChart3, label: "분석" },
+            { description: "최근 원장 행", href: "#ledger-table", icon: FileSpreadsheet, label: "테이블" }
           ]}
-          title="매출 거래내역"
+          title="매출 원장"
         />
 
         <div className="min-w-0 space-y-4">
@@ -184,7 +184,7 @@ export default async function RevenueTransactionsPage({
                   />
                 ))
               ) : (
-                <EmptyPanel message="거래처별 매출 분석을 위해 매출 거래내역서를 업로드하세요." />
+                <EmptyPanel message="거래처별 매출 분석을 위해 매출 원장을 업로드하세요." />
               )}
             </div>
           </section>
@@ -260,10 +260,10 @@ function RevenueDataBasisPanel({
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
-          <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 대시보드와 AI 리포트에 반영되는 기준값입니다.</p>
+          <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 대시보드와 운영 리포트에 반영되는 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
-          거래처 마스터와 매출 거래내역의 사업자번호 또는 상호명·주소가 맞아야 거래처별 매출, 등급, 품목 이탈 분석이 정확해집니다.
+          거래처 정보와 매출 원장의 사업자번호 또는 상호명·주소가 맞아야 거래처별 매출, 등급, 품목 이탈 분석이 정확해집니다.
         </p>
       </div>
       <div className="grid divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">

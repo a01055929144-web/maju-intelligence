@@ -39,8 +39,8 @@ export default async function AdminPage() {
       description: "Supabase, Storage, 지도·경로 API 환경을 점검합니다.",
       href: "/admin/system",
       label: "시스템 상태",
-      ready: dashboard.source !== "sample",
-      value: dashboard.source === "sample" ? "확인 필요" : "연결됨"
+      ready: dashboard.source === "supabase",
+      value: dashboard.source === "supabase" ? "연결됨" : "확인 필요"
     }
   ];
 
@@ -90,7 +90,7 @@ export default async function AdminPage() {
               label="1. 고객사 관리"
             />
             <AdminActionCard
-              description="거래처 마스터와 매출 거래원장이 실제 DB에 쌓였는지 확인합니다."
+              description="거래처 마스터와 매출 거래원장이 실서버에 쌓였는지 확인합니다."
               href="/admin/uploads"
               icon={UploadCloud}
               label="2. 업로드 이력 확인"
@@ -166,7 +166,7 @@ export default async function AdminPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5 text-primary" />
-                Health Score 가중치
+                회사 건강도 가중치
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">

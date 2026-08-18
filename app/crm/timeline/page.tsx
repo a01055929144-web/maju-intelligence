@@ -93,13 +93,13 @@ const resultLabels: Record<string, string> = {
 };
 
 const customerDetailTabs: Array<{ description: string; helper: string; icon: typeof Building2; id: CustomerDetailTab; label: string; shortLabel: string }> = [
-  { description: "사업자정보, 배송 담당자, 첨부자료를 관리합니다.", helper: "사업자·주소·적재위치", icon: Building2, id: "ledger", label: "원장·첨부", shortLabel: "기본정보" },
-  { description: "상담 메모와 영업 방문 기록을 누적합니다.", helper: "메모·방문·다음 액션", icon: FileText, id: "history", label: "메모·방문", shortLabel: "이력관리" }
+  { description: "사업자정보, 배송 기준값, 첨부자료를 한 번에 관리합니다.", helper: "사업자·주소·적재위치", icon: Building2, id: "ledger", label: "거래처 원장", shortLabel: "원장" },
+  { description: "상담 메모, 방문 기록, 다음 액션을 시간순으로 누적합니다.", helper: "메모·방문·다음 액션", icon: FileText, id: "history", label: "활동 기록", shortLabel: "기록" }
 ];
 
 const defaultDbSummary: DbSummary = {
-  description: "DB 상태를 확인 중입니다. DB 거래처 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
-  label: "DB 확인 중",
+  description: "저장 상태를 확인 중입니다. 거래처 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
+  label: "원장 확인 중",
   normalizedCustomers: null,
   tone: "fallback",
   visitResults: null
@@ -178,7 +178,7 @@ export default function CrmTimelinePage() {
   const [timelineSource, setTimelineSource] = useState<"empty" | "supabase">("empty");
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
-  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "sample" | "error">("loading");
+  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "empty" | "error">("loading");
   const [selectedIndex, setSelectedIndex] = useState(0);
   // 거래처 검색·목록 사이드바가 항상 펼쳐져 있으면 옆의 선택 거래처 상세(원장/첨부자료)가 계속
   // 좁게 눌려 보였습니다. 거래처를 고르면 자동으로 목록을 접어 상세가 전체 폭을 쓰도록 하고,
@@ -202,10 +202,10 @@ export default function CrmTimelinePage() {
       })
       .catch((error) => {
         if (!active) return;
-        setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
+        setDbError(error instanceof Error ? error.message : "원장 상태 API 호출 실패");
         setDbSummary({
-          description: "DB 상태 API 호출에 실패했습니다. DB 거래처 원장 연결 상태를 먼저 확인해야 합니다.",
-          label: "DB 확인 실패",
+          description: "원장 상태 API 호출에 실패했습니다. 거래처 원장 연결 상태를 먼저 확인해야 합니다.",
+          label: "원장 확인 실패",
           normalizedCustomers: null,
           tone: "fallback",
           visitResults: null
@@ -233,7 +233,7 @@ export default function CrmTimelinePage() {
       .then((payload) => {
         if (!active) return;
         if (payload?.source !== "supabase") {
-          setCustomerSource(payload?.source === "sample" ? "sample" : "error");
+          setCustomerSource(payload?.source === "empty" ? "empty" : "error");
           setCustomers([]);
           setSelectedIndex(0);
           return;
@@ -581,7 +581,7 @@ export default function CrmTimelinePage() {
       title: "필수 첨부자료"
     },
     {
-      description: customerNotes.length ? "최근 메모가 DB 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
+      description: customerNotes.length ? "최근 메모가 저장 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
       ok: customerNotes.length > 0 || selectedCustomer.memoCount > 0,
       title: "메모 히스토리"
     }
@@ -601,7 +601,7 @@ export default function CrmTimelinePage() {
     deliveryProofCount: deliveryProofAttachments,
     loadingPositionCount: loadingPositionAttachments,
     memoCount: historyCount,
-    recentMemoAt: latestNote?.createdAt || "DB 이력 대기",
+    recentMemoAt: latestNote?.createdAt || "이력 대기",
     visitCount: selectedCustomer.visitCount
   };
   const draftBusinessNumberChanged = Boolean(
@@ -743,12 +743,12 @@ export default function CrmTimelinePage() {
       setIsEditing(!movedToNext && !completedCleanupFilter && operationFilter !== "all");
       setSaveMessage(
         payload?.persisted === false
-          ? "거래처 정보가 화면에 반영되었습니다. DB 저장 상태는 관리자 시스템 점검에서 확인하세요."
+          ? "거래처 정보가 화면에 반영되었습니다. 저장 상태는 관리자 시스템 점검에서 확인하세요."
           : movedToNext
             ? "저장되었습니다. 같은 보완 조건의 다음 거래처로 이동했습니다."
             : completedCleanupFilter
               ? "저장되었습니다. 현재 보완 필터의 남은 거래처가 없어 전체 목록으로 돌아갑니다."
-            : "거래처 정보가 DB에 저장되었습니다."
+            : "거래처 정보 저장이 완료되었습니다."
       );
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
@@ -916,7 +916,7 @@ export default function CrmTimelinePage() {
       if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
       setAttachmentMessage(
         hasTemporaryResult
-          ? `${uploadedAttachments.length || files.length}건이 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다.`
+          ? `${uploadedAttachments.length || files.length}건이 목록에 반영됐습니다. 파일 저장소 연결 상태를 확인하세요.`
           : `${uploadedAttachments.length || files.length}건의 첨부자료가 거래처 원장에 자동 저장됐습니다.`
       );
       setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
@@ -964,7 +964,7 @@ export default function CrmTimelinePage() {
       if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
       setAttachmentMessage(
         hasTemporaryResult
-          ? `${uploadedAttachments.length || 1}건이 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다.`
+          ? `${uploadedAttachments.length || 1}건이 목록에 반영됐습니다. 파일 저장소 연결 상태를 확인하세요.`
           : `${uploadedAttachments.length || 1}건의 첨부자료가 거래처 원장에 저장됐습니다.`
       );
       setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
@@ -983,16 +983,16 @@ export default function CrmTimelinePage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="등록된 거래처를 검색해 상세 정보와 운영 상태를 바로 수정합니다."
+      subtitle="검색, 상세 수정, 메모·첨부 관리"
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px]">
         <WorkspaceSectionNav
           items={[
-            { active: true, description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "거래처 검색·필터" },
-            { description: "선택 거래처의 사업자정보와 배송 기준값을 바로 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "거래처 편집" },
-            { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
+            { active: true, description: "검색, 등급, 보완 필요 항목을 빠르게 좁힙니다.", href: "#customer-ledger-list", icon: Search, label: "목록·필터" },
+            { description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "원장 편집" },
+            { description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "활동 기록" }
           ]}
           title="거래처 관리"
         />
@@ -1002,7 +1002,7 @@ export default function CrmTimelinePage() {
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
-            description="검색과 필터로 거래처를 찾고, 선택한 거래처의 원장을 오른쪽에서 관리합니다."
+            description="거래처를 선택하면 오른쪽에서 원장을 편집합니다."
           />
           {/*
             검색·필터 사이드바(360~400px)가 거래처 상세(원장/첨부자료) 그리드 옆에 항상 펼쳐져 있으면,
@@ -1058,8 +1058,13 @@ export default function CrmTimelinePage() {
                   />
                 </label>
                 <div className="mt-3 border-t border-slate-200/80 pt-3">
-                  <p className="maju-muted-label px-0.5 pb-1.5">필터</p>
-                  <div className="maju-filter-box">
+                  <p className="maju-muted-label px-0.5 pb-1.5">빠른 필터</p>
+                  <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-3">
+                    <CustomerFilterButton active={operationFilter === "all"} count={customers.length} label="전체" onClick={clearOperationFilter} />
+                    <CustomerFilterButton active={operationFilter === "business-check"} count={businessCheckCount} label="사업자 확인" onClick={() => applyOperationFilter("business-check")} tone="danger" />
+                    <CustomerFilterButton active={operationFilter === "loading-missing"} count={loadingMissingCount} label="적재위치" onClick={() => applyOperationFilter("loading-missing")} tone="warning" />
+                  </div>
+                  <div className="maju-filter-box mt-3">
                     <p className="maju-muted-label px-2 pb-1">매출 등급</p>
                     <div className="grid grid-cols-4 gap-1.5">
                       {(["all", "A", "B", "C"] as const).map((grade) => (
@@ -1078,57 +1083,18 @@ export default function CrmTimelinePage() {
                       ))}
                     </div>
                   </div>
-                  <div className="maju-filter-box mt-3">
-                    <p className="maju-muted-label px-2 pb-1">운영 상태</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <CustomerFilterButton
-                        active={operationFilter === "address-missing"}
-                        count={addressMissingCount}
-                        label="주소 미등록"
-                        onClick={() => applyOperationFilter("address-missing")}
-                        tone="danger"
-                      />
-                      <CustomerFilterButton
-                        active={operationFilter === "business-number-missing"}
-                        count={businessNumberMissingCount}
-                        label="사업자번호 미등록"
-                        onClick={() => applyOperationFilter("business-number-missing")}
-                        tone="warning"
-                      />
-                      <CustomerFilterButton
-                        active={operationFilter === "business-check"}
-                        count={businessCheckCount}
-                        label="사업자 확인"
-                        onClick={() => applyOperationFilter("business-check")}
-                        tone="danger"
-                      />
-                      <CustomerFilterButton
-                        active={operationFilter === "loading-missing"}
-                        count={loadingMissingCount}
-                        label="적재위치 미등록"
-                        onClick={() => applyOperationFilter("loading-missing")}
-                        tone="warning"
-                      />
-                      <CustomerFilterButton
-                        active={operationFilter === "contact-missing"}
-                        count={contactMissingCount}
-                        label="연락처 미등록"
-                        onClick={() => applyOperationFilter("contact-missing")}
-                      />
-                      <CustomerFilterButton
-                        active={operationFilter === "manager-missing"}
-                        count={managerMissingCount}
-                        label="담당자 미지정"
-                        onClick={() => applyOperationFilter("manager-missing")}
-                      />
-                      <CustomerFilterButton
-                        active={operationFilter === "all"}
-                        count={customers.length}
-                        label="운영 전체"
-                        onClick={clearOperationFilter}
-                      />
+                  <details className="maju-filter-box mt-3">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-1 text-xs font-black text-slate-500">
+                      상세 보완 필터
+                      <Badge className="bg-slate-100 text-slate-600">{addressMissingCount + businessNumberMissingCount + contactMissingCount + managerMissingCount}건</Badge>
+                    </summary>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <CustomerFilterButton active={operationFilter === "address-missing"} count={addressMissingCount} label="주소 미등록" onClick={() => applyOperationFilter("address-missing")} tone="danger" />
+                      <CustomerFilterButton active={operationFilter === "business-number-missing"} count={businessNumberMissingCount} label="사업자번호" onClick={() => applyOperationFilter("business-number-missing")} tone="warning" />
+                      <CustomerFilterButton active={operationFilter === "contact-missing"} count={contactMissingCount} label="연락처" onClick={() => applyOperationFilter("contact-missing")} />
+                      <CustomerFilterButton active={operationFilter === "manager-missing"} count={managerMissingCount} label="담당자" onClick={() => applyOperationFilter("manager-missing")} />
                     </div>
-                  </div>
+                  </details>
                 </div>
                 <BusinessStatusControlPanel
                   checkableCount={businessStatusCheckableCount}
@@ -1242,7 +1208,7 @@ export default function CrmTimelinePage() {
                 <div className="maju-empty-state m-3">
                   <p className="text-sm font-black text-slate-700">{hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}</p>
                   <p className="mt-1 text-xs font-bold text-slate-400">
-                    {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처 마스터를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
+                    {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
                   </p>
                 </div>
               ) : null}
@@ -1414,33 +1380,27 @@ export default function CrmTimelinePage() {
             <div className="maju-section-card scroll-mt-28" id="customer-ledger-history">
               <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                  <p className="maju-muted-label">거래처 상세 탭</p>
+                  <p className="maju-muted-label">선택 거래처 작업</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
-                <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">
+                <div className="flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] lg:w-auto">
                   {customerDetailTabs.map((tab) => {
                     const Icon = tab.icon;
                     const selected = detailTab === tab.id;
                     return (
                       <button
-                        className={`group relative min-w-[170px] overflow-hidden rounded-lg border px-3 py-3 text-left transition ${
+                        className={`group flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-md border px-3 text-sm font-black transition ${
                           selected
-                            ? "border-teal-700 bg-teal-700 text-white shadow-[0_10px_22px_rgba(15,118,110,0.18)]"
-                            : "border-slate-200 bg-white text-slate-600 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                            ? "border-teal-700 bg-teal-700 text-white shadow-sm"
+                            : "border-transparent bg-white text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"
                         }`}
                         key={tab.id}
                         onClick={() => setDetailTab(tab.id)}
+                        title={`${tab.label} · ${tab.helper}`}
                         type="button"
                       >
-                        {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-white/80" /> : null}
-                        <span className="flex items-center gap-2 text-sm font-black">
-                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${selected ? "bg-white/15" : "bg-slate-100 group-hover:bg-white"}`}>
-                            <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
-                          </span>
-                          {tab.label}
-                        </span>
-                        <span className={`mt-2 block truncate text-[11px] font-bold ${selected ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>{tab.shortLabel}</span>
-                        <span className={`mt-1 block truncate text-[10px] font-black ${selected ? "text-white/60" : "text-slate-500"}`}>{tab.helper}</span>
+                        <Icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+                        <span className="truncate">{tab.label}</span>
                       </button>
                     );
                   })}
@@ -1448,14 +1408,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {/*
-              이 그리드는 좌측 260px 내비게이션 + 260px 거래처 목록 사이드바 안에 중첩돼 있어서, 화면이
-              2xl(1536px) 이상이어도 실제로 남는 폭은 훨씬 좁을 수 있습니다. 이전에 xl/2xl 뷰포트 기준
-              고정 2단 그리드(minmax(0,1fr)_minmax(440px,0.42fr))를 썼을 때 폭이 좁아지면 왼쪽 칸이
-              극단적으로 눌려 보이는 문제가 있었습니다(위 EditableField 폼과 같은 원인). 실제 남는 폭
-              기준으로 칸 수가 스스로 조절되도록 auto-fit으로 바꿨습니다.
-            */}
-            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] gap-4">
+            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -1533,14 +1486,6 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    {/*
-                      이 폼은 좌측 260px 내비게이션 + 400px 검색 사이드바 + 우측 440px 첨부자료 패널까지
-                      한 화면에 3중으로 중첩된 뷰포트 기준(xl/2xl) 그리드 안에 들어있습니다. 화면 자체는
-                      2xl(1536px) 이상이어도, 이 폼에 실제로 남는 폭은 그 중첩 때문에 훨씬 좁아질 수 있어서
-                      "뷰포트 기준" md:grid-cols-2/2xl:grid-cols-3처럼 고정 컬럼 수를 강제하면 남은 폭이
-                      좁을 때 칸이 극단적으로 눌려 보이는 문제가 있었습니다. 실제 남은 폭 기준으로
-                      칸 수가 스스로 조절되도록 auto-fit으로 바꿨습니다.
-                    */}
                     <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-3 gap-y-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
@@ -1622,9 +1567,14 @@ export default function CrmTimelinePage() {
                   />
                   <AttachmentChecklistPanel checklist={attachmentChecklist} />
                   <div className="maju-section-card mt-4 overflow-hidden">
-                    <div className="maju-card-header px-3 py-3">
-                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
-                      <p className="mt-1 text-sm font-black text-slate-950">적재위치, 사업자등록증, 통장사본을 같은 거래처 원장에 보관합니다.</p>
+                    <div className="maju-card-header flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
+                        <p className="mt-1 text-sm font-black text-slate-950">파일 업로드와 외부 URL 등록을 구분해서 저장합니다.</p>
+                      </div>
+                      <Badge className="w-fit bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-100">
+                        파일 선택 즉시 저장
+                      </Badge>
                     </div>
                     <div className="grid gap-3 p-3">
                       <div className="grid gap-3 md:grid-cols-2">
@@ -1654,61 +1604,65 @@ export default function CrmTimelinePage() {
                           />
                         </label>
                       </div>
-                      <label className="grid gap-1.5">
-                        <span className="text-xs font-black text-slate-500">파일 링크</span>
-                        <input
-                          className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                          onChange={(event) => setNewAttachmentUrl(event.target.value)}
-                          placeholder="외부 URL이 있으면 붙여넣고, 없으면 아래에서 파일을 선택하세요."
-                          value={newAttachmentUrl}
-                        />
-                      </label>
-                      <label className="maju-panel flex min-h-24 cursor-pointer items-center gap-3 border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
-                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-700 text-white">
-                          <Plus className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-slate-950">
-                            {isAttachmentSaving ? "업로드 중..." : newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 선택됨` : "사진·PDF·영상을 선택하면 바로 저장됩니다"}
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,.8fr)]">
+                        <label className="maju-panel flex min-h-28 cursor-pointer items-center gap-3 border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-700 text-white">
+                            <Plus className="h-4 w-4" />
                           </span>
-                          <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
-                            배송 적재위치는 여러 장의 사진이나 짧은 영상으로 남기면 현장 전달이 가장 정확합니다. 파일당 최대 50MB.
-                          </span>
-                          {newAttachmentFiles.length ? (
-                            <span className="mt-2 flex flex-wrap gap-1">
-                              {newAttachmentFiles.slice(0, 4).map((file) => (
-                                <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-blue-100" key={`${file.name}-${file.size}`}>
-                                  {file.name}
-                                </span>
-                              ))}
-                              {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-black text-slate-950">
+                              {isAttachmentSaving ? "업로드 중..." : newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 저장 중` : "+ 파일 업로드"}
                             </span>
-                          ) : null}
-                        </span>
-                        <input
-                          accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
-                          className="hidden"
-                          disabled={isAttachmentSaving}
-                          multiple
-                          onChange={(event) => {
-                            const files = Array.from(event.target.files || []);
-                            event.target.value = "";
-                            if (!files.length) return;
-                            setNewAttachmentFiles(files);
-                            uploadAttachmentFiles(files);
-                          }}
-                          type="file"
-                        />
-                      </label>
-                      <button
-                        className="maju-button-primary inline-flex h-11 items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
-                        disabled={!newAttachmentTitle.trim() || !newAttachmentUrl.trim() || isAttachmentSaving}
-                        onClick={saveAttachment}
-                        type="button"
-                      >
-                        <Plus className="h-4 w-4" />
-                        {isAttachmentSaving ? "등록 중" : "파일 링크 등록"}
-                      </button>
+                            <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
+                              사진, PDF, 영상을 선택하면 거래처 원장에 바로 저장됩니다. 파일당 최대 50MB.
+                            </span>
+                            {newAttachmentFiles.length ? (
+                              <span className="mt-2 flex flex-wrap gap-1">
+                                {newAttachmentFiles.slice(0, 4).map((file) => (
+                                  <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-blue-100" key={`${file.name}-${file.size}`}>
+                                    {file.name}
+                                  </span>
+                                ))}
+                                {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
+                              </span>
+                            ) : null}
+                          </span>
+                          <input
+                            accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
+                            className="hidden"
+                            disabled={isAttachmentSaving}
+                            multiple
+                            onChange={(event) => {
+                              const files = Array.from(event.target.files || []);
+                              event.target.value = "";
+                              if (!files.length) return;
+                              setNewAttachmentFiles(files);
+                              uploadAttachmentFiles(files);
+                            }}
+                            type="file"
+                          />
+                        </label>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-black text-slate-500">외부 URL로 등록</span>
+                            <input
+                              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                              onChange={(event) => setNewAttachmentUrl(event.target.value)}
+                              placeholder="이미 업로드된 파일 URL"
+                              value={newAttachmentUrl}
+                            />
+                          </label>
+                          <button
+                            className="maju-button-secondary mt-2 inline-flex h-10 w-full items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                            disabled={!newAttachmentTitle.trim() || !newAttachmentUrl.trim() || isAttachmentSaving}
+                            onClick={saveAttachment}
+                            type="button"
+                          >
+                            <LinkIcon className="h-4 w-4" />
+                            {isAttachmentSaving ? "등록 중" : "URL 등록"}
+                          </button>
+                        </div>
+                      </div>
                       {attachmentMessage ? (
                         <p className={`rounded-md border px-3 py-2 text-xs font-bold leading-5 ${
                           attachmentMessage.includes("저장됐습니다")
@@ -1743,9 +1697,9 @@ export default function CrmTimelinePage() {
                         ))
                       ) : (
                         <>
-                          <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="등록 대기" />
-                          <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
-                          <AttachmentRow icon={FileText} label="통장사본" value="등록 대기" />
+                          <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="미등록 · 자료 추가에서 업로드" />
+                          <AttachmentRow icon={FileText} label="사업자등록증" value="미등록 · OCR 또는 파일 업로드" />
+                          <AttachmentRow icon={FileText} label="통장사본" value="미등록 · 파일 업로드" />
                         </>
                       )}
                     </div>
@@ -1754,7 +1708,7 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] gap-4">
+            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -1839,7 +1793,7 @@ export default function CrmTimelinePage() {
                     ))
                   ) : (
                     <div className="maju-empty-state m-4 p-4">
-                      <p className="text-sm font-black text-slate-700">아직 DB 메모가 없습니다.</p>
+                      <p className="text-sm font-black text-slate-700">아직 저장된 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
                       </p>
@@ -1878,7 +1832,7 @@ export default function CrmTimelinePage() {
                     <div className="maju-empty-state m-4 p-4">
                       <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 DB에 저장된 데이터만 표시합니다.
+                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 저장된 데이터만 표시합니다.
                       </p>
                     </div>
                   )}
@@ -2075,7 +2029,7 @@ function LedgerListStatusStrip({
   totalCount,
   visibleCount
 }: {
-  customerSource: "loading" | "supabase" | "sample" | "error";
+  customerSource: "loading" | "supabase" | "empty" | "error";
   gradeFilter: "all" | "A" | "B" | "C";
   hasCustomers: boolean;
   operationFilter: OperationFilter;
@@ -2092,16 +2046,18 @@ function LedgerListStatusStrip({
     customerSource === "loading"
       ? "원장 불러오는 중"
       : customerSource === "supabase"
-        ? "DB 거래처 원장"
-        : "DB 거래처 원장 미연결";
+        ? "거래처 원장"
+        : customerSource === "empty"
+          ? "거래처 원장 비어 있음"
+          : "거래처 원장 미연결";
 
   return (
-    <div className={`mt-3 rounded-lg border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
+    <div className={`mt-3 rounded-md border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className={`text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>{sourceLabel}</p>
-          <p className={`mt-1 text-[11px] font-bold leading-4 ${hasCustomers ? "text-slate-500" : "text-amber-800"}`}>
-            {hasCustomers ? `현재 목록 ${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳 표시` : "거래처 마스터 등록 후 목록, 상세, 코스가 같은 DB 기준으로 연결됩니다."}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${hasCustomers ? "bg-emerald-500" : "bg-amber-500"}`} />
+          <p className={`truncate text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>
+            {sourceLabel} · {hasCustomers ? `${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳` : "등록 필요"}
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -2113,7 +2069,7 @@ function LedgerListStatusStrip({
             ))
           ) : (
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${hasCustomers ? "bg-emerald-50 text-emerald-700" : "bg-white text-amber-800"}`}>
-              전체 DB 원장 기준
+              전체 원장 기준
             </span>
           )}
         </div>
@@ -2170,34 +2126,31 @@ function FieldRecordTracePanel({
   ];
 
   return (
-    <div className="overflow-hidden rounded-lg border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-blue-50">
-      <div className="flex flex-col gap-3 border-b border-teal-100/80 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="overflow-hidden rounded-md border border-teal-100 bg-white">
+      <div className="flex flex-col gap-3 border-b border-teal-100/80 bg-teal-50/60 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Field Record Trace</p>
-          <h3 className="mt-1 text-base font-black text-slate-950">모바일 현장 기록 추적</h3>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-            직원이 모바일에서 남긴 배송완료, 적재위치, 방문 메모를 거래처 원장과 히스토리에서 확인합니다.
-          </p>
+          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Field Record</p>
+          <h3 className="mt-1 text-base font-black text-slate-950">현장 기록</h3>
         </div>
-        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-teal-100">방문 {summary.visitCount.toLocaleString()}회 기준</Badge>
+        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-teal-100">방문 {summary.visitCount.toLocaleString()}회</Badge>
       </div>
-      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => {
           const Icon = item.icon;
           return (
             <button
-              className="rounded-md border border-white bg-white/90 p-3 text-left shadow-sm transition hover:border-teal-200 hover:bg-white hover:shadow-md"
+              className="rounded-md border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50"
               key={item.label}
               onClick={item.action}
               type="button"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-teal-700 text-white">
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="text-lg font-black text-slate-950">{item.value}</span>
               </div>
-              <p className="mt-3 text-sm font-black text-slate-900">{item.label}</p>
+              <p className="mt-2 text-sm font-black text-slate-900">{item.label}</p>
               <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.helper}</p>
             </button>
           );
@@ -2276,7 +2229,7 @@ function MiniMetric({ label, value, wide = false }: { label: string; value: stri
 
 function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
-    <div className="mb-3 flex items-end justify-between gap-3 border-b border-slate-200 pb-2">
+    <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
       <div>
         <p className="maju-muted-label">{eyebrow}</p>
         <p className="mt-0.5 text-sm font-black text-slate-950">{title}</p>
@@ -2288,12 +2241,12 @@ function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string
 
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: string; value: string }) {
   return (
-    <div className="min-w-0 border-b border-r border-slate-200 bg-white p-3 last:border-r-0 xl:border-b-0">
+    <div className="min-w-0 border-b border-r border-slate-200 bg-white px-3 py-2.5 last:border-r-0 xl:border-b-0">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-400" />
         <p className="maju-muted-label">{label}</p>
       </div>
-      <p className="mt-2 truncate text-sm font-black text-slate-950" title={value}>
+      <p className="mt-1.5 truncate text-sm font-black text-slate-950" title={value}>
         {value}
       </p>
     </div>
@@ -2318,12 +2271,12 @@ function PriorityTile({
   }[tone];
 
   return (
-    <div className={`min-w-0 border-r border-slate-200 p-4 last:border-r-0 ${toneClassName}`}>
+    <div className={`min-w-0 border-r border-slate-200 px-3 py-2.5 last:border-r-0 ${toneClassName}`}>
       <p className="text-xs font-black opacity-70">{label}</p>
-      <p className="mt-2 truncate text-sm font-black" title={value}>
+      <p className="mt-1.5 truncate text-sm font-black" title={value}>
         {value}
       </p>
-      <p className="mt-1 text-xs font-bold opacity-60">{helper}</p>
+      <p className="mt-1 truncate text-xs font-bold opacity-60" title={helper}>{helper}</p>
     </div>
   );
 }
@@ -2345,7 +2298,7 @@ function HistoryInputSummary({
           <Badge className="bg-violet-700 text-white">{historyCount}건</Badge>
         </div>
         <p className="mt-2 text-sm font-black text-slate-950">
-          {latestNote ? "최근 메모가 DB 이력으로 관리 중입니다." : "아직 DB 메모가 없습니다."}
+          {latestNote ? "최근 메모가 저장 이력으로 관리 중입니다." : "아직 저장된 메모가 없습니다."}
         </p>
         <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
           {latestNote ? latestNote.memo : "상담, 배송 특이사항, 대표 요청사항을 남기면 거래처별 히스토리로 누적됩니다."}
@@ -2411,43 +2364,50 @@ function AttachmentChecklistPanel({
   const progress = checklist.length ? Math.round((readyCount / checklist.length) * 100) : 0;
 
   return (
-    <div className="maju-section-card mt-4 p-3">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className="maju-section-card mt-4 overflow-hidden">
+      <div className="maju-card-header flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">첨부자료 준비 상태</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">필수 자료가 채워질수록 거래처 원장과 현장 운영 신뢰도가 올라갑니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">필수 자료가 채워질수록 원장 신뢰도가 올라갑니다.</p>
         </div>
         <Badge className={progress === 100 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {readyCount}/{checklist.length} 완료
         </Badge>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-emerald-600" style={{ width: `${progress}%` }} />
+      <div className="h-1.5 bg-slate-100">
+        <div className="h-full bg-emerald-600" style={{ width: `${progress}%` }} />
       </div>
-      <div className="mt-3 grid gap-2">
+      <div className="hidden grid-cols-[140px_72px_80px_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black text-slate-400 md:grid">
+        <span>자료명</span>
+        <span>구분</span>
+        <span>상태</span>
+        <span>관리 기준</span>
+      </div>
+      <div className="divide-y divide-slate-100">
         {checklist.map((item) => (
           <div
             key={item.type}
-            className={`maju-filter-box p-3 ${
+            className={`grid gap-2 px-4 py-3 md:grid-cols-[140px_72px_80px_minmax(0,1fr)] md:items-center md:gap-3 ${
               item.type === "loading_position"
-                ? "border-blue-200 bg-blue-50/70"
+                ? "bg-blue-50/60"
                 : item.count > 0
-                  ? "border-emerald-100 bg-emerald-50/60"
-                  : "border-amber-100 bg-amber-50/60"
+                  ? "bg-emerald-50/40"
+                  : "bg-white"
             }`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-slate-950">
-                  {item.label}
-                  {item.type === "loading_position" ? <span className="ml-2 text-xs text-blue-700">최우선</span> : null}
-                </p>
-                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
-              </div>
-              <Badge className={item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-                {item.count > 0 ? `${item.count}건` : item.required ? "필요" : "선택"}
-              </Badge>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-slate-950">{item.label}</p>
+              {item.type === "loading_position" ? <p className="mt-0.5 text-[11px] font-black text-blue-700">배송 최우선 자료</p> : null}
             </div>
+            <Badge className={`w-fit ${item.required ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100" : "bg-slate-100 text-slate-600"}`}>
+              {item.required ? "필수" : "선택"}
+            </Badge>
+            <Badge className={`w-fit ${item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+              {item.count > 0 ? `${item.count}건` : "대기"}
+            </Badge>
+            <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 md:truncate" title={item.description}>
+              {item.description}
+            </p>
           </div>
         ))}
       </div>
@@ -2680,12 +2640,12 @@ function AttachmentRow({
   url?: string;
   value: string;
 }) {
-  const statusLabel = storagePath ? "Storage 저장" : url ? "외부 링크" : "파일 대기";
+  const statusLabel = storagePath ? "Storage 저장" : url ? "외부 링크" : "미등록";
   const statusClassName = storagePath
     ? "bg-emerald-50 text-emerald-800 ring-emerald-100"
     : url
       ? "bg-blue-50 text-blue-800 ring-blue-100"
-      : "bg-slate-100 text-slate-600 ring-slate-200";
+      : "bg-amber-50 text-amber-800 ring-amber-100";
   // 이미지·PDF·영상은 화면에서 바로 미리보기가 가능합니다. 그 외 형식은 새창 링크만 제공합니다.
   const canPreviewInline = /^image\/|^video\/|^application\/pdf/.test(mimeType);
 

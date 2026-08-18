@@ -30,7 +30,7 @@ export default async function AdminSystemPage() {
   const launchGates = [
     {
       description: databaseReady ? "Supabase 테이블 연결과 카운트 확인이 완료되었습니다." : "Supabase 환경변수와 schema.sql 적용, 테이블 카운트를 확인하세요.",
-      label: "DB 저장",
+      label: "저장 상태",
       ready: databaseReady
     },
     {
@@ -49,8 +49,8 @@ export default async function AdminSystemPage() {
       ready: deployReady
     },
     {
-      description: operationDataReady ? "정제 거래처 데이터가 DB에 적재되어 있습니다." : "거래처 마스터를 업로드하거나 수기 등록 후 정제 테이블을 확인하세요.",
-      label: "DB 반영 데이터",
+      description: operationDataReady ? "정제 거래처 데이터가 저장되어 있습니다." : "거래처 마스터를 업로드하거나 수기 등록 후 정제 테이블을 확인하세요.",
+      label: "운영 데이터",
       ready: operationDataReady
     }
   ];
@@ -101,7 +101,7 @@ export default async function AdminSystemPage() {
                 </Badge>
                 <h2 className="text-2xl font-black">운영 준비 상태</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  관리자, 고객사, DB 저장, 첨부자료, 경로 계산에 필요한 설정을 기준으로 실제 운영 가능 여부를 점검합니다.
+                  관리자, 고객사, 저장 상태, 첨부자료, 경로 계산에 필요한 설정을 기준으로 실제 운영 가능 여부를 점검합니다.
                 </p>
               </div>
               <div className="w-full rounded-md border border-border bg-white p-4 lg:w-72">
@@ -340,7 +340,7 @@ export default async function AdminSystemPage() {
                   최근 감사 로그
                 </CardTitle>
                 <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 DB 반영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
+                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
                 </p>
               </div>
               <Badge className={auditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
@@ -498,7 +498,7 @@ export default async function AdminSystemPage() {
               ["Data", "거래처 마스터 엑셀 업로드 후 업로드 이력 확인"],
               ["Data", "매출 거래원장 업로드 후 매출 원장 화면 확인"],
               ["Route", "출발지 주소와 TMAP API로 실제 경유 계산 확인"],
-              ["Report", "AI 리포트가 선택 고객사 companyId 기준으로 열리는지 확인"]
+              ["Report", "운영 리포트가 선택 고객사 companyId 기준으로 열리는지 확인"]
             ].map(([group, item]) => (
               <div key={item} className="flex items-start gap-3 rounded-md border border-border bg-muted/35 p-3 text-sm font-bold">
                 <Badge className="mt-0.5 shrink-0 bg-slate-100 text-slate-700">{group}</Badge>

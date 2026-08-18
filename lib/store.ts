@@ -33,7 +33,7 @@ export type AdminAuditLogItem = {
   createdAt: string;
 };
 type AdminDashboardPayload = {
-  source: "sample" | "supabase";
+  source: "empty" | "supabase";
   overview: {
     companies: number;
     uploadedFiles: number;
@@ -202,7 +202,7 @@ export type RoutePlanStop = LeadItem & {
   relationshipStatus?: string;
   representativeName?: string;
   routeCalculatedAt?: string;
-  routeProvider?: "tmap" | "estimated" | "cached" | "sample";
+  routeProvider?: "tmap" | "estimated" | "cached";
 };
 export type RoutePlanGroup = {
   region: string;
@@ -213,7 +213,7 @@ export type RoutePlanGroup = {
 };
 export type RoutePlan = {
   groups: RoutePlanGroup[];
-  source: "sample" | "supabase";
+  source: "empty" | "supabase";
   totalDistanceKm: number;
   totalDurationMinutes: number;
   totalExpectedRevenue: number;
@@ -859,31 +859,11 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
   }
 }
 
-export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedCompanyAccount[]; source: "sample" | "supabase" }> {
-  const fallbackCredentials = getFallbackAuthCredentials();
-
+export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedCompanyAccount[]; source: "empty" | "supabase" }> {
   if (!isProductionStoreConfigured()) {
     return {
-      source: "sample",
-      companies: [
-        {
-          id: fallbackCredentials.customerCompanyId,
-          name: "마주식자재",
-          businessType: "식자재 유통",
-          ownerName: "정두영",
-          originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
-          status: "active",
-          customerEmail: fallbackCredentials.customerEmail,
-          customerPassword: fallbackCredentials.customerPassword,
-          customerCount: 0,
-          salesTransactionCount: 0,
-          uploadCount: 0,
-          recentUploads: [],
-          staffInvitationCount: 0,
-          staffInvitations: [],
-          updatedAt: "기준 데이터"
-        }
-      ]
+      source: "empty",
+      companies: []
     };
   }
 
@@ -1016,26 +996,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
   } catch (error) {
     console.error("Managed company accounts fallback:", error);
     return {
-      source: "sample",
-      companies: [
-        {
-          id: fallbackCredentials.customerCompanyId,
-          name: "마주식자재",
-          businessType: "식자재 유통",
-          ownerName: "정두영",
-          originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
-          status: "fallback",
-          customerEmail: fallbackCredentials.customerEmail,
-          customerPassword: fallbackCredentials.customerPassword,
-          customerCount: 0,
-          salesTransactionCount: 0,
-          uploadCount: 0,
-          recentUploads: [],
-          staffInvitationCount: 0,
-          staffInvitations: [],
-          updatedAt: "fallback"
-        }
-      ]
+      source: "empty",
+      companies: []
     };
   }
 }
@@ -1869,7 +1831,7 @@ export function getSystemStatus(): SystemStatus {
       {
         name: "Supabase Postgres",
         status: supabaseConfigured ? "ready" : "fallback",
-        description: supabaseConfigured ? "실 DB 적재 모드입니다." : "환경변수가 없어 서버 저장을 확인할 수 없습니다."
+        description: supabaseConfigured ? "실서버 저장 모드입니다." : "환경변수가 없어 서버 저장을 확인할 수 없습니다."
       },
       {
         name: "Admin Auth",
@@ -1957,7 +1919,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
           name: "Supabase 연결",
           status: "fallback",
           count: null,
-          description: "환경변수가 없어 DB 조회를 건너뛰었습니다. 서버 환경변수를 등록한 뒤 다시 확인하세요."
+          description: "환경변수가 없어 서버 조회를 건너뛰었습니다. 서버 환경변수를 등록한 뒤 다시 확인하세요."
         }
       ],
       storageChecks: [
@@ -1980,14 +1942,14 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("customer_attachments", "거래처 첨부자료", "사업자등록증, 통장사본, 배송 적재위치 사진/영상 기록입니다."),
     countTableRows("sales_transactions", "매출 거래내역", "ERP 엑셀에서 적재된 일자/품목/금액 단위 거래내역입니다."),
     countTableRows("route_distance_cache", "티맵 경로 캐시", "회사 출발지에서 거래처 도착지까지 계산된 거리/시간/경로입니다."),
-    countTableRows("ai_reports", "AI 리포트", "Company Diagnosis 리포트 수입니다."),
+    countTableRows("ai_reports", "운영 리포트", "회사 운영 리포트 수입니다."),
     countTableRows("lead_recommendations", "추천 리드", "AI Lead Recommendation 결과입니다."),
     countTableRows("visit_results", "방문 결과", "영업 방문/상담 기록입니다."),
     countTableRows("admin_audit_logs", "감사 로그", "데이터 등록/수정 시 남는 관리자 감사 로그입니다."),
     countTableRows("column_mappings", "엑셀 헤더 매핑 이력", "대량 등록 시 저장되는 헤더-필드 매핑 이력입니다."),
     countTableRows("raw_customer_rows", "엑셀 원본 행", "대량 등록 원본 엑셀 행 백업입니다."),
     countTableRows("health_score_snapshots", "건강도 스냅샷", "리포트별 건강도 점수 스냅샷입니다."),
-    countTableRows("auth_credentials", "DB 저장 로그인 정보", "관리자/고객 로그인 정보를 DB에서 관리할 때 사용하는 테이블입니다."),
+    countTableRows("auth_credentials", "로그인 저장 정보", "관리자/고객 로그인 정보를 관리할 때 사용하는 테이블입니다."),
     countTableRows("excel_mapping_presets", "엑셀 매핑 프리셋", "ERP/유통사별로 저장해둔 엑셀 헤더 매핑 프리셋입니다."),
     checkVisitLeadRelationship(),
     checkCustomerPlaceLinkColumns(),
@@ -2008,14 +1970,14 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
 export async function getCustomerMaster(
   companyId?: string,
   options?: { offset?: number }
-): Promise<{ customers: CustomerMasterItem[]; source: "sample" | "supabase"; truncated: boolean }> {
+): Promise<{ customers: CustomerMasterItem[]; source: "empty" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
   const offset = Math.max(0, Math.floor(options?.offset || 0));
 
   if (!isProductionStoreConfigured()) {
     return {
       customers: [],
-      source: "sample",
+      source: "empty",
       truncated: false
     };
   }
@@ -2414,7 +2376,7 @@ export async function getCustomerOperations(customerId: string, companyId?: stri
     return {
       attachments: [],
       notes: [],
-      source: "sample" as const
+      source: "empty" as const
     };
   }
 
@@ -2466,7 +2428,7 @@ export type CustomerOperationsSummaryEntry = {
 /**
  * 배치 버전 getCustomerOperations: 거래처별로 한 번씩 호출하는 대신(N+1), 전체 거래처 ID를
  * 한 번의 in() 조회로 묶어 실제 메모 건수/최신 메모, 적재위치 사진 존재 여부를 반환합니다.
- * "거래처 전체 현황" 표에서 memoCount 같은 가짜 placeholder 값을 쓰지 않기 위한 용도입니다.
+ * "거래처 전체 현황" 표에서 memoCount 같은 임의 placeholder 값을 쓰지 않기 위한 용도입니다.
  */
 export async function getCustomerOperationsSummary(
   customerIds: string[],
@@ -2796,7 +2758,7 @@ async function checkCustomerPlaceLinkColumns(): Promise<DatabaseCheck> {
       status: "missing",
       count: null,
       description: isMissingCustomerPlaceLinksColumnError(error)
-        ? "20260725_customer_place_links.sql 마이그레이션을 Supabase SQL Editor에서 실행해야 링크가 DB에 저장됩니다."
+        ? "20260725_customer_place_links.sql 마이그레이션을 Supabase SQL Editor에서 실행해야 링크가 서버에 저장됩니다."
         : getErrorMessage(error)
     };
   }
@@ -3189,7 +3151,7 @@ export async function getReportById(reportId: string, companyId?: string): Promi
 export async function getLatestBriefing(companyId?: string) {
   const [report, customerMaster] = await Promise.all([
     getLatestReport(companyId),
-    getCustomerMaster(companyId).catch(() => ({ customers: [], source: "sample" as const }))
+    getCustomerMaster(companyId).catch(() => ({ customers: [], source: "empty" as const }))
   ]);
   const currentCustomers = customerMaster.customers.length || report.customers;
 
@@ -3202,26 +3164,11 @@ export async function getLatestBriefing(companyId?: string) {
     routeLeads: report.routeLeads,
     missingRegions: report.missingRegions,
     healthScore: report.health.total,
-    source: isProductionStoreConfigured() ? "supabase" : "sample"
+    source: customerMaster.source
   };
 }
 
-function getSampleBriefing() {
-  const report = analyzeCompany(sampleCustomers);
-  return {
-    greeting: "안녕하세요 정두영님.",
-    currentCustomers: report.customers,
-    weeklyOpportunities: report.newOpportunities,
-    todayRecommendations: Math.min(12, report.leadRecommendations.length),
-    highProbability: report.highProbabilityCount,
-    routeLeads: report.routeLeads,
-    missingRegions: report.missingRegions,
-    healthScore: report.health.total,
-    source: "sample"
-  };
-}
-
-function getEmptyBriefing(source: "sample" | "supabase" = "supabase") {
+function getEmptyBriefing(source: "empty" | "supabase" = "supabase") {
   return {
     greeting: "안녕하세요 정두영님.",
     currentCustomers: 0,
@@ -3279,7 +3226,7 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
       const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
       const cached = routeCache.get(address);
       const distanceKm = cached?.distanceKm ?? customer.deliveryKm;
-      const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : customerMaster.source === "supabase" ? "estimated" : "sample";
+      const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : "estimated";
 
       return {
         id: customer.id || `customer-${index + 1}`,
@@ -4429,7 +4376,7 @@ export async function getSalesAssistantDrafts(companyId?: string): Promise<Sales
 
 export async function getCompanyDashboardPayload(companyId?: string) {
   const [briefing, report, leads, uploadHistory] = await Promise.all([
-    getLatestBriefing(companyId).catch(() => getEmptyBriefing(isProductionStoreConfigured() ? "supabase" : "sample")),
+    getLatestBriefing(companyId).catch(() => getEmptyBriefing(isProductionStoreConfigured() ? "supabase" : "empty")),
     getLatestReport(companyId).catch(() => analyzeCompany([])),
     getLatestLeads(companyId).catch(() => ({ total: 0, leads: [] })),
     getUploadHistory(companyId).catch(() => [])
@@ -4440,7 +4387,7 @@ export async function getCompanyDashboardPayload(companyId?: string) {
     report,
     leads,
     uploadHistory,
-    source: isProductionStoreConfigured() ? "supabase" : "sample"
+    source: isProductionStoreConfigured() ? "supabase" : "empty"
   };
 }
 
@@ -4588,7 +4535,7 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
 }
 
 export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
-  if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("sample");
+  if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("empty");
 
   const [companies, imports, reports, leads, uploadHistory] = await Promise.all([
     supabaseRequest<SupabaseRow[]>("companies?select=id"),
@@ -4643,7 +4590,7 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       { label: "주소 인식률", value: avgQuality, description: "업로드 데이터의 주소/지역 필드 완성도를 봅니다." },
       { label: "중복 제거율", value: duplicateCleanRate, description: "업로드 행 수 대비 중복 후보가 아닌 행 비율입니다." },
       { label: "필수 컬럼 완성도", value: avgQuality, description: "거래처명, 지역, 주소, 업종, 매출, 방문 정보를 확인합니다." },
-      { label: "리포트 생성 성공률", value: reports.length ? 100 : 0, description: "실 DB에 생성된 AI 리포트 기준입니다." }
+      { label: "리포트 생성 성공률", value: reports.length ? 100 : 0, description: "저장된 운영 리포트 기준입니다." }
     ],
     scoringWeights: getOperationalScoringWeights(),
     leadQueue: leads.map((lead) => ({
@@ -4659,7 +4606,7 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
   };
 }
 
-function getEmptyAdminDashboardPayload(source: "sample" | "supabase"): AdminDashboardPayload {
+function getEmptyAdminDashboardPayload(source: "empty" | "supabase"): AdminDashboardPayload {
   return {
     source,
     overview: {
@@ -4670,10 +4617,10 @@ function getEmptyAdminDashboardPayload(source: "sample" | "supabase"): AdminDash
     },
     jobs: [],
     dataQuality: [
-      { label: "주소 인식률", value: 0, description: "거래처 마스터를 등록하면 주소/지역 완성도를 계산합니다." },
+      { label: "주소 인식률", value: 0, description: "거래처를 등록하면 주소/지역 완성도를 계산합니다." },
       { label: "중복 제거율", value: 0, description: "거래처명, 주소, 사업자번호 기준 중복 후보를 계산합니다." },
       { label: "필수 컬럼 완성도", value: 0, description: "필수 필드 매핑 후 저장 품질을 표시합니다." },
-      { label: "리포트 생성 성공률", value: 0, description: "실 DB에 생성된 AI 리포트 기준으로 표시합니다." }
+      { label: "리포트 생성 성공률", value: 0, description: "저장된 운영 리포트 기준으로 표시합니다." }
     ],
     scoringWeights: getOperationalScoringWeights(),
     leadQueue: [],

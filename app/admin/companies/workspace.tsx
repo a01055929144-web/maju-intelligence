@@ -9,7 +9,7 @@ import type { ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation
 
 type Props = {
   initialCompanies: ManagedCompanyAccount[];
-  source: "sample" | "supabase";
+  source: "empty" | "supabase";
 };
 
 const emptyCompany: ManagedCompanyAccountInput = {
@@ -111,7 +111,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       customerEmail: saved.customerEmail,
       customerPassword: saved.customerPassword
     });
-    setMessage(payload.persisted ? "고객사와 로그인 계정이 DB에 저장되었습니다." : "고객사 정보가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "고객사와 로그인 계정 저장이 완료되었습니다." : "고객사 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function createInvite() {
@@ -151,7 +151,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       )
     );
     setInviteForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크가 DB에 저장되었습니다." : "초대 링크가 화면에 생성되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크 저장이 완료되었습니다." : "초대 링크가 화면에 생성되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function updateStaffInvitation(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -188,7 +188,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           : company
       )
     );
-    setInviteMessage(payload.persisted ? "직원 업무 구분/상태가 DB에 저장되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 업무 구분/상태 저장이 완료되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -211,7 +211,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
         <AdminSummaryCard icon={Building2} label="운영 고객사" value={`${activeCompanies.toLocaleString()}곳`} helper={`전체 ${companies.length.toLocaleString()}곳`} />
         <AdminSummaryCard icon={Users} label="총 거래처" value={`${totalCustomers.toLocaleString()}곳`} helper="회사별 분리 저장" />
         <AdminSummaryCard icon={ReceiptText} label="매출 거래행" value={`${totalSalesRows.toLocaleString()}건`} helper="거래원장 누적" />
-        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "DB 연결" : "저장 확인 필요"} />
+        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "저장 연결" : "저장 확인 필요"} />
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white">
@@ -229,7 +229,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           <div className="grid grid-cols-3 gap-2 text-center">
             <AdminQueueMetric label="준비 미흡" value={`${needsSetupCompanies}곳`} tone="warning" />
             <AdminQueueMetric label="운영중" value={`${activeCompanies}곳`} />
-            <AdminQueueMetric label="DB 상태" value={source === "supabase" ? "연결" : "확인"} tone={source === "supabase" ? "default" : "warning"} />
+            <AdminQueueMetric label="저장 상태" value={source === "supabase" ? "연결" : "확인"} tone={source === "supabase" ? "default" : "warning"} />
           </div>
         </div>
         <div className="grid gap-3 p-4 lg:grid-cols-4">
@@ -275,7 +275,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               <p className="text-2xl font-black">{companies.length}곳</p>
             </div>
             <Badge className={source === "supabase" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
-              {source === "supabase" ? "DB 연결" : "저장 확인 필요"}
+              {source === "supabase" ? "저장 연결" : "저장 확인 필요"}
             </Badge>
           </div>
           <div className="mt-4 flex gap-2">

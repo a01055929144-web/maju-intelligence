@@ -15,6 +15,7 @@ import {
 
 export type CustomerWorkspaceKey =
   | "dashboard"
+  | "customers-summary"
   | "customers"
   | "routes"
   | "revenue"
@@ -46,8 +47,8 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "dashboard",
-        badge: "메인",
-        description: "지도에서 거래처, 배송차, 경유 코스 관리",
+        badge: "실시간",
+        description: "지도, 거래처 위치, 영업·배송 코스",
         href: "/dashboard",
         icon: MapPinned,
         label: "지도 홈"
@@ -55,39 +56,39 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "현장 운영",
+    label: "거래처",
     items: [
       {
         active: "customers",
-        description: "거래처 등록, 원장, 저장 이력을 같은 기준으로 관리",
+        description: "등록부터 상세 관리까지",
         href: "/",
         icon: Building2,
-        label: "거래처 데이터",
+        label: "거래처",
         children: [
           {
-            active: "customers",
-            description: "전체 거래처, 등급, 보완 상태를 요약해서 봅니다.",
+            active: "customers-summary",
+            description: "전체 거래처, 등급, 보완 상태 요약",
             href: "/crm/summary",
             icon: LayoutDashboard,
             label: "거래처 전체 현황"
           },
           {
             active: "data",
-            description: "거래처 기본정보와 매출 거래내역 입력",
+            description: "거래처 기본정보와 매출 입력",
             href: "/",
             icon: FileSpreadsheet,
             label: "데이터 등록"
           },
           {
             active: "customers",
-            description: "거래처 상세, 메모, 첨부자료 관리",
+            description: "상세, 메모, 첨부자료 관리",
             href: "/crm/timeline",
             icon: Building2,
             label: "거래처 관리"
           },
           {
             active: "data-management",
-            description: "업로드 이력, DB 반영, 누락 상태 확인",
+            description: "업로드 이력, 저장 상태, 누락 상태 확인",
             href: "/customers/data",
             icon: Database,
             label: "저장 이력"
@@ -97,35 +98,35 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "성장",
+    label: "매출",
     items: [
       {
         active: "revenue",
-        description: "성장 기회, 이탈 징후, 업셀링 후보 확인",
+        description: "기회, 이탈 징후, 업셀링 후보",
         href: "/revenue/pipeline",
         icon: BarChart3,
-        label: "매출 인사이트"
+        label: "매출 기회"
       },
       {
         active: "revenue-ledger",
-        description: "ERP 업로드 매출 원본 데이터 조회",
+        description: "ERP 매출 원장 조회",
         href: "/revenue/transactions",
         icon: ReceiptText,
-        label: "매출 내역"
+        label: "매출 거래내역"
       },
       {
         active: "assistant",
-        description: "견적, 방문 메모, 후속 액션 초안",
+        description: "견적, 메모, 후속 액션",
         href: "/assistant",
         icon: Sparkles,
-        label: "AI 영업 도우미"
+        label: "영업 도우미"
       },
       {
         active: "report",
-        description: "회사 건강도와 AI 진단 리포트",
+        description: "회사 건강도와 운영 리포트",
         href: "/reports/latest",
         icon: HeartPulse,
-        label: "AI 리포트"
+        label: "운영 리포트"
       }
     ]
   },
@@ -154,8 +155,8 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 
 export function getCustomerQuickActions() {
   return [
-    { active: "dashboard" as const, helper: "홈", icon: MapPinned, label: "지도" },
-    { active: "customers" as const, helper: "관리", icon: Building2, label: "거래처" },
+    { active: "dashboard" as const, helper: "지도·코스", icon: MapPinned, label: "지도 홈" },
+    { active: "customers" as const, helper: "원장", icon: Building2, label: "거래처" },
     { active: "revenue" as const, helper: "성장", icon: BarChart3, label: "매출" }
   ];
 }

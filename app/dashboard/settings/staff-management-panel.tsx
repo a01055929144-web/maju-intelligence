@@ -48,7 +48,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
     setInvitations((current) => [payload.invitation as StaffInvitation, ...current]);
     setForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setMessage(payload.persisted ? "직원 초대 링크가 DB에 저장되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요." : "직원 초대가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 초대 링크 저장이 완료되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요." : "직원 초대가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function updateStaff(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -73,7 +73,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    setMessage(payload.persisted ? "직원 정보가 DB에 저장되었습니다." : "직원 정보가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 정보 저장이 완료되었습니다." : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function copyInviteUrl(url: string) {
@@ -89,7 +89,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
             <Users className="mr-1 h-3.5 w-3.5" />
             직원 관리
           </Badge>
-          <h2 className="text-2xl font-black text-slate-950">직원 초대와 모바일 가입을 관리합니다</h2>
+          <h2 className="text-2xl font-black text-slate-950">직원 초대</h2>
           <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
             이름과 연락처를 입력하면 카카오 가입용 초대 링크가 생성됩니다. 역할은 업무 구분용이며 기능 제한은 적용하지 않습니다.
           </p>

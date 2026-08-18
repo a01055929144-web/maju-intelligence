@@ -73,26 +73,26 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
       subtitle="방문 결과와 견적 요청을 매출 후보로 정리합니다."
-      title="매출 성장"
+      title="매출 기회"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <WorkspaceSectionNav
           items={[
-            { active: true, badge: `${pipeline.items.length}건`, description: "예상매출, 가중매출, 전환율을 먼저 봅니다.", href: "#pipeline-summary", icon: TrendingUp, label: "성장 현황" },
-            { description: "방문 기록과 매출 원장 연결 기준을 확인합니다.", href: "#pipeline-basis", icon: FileText, label: "실행 기준" },
-            { description: "견적 요청, 관심 있음, 보류 상태를 나눠 봅니다.", href: "#pipeline-status", icon: Percent, label: "상태 분포" },
-            { description: "실제 후속 영업을 해야 할 후보 목록입니다.", href: "#pipeline-table", icon: ReceiptText, label: "후보 목록" }
+            { active: true, badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: "#pipeline-summary", icon: TrendingUp, label: "기회 현황" },
+            { description: "방문·원장 연결 기준", href: "#pipeline-basis", icon: FileText, label: "기준" },
+            { description: "견적·관심·보류", href: "#pipeline-status", icon: Percent, label: "상태" },
+            { description: "후속 영업 대상", href: "#pipeline-table", icon: ReceiptText, label: "후보" }
           ]}
-          title="매출 성장"
+          title="매출 기회"
         />
 
         <div className="min-w-0 space-y-4">
         <div className="maju-section-card scroll-mt-28" id="pipeline-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="maju-section-title">성장 후보 현황</p>
+              <p className="maju-section-title">매출 기회 현황</p>
               <p className="mt-1 maju-muted-label">방문 메모 · 견적 요청 기준</p>
             </div>
             <Badge className="bg-blue-100 text-blue-800">{pipeline.items.length.toLocaleString()}건 관리 중</Badge>
@@ -107,7 +107,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
 
         {pipelineError ? (
           <div className="maju-filter-box border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-900">
-            DB 연결 또는 방문 기록 테이블을 확인하세요. 화면은 계속 사용할 수 있도록 비어 있는 상태로 표시합니다.
+            저장 연결 또는 방문 기록 테이블을 확인하세요. 화면은 계속 사용할 수 있도록 비어 있는 상태로 표시합니다.
           </div>
         ) : null}
 
@@ -182,7 +182,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
                   {!pipeline.items.length ? (
                     <tr>
                       <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={5}>
-                        아직 관리 중인 성장 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
+                        아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
                       </td>
                     </tr>
                   ) : null}

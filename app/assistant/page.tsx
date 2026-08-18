@@ -27,19 +27,19 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const assistantActions = [
     {
-      description: "방문 결과와 메모를 기준으로 고객에게 보낼 후속 문장을 정리합니다.",
+      description: "방문 메모 기반 후속 문장",
       href: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
       label: "방문 기록 확인",
       value: `${drafts.length}개 초안`
     },
     {
-      description: "견적 요청 건은 매출 파이프라인에서 금액과 다음 액션으로 관리합니다.",
+      description: "견적 요청과 다음 액션",
       href: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
       label: "견적 후속 관리",
       value: `${quotes}건`
     },
     {
-      description: "오늘 방문할 거래처를 정하고 차량별 코스와 경유 순서를 확인합니다.",
+      description: "오늘 방문 코스 확인",
       href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
       label: "방문 코스 연결",
       value: "코스 확인"
@@ -52,8 +52,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="방문 기록과 견적 요청을 바로 실행할 문장으로 정리합니다."
-      title="AI 영업 도우미"
+      subtitle="방문 기록과 견적 요청을 실행 문장으로 정리합니다."
+      title="영업 도우미"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >

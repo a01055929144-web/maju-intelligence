@@ -26,7 +26,7 @@ export default async function AdminAccountsPage() {
             value={credentials.adminEmail}
           />
           <RoleCard
-            description="운영 초기 또는 테스트용 기본 고객사 계정입니다. 실 고객사는 고객사 관리에서 별도로 만듭니다."
+            description="기본 고객사 로그인 계정입니다. 회사별 계정은 고객사 관리에서 별도로 운영합니다."
             icon={KeyRound}
             label="기본 고객사 계정"
             value={credentials.customerEmail}
@@ -57,8 +57,8 @@ export default async function AdminAccountsPage() {
           <CardContent className="flex gap-3 p-4 text-sm leading-6 text-amber-900">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
             <p>
-              초기 운영 편의를 위해 비밀번호를 관리자 화면에서 확인할 수 있게 저장합니다. 실제 고객사 배포 전에는 더 긴 비밀번호로 교체하고,
-              추후에는 비밀번호 보기 대신 초기화 방식으로 바꾸는 것을 권장합니다.
+              초기 운영 편의를 위해 비밀번호를 관리자 화면에서 확인할 수 있게 저장합니다. 운영 계정은 긴 비밀번호로 교체하고,
+              필요 시 비밀번호 초기화 방식으로 관리하세요.
             </p>
           </CardContent>
         </Card>

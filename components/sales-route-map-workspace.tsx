@@ -220,13 +220,13 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
 ];
 const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
   { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치 확인", value: "map" },
-  { helper: "검색·상세·편집", icon: Store, label: "거래처 목록", shortLabel: "원장 관리", value: "customers" },
-  { helper: "선택·경유·티맵", icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
+  { helper: "검색·상세·편집", icon: Store, label: "원장", shortLabel: "거래처 관리", value: "customers" },
+  { helper: "선택·경유·티맵", icon: Navigation, label: "코스", shortLabel: "경유 계산", value: "course" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차와 거래처를 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
-  customers: "전체 거래처 원장을 검색, 등급, 배송차 기준으로 확인합니다.",
-  map: "거래처 등급 또는 배송차 기준으로 지도 마커를 확인합니다."
+  customers: "거래처 원장 검색·필터",
+  map: "등급·배송차별 마커"
 };
 const originMarkerId = "origin-hub";
 const tmapWaypointLimit = 15;
@@ -250,23 +250,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [isSearchingExternal, setIsSearchingExternal] = useState(false);
   const [externalSearchMessage, setExternalSearchMessage] = useState("");
   const [showExternalResults, setShowExternalResults] = useState(false);
-  // 검색에서 찾은 미등록 매장을 지도 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있도록 하는
-  // 빠른 등록 패널의 대상입니다. null이면 닫힌 상태입니다.
+  // 지도 검색에서 고른 미등록 매장의 빠른 등록 대상입니다.
   const [quickRegisterTarget, setQuickRegisterTarget] = useState<ExternalBusinessResult | null>(null);
-  // 검색 결과에서 여러 매장을 한 번에 체크해 일괄 등록할 수 있도록 하는 선택 상태입니다.
-  // externalResultId(result)를 키로 씁니다.
+  // 검색 결과 일괄 등록 선택 상태입니다.
   const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
   const [isBulkRegistering, setIsBulkRegistering] = useState(false);
   const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
-  // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, 좌우 목록 패널은 기본적으로 접어두고
-  // 얇은 토글 스트립만 남깁니다. 필요할 때 한 번 눌러서 펼치는 방식입니다.
+  // 지도 우선 화면: 좌우 패널과 통계는 기본 접힘 상태입니다.
   const [leftCollapsed, setLeftCollapsed] = useState(true);
   const [rightCollapsed, setRightCollapsed] = useState(true);
-  // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, KPI 통계/가이드 영역은 기본적으로 접어둡니다.
   const [statsExpanded, setStatsExpanded] = useState(false);
-  // 지도가 브라우저 전체 화면을 차지하는 실제 Fullscreen API 모드. 팝업 창을 새로 띄우는 대신
-  // 이 작업공간 전체를 그대로 화면 가득 확대해 네이버맵·카카오맵과 같은 방식으로 조작할 수 있습니다.
+  // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [mapFocusId, setMapFocusId] = useState("");
@@ -283,8 +278,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
-  const sourceReady = routePlan.source === "supabase";
-  const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
+  const ledgerFallbackStores = useMemo(() => createStoreRowsFromLedgerMarkers(mapMarkers), [mapMarkers]);
+  const sourceReady = routePlan.source === "supabase" || ledgerFallbackStores.length > 0;
+  const routeSeedStores = useMemo(() => {
+    const routeStores = routePlan.source === "supabase" ? createStoreRows(routePlan, mapMarkers) : [];
+    return routeStores.length ? routeStores : ledgerFallbackStores;
+  }, [ledgerFallbackStores, mapMarkers, routePlan]);
   const baseDeliveryVehicles = useMemo(
     () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualDrivers),
     [routeSeedStores, vehicleFuelTypes, manualDrivers]
@@ -361,9 +360,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
-  // 검색으로 찾은 미등록 매장을 지도 위에 별도 마커(점선 "+" 배지)로 보여줍니다. 실제 위치는 카카오맵이
-  // 주소를 지오코딩해서 찾으므로 x/y는 지오코딩 실패 시의 예비 표시용으로만 쓰이는 임의값입니다.
-  // 경유 코스(TMAP 연동) 탭에서 쓰는 markers/mapMarkers는 건드리지 않고, 메인 지도 화면에서만 합쳐서 씁니다.
+  // 미등록 매장은 메인 지도에만 별도 마커로 합쳐 표시합니다.
   const unregisteredMapMarkers = useMemo(
     () =>
       unregisteredResults.map((result, index) => ({
@@ -658,20 +655,29 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       ref={workspaceRef}
     >
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2.5 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-[16px] font-black leading-tight">영업·배송 운영</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-[16px] font-black leading-tight">영업·배송 지도</h2>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
+            {sourceReady ? `${allStores.length}곳` : "거래처 등록 필요"}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
+            {sourceReady ? `${deliveryVehicles.length}대` : "배송차 대기"}
+          </span>
+          <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200">
+            {activeView === "map" ? "마커 중심" : activeView === "customers" ? "원장 작업" : "경유 계산"}
+          </span>
         </div>
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
+        <div className="flex max-w-full flex-wrap items-center gap-1.5">
+          <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
             {[
-              { label: "거래처 등급", value: "grade" },
-              { label: "배송차", value: "vehicle" }
+              { label: "등급 마커", value: "grade" },
+              { label: "차량 마커", value: "vehicle" }
             ].map((item) => {
               const selected = markerViewMode === item.value;
               return (
                 <button
-                  className={`h-8 rounded px-3 text-xs font-black transition ${
-                    selected ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  className={`h-8 rounded-md px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
@@ -682,14 +688,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               );
             })}
           </div>
-          <nav className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
+          <nav className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
               return (
                 <button
-                  className={`flex h-8 items-center gap-1.5 rounded px-3 text-xs font-black transition ${
-                    selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => changeWorkspaceView(item.value)}
@@ -697,7 +703,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                   type="button"
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  {item.label}
+                  <span>{item.label}</span>
                 </button>
               );
             })}
@@ -709,13 +715,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
             type="button"
           >
-            {statsExpanded ? "통계 접기" : "통계 보기"}
+            {statsExpanded ? "KPI 접기" : "KPI 보기"}
           </button>
           <button
             aria-pressed={isFullscreen}
             className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${isFullscreen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
             onClick={toggleFullscreen}
-            title={isFullscreen ? "전체 화면 종료" : "네이버맵·카카오맵처럼 전체 화면으로 크게 보기"}
+            title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
             type="button"
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -733,24 +739,22 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         </div>
       </header>
 
-      {/*
-        검색·필터 바(및 지도 뷰의 좌우 패널)는 아래에서 xl:absolute로 이 영역 위에 떠 있는 카드로
-        배치됩니다. 이 relative 래퍼가 없으면 absolute 위치 기준이 이 카드 내부가 아니라 문서
-        전체가 되어, 검색 바가 페이지 맨 위(대시보드 공통 헤더 자리)로 튀어 올라가 로그아웃 등
-        상단 버튼을 가리는 문제가 있었습니다.
-      */}
       <div className="relative flex flex-1 flex-col xl:min-h-0">
+        <OperationalFlowBar
+          activeView={activeView}
+          courseCalculated={Boolean(courseSummary)}
+          dataRegistrationHref={dataRegistrationHref}
+          deliveryVehicleCount={deliveryVehicles.length}
+          onChangeView={changeWorkspaceView}
+          sourceReady={sourceReady}
+          storeCount={allStores.length}
+        />
         {timelineHref ? (
           <div className="shrink-0 px-4 pt-3 empty:hidden">
             <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
           </div>
         ) : null}
 
-      {/*
-        네이버맵/카카오맵처럼 지도가 화면 대부분을 차지해야 한다는 피드백에 따라, KPI 통계·기준값
-        가이드·필터 조건 요약은 기본 접힘 상태로 두고 "통계 보기" 토글로만 펼치게 했습니다. 지도
-        섹션이 항상 곧바로 이어지도록 이 블록 전체를 조건부로 렌더링합니다.
-      */}
       {statsExpanded ? (
         <>
           <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
@@ -786,6 +790,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             mapReadyStoreCount={mapReadyStoreCount}
             missingAddressCount={missingAddressCount}
             routePlan={routePlan}
+            sourceReady={sourceReady}
             visibleMapReadyStoreCount={visibleMapReadyStoreCount}
           />
 
@@ -801,15 +806,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         </>
       ) : null}
 
-      {/*
-        네이버맵/카카오맵처럼 지도가 배경을 꽉 채우고, 검색·필터 바와 좌우 패널은 그 위에 뜨는 카드로
-        보이도록 했습니다. 모바일(작은 화면)에서는 겹치는 카드가 쓰기 어려워서 xl 이상에서만 지도 위에
-        띄우고, 그 아래 화면에서는 기존처럼 지도 위쪽에 일반 문서 흐름으로 쌓이게 둡니다.
-      */}
       <section
-        className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2 ${
+        className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-white px-4 py-2 ${
           activeView === "map"
-            ? "xl:absolute xl:inset-x-2 xl:top-2 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-3 xl:py-2 xl:shadow-lg xl:backdrop-blur-sm"
+            ? "xl:absolute xl:inset-x-2 xl:top-2 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:px-3 xl:py-2 xl:shadow-[0_10px_28px_rgba(15,23,42,.12)]"
             : ""
         }`}
       >
@@ -821,7 +821,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               onBlur={() => setShowExternalResults(false)}
               onChange={(event) => setQuery(event.target.value)}
               onFocus={() => setShowExternalResults(true)}
-              placeholder="거래처명·지역·주소 검색... (미등록 매장도 함께 찾아드려요)"
+              placeholder="거래처명·지역·주소 검색"
               value={query}
             />
             {showExternalResults && query.trim().length >= 2 ? (
@@ -910,7 +910,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
             <select
               className={`h-10 rounded-lg border px-2.5 text-xs font-black outline-none transition ${
-                gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-slate-900 bg-slate-900 text-white"
+                gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
               }`}
               onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
               value={gradeFilter}
@@ -921,37 +921,37 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                 </option>
               ))}
             </select>
-          <button
-            aria-pressed={excludeClosedStores}
-            className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
-              excludeClosedStores
-                ? "border-rose-300 bg-rose-50 text-rose-700 shadow-[0_1px_0_rgba(15,23,42,0.03)]"
-                : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-            }`}
-            onClick={() => setExcludeClosedStores((value) => !value)}
-            type="button"
-          >
-            {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
-          </button>
-          <button
-            className="maju-button-blue h-10 rounded-lg"
-            onClick={focusOrigin}
-            title="물류 출발지로 지도 이동"
-            type="button"
-          >
-            출발지 보기
-          </button>
-          <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
-            {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
-          </span>
-          <span className="ml-1 text-xs font-black text-slate-500">
-            {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
-          </span>
+            <button
+              aria-pressed={excludeClosedStores}
+              className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
+                excludeClosedStores
+                  ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                  : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+              }`}
+              onClick={() => setExcludeClosedStores((value) => !value)}
+              type="button"
+            >
+              {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
+            </button>
+            <button
+              className="maju-button-secondary h-10 rounded-lg"
+              onClick={focusOrigin}
+              title="물류 출발지로 지도 이동"
+              type="button"
+            >
+              출발지
+            </button>
+            <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
+              {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
+            </span>
+            <span className="ml-1 text-xs font-black text-slate-500">
+              {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
+            </span>
           </div>
         </div>
         {statsExpanded ? (
-          <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <span className="text-xs font-black text-slate-400">현재 조건</span>
+          <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="text-xs font-black text-slate-500">현재 조건</span>
             {activeFilterLabels.length ? (
               activeFilterLabels.map((label) => (
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
@@ -959,7 +959,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                 </span>
               ))
             ) : sourceReady ? (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 거래처 표시 중</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">전체 거래처 표시 중</span>
             ) : (
               <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 등록 대기</span>
             )}
@@ -967,11 +967,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         ) : null}
       </section>
 
-      {/*
-        지도가 배경(전체 화면)이 되고, 배송담당자 필터·거래처 목록 패널은 그 위에 뜨는 카드로
-        배치됩니다(네이버맵/카카오맵 방식). xl 미만 화면은 겹치는 플로팅 카드가 오히려 쓰기
-        어려워서 기존처럼 지도 위/아래로 패널이 일반 문서 흐름으로 쌓이는 레이아웃을 유지합니다.
-      */}
       {activeView === "map" ? (
         <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0">
           <div className={`relative min-h-0 min-w-0 bg-slate-100 xl:absolute xl:inset-0 ${isFullscreen ? "h-full" : "h-[420px] xl:h-full"}`}>
@@ -1015,9 +1010,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             ) : (
               <OperationalEmptyState
                 actionHref={dataRegistrationHref}
-                actionLabel="거래처 마스터 등록"
-                description="거래처 기본정보를 저장하면 지도, 원장, 코스가 같은 DB 기준으로 연결됩니다."
-                title="표시할 거래처가 없습니다."
+                actionLabel="거래처 등록"
+                description="거래처 기본정보를 저장하면 지도와 코스가 열립니다."
+                title="거래처 원장 필요"
               />
             )}
           </div>
@@ -1538,14 +1533,14 @@ function RouteWorkspaceGuide({
   const markerLabel = markerViewMode === "grade" ? "거래처 등급별 마커" : "배송차별 마커";
   const guide =
     !sourceReady
-      ? "거래처 마스터를 등록하면 지도, 거래처 목록, 배송차 경유 계산이 같은 원장 기준으로 열립니다."
+      ? "거래처를 등록하면 지도, 목록, 배송차 경유 계산이 같은 기준으로 열립니다."
       : activeView === "course"
       ? courseSummary
         ? `${selectedVehicleLabel} 기준 경유 ${courseSummary.selectedCount}곳의 도로 거리와 시간이 계산되었습니다.`
         : `${selectedVehicleLabel} 기준 경유 거래처를 선택한 뒤 티맵 계산을 실행하세요.`
       : activeView === "customers"
         ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
-        : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 관리를 확인합니다.";
+        : "마커 선택 후 상세로 이동합니다.";
 
   return (
     <section className="shrink-0 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
@@ -1559,10 +1554,102 @@ function RouteWorkspaceGuide({
           <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
           {!sourceReady ? (
             <Link className="maju-button-primary h-8" href={dataRegistrationHref}>
-              거래처 마스터 등록
+              거래처 등록
             </Link>
           ) : null}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function OperationalFlowBar({
+  activeView,
+  courseCalculated,
+  dataRegistrationHref,
+  deliveryVehicleCount,
+  onChangeView,
+  sourceReady,
+  storeCount
+}: {
+  readonly activeView: WorkspaceView;
+  readonly courseCalculated: boolean;
+  readonly dataRegistrationHref: string;
+  readonly deliveryVehicleCount: number;
+  readonly onChangeView: (view: WorkspaceView) => void;
+  readonly sourceReady: boolean;
+  readonly storeCount: number;
+}) {
+  const steps: Array<{
+    action: ReactNode;
+    helper: string;
+    label: string;
+    ready: boolean;
+    selected?: boolean;
+  }> = [
+    {
+      action: (
+        <Link className="absolute inset-0 rounded-lg" href={dataRegistrationHref} title="거래처 등록으로 이동">
+          <span className="sr-only">거래처 등록</span>
+        </Link>
+      ),
+      helper: sourceReady ? `${storeCount.toLocaleString()}곳` : "필수",
+      label: "거래처 등록",
+      ready: sourceReady
+    },
+    {
+      action: <button aria-label="지도 확인" className="absolute inset-0 rounded-lg" onClick={() => onChangeView("map")} type="button" />,
+      helper: sourceReady ? "마커 확인" : "등록 후",
+      label: "지도 확인",
+      ready: sourceReady,
+      selected: activeView === "map"
+    },
+    {
+      action: <button aria-label="원장 관리" className="absolute inset-0 rounded-lg" onClick={() => onChangeView("customers")} type="button" />,
+      helper: sourceReady ? "상세·첨부" : "등록 후",
+      label: "원장 관리",
+      ready: sourceReady,
+      selected: activeView === "customers"
+    },
+    {
+      action: <button aria-label="코스 계산" className="absolute inset-0 rounded-lg" onClick={() => onChangeView("course")} type="button" />,
+      helper: courseCalculated ? "계산 완료" : sourceReady ? `${deliveryVehicleCount.toLocaleString()}대` : "등록 후",
+      label: "코스 계산",
+      ready: courseCalculated,
+      selected: activeView === "course"
+    }
+  ];
+
+  return (
+    <section className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-4 py-2">
+      <div className="grid gap-2 md:grid-cols-4">
+        {steps.map((step, index) => (
+          <div
+            className={`relative min-w-0 rounded-lg border px-3 py-2 transition ${
+              step.selected
+                ? "border-teal-300 bg-teal-50 shadow-[0_1px_0_rgba(15,23,42,0.04)]"
+                : step.ready
+                  ? "border-emerald-100 bg-white"
+                  : "border-slate-200 bg-white"
+            }`}
+            key={step.label}
+          >
+            {step.action}
+            <div className="flex items-center gap-2">
+              <span
+                className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black ${
+                  step.ready ? "bg-emerald-600 text-white" : step.selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black text-slate-900">{step.label}</p>
+                <p className={`truncate text-[11px] font-black ${step.ready ? "text-emerald-700" : "text-slate-400"}`}>{step.helper}</p>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -2194,12 +2281,10 @@ function VehicleEditForm({
         <span className="font-black text-slate-500">구역</span>
         <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
       </label>
-      <p className="text-[11px] font-bold leading-4 text-slate-400">
-        호차명·담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 관리의 담당자 일괄 변경을 사용하세요.
-      </p>
+      <p className="text-[11px] font-bold leading-4 text-slate-400">호차명·담당자·구역 표시값을 저장합니다.</p>
       {!fuelTypeConfigured ? (
         <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] font-bold leading-4 text-amber-800">
-          연료 타입이 아직 설정되지 않아 기본값(경유)이 적용 중입니다. 저장하면 이 담당자 전용 값으로 저장됩니다.
+          연료 타입 기본값은 경유입니다.
         </p>
       ) : null}
       <div className="grid grid-cols-2 gap-1.5">
@@ -2317,7 +2402,7 @@ function StoreManagementPanel({
               <div>
                 <p className="text-sm font-black text-slate-700">{sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}</p>
                 <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처 마스터를 먼저 등록하면 담당자별 거래처 목록이 표시됩니다."}
+                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처를 먼저 등록하면 담당자별 거래처 목록이 표시됩니다."}
                 </p>
                 {!sourceReady ? (
                 <Link className="maju-button-primary mt-3 h-8" href={dataRegistrationHref}>
@@ -2329,7 +2414,7 @@ function StoreManagementPanel({
           )}
         </div>
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-bold leading-5 text-slate-500">상세 정보, 메모, 첨부자료는 거래처 선택 후 우측 넓은 패널에서 관리합니다.</p>
+          <p className="text-xs font-bold leading-5 text-slate-500">거래처 선택 후 우측 패널에서 관리합니다.</p>
         </div>
       </div>
     </aside>
@@ -2368,9 +2453,9 @@ function CustomerDirectoryView({
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
-            actionLabel="거래처 마스터 등록"
-            description="사업자번호, 주소, 담당자, 매출등급을 먼저 저장하세요."
-            title="거래처 원장이 비어 있습니다."
+            actionLabel="거래처 등록"
+            description="사업자번호, 주소, 담당자, 매출등급을 등록하세요."
+            title="거래처 원장 필요"
           />
         ) : null}
         {sourceReady ? (
@@ -2425,8 +2510,8 @@ function CustomerDirectoryView({
             <OperationalEmptyState
               actionHref={dataRegistrationHref}
               actionLabel="거래처 관리 확인"
-              description="검색어, 매출등급, 배송차 조건에 맞는 거래처가 없습니다. 현재 필터를 초기화하거나 거래처 관리에서 값을 확인하세요."
-              title="현재 조건에 맞는 거래처가 없습니다."
+              description="필터를 초기화하거나 거래처 값을 확인하세요."
+              title="조건에 맞는 거래처 없음"
             />
           )
         ) : null}
@@ -2571,9 +2656,9 @@ function TodayCourseView({
       <section className="min-h-[620px] rounded-b-xl bg-[#f6f8fb] p-4">
         <OperationalEmptyState
           actionHref={dataRegistrationHref}
-          actionLabel="거래처 마스터 등록"
-          description="배송차별 경유 코스는 DB에 저장된 거래처 주소, 좌표, 담당자 배정값을 기준으로 계산합니다. 먼저 거래처 마스터를 등록한 뒤 배송차를 선택하세요."
-          title="경유 코스 계산을 시작하려면 DB 거래처 원장이 필요합니다."
+          actionLabel="거래처 등록"
+          description="거래처 주소와 배송차 배정값을 등록하세요."
+          title="경유 코스 계산 대기"
         />
       </section>
     );
@@ -2852,7 +2937,7 @@ function TodayCourseView({
                     </button>
                     <button
                       className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-                        routeOriginMode === "current" ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-blue-50 text-blue-800 hover:bg-white"
+                        routeOriginMode === "current" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                       onClick={useCurrentLocationAsOrigin}
                       type="button"
@@ -2869,11 +2954,11 @@ function TodayCourseView({
                   <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지-거래처 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
                   <RouteMetric label={routeSequence ? "티맵 경유 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
-                <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
-                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
+                <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-slate-200 bg-slate-50" : "border-amber-200 bg-amber-50"}`}>
+                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-slate-900" : "text-amber-800"}`}>
                     {routeSequence ? "티맵 계산 완료" : isVehicleScoped && selectedRouteStores.length ? "티맵 계산 대기" : isVehicleScoped ? "경유지 선택 필요" : "배송차 선택 필요"}
                   </p>
-                  <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : isVehicleScoped && selectedRouteStores.length ? "text-blue-700" : "text-amber-800"}`}>
+                  <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : isVehicleScoped && selectedRouteStores.length ? "text-slate-600" : "text-amber-800"}`}>
                     {routeSequence
                       ? `현재 묶음 ${selectedRouteStores.length}곳의 도로 경로를 지도에 반영했습니다.`
                       : isVehicleScoped && selectedRouteStores.length
@@ -2958,7 +3043,7 @@ function TodayCourseView({
                     <p className="text-sm font-black text-slate-950">선택한 경유지</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">현재 묶음 {selectedRouteStores.length}곳을 티맵 계산에 사용합니다.</p>
                   </div>
-                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
                     {activeRouteBatchIndex + 1}/{routeBatchCount}
                   </span>
                 </div>
@@ -3065,7 +3150,7 @@ function TodayCourseView({
                       <div className="flex items-start gap-3">
                         <span
                           className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${
-                            activeForRoute ? "bg-teal-700 text-white" : selectedForRoute ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                            activeForRoute ? "bg-teal-700 text-white" : selectedForRoute ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-500"
                           }`}
                         >
                           {selectedForRoute ? selectedOrder : index + 1}
@@ -3084,7 +3169,7 @@ function TodayCourseView({
                           ) : null}
                           <span
                             className={`rounded-md px-2 py-1 text-[11px] font-black ${
-                              selectedForRoute ? "bg-teal-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"
+                              selectedForRoute ? "bg-teal-600 text-white" : "bg-teal-700 text-white hover:bg-teal-800"
                             }`}
                             onClick={(event) => {
                               event.stopPropagation();
@@ -3197,26 +3282,26 @@ function DeliveryProofPanel({
   };
 
   return (
-      <div className="maju-panel mt-3 border-blue-100 bg-blue-50/70 p-3">
+      <div className="maju-panel mt-3 border-slate-200 bg-slate-50 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
-            <Camera className="h-4 w-4 text-blue-700" />
+            <Camera className="h-4 w-4 text-slate-700" />
             배송완료 증빙
           </p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
             {store.name} 도착 후 사진을 남기고 점주님께 발송할 알림을 준비합니다.
           </p>
         </div>
-        <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{proofs.length}건</span>
+        <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">{proofs.length}건</span>
       </div>
-        <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-white px-3 py-3 text-left transition hover:border-blue-400 hover:bg-blue-50">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
+        <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-left transition hover:border-slate-400 hover:bg-slate-50">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
           <Plus className="h-4 w-4" />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-black text-slate-900">{fileName || "도착 사진/영상 선택"}</span>
-          <span className="mt-1 block text-xs font-bold text-slate-500">실제 발송 API 연결 전까지는 파일명과 발송 대기 상태를 기록합니다.</span>
+          <span className="mt-1 block text-xs font-bold text-slate-500">파일명과 발송 상태를 기록합니다.</span>
         </span>
         <input
           accept="image/*,video/*"
@@ -3270,7 +3355,7 @@ function DeliveryProofPanel({
         placeholder="추가 메모 예: 요청하신 냉장고 앞에 적재했습니다."
         value={memo}
       />
-      <div className="maju-panel mt-3 border-blue-100 p-3">
+      <div className="maju-panel mt-3 border-slate-200 p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
           <button
@@ -3283,10 +3368,10 @@ function DeliveryProofPanel({
           </button>
         </div>
         <p className="mt-2 whitespace-pre-line rounded-md bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
-        {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
+        {copyMessage ? <p className="mt-2 text-xs font-bold text-slate-700">{copyMessage}</p> : null}
       </div>
       <button
-        className="maju-button-blue mt-2 w-full bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="maju-button-primary mt-2 w-full disabled:cursor-not-allowed disabled:bg-slate-300"
         disabled={isSaving}
         onClick={saveProof}
         type="button"
@@ -3294,18 +3379,18 @@ function DeliveryProofPanel({
         <MessageSquareText className="h-3.5 w-3.5" />
         {isSaving ? "저장 중" : "배송완료 기록 저장"}
       </button>
-      {saveMessage ? <p className="mt-2 text-xs font-bold leading-5 text-blue-700">{saveMessage}</p> : null}
+      {saveMessage ? <p className="mt-2 text-xs font-bold leading-5 text-slate-700">{saveMessage}</p> : null}
       {proofs.length ? (
         <div className="mt-3 space-y-2">
           {proofs.slice(0, 3).map((proof) => (
-            <div className="rounded-md border border-blue-100 bg-white p-2" key={`${proof.recordedAt}-${proof.fileName}`}>
+            <div className="rounded-md border border-slate-200 bg-white p-2" key={`${proof.recordedAt}-${proof.fileName}`}>
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-xs font-black text-slate-900">{proof.fileName}</p>
                 <span className={`rounded px-2 py-0.5 text-[11px] font-black ${proof.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                  {proof.persisted ? "DB 저장" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
+                  {proof.persisted ? "저장 완료" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] font-black text-blue-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
+              <p className="mt-1 text-[11px] font-black text-slate-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
               <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
               <p className="mt-1 text-[11px] font-bold text-slate-400">{proof.recordedAt}</p>
             </div>
@@ -3442,7 +3527,7 @@ function StoreDetail({
       phone: draftPhone,
       representativeName: draftRepresentativeName
       });
-      const persistedLabel = result?.persisted === false ? "DB 저장 미확인" : "DB 저장 완료";
+      const persistedLabel = result?.persisted === false ? "저장 미확인" : "저장 완료";
       setSavedAt(`${persistedLabel} · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
@@ -3573,7 +3658,7 @@ function StoreDetail({
                     ]}
                     value={draftGrade}
                   />
-                  <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
+                  <InfoRow label="매출정보" value="거래원장 기준" />
                   <label className="grid gap-1.5 text-sm">
                     <span className="text-xs font-black text-slate-500">담당자</span>
                     <DriverSelectField driverOptions={driverOptions} onAddDriver={onAddDriver} onChange={setDraftDeliveryDriver} value={draftDeliveryDriver} />
@@ -3714,22 +3799,22 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
 
 function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; readonly onSave: (files: AttachmentFile[]) => void }) {
   return (
-    <div className="rounded-md border border-blue-300 bg-blue-50/60 p-4">
+    <div className="rounded-md border border-slate-300 bg-slate-50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
             <FileImage className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">배송 적재위치 사진/영상</p>
-              <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-200">{files.length}개</span>
+              <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">배송 필수</span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">{files.length}개</span>
             </div>
             <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 확인하는 핵심 자료입니다. 적재 위치, 입구, 냉장/냉동 구분 사진과 짧은 영상을 여러 개 저장할 수 있습니다.</p>
           </div>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white shadow-sm hover:bg-blue-700">
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-black text-white shadow-sm hover:bg-teal-800">
           <Plus className="h-4 w-4" />
           추가
           <input
@@ -3762,7 +3847,7 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
             <MediaPreview file={file} key={`${file.name}-${index}`} />
           ))
         ) : (
-          <div className="col-span-full grid h-28 place-items-center rounded-md border border-dashed border-blue-200 bg-white text-center">
+          <div className="col-span-full grid h-28 place-items-center rounded-md border border-dashed border-slate-300 bg-white text-center">
             <div>
               <p className="text-xs font-black text-slate-600">아직 업로드된 적재위치 자료가 없습니다.</p>
               <p className="mt-1 text-[11px] font-bold text-slate-400">오른쪽 + 버튼으로 사진/영상을 추가하세요.</p>
@@ -3807,7 +3892,7 @@ function BusinessOcrPanel({
   const suggestionNumberValid = isValidBusinessRegistrationNumber(suggestion.businessRegistrationNumber);
 
   return (
-    <div className="rounded-md border border-blue-200 bg-blue-50/70 p-4">
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -3818,7 +3903,7 @@ function BusinessOcrPanel({
           </div>
           <p className="mt-1 text-xs font-bold text-slate-500">사업자등록증에서 읽은 후보값입니다. 기존 값과 비교 후 반영하세요.</p>
         </div>
-        <button className="h-9 rounded-md bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!suggestionNumberValid} onClick={onApply} type="button">
+        <button className="h-9 rounded-md bg-teal-700 px-3 text-xs font-black text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!suggestionNumberValid} onClick={onApply} type="button">
           기본정보에 반영
         </button>
       </div>
@@ -3857,16 +3942,16 @@ function AttachmentBox({
   readonly onSave: (file: AttachmentFile) => void;
 }) {
   return (
-    <div className={`rounded-md border p-4 ${important ? "border-blue-300 bg-blue-50/60" : "border-slate-200 bg-white"}`}>
+    <div className={`rounded-md border p-4 ${important ? "border-slate-300 bg-slate-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${important ? "bg-blue-600 text-white" : "bg-white text-slate-400"}`}>
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${important ? "bg-teal-700 text-white" : "bg-white text-slate-400"}`}>
             <FileImage className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">{label}</p>
-              {important ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span> : null}
+              {important ? <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">중요</span> : null}
             </div>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
           </div>
@@ -4023,6 +4108,7 @@ function RouteBasisStrip({
   mapReadyStoreCount,
   missingAddressCount,
   routePlan,
+  sourceReady,
   visibleMapReadyStoreCount
 }: {
   readonly allStoreCount: number;
@@ -4033,14 +4119,15 @@ function RouteBasisStrip({
   readonly mapReadyStoreCount: number;
   readonly missingAddressCount: number;
   readonly routePlan: RoutePlan;
+  readonly sourceReady: boolean;
   readonly visibleMapReadyStoreCount: number;
 }) {
   const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 거래처 주소 정상";
-  const sourceLabel = routePlan.source === "supabase" ? "거래처 연결됨" : "거래처 연결 대기";
-  const sourceHelper = routePlan.source === "supabase" ? "저장된 거래처 기준" : "거래처 등록 또는 연결 확인 필요";
-  const sourceReady = routePlan.source === "supabase";
-  const distanceValue = sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산";
-  const durationValue = sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산";
+  const routeReady = routePlan.source === "supabase";
+  const sourceLabel = routeReady ? "코스 연결됨" : sourceReady ? "원장 기준 표시" : "거래처 연결 대기";
+  const sourceHelper = routeReady ? "저장된 코스·거래처 기준" : sourceReady ? "거래처 원장 마커 기준" : "거래처 등록 또는 연결 확인 필요";
+  const distanceValue = routeReady || allStoreTotals.distanceKm > 0 ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "티맵 계산 전";
+  const durationValue = routeReady || allStoreTotals.durationMinutes > 0 ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "티맵 계산 전";
 
   return (
     <section className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 xl:flex-row xl:items-center">
@@ -4056,10 +4143,10 @@ function RouteBasisStrip({
         ) : null}
       </div>
       <div className="grid min-w-0 flex-1 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
-        <RouteBasisMetric label="DB 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
+        <RouteBasisMetric label="원장 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
-        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 거래처 합산" tone={sourceReady ? "default" : "warning"} />
-        <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={sourceReady ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 거래처 합산" tone={routeReady || allStoreTotals.distanceKm > 0 ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={routeReady || allStoreTotals.durationMinutes > 0 ? "default" : "warning"} />
         <RouteBasisMetric label="현재 화면 거래처" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · 매출 ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
@@ -4093,8 +4180,8 @@ function RouteMetric({ label, value }: { readonly label: string; readonly value:
 
 function RouteWorkStep({ active, done, label }: { active: boolean; done: boolean; label: string }) {
   return (
-    <div className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${done ? "border-emerald-200 bg-white text-emerald-800" : active ? "border-blue-200 bg-white text-blue-800" : "border-slate-200 bg-white text-slate-500"}`}>
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${done ? "bg-emerald-600 text-white" : active ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>
+    <div className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${done ? "border-emerald-200 bg-white text-emerald-800" : active ? "border-slate-300 bg-white text-slate-900" : "border-slate-200 bg-white text-slate-500"}`}>
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${done ? "bg-emerald-600 text-white" : active ? "bg-teal-700 text-white" : "bg-slate-200 text-slate-500"}`}>
         {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
       </span>
       <span className="text-xs font-black">{label}</span>
@@ -4159,6 +4246,46 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
     });
 }
 
+function createStoreRowsFromLedgerMarkers(existingMarkers: KakaoMapMarker[]): StoreRow[] {
+  return existingMarkers
+    .filter((marker) => marker.tone === "lead" && marker.id && marker.address)
+    .map((marker, index) => {
+      const { expectedRevenue, name } = parseLedgerMarkerName(marker.name);
+      const region = getRegionFromAddress(marker.address || "");
+
+      return {
+        id: marker.id || `ledger-marker-${index + 1}`,
+        accountCopyStatus: "missing",
+        address: marker.address || "",
+        bankAccount: "",
+        birthDate: "",
+        businessCertificateStatus: "missing",
+        businessRegistrationNumber: "",
+        businessStatus: "unknown",
+        deliveryArea: region,
+        deliveryDriver: defaultDriverByIndex(index),
+        distanceKm: 0,
+        durationMinutes: 0,
+        email: "",
+        expectedRevenue,
+        grade: normalizeRevenueGrade(marker.grade) || getRevenueGrade(expectedRevenue),
+        industry: "미분류",
+        markerX: marker.x,
+        markerY: marker.y,
+        memo: "거래처 원장 기준으로 지도에 표시 중",
+        name,
+        openingDate: "",
+        order: index + 1,
+        phone: "",
+        region,
+        relationshipStatus: "관리중",
+        representativeName: "",
+        score: 80,
+        status: "today"
+      };
+    });
+}
+
 function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: KakaoMapMarker[]): StoreRow[] {
   return vehicles.flatMap((vehicle, vehicleIndex) =>
     vehicle.stops.map((store, storeIndex) => {
@@ -4189,6 +4316,26 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
       };
     })
   );
+}
+
+function parseLedgerMarkerName(value: string) {
+  const [rawName, rawRevenue] = value.split("· 월 ");
+  const expectedRevenue = Number((rawRevenue || "").replace(/[^0-9]/g, ""));
+
+  return {
+    expectedRevenue: Number.isFinite(expectedRevenue) && expectedRevenue > 0 ? expectedRevenue : 0,
+    name: rawName.trim() || value
+  };
+}
+
+function getRegionFromAddress(address: string) {
+  const parts = address.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).join(" ") || "미분류";
+}
+
+function normalizeRevenueGrade(value: string | undefined): RevenueGrade | undefined {
+  if (value === "A" || value === "B" || value === "C") return value;
+  return undefined;
 }
 
 function findMarkerForStore(existingMarkers: KakaoMapMarker[], store: Pick<RoutePlanStop, "address" | "id" | "name">) {

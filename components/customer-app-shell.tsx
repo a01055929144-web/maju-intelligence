@@ -40,7 +40,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 운영 화면";
-  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200";
+  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-700 text-white ring-1 ring-inset ring-teal-700";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
   const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
@@ -56,7 +56,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
-  // 같은 active 키를 공유하는 항목이 여러 개일 수 있어(예: 거래처 전체 현황/거래처 관리 모두 "customers"),
   // 사이드바 "현재 작업" 카드는 우선 현재 경로(pathname)로 정확히 일치하는 항목을 찾고,
   // 못 찾으면(예: 서버 렌더 초기) active 키로 대체 매칭합니다.
   const flatNavigationItems = flattenCustomerNavigationItems(visibleNavigationGroups);
@@ -81,13 +80,13 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
   return (
     <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-hidden" : ""}`}>
-      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-200 bg-white shadow-[8px_0_24px_rgba(15,23,42,0.04)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
+        <aside className="border-b border-slate-200 bg-white shadow-[6px_0_22px_rgba(15,23,42,0.035)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0">
               <div className={`flex w-full items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
                 <Link className={`flex min-w-0 items-center gap-3 ${collapsed ? "justify-center" : ""}`} href={scopedHref("/dashboard")}>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]">M</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
                   {!collapsed ? (
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-black">MAJU Map OS</span>
@@ -123,15 +122,15 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                               href={scopedHref(firstChild.href)}
                               title={item.label}
                             >
-                              {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-teal-600" /> : null}
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-teal-700" : "text-slate-400"}`} />
+                              {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-white" : "text-slate-400"}`} />
                             </Link>
                           );
                         }
                         return (
                           <div key={`${group.label}-${item.label}`}>
-                            <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-black ${groupSelected ? "text-teal-700" : "text-slate-700"}`}>
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-teal-700" : "text-slate-400"}`} />
+                            <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-black ${groupSelected ? "text-slate-950" : "text-slate-700"}`}>
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-slate-900" : "text-slate-400"}`} />
                               <span className="min-w-0 flex-1 truncate">{item.label}</span>
                             </div>
                             <div className="ml-[26px] space-y-1 border-l border-slate-200 pl-2.5">
@@ -143,7 +142,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                                     className={`maju-nav-item relative py-1.5 text-[13px] ${childSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
                                     href={scopedHref(child.href)}
                                   >
-                                    {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-teal-600" /> : null}
+                                    {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-white/80" /> : null}
                                     <span className="min-w-0 flex-1 truncate">{child.label}</span>
                                   </Link>
                                 );
@@ -164,10 +163,10 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                           href={itemHref}
                           title={collapsed ? item.label : undefined}
                         >
-                          {selected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-teal-600" /> : null}
-                          <item.icon className={`h-4 w-4 ${selected ? "text-teal-700" : "text-slate-400"}`} />
+                          {selected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
+                          <item.icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
+                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-[10px] text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
                         </Link>
                       );
                     })}
@@ -178,11 +177,13 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             {!collapsed ? (
               <div className="border-t border-slate-200/80 bg-white p-3">
-                <div className="rounded-lg border border-teal-100 bg-teal-50 p-3">
-                  <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">현재 작업</p>
-                  <p className="mt-1 truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
-                  <p className="mt-1 line-clamp-2 text-[11px] font-bold leading-5 text-slate-600">
-                    {activeNavigationItem?.description || "지도에서 거래처 위치와 출발지 기준 업무를 이어갑니다."}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
+                    <Badge className="shrink-0 bg-white px-1.5 py-0 text-[10px] text-slate-700 ring-1 ring-inset ring-slate-200">현재</Badge>
+                  </div>
+                  <p className="mt-1 truncate text-[11px] font-bold text-slate-600">
+                    {activeNavigationItem?.description || "지도 기준 업무"}
                   </p>
                 </div>
               </div>
@@ -191,7 +192,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
         </aside>
 
         <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
-          <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
+          <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.035)] ${fullBleed ? "xl:static" : ""}`}>
             <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -212,25 +213,27 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                 </div>
               )}
-              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
+              <div className={`flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
                 <Link
-                  className="maju-button-secondary h-9 shrink-0 px-3 text-sm"
+                  className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none"
                   href={settingsHref}
+                  title={settingsLabel}
                 >
                   <MapPinned className="h-4 w-4" />
-                  {settingsLabel}
+                  <span className={fullBleed ? "hidden 2xl:inline" : ""}>{settingsLabel}</span>
                 </Link>
                 <Link
-                  className="maju-button-blue h-9 shrink-0 px-3 text-sm"
+                  className="maju-button-primary h-8 shrink-0 px-2.5 text-xs shadow-none"
                   href={scopedHref("/assistant")}
+                  title="AI 도우미"
                 >
                   <MessageSquareText className="h-4 w-4" />
-                  AI 도우미
+                  <span className={fullBleed ? "hidden 2xl:inline" : ""}>AI 도우미</span>
                 </Link>
                 {mode === "customer" ? (
-                  <Link className="maju-button-secondary h-9 shrink-0 px-3 text-sm" href="/mobile/today">
+                  <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="모바일로 보기">
                     <Smartphone className="h-4 w-4" />
-                    모바일로 보기
+                    <span className={fullBleed ? "hidden 2xl:inline" : ""}>모바일</span>
                   </Link>
                 ) : null}
                 {rightAction}
@@ -281,12 +284,13 @@ function CustomerAccountActions() {
 
   return (
     <button
-      className="maju-button-secondary h-9 shrink-0 px-3 text-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
       onClick={logout}
+      title="로그아웃"
       type="button"
     >
       <LogOut className="h-4 w-4" />
-      로그아웃
+      <span className="hidden 2xl:inline">로그아웃</span>
     </button>
   );
 }

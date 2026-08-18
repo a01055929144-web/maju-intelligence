@@ -69,8 +69,8 @@ export default function CustomerDataManagementPage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="데이터 등록 이력과 누락·미매칭·정합성 문제를 확인하고 관리합니다."
-      title="거래처 관리 · 데이터 관리"
+      subtitle="등록 이력, 누락, 미매칭 확인"
+      title="저장 이력"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <div className="mx-auto max-w-[1560px] space-y-4">
