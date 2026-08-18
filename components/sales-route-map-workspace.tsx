@@ -6399,7 +6399,11 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
         label: mode === "vehicle" ? vehicle?.label || "?" : store.grade,
         markerColor: mode === "vehicle" ? vehicle?.color : undefined,
         name: mode === "vehicle" ? `${store.deliveryVehicleName || "배송차 미지정"} · ${store.name}` : store.name,
-        tone: "lead" as const,
+        // 이전에는 여기가 "lead"로 잘못 표시되어 있어서, 지도 탭의 onMarkerClick이 등록된
+        // 거래처 마커를 신규 리드로 오인해 setPreviewLeadId를 호출했습니다. leadRadiusResult가
+        // 없을 때는(기본 상태) 그 조건도 항상 거짓이라 아무 카드도 뜨지 않았던 것이 "마커
+        // 선택하면 카드가 안 보임" 버그의 실제 원인이었습니다.
+        tone: "customer" as const,
         x: store.markerX,
         y: store.markerY
       };
