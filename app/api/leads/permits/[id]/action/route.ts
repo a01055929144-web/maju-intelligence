@@ -21,12 +21,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ message: "올바르지 않은 액션입니다." }, { status: 400 });
   }
 
-  const result = await recordPermitLeadAction(scope.companyId!, id, {
-    actionType: body.actionType as PermitLeadActionType,
-    result: body.result,
-    memo: body.memo,
-    actorName: body.actorName || scope.customerSession?.name || scope.adminSession?.name || undefined
-  });
-
-  return NextResponse.json(result);
+  try {
+    const result = await recordPermitLeadAction(scope.companyId!, id, {
+      actionType: body.actionType as PermitLeadActionType,
+      result: body.result,
+      memo: body.memo,
+      actorName: body.actorName || scope.customerSession?.name || scope.adminSession?.name || undefined
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("permit lead action failed:", error);
+    return NextResponse.json({ message: error instanceof Error ? error.message : "처리 중 오류가 발생했습니다." }, { status: 500 });
+  }
 }

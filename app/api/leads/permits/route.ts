@@ -48,6 +48,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "한 번에 5,000행까지만 업로드할 수 있습니다. 파일을 나눠서 업로드하세요." }, { status: 400 });
   }
 
-  const result = await ingestPermitLeadRows(scope.companyId!, rows);
-  return NextResponse.json(result);
+  try {
+    const result = await ingestPermitLeadRows(scope.companyId!, rows);
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("permit lead ingest failed:", error);
+    return NextResponse.json({ message: error instanceof Error ? error.message : "업로드 처리 중 오류가 발생했습니다." }, { status: 500 });
+  }
 }
