@@ -1278,7 +1278,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                       setSelectedId(previewStore.id);
                       setPreviewStoreId("");
                     }}
-                    onOpenQuote={(targetStore) => setQuoteSubject({ customerId: targetStore.id, industry: targetStore.industry, menuNotes: targetStore.menuSummary, name: targetStore.name })}
+                    onOpenQuote={(targetStore) =>
+                      setQuoteSubject({ customerId: targetStore.id, industry: resolveDisplayIndustry(targetStore), menuNotes: targetStore.menuSummary, name: targetStore.name })
+                    }
                     onSave={(edit) => updateStore(previewStore.id, edit)}
                     originAddress={originMarker?.address || ""}
                     store={previewStore}
@@ -2271,7 +2273,7 @@ function StoreQuickCard({
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700">{store.grade}등급</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{resolveDisplayIndustry(store)}</span>
           </div>
         </div>
         <button aria-label="닫기" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
@@ -2330,7 +2332,7 @@ function StoreQuickCard({
         {!isEditing && store.reviewSummary ? (
           <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-500">
             <MessageCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
-            <span className="line-clamp-2">{store.reviewSummary}</span>
+            <span>{store.reviewSummary}</span>
           </p>
         ) : null}
         {isEditing ? (
@@ -2385,10 +2387,10 @@ function StoreQuickCard({
           </div>
         ) : (
           <>
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">
-                {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
-              </span>
+            <p className="mt-2.5 break-words text-[11px] font-black leading-4 text-slate-400">
+              {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
+            </p>
+            <div className="mt-1.5 flex items-center justify-end gap-2">
               {onSave ? (
                 <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
                   <Edit3 className="h-3.5 w-3.5" />
@@ -2929,6 +2931,9 @@ type QuoteRow = { id: string; item: string; qty: number; spec: string; unitPrice
 // 달라 0으로 비워두고, 담당자가 실제 협상가로 채워 넣는 것을 전제로 합니다(가짜 단가를 넣지 않음).
 const INDUSTRY_QUOTE_TEMPLATES: Record<string, string[]> = {
   "한식": ["쌀 20kg", "돼지고기 앞다리살", "대파", "양파", "고춧가루", "식용유 18L", "국간장"],
+  "고기/구이": ["삼겹살", "목살", "소고기(구이용)", "쌈채소 세트", "된장", "숯"],
+  "곱창/막창": ["소곱창(손질)", "막창(손질)", "대창", "깻잎", "부추", "양념장 베이스"],
+  "분식": ["떡볶이떡", "어묵", "튀김가루", "라면사리", "순대", "쫄면"],
   "카페/디저트": ["원두 1kg", "우유 1L", "생크림", "시럽류", "박력분 20kg", "일회용 컵"],
   "일식": ["초밥용 쌀 20kg", "간장 18L", "와사비", "김(초밥용)", "냉동 생선류", "무순"],
   "중식": ["면류(생면)", "굴소스", "두반장", "돼지고기 삼겹살", "청경채", "식용유 18L"],
@@ -2937,6 +2942,43 @@ const INDUSTRY_QUOTE_TEMPLATES: Record<string, string[]> = {
   "양식": ["파스타면", "올리브유", "치즈류", "육류(스테이크용)", "토마토소스"],
   "뷔페/단체급식": ["쌀 20kg (대량)", "육류 세트", "채소 세트(대량)", "국·찌개용 육수", "일회용품"]
 };
+
+// 거래처의 업종(industry) 값이 비어 있거나 "미분류"일 때, 이미 확보된 리뷰 키워드·리뷰 요약·메뉴
+// 요약 텍스트에서 업종을 추정합니다. 정확한 값이 있으면 그걸 그대로 쓰고, 이건 어디까지나
+// 마지막 보정 수단입니다(잘못 추정되면 사용자가 상세 화면에서 업종을 직접 입력해 덮어쓸 수 있음).
+const INDUSTRY_KEYWORD_RULES: Array<{ industry: string; keywords: string[] }> = [
+  { industry: "곱창/막창", keywords: ["곱창", "막창", "대창"] },
+  { industry: "고기/구이", keywords: ["삼겹살", "고깃집", "정육", "숯불", "구이"] },
+  { industry: "분식", keywords: ["분식", "떡볶이", "김밥"] },
+  { industry: "한식", keywords: ["한식", "백반", "국밥", "찌개", "한정식"] },
+  { industry: "카페/디저트", keywords: ["카페", "커피", "디저트", "베이커리", "빵집"] },
+  { industry: "일식", keywords: ["일식", "초밥", "스시", "라멘", "이자카야"] },
+  { industry: "중식", keywords: ["중식", "짜장", "짬뽕", "마라"] },
+  { industry: "양식", keywords: ["양식", "파스타", "스테이크", "피자"] },
+  { industry: "주점", keywords: ["주점", "호프", "포차", "술집"] },
+  { industry: "프랜차이즈/배달", keywords: ["치킨", "배달전문", "패스트푸드", "버거"] },
+  { industry: "뷔페/단체급식", keywords: ["뷔페", "단체급식", "구내식당"] }
+];
+
+function inferIndustryFromText(...texts: Array<string | undefined>): string | undefined {
+  const haystack = texts.filter(Boolean).join(" ");
+  if (!haystack) return undefined;
+  const rule = INDUSTRY_KEYWORD_RULES.find((candidate) => candidate.keywords.some((keyword) => haystack.includes(keyword)));
+  return rule?.industry;
+}
+
+/** 카드 뱃지·견적서 초안이 함께 쓰는 "실제로 보여줄 업종" 계산입니다. */
+function resolveDisplayIndustry(store: {
+  industry?: string;
+  menuSummary?: string;
+  name?: string;
+  reviewKeywords?: string[];
+  reviewSummary?: string;
+}): string {
+  if (store.industry && store.industry !== "미분류") return store.industry;
+  const inferred = inferIndustryFromText(store.menuSummary, store.reviewSummary, store.reviewKeywords?.join(" "), store.name);
+  return inferred || store.industry || "미분류";
+}
 
 function buildQuoteDraftRows(industry?: string): QuoteRow[] {
   const items = (industry && INDUSTRY_QUOTE_TEMPLATES[industry]) || [];

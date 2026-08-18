@@ -94,7 +94,6 @@ export function KakaoAddressMap({
   const [fallbackReason, setFallbackReason] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
-  const focusedMarker = useMemo(() => markers.find((marker) => marker.id === focusedMarkerId), [focusedMarkerId, markers]);
 
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
@@ -277,6 +276,13 @@ export function KakaoAddressMap({
     circle.setMap(map);
     radiusCircleRef.current = circle;
 
+    // 반경이 넓으면(기본 5km) 지도가 이미 그 반경보다 훨씬 좁게 확대돼 있어 원과 손잡이가 화면
+    // 밖으로 나가 "드래그할 게 안 보인다"는 문제가 있었습니다. 원이 처음 나타나거나 반경 값이
+    // 바뀔 때마다 원 전체가 화면에 들어오도록 지도를 자동으로 맞춥니다.
+    if (typeof circle.getBounds === "function") {
+      map.setBounds(circle.getBounds(), 40, 40, 40, 40);
+    }
+
     const handlePoint = destinationPoint(centerLat, centerLng, radiusOverlay.radiusMeters, 90);
     const handleMarker = new kakao.maps.Marker({
       draggable: true,
@@ -367,25 +373,6 @@ export function KakaoAddressMap({
     }
   };
 
-  const openRoadview = () => {
-    const center = mapInstanceRef.current?.getCenter?.();
-    if (!center) return;
-    const kakao = window.kakao;
-    if (!kakao?.maps?.RoadviewClient) {
-      openPopup(createKakaoSearchUrl(focusedMarker) || `https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
-      return;
-    }
-
-    const client = new kakao.maps.RoadviewClient();
-    client.getNearestPanoId(center, 180, (panoId: number | null) => {
-      if (!panoId) {
-        openPopup(createKakaoSearchUrl(focusedMarker) || `https://map.kakao.com/link/map/MAJU%20지도,${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
-        return;
-      }
-      openPopup(`https://map.kakao.com/link/roadview/${center.getLat()},${center.getLng()}`, "maju-kakao-roadview");
-    });
-  };
-
   const openLargeMap = () => {
     openInternalLargeMap({
       focusedMarkerId,
@@ -405,7 +392,6 @@ export function KakaoAddressMap({
           onFitAll={fitAllMarkers}
           onLargeMap={openLargeMap}
           onLocation={moveToCurrentLocation}
-          onRoadview={openRoadview}
         />
         {status === "loading" && (
           <div className="absolute inset-0 grid place-items-center bg-white/80 text-sm font-bold text-muted-foreground backdrop-blur-sm">
@@ -423,15 +409,13 @@ function MapControls({
   offsetPx,
   onFitAll,
   onLargeMap,
-  onLocation,
-  onRoadview
+  onLocation
 }: {
   readonly offsetClassName?: string;
   readonly offsetPx?: number;
   readonly onFitAll: () => void;
   readonly onLargeMap: () => void;
   readonly onLocation: () => void;
-  readonly onRoadview: () => void;
 }) {
   // 모바일에서는 검색·필터 바가 지도 위 일반 흐름(in-flow)에 있어 지도 자체가 그 아래에서
   // 시작하므로 작은 고정값(top-3= 0.75rem)이면 충분합니다. xl 이상에서는 그 바가 지도 위에 뜨는
@@ -448,21 +432,14 @@ function MapControls({
       } ${offsetClassName || ""}`}
       style={style}
     >
-      <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
+      <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
         <Crosshair className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">내 위치</span>
       </button>
-      <button aria-label="전체 보기" title="전체 보기" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onFitAll} type="button">
+      <button aria-label="전체 보기" title="전체 보기" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100" onClick={onFitAll} type="button">
         <RotateCcw className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">전체 보기</span>
       </button>
-      <button aria-label="로드뷰" title="로드뷰" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-100" onClick={onRoadview} type="button">
-        <MapPin className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">로드뷰</span>
-      </button>
-      <button aria-label="전체화면 지도" title="전체화면 지도" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800" onClick={onLargeMap} type="button">
+      <button aria-label="전체화면 지도" title="전체화면 지도" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-teal-700 text-white transition hover:bg-teal-800" onClick={onLargeMap} type="button">
         <ExternalLink className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">전체화면</span>
       </button>
     </div>
   );
@@ -480,12 +457,6 @@ function openInternalLargeMap(payload: FullscreenMapPayload) {
     // If browser storage is blocked, the fullscreen page will show an empty-state message.
   }
   openPopup(`/map/fullscreen?mapId=${encodeURIComponent(mapId)}`, "maju-internal-large-map");
-}
-
-function createKakaoSearchUrl(marker?: KakaoMapMarker) {
-  if (!marker) return "";
-  const query = `${marker.name} ${marker.address}`.trim();
-  return query ? `https://map.kakao.com/link/search/${encodeURIComponent(query)}` : "";
 }
 
 function getKakaoDomainHint() {
@@ -733,13 +704,12 @@ function FallbackAddressMap({
         <div className="absolute right-3 z-30 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur" style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
           <button
             aria-label="전체화면 지도"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white transition hover:bg-teal-800"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-teal-700 text-white transition hover:bg-teal-800"
             onClick={() => openInternalLargeMap({ focusedMarkerId, markers, routePath: routePath || emptyRoutePath })}
             title="전체화면 지도"
             type="button"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">전체화면</span>
           </button>
         </div>
         <div className="absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-2 text-xs font-bold text-muted-foreground shadow-sm">
