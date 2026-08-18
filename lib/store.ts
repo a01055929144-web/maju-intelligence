@@ -1,5 +1,6 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
+import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { enrichLeadRecommendations } from "./leads";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
@@ -2264,6 +2265,15 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     }
   }).catch(() => null);
 
+  // 신규 거래처를 등록했고, 이 저장 요청에 리뷰 요약을 직접 입력하지 않았다면(즉 담당자가 방금
+  // 수기로 리뷰를 채운 것이 아니라면), 구글 리뷰 자동 수집을 백그라운드로 실행합니다. 저장
+  // 응답을 기다리게 하지 않으려고 await하지 않으며(fire-and-forget), 실패해도 저장 자체는
+  // 이미 성공한 뒤이므로 조용히 무시합니다. GOOGLE_PLACES_API_KEY가 없으면 함수 내부에서
+  // 즉시 no-op으로 끝납니다.
+  if (!existingRows.length && input.reviewSummary === undefined && isGoogleReviewsApiConfigured()) {
+    void syncCustomerGoogleReviews(id, savedCustomer.id).catch(() => null);
+  }
+
   return {
     customer: savedCustomer,
     persisted: true
@@ -2400,6 +2410,144 @@ export async function deleteCustomerContact(companyId: string, contactId: string
     if (!isMissingCustomerContactsTableError(error)) throw error;
   });
   return { ok: true };
+}
+
+// 구글 리뷰 자동 수집 (리뷰_자동수집_파이프라인_설계.md "옵션 B"). GOOGLE_PLACES_API_KEY가 없는
+// 환경에서도 항상 안전하게 "설정 안 됨" 메시지를 돌려주고, 있는 환경에서는 거래처명+주소로 구글
+// Place를 찾아 리뷰를 가져와 review_summary/review_keywords/review_source/reviews_updated_at을
+// 갱신합니다. 사업자 상태 자동조회(refreshCustomerBusinessStatuses)와 동일한 graceful-degradation
+// 구조를 그대로 따릅니다.
+export type GoogleReviewSyncOutcome = {
+  ok: boolean;
+  updated: boolean;
+  message?: string;
+  result?: GoogleReviewSyncResult;
+};
+
+export async function syncCustomerGoogleReviews(companyId: string, customerId: string): Promise<GoogleReviewSyncOutcome> {
+  if (!isGoogleReviewsApiConfigured()) {
+    return { ok: false, updated: false, message: "GOOGLE_PLACES_API_KEY가 설정되지 않아 구글 리뷰 자동 수집을 사용할 수 없습니다." };
+  }
+  if (!isProductionStoreConfigured()) {
+    return { ok: false, updated: false, message: "저장소가 준비되지 않았습니다." };
+  }
+
+  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; address: string | null }>>(
+    `normalized_customers?select=id,customer_name,address&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(
+      customerId
+    )}&limit=1`
+  ).catch(() => []);
+  const customer = rows[0];
+  if (!customer) return { ok: false, updated: false, message: "거래처를 찾을 수 없습니다." };
+
+  const result = await syncGoogleReviewsForCustomer({ customerName: customer.customer_name, address: customer.address || undefined });
+  if (!result) {
+    return { ok: true, updated: false, message: "구글에서 이 거래처의 리뷰를 찾지 못했습니다." };
+  }
+
+  await supabaseRequest(`normalized_customers?id=eq.${encodeURIComponent(customerId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      review_summary: result.summary,
+      review_keywords: result.keywords,
+      review_source: result.source,
+      reviews_updated_at: new Date().toISOString()
+    })
+  });
+
+  return { ok: true, updated: true, result };
+}
+
+const GOOGLE_REVIEWS_REFRESH_LIMIT = 30;
+// 구글 리뷰 자동 수집은 회사당 이 개수만큼만 매 실행마다 처리합니다(오래된 순으로). Places API는
+// 호출당 과금이 있고, 한 거래처당 검색+상세조회 2번의 외부 호출이 필요해 한 번에 너무 많이 돌리면
+// cron 실행시간·비용이 늘어나기 때문에, 거래처가 많아져도 매일 조금씩 커버되도록 상한을 둡니다.
+
+export type GoogleReviewRefreshResult = {
+  configured: boolean;
+  checked: number;
+  updated: number;
+  noMatch: number;
+};
+
+/**
+ * 회사 하나의 거래처 중 (1) 리뷰가 아예 없거나 (2) 이미 "구글 리뷰 자동 수집"으로 채워져 있어
+ * 다시 자동으로 새로고침해도 무방한 거래처만, 가장 오래전에 갱신된 순으로 골라 구글 리뷰 자동
+ * 수집을 실행합니다. 담당자가 직접 조사해서 입력한 리뷰(review_source가 "구글 리뷰 자동 수집"이
+ * 아닌 다른 값)는 이 자동 새로고침이 절대 덮어쓰지 않습니다 — 사람이 공들여 조사한 값을 품질이
+ * 더 낮을 수 있는 규칙 기반 자동 요약이 조용히 대체하지 않도록 하기 위함입니다. 특정 거래처를
+ * 수동으로 강제 새로고침하고 싶다면 syncCustomerGoogleReviews()를 직접 호출하세요(이쪽은 출처와
+ * 무관하게 항상 갱신합니다 — "리뷰 새로고침" 버튼이 이 경로를 사용합니다).
+ */
+export async function refreshCustomerGoogleReviews(companyId: string, customerIds?: string[]): Promise<GoogleReviewRefreshResult> {
+  const emptyResult: GoogleReviewRefreshResult = { configured: isGoogleReviewsApiConfigured(), checked: 0, updated: 0, noMatch: 0 };
+  if (!emptyResult.configured || !isProductionStoreConfigured()) return emptyResult;
+
+  const idFilter = customerIds && customerIds.length ? `&id=in.(${customerIds.map(encodeURIComponent).join(",")})` : "";
+  const autoManagedFilter = `&or=(review_source.is.null,review_source.eq.${encodeURIComponent("구글 리뷰 자동 수집")})`;
+  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; address: string | null }>>(
+    `normalized_customers?select=id,customer_name,address&company_id=eq.${encodeURIComponent(
+      companyId
+    )}${idFilter}${autoManagedFilter}&order=reviews_updated_at.asc.nullsfirst&limit=${GOOGLE_REVIEWS_REFRESH_LIMIT}`
+  ).catch(() => []);
+  if (!rows.length) return emptyResult;
+
+  const outcomes = await Promise.all(
+    rows.map(async (row) => {
+      const result = await syncGoogleReviewsForCustomer({ customerName: row.customer_name, address: row.address || undefined });
+      if (!result) return { updated: false };
+      await supabaseRequest(`normalized_customers?id=eq.${encodeURIComponent(row.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          review_summary: result.summary,
+          review_keywords: result.keywords,
+          review_source: result.source,
+          reviews_updated_at: new Date().toISOString()
+        })
+      }).catch(() => null);
+      return { updated: true };
+    })
+  );
+
+  return {
+    configured: true,
+    checked: rows.length,
+    updated: outcomes.filter((item) => item.updated).length,
+    noMatch: outcomes.filter((item) => !item.updated).length
+  };
+}
+
+export type GoogleReviewDailyRefreshResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalChecked: number;
+  totalUpdated: number;
+};
+
+/** refreshCustomerGoogleReviews()를 전체 회사에 대해 실행합니다 (일일 cron에서 호출). */
+export async function refreshAllCompaniesGoogleReviews(): Promise<GoogleReviewDailyRefreshResult> {
+  const emptyResult: GoogleReviewDailyRefreshResult = {
+    configured: isGoogleReviewsApiConfigured(),
+    companiesProcessed: 0,
+    totalChecked: 0,
+    totalUpdated: 0
+  };
+  if (!emptyResult.configured || !isProductionStoreConfigured()) return emptyResult;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map((company) => refreshCustomerGoogleReviews(company.id)));
+
+  return results.reduce<GoogleReviewDailyRefreshResult>(
+    (total, result) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalChecked: total.totalChecked + result.checked,
+      totalUpdated: total.totalUpdated + result.updated
+    }),
+    { ...emptyResult, configured: true }
+  );
 }
 
 export type BusinessNumberException = {

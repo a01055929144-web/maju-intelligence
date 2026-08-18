@@ -4910,6 +4910,8 @@ function StoreDetail({
   const [relationshipStatusError, setRelationshipStatusError] = useState("");
   const [savedAt, setSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [isSyncingReviews, setIsSyncingReviews] = useState(false);
+  const [reviewSyncMessage, setReviewSyncMessage] = useState("");
   const activeOcrSuggestion = ocrSuggestion || (attachments.businessCertificate ? createBusinessOcrSuggestion(store, attachments.businessCertificate.name) : null);
   const businessNumberValid = isValidBusinessRegistrationNumber(draftBusinessNumber);
   const saveDraft = async () => {
@@ -4956,6 +4958,41 @@ function StoreDetail({
       setSaveError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
     } finally {
       setIsSaving(false);
+    }
+  };
+  // 구글 리뷰를 지금 바로 다시 수집합니다(공식 Places API). 서버에 즉시 저장되므로, 성공하면 이
+  // 폼의 입력값도 그 결과로 갱신해 사용자가 바로 확인할 수 있게 합니다.
+  const syncGoogleReviews = async () => {
+    setIsSyncingReviews(true);
+    setReviewSyncMessage("");
+    try {
+      const companyId = permitLeadCompanyId();
+      const response = await fetch(`/api/customers/${store.id}/sync-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(companyId ? { companyId } : {})
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        updated?: boolean;
+        result?: { summary?: string; keywords?: string[]; source?: string };
+      } | null;
+      if (!response.ok) {
+        setReviewSyncMessage(payload?.message || "리뷰 새로고침에 실패했습니다.");
+        return;
+      }
+      if (payload?.updated && payload.result) {
+        setDraftReviewSummary(payload.result.summary || "");
+        setDraftReviewKeywords((payload.result.keywords || []).join(", "));
+        setDraftReviewSource(payload.result.source || "");
+        setReviewSyncMessage(`구글 리뷰 반영 완료 · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
+      } else {
+        setReviewSyncMessage(payload?.message || "구글에서 리뷰를 찾지 못했습니다.");
+      }
+    } catch (error) {
+      setReviewSyncMessage(error instanceof Error ? error.message : "리뷰 새로고침 중 오류가 발생했습니다.");
+    } finally {
+      setIsSyncingReviews(false);
     }
   };
 
@@ -5110,9 +5147,20 @@ function StoreDetail({
 
               <CollapsibleSection title="리뷰 요약 · 키워드 (AI)">
                 <div className="mt-4 space-y-3">
-                  <p className="maju-filter-box border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">
-                    네이버플레이스·카카오맵·구글 리뷰를 참고해 자유롭게 요약과 키워드를 남겨두면 거래처 카드에 표시됩니다. 아직 자동 수집 기능은 없어 수동 입력 방식입니다.
-                  </p>
+                  <div className="flex items-start justify-between gap-2 maju-filter-box border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs font-bold leading-5 text-slate-600">
+                      구글 리뷰는 공식 API로 자동 수집됩니다. 네이버플레이스·카카오맵 리뷰는 아직 자동 수집이 없어 아래에 직접 남겨두면 거래처 카드에 표시됩니다.
+                    </p>
+                    <button
+                      className="shrink-0 rounded-md border border-teal-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isSyncingReviews}
+                      onClick={syncGoogleReviews}
+                      type="button"
+                    >
+                      {isSyncingReviews ? "수집 중…" : "구글 리뷰 새로고침"}
+                    </button>
+                  </div>
+                  {reviewSyncMessage ? <p className="text-[11px] font-bold text-teal-600">{reviewSyncMessage}</p> : null}
                   {draftReviewKeywords.split(",").map((keyword) => keyword.trim()).filter(Boolean).length ? (
                     <div className="flex flex-wrap gap-1.5">
                       {draftReviewKeywords
