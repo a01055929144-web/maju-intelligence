@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, ExternalLink, FileVideo, ImageIcon, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { LoadingPositionGallery } from "@/components/loading-position-gallery";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type AttachmentItem = {
@@ -170,7 +171,11 @@ function AttachmentSlot({
 
       <div className="min-h-0">
         <p className="min-h-10 text-xs font-semibold leading-5 text-slate-500">{description}</p>
-        {existingItems.length ? (
+        {existingItems.length && attachmentType === "loading_position" ? (
+          <div className="mt-2 max-h-[160px] overflow-y-auto pr-1">
+            <LoadingPositionGallery items={existingItems} />
+          </div>
+        ) : existingItems.length ? (
           <div className="mt-2 max-h-[76px] space-y-1 overflow-y-auto pr-1">
             {existingItems.map((item) => (
               <a

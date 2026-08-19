@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Camera, CheckCircle2, ExternalLink, FileVideo, ImageIcon, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, Plus, RefreshCw } from "lucide-react";
+import { LoadingPositionGallery } from "@/components/loading-position-gallery";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type Attachment = {
@@ -119,30 +120,12 @@ export function MobileLoadingAttachmentPanel({
       ) : null}
       {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveErrorMessage || "업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요."}</p> : null}
 
-      <div className="mt-4 grid gap-2">
+      <div className="mt-4">
         {loadState === "loading" ? <p className="rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">첨부자료를 불러오는 중입니다.</p> : null}
         {loadState === "error" ? <p className="rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700">첨부자료를 불러오지 못했습니다.</p> : null}
-        {loadState === "ready" && !loadingAttachments.length ? (
-          <p className="rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">아직 등록된 적재위치 사진/영상이 없습니다.</p>
+        {loadState === "ready" ? (
+          <LoadingPositionGallery emptyMessage="아직 등록된 적재위치 사진/영상이 없습니다." items={loadingAttachments} />
         ) : null}
-        {loadingAttachments.map((item) => (
-          <a
-            className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50"
-            href={item.fileUrl || "#"}
-            key={item.id}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600">
-              {item.mimeType?.startsWith("video") ? <FileVideo className="h-5 w-5" /> : <ImageIcon className="h-5 w-5" />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-black text-slate-950">{item.title}</span>
-              <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">{item.createdAt}</span>
-            </span>
-            <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
-          </a>
-        ))}
       </div>
     </section>
   );

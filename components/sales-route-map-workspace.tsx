@@ -20,6 +20,7 @@ import {
   ExternalLink,
   FileImage,
   ListFilter,
+  Loader2,
   Maximize2,
   Minimize2,
   MapPin,
@@ -50,10 +51,12 @@ import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { CustomerContactItem, DeliveryVehicle, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues, RoutePlan, RoutePlanStop } from "@/lib/store";
+import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
@@ -189,7 +192,6 @@ type DeliveryProofInput = {
 type StoreAttachment = {
   businessCertificate?: AttachmentFile;
   bankbookCopy?: AttachmentFile;
-  loadingPositionMedia?: AttachmentFile[];
 };
 
 type AttachmentFile = {
@@ -1477,15 +1479,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               }
             }))
           }
-          onSaveLoadingMedia={(files) =>
-            setStoreAttachments((current) => ({
-              ...current,
-              [selectedStore.id]: {
-                ...current[selectedStore.id],
-                loadingPositionMedia: [...(current[selectedStore.id]?.loadingPositionMedia || []), ...files]
-              }
-            }))
-          }
           onUpdateRelationshipStatus={updateRelationshipStatus}
           onUpdateStore={updateStore}
           onWriteHistory={(storeId, memo) =>
@@ -2509,7 +2502,6 @@ function StoreQuickCard({
                   {isInRoute ? "경유지 추가됨" : "경유지 추가"}
                 </button>
               ) : null}
-              <NavigateMenu destinationAddress={store.address || store.region} destinationName={store.name} originAddress={originAddress} />
               {onOpenQuote ? (
                 <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => onOpenQuote(store)} title="견적서 작성" type="button">
                   견적서
@@ -5231,7 +5223,6 @@ function StoreDetail({
   onClearHistory,
   onDeleteHistory,
   onSaveAttachment,
-  onSaveLoadingMedia,
   onUpdateRelationshipStatus,
   onUpdateStore,
   onWriteHistory,
@@ -5248,7 +5239,6 @@ function StoreDetail({
   readonly onClearHistory: (storeId: string) => void;
   readonly onDeleteHistory: (storeId: string, historyId: string) => void;
   readonly onSaveAttachment: (slot: "bankbookCopy" | "businessCertificate", file: AttachmentFile) => void;
-  readonly onSaveLoadingMedia: (files: AttachmentFile[]) => void;
   readonly onUpdateRelationshipStatus: (storeId: string, status: string, note?: string) => Promise<{ persisted: boolean } | void>;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => Promise<{ persisted: boolean } | void>;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
@@ -5656,7 +5646,7 @@ function StoreDetail({
 
               <CollapsibleSection defaultOpen title="첨부자료">
                 <div className="mt-4 space-y-3">
-                  <LoadingMediaBox files={attachments.loadingPositionMedia || []} onSave={onSaveLoadingMedia} />
+                  <LoadingPositionAttachmentBox customerId={store.id} customerName={store.name} />
                   <AttachmentBox
                     description="업로드하면 OCR 후보값을 읽어 기본정보와 비교합니다."
                     file={attachments.businessCertificate}
@@ -6009,7 +5999,62 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
   );
 }
 
-function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; readonly onSave: (files: AttachmentFile[]) => void }) {
+function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly customerId: string; readonly customerName: string }) {
+  const [items, setItems] = useState<LoadingPositionMediaItem[]>([]);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
+
+  async function loadItems() {
+    setLoadState("loading");
+    const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
+    if (!response?.ok) {
+      setLoadState("error");
+      return;
+    }
+    const payload = (await response.json().catch(() => null)) as { attachments?: Array<LoadingPositionMediaItem & { attachmentType: string }> } | null;
+    setItems((payload?.attachments || []).filter((item) => item.attachmentType === "loading_position"));
+    setLoadState("ready");
+  }
+
+  async function uploadFiles(fileList: FileList | null) {
+    const files = Array.from(fileList || []);
+    if (!files.length || saveState === "saving") return;
+
+    const oversizedFile = files.find((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
+    if (oversizedFile) {
+      setSaveState("error");
+      setSaveError(`${oversizedFile.name} 용량이 ${formatUploadSizeMb(oversizedFile.size)}로 최대 50MB를 초과합니다.`);
+      return;
+    }
+
+    setSaveError("");
+    setSaveState("saving");
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("customerId", customerId);
+      formData.append("attachmentType", "loading_position");
+      formData.append("title", `배송 적재위치 - ${customerName}`);
+
+      const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
+      if (!response?.ok) {
+        setSaveState("error");
+        setSaveError(`${file.name} 업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.`);
+        return;
+      }
+    }
+
+    setSaveState("idle");
+    await loadItems();
+  }
+
+  useEffect(() => {
+    loadItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
+
   return (
     <div className="rounded-md border border-slate-300 bg-slate-50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -6021,51 +6066,35 @@ function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; 
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">배송 적재위치 사진/영상</p>
               <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">배송 필수</span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">{files.length}개</span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">{items.length}개</span>
             </div>
-            <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 확인하는 핵심 자료입니다. 적재 위치, 입구, 냉장/냉동 구분 사진과 짧은 영상을 여러 개 저장할 수 있습니다.</p>
+            <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">
+              기사님이 출고 전 확인하는 핵심 자료입니다. 가장 최근 자료가 현재 기준이며, 이전 자료는 잠금 표시로 계속 보존됩니다.
+            </p>
           </div>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-black text-white shadow-sm hover:bg-teal-800">
-          <Plus className="h-4 w-4" />
-          추가
-          <input
-            accept="image/*,video/*"
-            className="sr-only"
-            multiple
-            onChange={(event) => {
-              const selectedFiles = Array.from(event.target.files || []);
-              if (!selectedFiles.length) return;
-              Promise.all(
-                selectedFiles.map(
-                  (selectedFile) =>
-                    new Promise<AttachmentFile>((resolve) => {
-                      const mediaType = selectedFile.type.startsWith("video/") ? "video" : "image";
-                      const reader = new FileReader();
-                      reader.onload = () => resolve({ dataUrl: String(reader.result || ""), mediaType, name: selectedFile.name });
-                      reader.readAsDataURL(selectedFile);
-                    })
-                )
-              ).then(onSave);
-              event.target.value = "";
-            }}
-            type="file"
-          />
-        </label>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            aria-label="적재위치 자료 새로고침"
+            className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-500"
+            onClick={loadItems}
+            type="button"
+          >
+            <RefreshCw className={`h-4 w-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
+          </button>
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-black text-white shadow-sm hover:bg-teal-800">
+            {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {saveState === "saving" ? "업로드 중" : "추가"}
+            <input accept="image/*,video/*" className="sr-only" multiple onChange={(event) => uploadFiles(event.target.files)} type="file" />
+          </label>
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {files.length ? (
-          files.map((file, index) => (
-            <MediaPreview file={file} key={`${file.name}-${index}`} />
-          ))
-        ) : (
-          <div className="col-span-full grid h-28 place-items-center rounded-md border border-dashed border-slate-300 bg-white text-center">
-            <div>
-              <p className="text-xs font-black text-slate-600">아직 업로드된 적재위치 자료가 없습니다.</p>
-              <p className="mt-1 text-[11px] font-bold text-slate-400">오른쪽 + 버튼으로 사진/영상을 추가하세요.</p>
-            </div>
-          </div>
-        )}
+      {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveError}</p> : null}
+      <div className="mt-4">
+        <LoadingPositionGallery
+          emptyMessage="아직 업로드된 적재위치 자료가 없습니다. 오른쪽 + 버튼으로 사진/영상을 추가하세요."
+          items={items}
+        />
       </div>
     </div>
   );
