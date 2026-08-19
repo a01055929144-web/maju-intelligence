@@ -132,7 +132,7 @@ function rotateStartPage(totalPages: number, pagesPerRun: number): number {
 const FETCH_CONCURRENCY = 5;
 const TIME_BUDGET_MS = 45_000;
 
-export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 30): Promise<GovRestaurantRow[]> {
+export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 150): Promise<GovRestaurantRow[]> {
   if (!isGovRestaurantApiConfigured()) return [];
 
   const startedAt = Date.now();

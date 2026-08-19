@@ -141,7 +141,7 @@ function rotateStartPage(totalPages: number, pagesPerRun: number): number {
 const FETCH_CONCURRENCY = 5;
 const TIME_BUDGET_MS = 45_000;
 
-export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 30): Promise<SeoulRestaurantRow[]> {
+export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 150): Promise<SeoulRestaurantRow[]> {
   if (!isSeoulOpenDataConfigured()) return [];
 
   const startedAt = Date.now();
