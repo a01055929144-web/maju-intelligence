@@ -45,6 +45,7 @@ import {
   X,
   type LucideIcon
 } from "lucide-react";
+import { LinkifiedText } from "@/components/linkified-text";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
@@ -5732,7 +5733,9 @@ function StoreDetail({
                             삭제
                           </button>
                         </div>
-                        <p className="mt-1 text-sm font-bold leading-5 text-slate-700">{item.memo}</p>
+                        <p className="mt-1 text-sm font-bold leading-5 text-slate-700">
+                          <LinkifiedText text={item.memo} />
+                        </p>
                       </div>
                     ))
                   ) : (
