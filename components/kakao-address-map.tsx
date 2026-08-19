@@ -25,25 +25,23 @@ export type KakaoRoutePoint = {
 // "신규 리드 서치"처럼 특정 중심점 주위 반경을 지도 위에 원으로 시각화하고, 원 가장자리의 손잡이를
 // 네이버·카카오 지도처럼 드래그해서 반경을 직접 조절할 수 있게 합니다. centerPoint를 주면 그 좌표를,
 // centerMarkerId를 주면 이미 지오코딩된 마커 좌표(markerPositionsRef)를 중심으로 쓰고, 둘 다 없으면
-// (예: "전체 거래처" 기준) 현재 지도 중심을 기준으로 씁니다.
+// (예: "전체 거래처" 기준) 현재 지도 중심을 기준으로 씁니다. onClear가 있으면 손잡이 옆 말풍선에
+// 네이버 지도 반경 도구처럼 "지우기" 버튼이 함께 뜹니다.
 export type KakaoRadiusOverlay = {
   readonly centerMarkerId?: string;
   readonly centerPoint?: { lat: number; lng: number };
+  readonly onClear?: () => void;
   readonly onRadiusChange?: (radiusMeters: number) => void;
   readonly radiusMeters: number;
 };
 
-// "신규 리드 서치"의 지도 오른쪽 클릭 인터랙션입니다. active가 true인 동안 지도를 오른쪽 클릭하면
-// 그 지점에서 반경이 자동으로 커지고(onGrowStart), 다시 오른쪽 클릭하면 그 순간의 반경으로 고정되어
-// onLocked로 중심좌표·반경(m)을 부모에 알려줍니다. 성장 애니메이션은 이 컴포넌트 안에서 ref로만
-// 처리해(React state를 매 프레임 갱신하지 않음) 부모 리렌더나 지도 재생성 없이 부드럽게 동작합니다.
+// "신규 리드 서치"의 지도 클릭 인터랙션입니다(네이버 지도 반경 도구 참고). active가 true인 동안
+// 지도를 왼쪽 클릭하면 그 지점에 고정 기본값(0.5km) 반경으로 즉시 원을 만들고 onLocked로 알립니다 —
+// 이후 크기 조절은 radiusOverlay의 드래그 손잡이가 맡습니다. 지도를 오른쪽 클릭하면 현재 표시 중인
+// radiusOverlay를 지웁니다(onClear).
 export type KakaoLeadSearchInteraction = {
   readonly active: boolean;
-  readonly onGrowStart?: () => void;
-  // 성장 중 실시간 반경(m)을 부모에 알려 지도 위 플로팅 안내(네이버 지도 반경 검색 패널처럼)에
-  // 쓸 수 있게 합니다. 매 틱(45ms)마다 부르면 부모 리렌더가 너무 잦아지므로 내부에서 스로틀링해
-  // 호출합니다 — 부모는 그냥 받은 값을 표시만 하면 됩니다.
-  readonly onGrowTick?: (radiusMeters: number) => void;
+  readonly defaultRadiusMeters?: number;
   readonly onLocked: (point: { lat: number; lng: number }, radiusMeters: number) => void;
 };
 
@@ -110,14 +108,13 @@ export function KakaoAddressMap({
   const radiusHandleMarkerRef = useRef<any>(null);
   const radiusLabelOverlayRef = useRef<any>(null);
   const radiusOnChangeRef = useRef(radiusOverlay?.onRadiusChange);
-  // "신규 리드 서치"의 우클릭-성장-확정 인터랙션 상태입니다. 성장 애니메이션은 매 프레임(수십ms) 진행
-  // 되므로 React state로 다루면 그때마다 부모까지 리렌더되어 무겁습니다 — ref로만 추적하고, 확정된
-  // 최종 값만 onLocked로 부모에 한 번 올립니다.
+  const radiusOnClearRef = useRef(radiusOverlay?.onClear);
+  // radiusOverlay가 지금 화면에 떠 있는지(centerPoint/centerMarkerId가 있는지)를 ref로도 들고 있어,
+  // 지도 우클릭(clear) 핸들러가 리렌더를 기다리지 않고 항상 최신 상태를 읽을 수 있게 합니다.
+  const radiusActiveRef = useRef(Boolean(radiusOverlay?.centerPoint || radiusOverlay?.centerMarkerId));
+  // "신규 리드 서치" 클릭 인터랙션(네이버 지도 반경 도구 참고) — active/onLocked 콜백만 ref로
+  // 최신값을 추적합니다. 부모가 매 렌더마다 새 함수를 넘겨도 boot effect를 다시 돌리지 않기 위함입니다.
   const leadSearchRef = useRef(leadSearch);
-  const leadSearchCircleRef = useRef<any>(null);
-  const leadSearchLabelRef = useRef<any>(null);
-  const leadSearchIntervalRef = useRef<number | null>(null);
-  const leadSearchPhaseRef = useRef<"idle" | "growing">("idle");
   const onCenterChangeRef = useRef(onCenterChange);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const [fallbackReason, setFallbackReason] = useState("");
@@ -146,26 +143,10 @@ export function KakaoAddressMap({
     onCenterChangeRef.current = onCenterChange;
   }, [onCenterChange]);
 
-  // 성장 중인 원(주황)을 지도·인터벌에서 완전히 지웁니다. active가 꺼지거나(패널 닫힘) 컴포넌트가
-  // 사라질 때 호출해 타이머가 백그라운드에서 계속 돌거나 원이 화면에 남아있지 않게 합니다.
-  function stopLeadSearchGrowth() {
-    if (leadSearchIntervalRef.current !== null) {
-      window.clearInterval(leadSearchIntervalRef.current);
-      leadSearchIntervalRef.current = null;
-    }
-    leadSearchCircleRef.current?.setMap(null);
-    leadSearchLabelRef.current?.setMap(null);
-    leadSearchCircleRef.current = null;
-    leadSearchLabelRef.current = null;
-    leadSearchPhaseRef.current = "idle";
-  }
-
   useEffect(() => {
-    if (!leadSearch?.active) stopLeadSearchGrowth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadSearch?.active]);
-
-  useEffect(() => stopLeadSearchGrowth, []);
+    radiusOnClearRef.current = radiusOverlay?.onClear;
+    radiusActiveRef.current = Boolean(radiusOverlay?.centerPoint || radiusOverlay?.centerMarkerId);
+  }, [radiusOverlay?.onClear, radiusOverlay?.centerPoint, radiusOverlay?.centerMarkerId]);
 
   useEffect(() => {
     let ignore = false;
@@ -195,76 +176,23 @@ export function KakaoAddressMap({
         window.setTimeout(() => map.relayout?.(), 0);
         setStatus("ready");
 
-        // "신규 리드 서치": leadSearchRef.current?.active일 때만 반응합니다. 첫 우클릭은 그 지점에서
-        // 반경을 자동으로 키우기 시작하고, 성장 중일 때의 두 번째 우클릭은 (클릭 위치가 아니라) 그
-        // 원래 중심을 그대로 유지한 채 지금까지 커진 반경으로 고정해 부모에 알립니다.
-        kakao.maps.event.addListener(map, "rightclick", (mouseEvent: any) => {
+        // "신규 리드 서치"(네이버 지도 반경 도구 참고): active일 때 지도를 왼쪽 클릭하면 그 지점에
+        // 고정 기본 반경(기본 500m)으로 즉시 원을 만들고 onLocked로 부모에 알립니다. 이후 크기
+        // 조절은 아래 radiusOverlay effect의 드래그 손잡이가 맡습니다.
+        kakao.maps.event.addListener(map, "click", (mouseEvent: any) => {
           if (!leadSearchRef.current?.active) return;
-
-          if (leadSearchPhaseRef.current === "growing") {
-            if (leadSearchIntervalRef.current !== null) {
-              window.clearInterval(leadSearchIntervalRef.current);
-              leadSearchIntervalRef.current = null;
-            }
-            const finalCircle = leadSearchCircleRef.current;
-            const finalRadius = finalCircle?.getRadius?.() ?? 1500;
-            const center = finalCircle?.getCenter?.() ?? mouseEvent.latLng;
-            finalCircle?.setMap(null);
-            leadSearchLabelRef.current?.setMap(null);
-            leadSearchCircleRef.current = null;
-            leadSearchLabelRef.current = null;
-            leadSearchPhaseRef.current = "idle";
-            if (center) leadSearchRef.current?.onLocked({ lat: center.getLat(), lng: center.getLng() }, finalRadius);
-            return;
-          }
-
           const clickLatLng = mouseEvent.latLng;
           if (!clickLatLng) return;
-          const startRadius = 60;
-          const maxRadius = 8000;
-          const stepMeters = 55;
-          const intervalMs = 45;
+          leadSearchRef.current.onLocked(
+            { lat: clickLatLng.getLat(), lng: clickLatLng.getLng() },
+            leadSearchRef.current.defaultRadiusMeters || 500
+          );
+        });
 
-          const circle = new kakao.maps.Circle({
-            center: clickLatLng,
-            fillColor: "#f97316",
-            fillOpacity: 0.12,
-            radius: startRadius,
-            strokeColor: "#c2410c",
-            strokeOpacity: 0.9,
-            strokeStyle: "solid",
-            strokeWeight: 2
-          });
-          circle.setMap(map);
-          leadSearchCircleRef.current = circle;
-
-          const label = new kakao.maps.CustomOverlay({
-            content: radiusLabelHtml(startRadius / 1000),
-            map,
-            position: clickLatLng,
-            yAnchor: -0.6,
-            zIndex: 12
-          });
-          leadSearchLabelRef.current = label;
-
-          leadSearchPhaseRef.current = "growing";
-          leadSearchRef.current?.onGrowStart?.();
-
-          let currentRadius = startRadius;
-          let tickCount = 0;
-          leadSearchIntervalRef.current = window.setInterval(() => {
-            currentRadius = Math.min(maxRadius, currentRadius + stepMeters);
-            circle.setRadius(currentRadius);
-            label.setContent(radiusLabelHtml(currentRadius / 1000));
-            // 부모에는 3틱(약 135ms)마다만 알려 리렌더 빈도를 낮춥니다 — 지도 위 원·라벨은 이미
-            // 매 틱 부드럽게 갱신되므로, 부모 쪽 플로팅 안내 카드는 이 정도 빈도로도 충분히 매끄럽습니다.
-            tickCount += 1;
-            if (tickCount % 3 === 0) leadSearchRef.current?.onGrowTick?.(currentRadius);
-            if (currentRadius >= maxRadius && leadSearchIntervalRef.current !== null) {
-              window.clearInterval(leadSearchIntervalRef.current);
-              leadSearchIntervalRef.current = null;
-            }
-          }, intervalMs);
+        // 오른쪽 클릭으로 현재 표시 중인 반경 원을 지웁니다(네이버 지도 반경 도구의 "지우기"와 동일한
+        // 동작을 오른쪽 클릭에도 매핑) — radiusActiveRef가 true일 때만(원이 떠 있을 때만) 반응합니다.
+        kakao.maps.event.addListener(map, "rightclick", () => {
+          if (radiusActiveRef.current) radiusOnClearRef.current?.();
         });
 
         // 지도 중심이 바뀔 때(초기 로드·드래그·확대축소 끝)마다 알려, 부모가 "현재 지도 중심에서
@@ -457,13 +385,13 @@ export function KakaoAddressMap({
     handleMarker.setMap(map);
     radiusHandleMarkerRef.current = handleMarker;
 
-    // 손잡이를 드래그하는 동안 반경(km) 숫자를 바로 옆에 띄워, 놓기 전에 지금 얼마나 늘렸는지
-    // 바로 볼 수 있게 합니다. 이 값을 React state(부모의 leadRadiusKm)로 매 드래그마다 올리면
-    // radiusOverlay.radiusMeters가 바뀔 때마다 이 effect 전체가 다시 실행돼 손잡이가 매번 다시
-    // 만들어지며 드래그가 끊기므로, 커밋은 dragend에서만 하고 드래그 중 표시는 이 오버레이를
-    // 직접 setContent()로 갱신해 React 리렌더 없이 처리합니다.
+    // 손잡이를 드래그하는 동안 반경 숫자를 바로 옆에 띄워, 놓기 전에 지금 얼마나 늘렸는지 바로
+    // 볼 수 있게 합니다(네이버 지도 반경 도구의 "총반경 X.Xm" 말풍선 참고). "지우기" 버튼도 같은
+    // 말풍선에 넣어 DOM 엘리먼트로 만들고, 드래그 중에는 텍스트 노드만 갱신해(재생성 없이) 버튼의
+    // 클릭 리스너가 끊기지 않게 합니다.
+    const { element: labelElement, textNode: labelTextNode } = createRadiusLabelElement(radiusOverlay.radiusMeters, radiusOverlay.onClear);
     const labelOverlay = new kakao.maps.CustomOverlay({
-      content: radiusLabelHtml(radiusOverlay.radiusMeters / 1000),
+      content: labelElement,
       map,
       position: new kakao.maps.LatLng(handlePoint.lat, handlePoint.lng),
       yAnchor: 1.6,
@@ -476,7 +404,7 @@ export function KakaoAddressMap({
       const meters = Math.max(haversineMeters(centerLat, centerLng, pos.getLat(), pos.getLng()), 100);
       circle.setRadius(meters);
       labelOverlay.setPosition(pos);
-      labelOverlay.setContent(radiusLabelHtml(meters / 1000));
+      labelTextNode.textContent = radiusLabelText(meters);
     });
     kakao.maps.event.addListener(handleMarker, "dragend", () => {
       const pos = handleMarker.getPosition();
@@ -678,10 +606,41 @@ function destinationPoint(lat: number, lng: number, distanceMeters: number, bear
   return { lat: toDeg(lat2), lng: toDeg(lng2) };
 }
 
-// 반경 손잡이를 드래그하는 동안 옆에 띄우는 "X.Xkm" 말풍선입니다.
-function radiusLabelHtml(km: number) {
+// 반경 손잡이 옆 말풍선에 쓰는 "총반경 X.Xm/X.Xkm" 텍스트입니다(네이버 지도 반경 도구 문구 참고).
+function radiusLabelText(radiusMeters: number) {
+  if (radiusMeters < 1000) return `총반경 ${Math.round(radiusMeters).toLocaleString()}m`;
+  const km = radiusMeters / 1000;
   const formatted = km >= 10 ? Math.round(km).toString() : (Math.round(km * 10) / 10).toString();
-  return `<div style="pointer-events:none;background:#0f766e;color:#ffffff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 6px 14px rgba(15,23,42,.25);">${formatted}km</div>`;
+  return `총반경 ${formatted}km`;
+}
+
+// 반경 손잡이 옆에 띄우는 말풍선 DOM 엘리먼트를 만듭니다 — 네이버 지도 반경 도구처럼 현재 반경
+// 값과 "지우기" 버튼을 한 말풍선에 담습니다. 드래그 중에는 반환된 textNode.textContent만 갱신해
+// 버튼 리스너가 끊기지 않게 합니다(CustomOverlay.setContent()로 통째로 교체하면 리스너가 사라짐).
+function createRadiusLabelElement(radiusMeters: number, onClear?: () => void) {
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText =
+    "display:flex;align-items:center;gap:6px;background:#0f766e;color:#ffffff;border-radius:999px;padding:4px 6px 4px 10px;font-size:12px;font-weight:900;white-space:nowrap;box-shadow:0 6px 14px rgba(15,23,42,.25);";
+
+  const textNode = document.createElement("span");
+  textNode.textContent = radiusLabelText(radiusMeters);
+  wrapper.appendChild(textNode);
+
+  if (onClear) {
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.setAttribute("aria-label", "반경 지우기");
+    clearButton.textContent = "✕";
+    clearButton.style.cssText =
+      "display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:rgba(255,255,255,.22);border:none;color:#ffffff;font-size:10px;cursor:pointer;line-height:1;padding:0;";
+    clearButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onClear();
+    });
+    wrapper.appendChild(clearButton);
+  }
+
+  return { element: wrapper, textNode };
 }
 
 function splitRoutePath(routePath: ReadonlyArray<KakaoRoutePoint>) {

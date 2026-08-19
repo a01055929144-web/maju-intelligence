@@ -19,6 +19,7 @@ import {
   Edit3,
   ExternalLink,
   FileImage,
+  Layers,
   ListFilter,
   Loader2,
   Maximize2,
@@ -251,6 +252,8 @@ const workspaceViewDescriptions: Record<WorkspaceView, string> = {
 };
 const originMarkerId = "origin-hub";
 const tmapWaypointLimit = 15;
+// "신규 리드 서치"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
+const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
 const localStoreKeys = {
@@ -343,28 +346,30 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
   // 지도 탭에서 바로 켜는 "신규 리드 서치" — 리드 탭의 리드 탐색과 같은 API를 쓰지만,
   // 지도 위에 마커로 바로 보여주기 위한 별도 상태입니다(리드 탭 상태와는 독립적).
-  // 기본 모드는 "point"(지도 오른쪽 클릭) — 원하는 지점을 클릭하면 반경이 자동으로 커지고,
-  // 한 번 더 클릭하면 그 반경으로 고정되어 바로 탐색이 실행됩니다.
+  // 기본 모드는 "point"(지도 클릭) — 네이버 지도 반경 도구처럼 지도를 클릭하면 그 지점에
+  // 고정 기본값(0.5km) 반경이 즉시 생기고, 손잡이로 조절, 오른쪽 클릭이나 지우기 버튼으로 지웁니다.
   const [leadRadiusOpen, setLeadRadiusOpen] = useState(false);
   const [leadRadiusAnchorMode, setLeadRadiusAnchorMode] = useState<"all" | "customer" | "point">("point");
   const [leadRadiusCustomerId, setLeadRadiusCustomerId] = useState("");
-  // point 모드에서 오른쪽 클릭으로 고정한 중심좌표입니다. 아직 고정 전이면 null이고, 이 값이
-  // null인 동안에만 지도 우클릭이 "반경 성장 시작" 인터랙션을 받습니다.
+  // point 모드에서 클릭으로 고정한 중심좌표입니다. 아직 고정 전이면 null이고, 이 값이 null인
+  // 동안에만 지도 클릭이 "이 지점에 반경 만들기" 인터랙션을 받습니다.
   const [leadRadiusPoint, setLeadRadiusPoint] = useState<{ lat: number; lng: number } | null>(null);
-  // 우클릭 후 반경이 자동으로 커지는 중인지 여부 — 안내 문구 표시용입니다(성장 애니메이션
-  // 자체는 kakao-address-map.tsx 안에서 ref로 처리하고, 이 값은 그 시작/종료만 반영합니다).
-  const [leadRadiusGrowing, setLeadRadiusGrowing] = useState(false);
-  // 성장 중 실시간 반경(m) — 지도 위 플로팅 안내 카드(네이버 지도 반경 검색 패널 참고)에 표시합니다.
-  const [leadRadiusGrowingMeters, setLeadRadiusGrowingMeters] = useState(0);
-  // 지도가 마지막으로 멈춘 중심좌표 — "빠른 반경 선택" 칩을 누르면 오른쪽 클릭 없이도 지금 보고
-  // 있는 지도 중심을 기준으로 바로 탐색할 수 있게 합니다(네이버 지도의 "이 지역 검색"과 비슷한 흐름).
+  // 지도가 마지막으로 멈춘 중심좌표 — "빠른 반경 선택" 칩을 누르면 클릭 없이도 지금 보고 있는
+  // 지도 중심을 기준으로 바로 탐색할 수 있게 합니다(네이버 지도의 "이 지역 검색"과 비슷한 흐름).
   const [mapCenterPoint, setMapCenterPoint] = useState<{ lat: number; lng: number } | null>(null);
-  // 기본 반경은 5km였는데, 실제로 많이 쓰는 값은 1.5km라는 피드백에 따라 기본값을 낮췄습니다(2026-08-19).
-  const [leadRadiusKm, setLeadRadiusKm] = useState(1.5);
+  // 반경 기본값은 0.5km로 고정합니다(2026-08-20 피드백) — 지도를 클릭하면 항상 이 값으로
+  // 시작하고, 이후 손잡이 드래그나 숫자 입력으로 조절합니다.
+  const [leadRadiusKm, setLeadRadiusKm] = useState(DEFAULT_LEAD_SEARCH_RADIUS_KM);
   const [leadRadiusSearching, setLeadRadiusSearching] = useState(false);
   const [leadRadiusResult, setLeadRadiusResult] = useState<NearbyPermitLeadResult | null>(null);
   const [leadRadiusError, setLeadRadiusError] = useState("");
   const [previewLeadId, setPreviewLeadId] = useState("");
+  // "전체 리드 보기" — 반경 검색과 무관하게 활성 신규 리드 전체를 메인 지도에 바로 표시합니다.
+  // 예전에는 신규 리드 탭 안에 별도 지도가 있었는데(같은 데이터를 두 지도에서 따로 관리),
+  // 이제 메인 지도 한 곳에서만 보여주도록 합칩니다(2026-08-20 피드백).
+  const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(false);
+  const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
+  const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   // 업종·메뉴 기반 견적서 초안 — 지도 위 리드 카드/거래처 카드 어디서든 열 수 있는 공용 상태입니다.
   const [quoteSubject, setQuoteSubject] = useState<QuoteSubject | null>(null);
   const ledgerFallbackStores = useMemo(() => createStoreRowsFromLedgerMarkers(mapMarkers), [mapMarkers]);
@@ -386,7 +391,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
   const geocodableStoresForRadius = useMemo(() => allStores.filter((store) => store.address?.trim()), [allStores]);
 
-  // overridePoint/overrideRadiusKm은 지도 우클릭으로 반경을 방금 고정한 직후(handleLeadSearchLocked)
+  // overridePoint/overrideRadiusKm은 지도 클릭으로 반경을 방금 고정한 직후(handleLeadSearchLocked)
   // 처럼, setLeadRadiusPoint/setLeadRadiusKm 호출 직후라 아직 state에 반영되지 않은 값을 즉시 검색에
   // 써야 할 때 씁니다(React state 업데이트는 비동기라 바로 이어서 읽으면 이전 값이 잡히는 문제 방지).
   async function runMapLeadRadiusSearch(overridePoint?: { lat: number; lng: number } | null, overrideRadiusKm?: number) {
@@ -398,7 +403,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       return;
     }
     if (leadRadiusAnchorMode === "point" && !point) {
-      setLeadRadiusError("지도를 오른쪽 클릭해 반경을 먼저 선택하세요.");
+      setLeadRadiusError("지도를 클릭해 반경을 먼저 선택하세요.");
       return;
     }
     const anchorStore = geocodableStoresForRadius.find((store) => store.id === leadRadiusCustomerId);
@@ -433,32 +438,25 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     }
   }
 
-  // 지도 우클릭으로 반경 성장이 시작될 때(안내 문구·플로팅 카드 표시용)
-  function handleLeadSearchGrowStart() {
-    setLeadRadiusGrowing(true);
-    setLeadRadiusGrowingMeters(60);
-    setLeadRadiusError("");
-  }
-
-  // 지도를 다시 우클릭해 반경을 고정한 순간 — 좌표·반경을 state에 반영하고 곧바로 그 값으로 탐색합니다.
+  // 지도를 클릭해 반경을 만든 순간(네이버 지도 반경 도구 참고) — 좌표·반경(기본 0.5km)을 state에
+  // 반영하고 곧바로 그 값으로 탐색합니다.
   function handleLeadSearchLocked(point: { lat: number; lng: number }, radiusMeters: number) {
     const radiusKmValue = Math.min(50, Math.max(0.1, Math.round((radiusMeters / 1000) * 10) / 10));
-    setLeadRadiusGrowing(false);
     setLeadRadiusPoint(point);
     setLeadRadiusKm(radiusKmValue);
     void runMapLeadRadiusSearch(point, radiusKmValue);
   }
 
-  // "지점 다시 선택" — 고정된 지점을 지우고 지도 우클릭으로 새 지점을 다시 고를 수 있게 합니다.
+  // "지점 다시 선택"/"지우기" — 고정된 지점을 지우고 지도 클릭으로 새 지점을 다시 고를 수 있게
+  // 합니다. 지도 위 말풍선의 지우기 버튼(onClear)과 오른쪽 클릭에서도 이 함수를 그대로 씁니다.
   function resetLeadSearchPoint() {
     setLeadRadiusPoint(null);
-    setLeadRadiusGrowing(false);
     setLeadRadiusResult(null);
     setLeadRadiusError("");
     setPreviewLeadId("");
   }
 
-  // 네이버 지도의 "이 지역에서 검색" 칩처럼, 오른쪽 클릭 없이도 지금 보고 있는 지도 중심을 기준으로
+  // 네이버 지도의 "이 지역에서 검색" 칩처럼, 클릭 없이도 지금 보고 있는 지도 중심을 기준으로
   // 미리 정해둔 반경으로 바로 탐색합니다 — 마우스 정밀 조작이 부담스러운 사용자를 위한 빠른 경로입니다.
   function runPresetRadiusSearch(radiusKmValue: number) {
     if (!mapCenterPoint) {
@@ -466,11 +464,35 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       return;
     }
     setLeadRadiusAnchorMode("point");
-    setLeadRadiusGrowing(false);
     setLeadRadiusPoint(mapCenterPoint);
     setLeadRadiusKm(radiusKmValue);
     void runMapLeadRadiusSearch(mapCenterPoint, radiusKmValue);
   }
+
+  // "전체 리드 보기" 켤 때 활성 신규 리드를 한 번 불러옵니다(반경 검색과 무관 — 거래처 등록 여부와
+  // 상관없이 지금 살아있는 리드 전체를 지도에 뿌립니다). 신규 리드 탭의 목록 로딩과 같은 엔드포인트를
+  // 씁니다.
+  async function loadAllLeadsForMap() {
+    setAllLeadsLoadState("loading");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits"), { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        setAllLeadsLoadState("error");
+        return;
+      }
+      setAllLeadsForMap(Array.isArray(payload.leads) ? payload.leads : []);
+      setAllLeadsLoadState("ready");
+    } catch {
+      setAllLeadsLoadState("error");
+    }
+  }
+
+  useEffect(() => {
+    if (showAllLeadsOnMap && allLeadsLoadState === "idle") void loadAllLeadsForMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAllLeadsOnMap]);
+
   // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
   // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
   const vehicleNameOptions = useMemo(() => {
@@ -587,9 +609,27 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         y: 0
       }));
   }, [leadRadiusOpen, leadRadiusResult]);
+  // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
+  // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
+  const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
+    if (!showAllLeadsOnMap) return [];
+    const radiusLeadIds = new Set(leadRadiusMapMarkers.map((marker) => marker.id));
+    return allLeadsForMap
+      .filter((lead) => lead.address && !radiusLeadIds.has(lead.id))
+      .map((lead) => ({
+        address: lead.address!,
+        grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
+        id: lead.id,
+        label: "신규",
+        name: lead.businessName,
+        tone: "lead" as const,
+        x: 0,
+        y: 0
+      }));
+  }, [showAllLeadsOnMap, allLeadsForMap, leadRadiusMapMarkers]);
   const mapDisplayMarkers = useMemo(
-    () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers],
-    [markers, unregisteredMapMarkers, leadRadiusMapMarkers]
+    () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers],
+    [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers]
   );
   const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
@@ -939,23 +979,37 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
             {sourceReady ? `${deliveryVehicles.length}대` : "배송차 대기"}
           </span>
-          <span className="hidden rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 sm:inline-flex">
-            {activeView === "map" ? "마커 중심" : activeView === "customers" ? "원장 작업" : activeView === "leads" ? "신규 영업" : "경유 계산"}
-          </span>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-1.5">
           {activeView === "map" ? (
             <button
               aria-pressed={leadRadiusOpen}
-              className={`h-10 shrink-0 rounded-md px-3 text-xs font-black shadow-[0_6px_14px_rgba(234,88,12,0.18)] transition ${
+              className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black shadow-[0_6px_14px_rgba(234,88,12,0.18)] transition ${
                 leadRadiusOpen ? "bg-orange-700 text-white" : "bg-orange-600 text-white hover:bg-orange-700"
               }`}
               onClick={() => setLeadRadiusOpen((value) => !value)}
-              title="지도를 오른쪽 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
+              title="지도를 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
               type="button"
             >
               <Radar className="h-4 w-4" />
               <span>신규 리드 서치</span>
+            </button>
+          ) : null}
+          {activeView === "map" ? (
+            <button
+              aria-pressed={showAllLeadsOnMap}
+              className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                showAllLeadsOnMap
+                  ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                  : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white hover:text-slate-900"
+              }`}
+              onClick={() => setShowAllLeadsOnMap((value) => !value)}
+              title="지도에 활성 신규 리드 전체를 표시합니다."
+              type="button"
+            >
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">{allLeadsLoadState === "loading" ? "리드 불러오는 중..." : "전체 리드 보기"}</span>
+              <span className="sm:hidden">전체 리드</span>
             </button>
           ) : null}
           <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
@@ -1298,7 +1352,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                       setPreviewLeadId("");
                       if (item.value !== "point") {
                         setLeadRadiusPoint(null);
-                        setLeadRadiusGrowing(false);
                       }
                     }}
                     type="button"
@@ -1338,7 +1391,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                   className="h-8 w-14 rounded-md border border-orange-200 bg-white px-1.5 text-center text-[11px] font-bold text-slate-950 outline-none"
                   max={50}
                   min={0.5}
-                  onChange={(event) => setLeadRadiusKm(Number(event.target.value) || 1.5)}
+                  onChange={(event) => setLeadRadiusKm(Number(event.target.value) || DEFAULT_LEAD_SEARCH_RADIUS_KM)}
                   step={0.5}
                   type="number"
                   value={leadRadiusKm}
@@ -1371,9 +1424,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                   </button>
                 ))}
                 <span className="text-[11px] font-bold text-slate-500">
-                  {leadRadiusGrowing
-                    ? "반경이 커지는 중입니다 — 지도를 다시 오른쪽 클릭하면 그 반경으로 고정하고 바로 탐색합니다."
-                    : "또는 지도를 오른쪽 클릭해 원하는 지점부터 반경을 직접 키우세요."}
+                  또는 지도를 클릭해 원하는 지점에 기본 {DEFAULT_LEAD_SEARCH_RADIUS_KM}km 반경을 바로 만드세요.
                 </span>
               </div>
             ) : null}
@@ -1425,8 +1476,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     }}
                     leadSearch={{
                       active: leadRadiusOpen && leadRadiusAnchorMode === "point" && !leadRadiusPoint,
-                      onGrowStart: handleLeadSearchGrowStart,
-                      onGrowTick: setLeadRadiusGrowingMeters,
+                      defaultRadiusMeters: DEFAULT_LEAD_SEARCH_RADIUS_KM * 1000,
                       onLocked: handleLeadSearchLocked
                     }}
                     onCenterChange={setMapCenterPoint}
@@ -1435,6 +1485,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                         ? {
                             centerMarkerId: leadRadiusAnchorMode === "customer" ? leadRadiusCustomerId || undefined : undefined,
                             centerPoint: leadRadiusAnchorMode === "point" ? leadRadiusPoint || undefined : undefined,
+                            onClear: leadRadiusAnchorMode === "point" ? resetLeadSearchPoint : undefined,
                             onRadiusChange: (meters) => setLeadRadiusKm(Math.min(50, Math.max(0.1, Math.round((meters / 1000) * 10) / 10))),
                             radiusMeters: leadRadiusKm * 1000
                           }
@@ -1443,14 +1494,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     showList={false}
                   />
                 </div>
-                {leadRadiusGrowing ? (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-3">
-                    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-slate-950/90 px-4 py-2 text-white shadow-[0_10px_28px_rgba(15,23,42,.35)] backdrop-blur">
-                      <span className="text-lg font-black text-orange-400">{formatLeadSearchRadiusLabel(leadRadiusGrowingMeters)}</span>
-                      <span className="text-xs font-bold text-slate-200">지도를 다시 오른쪽 클릭하면 이 반경으로 고정하고 탐색합니다</span>
-                    </div>
-                  </div>
-                ) : null}
                 {previewStore ? (
                   <StoreQuickCard
                     driverOptions={deliveryDefaults.drivers}
@@ -1480,13 +1523,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     vehicleOptions={vehicleNameOptions}
                   />
                 ) : null}
-                {previewLeadId && leadRadiusResult ? (
+                {previewLeadId ? (
                   <PermitLeadMapQuickCard
-                    lead={leadRadiusResult.leads.find((lead) => lead.id === previewLeadId) || null}
+                    lead={
+                      leadRadiusResult?.leads.find((lead) => lead.id === previewLeadId) ||
+                      allLeadsForMap.find((lead) => lead.id === previewLeadId) ||
+                      null
+                    }
                     leftPanelCollapsed={leftCollapsed}
                     onClose={() => setPreviewLeadId("")}
                     onConverted={() => {
                       setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((lead) => lead.id !== previewLeadId) } : current));
+                      setAllLeadsForMap((current) => current.filter((lead) => lead.id !== previewLeadId));
                       setPreviewLeadId("");
                     }}
                     onOpenQuote={(lead) => setQuoteSubject({ industry: lead.industryPrimary, name: lead.businessName })}
@@ -3202,7 +3250,7 @@ function PermitLeadMapQuickCard({
   onConverted,
   onOpenQuote
 }: {
-  readonly lead: (PermitLeadItem & { distanceKm: number; nearestAnchor: { id: string; name: string } | null }) | null;
+  readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
   readonly leftPanelCollapsed?: boolean;
   readonly onClose: () => void;
   readonly onConverted: () => void;
@@ -3243,7 +3291,9 @@ function PermitLeadMapQuickCard({
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade || "-"}</Badge>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
-            <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
+            {typeof lead.distanceKm === "number" ? (
+              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
+            ) : null}
           </div>
         </div>
         <button aria-label="닫기" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
@@ -7050,14 +7100,6 @@ function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
-}
-
-// "신규 리드 서치" 성장 중 플로팅 안내에 쓰는 반경 라벨입니다 — 1km 미만은 m 단위로 보여줘야
-// 초반(60m~수백m)에 "0.1km"처럼 어색하게 표시되지 않습니다.
-function formatLeadSearchRadiusLabel(radiusMeters: number) {
-  if (radiusMeters < 1000) return `${Math.round(radiusMeters).toLocaleString()}m`;
-  const km = Math.round((radiusMeters / 1000) * 10) / 10;
-  return `${km}km`;
 }
 
 function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {
