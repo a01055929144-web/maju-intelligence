@@ -1329,6 +1329,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     onAddDriver={addManualDriver}
                     onAddVehicle={addManualVehicle}
                     onAddToRoute={() => {
+                      // 경유 코스 탭은 배송차가 지정돼야 경유 선택이 유지됩니다(미지정 상태에서 배송차를
+                      // 고르면 그 차량 기본 목록으로 선택이 초기화되어 방금 추가한 거래처가 빠질 수 있음) —
+                      // 이 거래처에 배정된 배송차를 먼저 선택해 그 문제를 피합니다.
+                      selectVehicle(previewStore.deliveryVehicleId || deliveryVehicles[0]?.id || "all");
                       setPendingCourseStoreId(previewStore.id);
                       setPreviewStoreId("");
                       setActiveView("course");
