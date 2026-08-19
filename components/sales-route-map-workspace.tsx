@@ -41,6 +41,7 @@ import {
   Upload,
   UserCheck,
   UserRound,
+  Warehouse,
   X,
   type LucideIcon
 } from "lucide-react";
@@ -314,6 +315,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  // 지도 홈 퀵카드에서 "경유지 추가"를 누르면 경유 코스 탭으로 바로 이동시키면서 이 값을 같이
+  // 넘겨, TodayCourseView가 마운트된 뒤 해당 거래처를 오늘 경유 선택에 자동으로 포함시킵니다.
+  const [pendingCourseStoreId, setPendingCourseStoreId] = useState("");
   // /leads/permits 같은 예전 딥링크(?view=leads)로 들어와도 같은 탭이 바로 열리도록 초기값을 URL에서 읽습니다.
   const [activeView, setActiveView] = useState<WorkspaceView>(() => {
     if (typeof window === "undefined") return "map";
@@ -1324,6 +1328,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     leftPanelCollapsed={leftCollapsed}
                     onAddDriver={addManualDriver}
                     onAddVehicle={addManualVehicle}
+                    onAddToRoute={() => {
+                      setPendingCourseStoreId(previewStore.id);
+                      setPreviewStoreId("");
+                      setActiveView("course");
+                    }}
                     onClose={() => setPreviewStoreId("")}
                     onOpenDetail={() => {
                       setSelectedId(previewStore.id);
@@ -1412,10 +1421,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         <TodayCourseView
           dataRegistrationHref={dataRegistrationHref}
           markers={markers}
+          onConsumePendingAddStore={() => setPendingCourseStoreId("")}
           onPreviewStore={setPreviewStoreId}
           onSummaryChange={setCourseSummary}
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
+          pendingAddStoreId={pendingCourseStoreId}
           routeTotals={routeTotals}
           selectedStoreId={selectedId}
           selectedVehicle={selectedVehicle}
@@ -2230,8 +2241,10 @@ function FullRouteNavigateAction({
 
 function StoreQuickCard({
   driverOptions,
+  isInRoute,
   leftPanelCollapsed,
   onAddDriver,
+  onAddToRoute,
   onAddVehicle,
   onClose,
   onOpenDetail,
@@ -2243,8 +2256,12 @@ function StoreQuickCard({
   vehicleOptions
 }: {
   readonly driverOptions?: string[];
+  /** 경유 코스 탭에서만 전달됩니다 — 오늘 경유 선택에 이미 포함돼 있는지 여부. */
+  readonly isInRoute?: boolean;
   readonly leftPanelCollapsed?: boolean;
   readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  /** "경유지 추가" 버튼. 지도 홈에서는 경유 코스 탭으로 이동시키는 콜백, 경유 코스 탭에서는 즉시 토글하는 콜백을 받습니다. */
+  readonly onAddToRoute?: () => void;
   readonly onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onOpenDetail: () => void;
@@ -2262,6 +2279,8 @@ function StoreQuickCard({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // 리뷰 요약은 공간을 꽤 차지해서 기본 접힘 상태로 두고, 필요할 때만 펼쳐 보게 합니다.
+  const [showReviews, setShowReviews] = useState(false);
   const [draft, setDraft] = useState({
     name: store.name,
     phone: store.phone || "",
@@ -2367,7 +2386,29 @@ function StoreQuickCard({
             <PlaceLinkRow compact store={store} />
           </div>
         ) : null}
-        {!isEditing && store.reviewKeywords?.length ? (
+        {/* 배송하는 사람이 현장에서 바로 참고할 적재위치·메모는 리뷰보다 위, 접지 않고 항상 보여줍니다. */}
+        {!isEditing && store.loadingPosition ? (
+          <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-600">
+            <Warehouse className="mt-0.5 h-3 w-3 shrink-0 text-teal-500" />
+            <span className="line-clamp-2">적재위치 · {store.loadingPosition}</span>
+          </p>
+        ) : null}
+        {!isEditing && store.memo ? (
+          <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-600">
+            <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+            <span className="line-clamp-2">메모 · {store.memo}</span>
+          </p>
+        ) : null}
+        {!isEditing && (store.reviewKeywords?.length || store.reviewSummary) ? (
+          <button
+            className="mt-1.5 text-[11px] font-bold text-slate-400 underline decoration-dotted underline-offset-2 hover:text-slate-600"
+            onClick={() => setShowReviews((value) => !value)}
+            type="button"
+          >
+            {showReviews ? "리뷰 요약 접기" : `리뷰 요약 보기${store.reviewKeywords?.length ? ` · #${store.reviewKeywords.length}` : ""}`}
+          </button>
+        ) : null}
+        {!isEditing && showReviews && store.reviewKeywords?.length ? (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {store.reviewKeywords.slice(0, 6).map((keyword) => (
               <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" key={keyword}>
@@ -2376,7 +2417,7 @@ function StoreQuickCard({
             ))}
           </div>
         ) : null}
-        {!isEditing && store.reviewSummary ? (
+        {!isEditing && showReviews && store.reviewSummary ? (
           <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-500">
             <MessageCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
             <span>{store.reviewSummary}</span>
@@ -2451,6 +2492,16 @@ function StoreQuickCard({
               {onSave ? (
                 <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
                   <Edit3 className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              {onAddToRoute ? (
+                <button
+                  className={`h-8 shrink-0 px-2.5 text-xs ${isInRoute ? "maju-button-secondary bg-teal-50 text-teal-700" : "maju-button-secondary"}`}
+                  onClick={onAddToRoute}
+                  type="button"
+                >
+                  {isInRoute ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                  {isInRoute ? "경유지 추가됨" : "경유지 추가"}
                 </button>
               ) : null}
               <NavigateMenu destinationAddress={store.address || store.region} destinationName={store.name} originAddress={originAddress} />
@@ -4236,10 +4287,12 @@ function PermitActionButton({ disabled, icon: Icon, label, onClick }: { readonly
 function TodayCourseView({
   dataRegistrationHref,
   markers,
+  onConsumePendingAddStore,
   onPreviewStore,
   onSummaryChange,
   onSelectStore,
   onSelectVehicle,
+  pendingAddStoreId,
   routeTotals,
   selectedStoreId,
   selectedVehicle,
@@ -4250,10 +4303,14 @@ function TodayCourseView({
 }: {
   readonly dataRegistrationHref: string;
   readonly markers: KakaoMapMarker[];
+  /** 지도 홈 퀵카드의 "경유지 추가"로 넘어온 경우, pendingAddStoreId를 소비했음을 알립니다. */
+  readonly onConsumePendingAddStore?: () => void;
   readonly onPreviewStore: (storeId: string) => void;
   readonly onSummaryChange: (summary: CourseSummary) => void;
   readonly onSelectStore: (storeId: string) => void;
   readonly onSelectVehicle: (vehicleId: string) => void;
+  /** 지도 홈에서 "경유지 추가"를 눌러 이 탭으로 넘어온 거래처 id — 마운트/변경 시 오늘 경유 선택에 자동 포함시킵니다. */
+  readonly pendingAddStoreId?: string;
   readonly routeTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
   readonly selectedStoreId: string;
   readonly selectedVehicle?: DeliveryVehicle;
@@ -4363,6 +4420,13 @@ function TodayCourseView({
   }, [onSummaryChange, routeDistanceKm, routeDurationMinutes, routeRevenue, selectedRouteStores.length]);
 
   useEffect(() => saveLocalJson(localStoreKeys.deliveryProofs, deliveryProofs), [deliveryProofs]);
+
+  // 지도 홈에서 "경유지 추가"로 넘어온 거래처를 오늘 경유 선택에 자동으로 포함시킵니다.
+  useEffect(() => {
+    if (!pendingAddStoreId) return;
+    setSelectedRouteStoreIds((current) => (current.includes(pendingAddStoreId) ? current : [...current, pendingAddStoreId]));
+    onConsumePendingAddStore?.();
+  }, [pendingAddStoreId, onConsumePendingAddStore]);
 
   if (!sourceReady) {
     return (
@@ -4582,6 +4646,8 @@ function TodayCourseView({
         </div>
         {routeSelectedStoreId && routeSelectedStore ? (
           <StoreQuickCard
+            isInRoute={selectedRouteIdSet.has(routeSelectedStore.id)}
+            onAddToRoute={() => toggleRouteStore(routeSelectedStore.id)}
             onClose={() => setRouteSelectedStoreId("")}
             onOpenDetail={() => onSelectStore(routeSelectedStore.id)}
             originAddress={routeOriginAddress}
