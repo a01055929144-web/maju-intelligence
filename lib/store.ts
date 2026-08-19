@@ -4,6 +4,7 @@ import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigu
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
+import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
 import { enrichLeadRecommendations } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolvePlaceLinks } from "./place-links";
@@ -4411,6 +4412,57 @@ export async function deletePermitLead(companyId: string, leadId: string): Promi
   });
 
   return { ok: true };
+}
+
+/**
+ * "영업리드 > 키워드 검색량 순" 정렬(2026-08-20 피드백)을 위해, 지정한 리드들의 거래처명으로
+ * 네이버 데이터랩 검색어 트렌드를 조회해 keyword_volume 컬럼을 채웁니다. 이미 채워진(0이 아닌)
+ * 리드는 다시 조회하지 않아 API 호출을 아낍니다 — 화면에서 "검색량순" 정렬을 처음 켤 때만 비용이
+ * 들고, 그다음부터는 DB에 저장된 값을 그대로 씁니다. 키가 없거나 조회에 실패해도 throw하지 않고
+ * 빈 맵을 돌려주므로 호출하는 쪽(API 라우트)에서 항상 안전하게 호출할 수 있습니다.
+ */
+export async function enrichPermitLeadKeywordVolume(companyId: string, leadIds: string[]): Promise<Record<string, number>> {
+  if (!isProductionStoreConfigured() || !leadIds.length) return {};
+  if (!isNaverDatalabConfigured()) return {};
+
+  const idsParam = leadIds.map((id) => encodeURIComponent(id)).join(",");
+  const rows = await supabaseRequest<Array<{ id: string; business_name: string; keyword_volume: number | null }>>(
+    `business_permit_leads?select=id,business_name,keyword_volume&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${idsParam})`
+  ).catch(() => []);
+
+  const alreadyScored: Record<string, number> = {};
+  const needsScore = rows.filter((row) => {
+    if (typeof row.keyword_volume === "number" && row.keyword_volume > 0) {
+      alreadyScored[row.id] = row.keyword_volume;
+      return false;
+    }
+    return true;
+  });
+  if (!needsScore.length) return alreadyScored;
+
+  const nameToScore = await fetchKeywordVolumeScores(needsScore.map((row) => row.business_name));
+
+  const updates: Array<{ id: string; score: number }> = [];
+  needsScore.forEach((row) => {
+    const score = nameToScore[row.business_name];
+    if (typeof score === "number") updates.push({ id: row.id, score });
+  });
+
+  await Promise.all(
+    updates.map((update) =>
+      supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(update.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ keyword_volume: update.score, updated_at: new Date().toISOString() })
+      }).catch(() => null)
+    )
+  );
+
+  const result: Record<string, number> = { ...alreadyScored };
+  updates.forEach((update) => {
+    result[update.id] = update.score;
+  });
+  return result;
 }
 
 /** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */

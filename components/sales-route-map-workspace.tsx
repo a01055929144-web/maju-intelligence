@@ -19,6 +19,7 @@ import {
   Edit3,
   ExternalLink,
   FileImage,
+  Gauge,
   Layers,
   ListFilter,
   Loader2,
@@ -970,7 +971,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0 ${isFullscreen ? "!rounded-none" : ""}`}
       ref={workspaceRef}
     >
-      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2.5 xl:flex-row xl:items-center xl:justify-between">
+      <header className="flex shrink-0 flex-col gap-1.5 border-b border-slate-200 bg-white px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="text-[16px] font-black leading-tight">영업·배송 지도</h2>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
@@ -1054,27 +1055,27 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </nav>
           <button
             aria-expanded={statsExpanded}
-            className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${statsExpanded ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
+            aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
+            className={`maju-button-secondary grid h-10 w-10 shrink-0 place-items-center rounded-md ${statsExpanded ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
             onClick={() => setStatsExpanded((value) => !value)}
             title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
             type="button"
           >
-            <span className="hidden sm:inline">{statsExpanded ? "KPI 접기" : "KPI 보기"}</span>
-            <span className="sm:hidden">KPI</span>
+            <Gauge className="h-4 w-4" />
           </button>
           <button
+            aria-label={isFullscreen ? "전체 화면 종료" : "전체 화면"}
             aria-pressed={isFullscreen}
-            className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${isFullscreen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
+            className={`maju-button-secondary grid h-10 w-10 shrink-0 place-items-center rounded-md ${isFullscreen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
             onClick={toggleFullscreen}
             title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
             type="button"
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            <span className="hidden sm:inline">{isFullscreen ? "전체 화면 종료" : "전체 화면"}</span>
           </button>
           <button
             aria-label="필터 초기화"
-            className="maju-button-secondary h-10 shrink-0 rounded-md px-3 text-slate-600"
+            className="maju-button-secondary grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-600"
             onClick={resetWorkspace}
             title="필터 초기화"
             type="button"
@@ -3639,6 +3640,14 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [nearbyError, setNearbyError] = useState("");
   const [showNearbyOnly, setShowNearbyOnly] = useState(false);
 
+  // "신규 리드"(인허가 최신순, 기본) vs "영업리드"(키워드 검색량순) — 2026-08-20 피드백: "신규리드 >
+  // 인허가데이터로 진행 / 영업리드 > 키워드 검색량 순으로 진행". 검색량 점수는 네이버 데이터랩으로
+  // 조회해 DB(keyword_volume)에 캐시하고, 화면은 그 값으로 로컬 정렬만 다시 합니다.
+  const [leadQualityMode, setLeadQualityMode] = useState<"permit" | "keyword">("permit");
+  const [keywordVolumeScores, setKeywordVolumeScores] = useState<Record<string, number>>({});
+  const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
+  const [keywordVolumeConfigured, setKeywordVolumeConfigured] = useState(true);
+
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
 
   const loadLeads = useCallback(() => {
@@ -3690,6 +3699,44 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
             .some((value) => String(value).toLowerCase().includes(keyword))
       );
   }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds]);
+
+  // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
+  // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
+  // keywordVolume) 다시 조회하지 않습니다.
+  useEffect(() => {
+    if (leadQualityMode !== "keyword") return;
+    const targetIds = filteredLeads
+      .filter((lead) => typeof keywordVolumeScores[lead.id] !== "number" && !lead.keywordVolume)
+      .slice(0, 60)
+      .map((lead) => lead.id);
+    if (!targetIds.length) return;
+
+    setKeywordVolumeLoading(true);
+    fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-volume"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadIds: targetIds })
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!payload) return;
+        if (payload.configured === false) setKeywordVolumeConfigured(false);
+        if (payload.scores) setKeywordVolumeScores((current) => ({ ...current, ...payload.scores }));
+      })
+      .catch(() => null)
+      .finally(() => setKeywordVolumeLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadQualityMode, filteredLeads]);
+
+  function keywordVolumeOf(lead: PermitLeadItem): number {
+    return keywordVolumeScores[lead.id] ?? lead.keywordVolume ?? 0;
+  }
+
+  const sortedLeads = useMemo(() => {
+    if (leadQualityMode !== "keyword") return filteredLeads;
+    return [...filteredLeads].sort((a, b) => keywordVolumeOf(b) - keywordVolumeOf(a));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredLeads, leadQualityMode, keywordVolumeScores]);
 
   async function handleFileUpload(file: File) {
     setUploadBusy(true);
@@ -4161,6 +4208,25 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
               </button>
             ))}
           </div>
+          <div className="flex h-8 items-center rounded-md border border-slate-200 bg-white p-0.5" title="신규 리드는 인허가 최신순, 영업리드는 네이버 검색어 트렌드 기반 키워드 검색량순으로 정렬합니다.">
+            {(
+              [
+                { value: "permit" as const, label: "신규 리드" },
+                { value: "keyword" as const, label: "영업리드" }
+              ]
+            ).map((item) => (
+              <button
+                className={`rounded px-2.5 py-1 text-xs font-black transition ${
+                  leadQualityMode === item.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"
+                }`}
+                key={item.value}
+                onClick={() => setLeadQualityMode(item.value)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           <div className="flex items-center gap-1.5">
             <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadPermitLeadsExcel()} type="button">
               <Download className="h-3.5 w-3.5" />
@@ -4172,6 +4238,11 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
             </button>
           </div>
         </div>
+        {leadQualityMode === "keyword" && !keywordVolumeConfigured ? (
+          <p className="mx-3 mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+            네이버 검색량 API가 아직 연결되지 않아 검색량순 정렬을 쓸 수 없습니다. 관리자에게 문의하세요.
+          </p>
+        ) : null}
 
         <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -4264,14 +4335,18 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                     <th className="w-[90px] border-r border-slate-200 px-4 py-3">업종</th>
                     <th className="w-[72px] border-r border-slate-200 px-4 py-3">등급</th>
                     <th className="w-[130px] border-r border-slate-200 px-4 py-3">전화</th>
-                    <th className="w-[110px] border-r border-slate-200 px-4 py-3">인허가일</th>
+                    {leadQualityMode === "keyword" ? (
+                      <th className="w-[100px] border-r border-slate-200 px-4 py-3 text-right">검색량 지수</th>
+                    ) : (
+                      <th className="w-[110px] border-r border-slate-200 px-4 py-3">인허가일</th>
+                    )}
                     <th className="w-[140px] border-r border-slate-200 px-4 py-3">다음 액션</th>
                     {showNearbyOnly && nearbyResult ? <th className="w-[90px] border-r border-slate-200 px-4 py-3 text-right">거리</th> : null}
                     <th className="px-4 py-3">상태</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredLeads.map((lead) => (
+                  {sortedLeads.map((lead) => (
                     <tr
                       className="cursor-pointer bg-white transition hover:bg-slate-50"
                       key={lead.id}
@@ -4291,7 +4366,13 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                         <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade || "-"}</Badge>
                       </td>
                       <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.phone || "미확인"}</td>
-                      <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{lead.permitDate || "-"}</td>
+                      {leadQualityMode === "keyword" ? (
+                        <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-teal-700">
+                          {keywordVolumeOf(lead) > 0 ? keywordVolumeOf(lead).toLocaleString() : keywordVolumeLoading ? "조회 중..." : "미확인"}
+                        </td>
+                      ) : (
+                        <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{lead.permitDate || "-"}</td>
+                      )}
                       <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.nextAction || "-"}</td>
                       {showNearbyOnly && nearbyResult ? (
                         <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-teal-700">
