@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MessageSquareText, Plus, RefreshCw } from "lucide-react";
+import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
@@ -23,6 +23,8 @@ type OperationNote = {
   nextAction: string;
   noteType: string;
 };
+type LocationTag = { accuracy: number; lat: number; lng: number };
+type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
 
 const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
   { label: "도착완료", value: "arrived" },
@@ -50,6 +52,8 @@ export function MobileDeliveryProofPanel({
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState("");
   const [loadingProofs, setLoadingProofs] = useState(false);
+  const [location, setLocation] = useState<LocationTag | null>(null);
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
   const [notes, setNotes] = useState<OperationNote[]>([]);
@@ -69,6 +73,31 @@ export function MobileDeliveryProofPanel({
     setFile(selected);
   }
 
+  // 배송완료를 저장하는 순간 좌표를 한 번만(단발성) 확인합니다. watchPosition처럼 계속 추적하지 않고
+  // getCurrentPosition만 쓰기 때문에 백그라운드 권한이 필요 없고, 화면을 열어둔 동안만 잠깐 동작합니다.
+  function requestLocation() {
+    if (!("geolocation" in navigator)) {
+      setLocationStatus("unavailable");
+      return;
+    }
+    setLocationStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          accuracy: Math.round(position.coords.accuracy),
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setLocationStatus("granted");
+      },
+      () => {
+        setLocation(null);
+        setLocationStatus("denied");
+      },
+      { enableHighAccuracy: true, maximumAge: 60000, timeout: 10000 }
+    );
+  }
+
   async function loadProofs() {
     setLoadingProofs(true);
     const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
@@ -83,7 +112,10 @@ export function MobileDeliveryProofPanel({
 
     setSaving(true);
     setStatus("idle");
-    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}`;
+    const locationText = location
+      ? `\n위치 태그: https://www.google.com/maps?q=${location.lat},${location.lng} (정확도 약 ${location.accuracy}m)`
+      : "";
+    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}${locationText}`;
 
     const noteRequest = fetch("/api/customer-operations", {
       method: "POST",
@@ -123,6 +155,7 @@ export function MobileDeliveryProofPanel({
 
   useEffect(() => {
     loadProofs();
+    requestLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
@@ -205,6 +238,24 @@ export function MobileDeliveryProofPanel({
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
       </div>
       <p className="mt-2 text-xs font-bold leading-5 text-blue-800">저장하면 배송 메모와 증빙 파일이 거래처 원장에 함께 누적됩니다.</p>
+
+      <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-800">
+        <MapPin className="h-3 w-3 shrink-0" />
+        {locationStatus === "granted" && location
+          ? `현재 위치 태그 준비됨 · 정확도 약 ${location.accuracy}m`
+          : locationStatus === "loading"
+            ? "위치 확인 중..."
+            : locationStatus === "denied"
+              ? "위치 접근이 거부되어 위치 태그 없이 저장됩니다"
+              : locationStatus === "unavailable"
+                ? "이 브라우저는 위치 확인을 지원하지 않습니다"
+                : "위치 확인 대기 중"}
+        {locationStatus === "denied" ? (
+          <button className="underline decoration-dotted underline-offset-2" onClick={requestLocation} type="button">
+            다시 시도
+          </button>
+        ) : null}
+      </p>
 
       <Button className="mt-3 h-11 w-full bg-blue-700 font-black hover:bg-blue-800" disabled={saving} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
