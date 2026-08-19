@@ -1765,7 +1765,7 @@ function DeliveryAssignmentPanel({
           <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 거래처 표시</p>
         </button>
       </div>
-      <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-auto">
+      <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 divide-y divide-slate-100 overflow-auto xl:max-h-none">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
@@ -2935,7 +2935,7 @@ function StoreManagementPanel({
           </button>
           <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {stores.length ? (
             stores.map((store) => (
               <button
@@ -4660,7 +4660,7 @@ function TodayCourseView({
                 </div>
               </div>
             </div>
-            <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
+            <div className="max-h-[calc(100vh-320px)] min-h-0 flex-1 space-y-2 overflow-auto p-3 xl:max-h-none">
               <button
                 className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
                 onClick={() => onSelectVehicle("all")}
@@ -4771,7 +4771,7 @@ function TodayCourseView({
                 요약 · 티맵 계산
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div className="max-h-[calc(100vh-320px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
               {routeRightPanelTab === "summary" ? (
               <div className="border-b border-slate-200/80 p-3">
                 <div className="maju-panel mb-3 p-3">
