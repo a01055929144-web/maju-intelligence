@@ -59,41 +59,32 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     label: "거래처",
     items: [
       {
-        active: "customers",
-        description: "등록부터 상세 관리까지",
+        active: "customers-summary",
+        description: "전체 거래처, 등급, 보완 상태 요약",
+        href: "/crm/summary",
+        icon: LayoutDashboard,
+        label: "거래처 전체 현황"
+      },
+      {
+        active: "data",
+        description: "거래처 기본정보와 매출 입력",
         href: "/",
+        icon: FileSpreadsheet,
+        label: "데이터 등록"
+      },
+      {
+        active: "customers",
+        description: "상세, 메모, 첨부자료 관리",
+        href: "/crm/timeline",
         icon: Building2,
-        label: "거래처",
-        children: [
-          {
-            active: "customers-summary",
-            description: "전체 거래처, 등급, 보완 상태 요약",
-            href: "/crm/summary",
-            icon: LayoutDashboard,
-            label: "거래처 전체 현황"
-          },
-          {
-            active: "data",
-            description: "거래처 기본정보와 매출 입력",
-            href: "/",
-            icon: FileSpreadsheet,
-            label: "데이터 등록"
-          },
-          {
-            active: "customers",
-            description: "상세, 메모, 첨부자료 관리",
-            href: "/crm/timeline",
-            icon: Building2,
-            label: "거래처 관리"
-          },
-          {
-            active: "data-management",
-            description: "업로드 이력, 저장 상태, 누락 상태 확인",
-            href: "/customers/data",
-            icon: Database,
-            label: "저장 이력"
-          }
-        ]
+        label: "거래처 관리"
+      },
+      {
+        active: "data-management",
+        description: "업로드 이력, 저장 상태, 누락 상태 확인",
+        href: "/customers/data",
+        icon: Database,
+        label: "저장 이력"
       }
     ]
   },

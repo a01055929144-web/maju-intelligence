@@ -354,6 +354,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   // 우클릭 후 반경이 자동으로 커지는 중인지 여부 — 안내 문구 표시용입니다(성장 애니메이션
   // 자체는 kakao-address-map.tsx 안에서 ref로 처리하고, 이 값은 그 시작/종료만 반영합니다).
   const [leadRadiusGrowing, setLeadRadiusGrowing] = useState(false);
+  // 성장 중 실시간 반경(m) — 지도 위 플로팅 안내 카드(네이버 지도 반경 검색 패널 참고)에 표시합니다.
+  const [leadRadiusGrowingMeters, setLeadRadiusGrowingMeters] = useState(0);
+  // 지도가 마지막으로 멈춘 중심좌표 — "빠른 반경 선택" 칩을 누르면 오른쪽 클릭 없이도 지금 보고
+  // 있는 지도 중심을 기준으로 바로 탐색할 수 있게 합니다(네이버 지도의 "이 지역 검색"과 비슷한 흐름).
+  const [mapCenterPoint, setMapCenterPoint] = useState<{ lat: number; lng: number } | null>(null);
   // 기본 반경은 5km였는데, 실제로 많이 쓰는 값은 1.5km라는 피드백에 따라 기본값을 낮췄습니다(2026-08-19).
   const [leadRadiusKm, setLeadRadiusKm] = useState(1.5);
   const [leadRadiusSearching, setLeadRadiusSearching] = useState(false);
@@ -428,9 +433,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     }
   }
 
-  // 지도 우클릭으로 반경 성장이 시작될 때(안내 문구 표시용)
+  // 지도 우클릭으로 반경 성장이 시작될 때(안내 문구·플로팅 카드 표시용)
   function handleLeadSearchGrowStart() {
     setLeadRadiusGrowing(true);
+    setLeadRadiusGrowingMeters(60);
     setLeadRadiusError("");
   }
 
@@ -450,6 +456,20 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     setLeadRadiusResult(null);
     setLeadRadiusError("");
     setPreviewLeadId("");
+  }
+
+  // 네이버 지도의 "이 지역에서 검색" 칩처럼, 오른쪽 클릭 없이도 지금 보고 있는 지도 중심을 기준으로
+  // 미리 정해둔 반경으로 바로 탐색합니다 — 마우스 정밀 조작이 부담스러운 사용자를 위한 빠른 경로입니다.
+  function runPresetRadiusSearch(radiusKmValue: number) {
+    if (!mapCenterPoint) {
+      setLeadRadiusError("지도가 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
+      return;
+    }
+    setLeadRadiusAnchorMode("point");
+    setLeadRadiusGrowing(false);
+    setLeadRadiusPoint(mapCenterPoint);
+    setLeadRadiusKm(radiusKmValue);
+    void runMapLeadRadiusSearch(mapCenterPoint, radiusKmValue);
   }
   // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
   // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
@@ -919,11 +939,25 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
             {sourceReady ? `${deliveryVehicles.length}대` : "배송차 대기"}
           </span>
-          <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200">
+          <span className="hidden rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 sm:inline-flex">
             {activeView === "map" ? "마커 중심" : activeView === "customers" ? "원장 작업" : activeView === "leads" ? "신규 영업" : "경유 계산"}
           </span>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-1.5">
+          {activeView === "map" ? (
+            <button
+              aria-pressed={leadRadiusOpen}
+              className={`h-10 shrink-0 rounded-md px-3 text-xs font-black shadow-[0_6px_14px_rgba(234,88,12,0.18)] transition ${
+                leadRadiusOpen ? "bg-orange-700 text-white" : "bg-orange-600 text-white hover:bg-orange-700"
+              }`}
+              onClick={() => setLeadRadiusOpen((value) => !value)}
+              title="지도를 오른쪽 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
+              type="button"
+            >
+              <Radar className="h-4 w-4" />
+              <span>신규 리드 서치</span>
+            </button>
+          ) : null}
           <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
             {[
               { label: "등급 마커", value: "grade" },
@@ -944,18 +978,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               );
             })}
           </div>
-          {activeView === "map" ? (
-            <button
-              aria-pressed={leadRadiusOpen}
-              className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${leadRadiusOpen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
-              onClick={() => setLeadRadiusOpen((value) => !value)}
-              title="지도를 오른쪽 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
-              type="button"
-            >
-              <Radar className="h-4 w-4" />
-              <span className="hidden sm:inline">신규 리드 서치</span>
-            </button>
-          ) : null}
           <nav className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
@@ -971,7 +993,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                   type="button"
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  <span>{item.label}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
                 </button>
               );
             })}
@@ -983,7 +1005,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
             type="button"
           >
-            {statsExpanded ? "KPI 접기" : "KPI 보기"}
+            <span className="hidden sm:inline">{statsExpanded ? "KPI 접기" : "KPI 보기"}</span>
+            <span className="sm:hidden">KPI</span>
           </button>
           <button
             aria-pressed={isFullscreen}
@@ -1008,15 +1031,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       </header>
 
       <div className="relative flex flex-1 flex-col xl:min-h-0">
-        <OperationalFlowBar
-          activeView={activeView}
-          courseCalculated={Boolean(courseSummary)}
-          dataRegistrationHref={dataRegistrationHref}
-          deliveryVehicleCount={deliveryVehicles.length}
-          onChangeView={changeWorkspaceView}
-          sourceReady={sourceReady}
-          storeCount={allStores.length}
-        />
         {timelineHref ? (
           <div className="shrink-0 px-4 pt-3 empty:hidden">
             <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
@@ -1025,7 +1039,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
 
       {statsExpanded ? (
         <>
-          <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
+          <section className="grid shrink-0 grid-cols-3 border-b border-slate-200/80 bg-white lg:grid-cols-6">
             <Kpi
               helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
               label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 거래처"} · ${selectedGradeLabel}`}
@@ -1260,98 +1274,122 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </div>
         ) : null}
         {activeView === "map" && leadRadiusOpen ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50/60 px-3 py-2">
-            <span className="flex items-center gap-1.5 text-xs font-black text-teal-800">
-              <Radar className="h-3.5 w-3.5" />
-              신규 리드 서치
-            </span>
-            <div className="flex h-8 items-center rounded-lg border border-teal-200 bg-white p-0.5">
-              {[
-                { label: "지도 클릭", value: "point" as const },
-                { label: "거래처 1곳", value: "customer" as const },
-                { label: "전체 거래처", value: "all" as const }
-              ].map((item) => (
-                <button
-                  className={`h-7 rounded-md px-2.5 text-[11px] font-black transition ${
-                    leadRadiusAnchorMode === item.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"
-                  }`}
-                  key={item.value}
-                  onClick={() => {
-                    setLeadRadiusAnchorMode(item.value);
-                    setLeadRadiusResult(null);
-                    setLeadRadiusError("");
-                    setPreviewLeadId("");
-                    if (item.value !== "point") {
-                      setLeadRadiusPoint(null);
-                      setLeadRadiusGrowing(false);
-                    }
-                  }}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            {leadRadiusAnchorMode === "customer" ? (
-              <select
-                className="h-8 min-w-[200px] rounded-md border border-teal-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none"
-                onChange={(event) => setLeadRadiusCustomerId(event.target.value)}
-                value={leadRadiusCustomerId}
-              >
-                <option value="">기준 거래처 선택</option>
-                {geocodableStoresForRadius.map((store) => (
-                  <option key={store.id} value={store.id}>
-                    {store.name}
-                  </option>
+          <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/60 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-black text-orange-800">
+                <Radar className="h-3.5 w-3.5" />
+                신규 리드 서치
+              </span>
+              <div className="flex h-8 items-center rounded-lg border border-orange-200 bg-white p-0.5">
+                {[
+                  { label: "지도 클릭", value: "point" as const },
+                  { label: "거래처 1곳", value: "customer" as const },
+                  { label: "전체 거래처", value: "all" as const }
+                ].map((item) => (
+                  <button
+                    className={`h-7 rounded-md px-2.5 text-[11px] font-black transition ${
+                      leadRadiusAnchorMode === item.value ? "bg-orange-600 text-white" : "text-slate-500 hover:bg-slate-50"
+                    }`}
+                    key={item.value}
+                    onClick={() => {
+                      setLeadRadiusAnchorMode(item.value);
+                      setLeadRadiusResult(null);
+                      setLeadRadiusError("");
+                      setPreviewLeadId("");
+                      if (item.value !== "point") {
+                        setLeadRadiusPoint(null);
+                        setLeadRadiusGrowing(false);
+                      }
+                    }}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
                 ))}
-              </select>
-            ) : leadRadiusAnchorMode === "all" ? (
-              <span className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-inset ring-teal-100">
-                주소 확인된 거래처 {geocodableStoresForRadius.length.toLocaleString()}곳 기준
-              </span>
-            ) : leadRadiusPoint ? (
-              <span className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-inset ring-teal-100">
-                지도 클릭 지점 기준
-                <button className="font-black text-teal-700 underline decoration-dotted underline-offset-2 hover:text-teal-900" onClick={resetLeadSearchPoint} type="button">
-                  지점 다시 선택
-                </button>
-              </span>
-            ) : (
-              <span className="text-[11px] font-black text-orange-700">
-                {leadRadiusGrowing
-                  ? "반경이 커지는 중입니다 — 지도를 다시 오른쪽 클릭하면 그 반경으로 고정하고 바로 탐색합니다."
-                  : "지도를 오른쪽 클릭하면 그 지점에서 반경이 자동으로 커집니다."}
-              </span>
-            )}
-            <label className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
-              반경
-              <input
-                className="h-8 w-14 rounded-md border border-teal-200 bg-white px-1.5 text-center text-[11px] font-bold text-slate-950 outline-none"
-                max={50}
-                min={0.5}
-                onChange={(event) => setLeadRadiusKm(Number(event.target.value) || 1.5)}
-                step={0.5}
-                type="number"
-                value={leadRadiusKm}
-              />
-              km
-            </label>
-            <button
-              className="maju-button-primary h-8 text-[11px]"
-              disabled={leadRadiusSearching || (leadRadiusAnchorMode === "point" && !leadRadiusPoint)}
-              onClick={() => void runMapLeadRadiusSearch()}
-              type="button"
-            >
-              {leadRadiusSearching ? "탐색 중..." : "탐색"}
-            </button>
-            {leadRadiusResult ? (
-              <span className="text-[11px] font-black text-teal-800">
-                반경 {leadRadiusResult.radiusKm}km 안 리드 {leadRadiusResult.leads.length.toLocaleString()}곳 지도에 표시 중
-              </span>
+              </div>
+              {leadRadiusAnchorMode === "customer" ? (
+                <select
+                  className="h-8 min-w-[160px] flex-1 rounded-md border border-orange-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none sm:flex-none"
+                  onChange={(event) => setLeadRadiusCustomerId(event.target.value)}
+                  value={leadRadiusCustomerId}
+                >
+                  <option value="">기준 거래처 선택</option>
+                  {geocodableStoresForRadius.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              ) : leadRadiusAnchorMode === "all" ? (
+                <span className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-inset ring-orange-100">
+                  주소 확인된 거래처 {geocodableStoresForRadius.length.toLocaleString()}곳 기준
+                </span>
+              ) : leadRadiusPoint ? (
+                <span className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-inset ring-orange-100">
+                  지도 클릭 지점 기준
+                  <button className="font-black text-orange-700 underline decoration-dotted underline-offset-2 hover:text-orange-900" onClick={resetLeadSearchPoint} type="button">
+                    지점 다시 선택
+                  </button>
+                </span>
+              ) : null}
+              <label className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                반경
+                <input
+                  className="h-8 w-14 rounded-md border border-orange-200 bg-white px-1.5 text-center text-[11px] font-bold text-slate-950 outline-none"
+                  max={50}
+                  min={0.5}
+                  onChange={(event) => setLeadRadiusKm(Number(event.target.value) || 1.5)}
+                  step={0.5}
+                  type="number"
+                  value={leadRadiusKm}
+                />
+                km
+              </label>
+              <button
+                className="maju-button-primary h-8 shrink-0 bg-orange-600 text-[11px] hover:bg-orange-700"
+                disabled={leadRadiusSearching || (leadRadiusAnchorMode === "point" && !leadRadiusPoint)}
+                onClick={() => void runMapLeadRadiusSearch()}
+                type="button"
+              >
+                {leadRadiusSearching ? "탐색 중..." : "탐색"}
+              </button>
+            </div>
+
+            {leadRadiusAnchorMode === "point" && !leadRadiusPoint ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-orange-100 pt-2">
+                <span className="text-[11px] font-black text-slate-500">빠른 선택</span>
+                {[0.5, 1, 1.5, 3, 5].map((presetKm) => (
+                  <button
+                    className="h-7 rounded-full border border-orange-200 bg-white px-3 text-[11px] font-black text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!mapCenterPoint}
+                    key={presetKm}
+                    onClick={() => runPresetRadiusSearch(presetKm)}
+                    title="지금 보고 있는 지도 중심 기준으로 바로 탐색합니다."
+                    type="button"
+                  >
+                    현재 위치 {presetKm}km
+                  </button>
+                ))}
+                <span className="text-[11px] font-bold text-slate-500">
+                  {leadRadiusGrowing
+                    ? "반경이 커지는 중입니다 — 지도를 다시 오른쪽 클릭하면 그 반경으로 고정하고 바로 탐색합니다."
+                    : "또는 지도를 오른쪽 클릭해 원하는 지점부터 반경을 직접 키우세요."}
+                </span>
+              </div>
             ) : null}
-            {leadRadiusError ? <span className="text-[11px] font-black text-rose-600">{leadRadiusError}</span> : null}
-            {leadRadiusAnchorMode !== "point" || leadRadiusPoint ? (
-              <span className="text-[11px] font-bold text-teal-700">지도 위 원 가장자리의 흰 손잡이를 마우스로 드래그해도 반경을 조절할 수 있습니다.</span>
+
+            {leadRadiusResult || leadRadiusError || (leadRadiusAnchorMode !== "point" || leadRadiusPoint) ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-orange-100 pt-2 text-[11px] font-bold">
+                {leadRadiusResult ? (
+                  <span className="font-black text-orange-800">
+                    반경 {leadRadiusResult.radiusKm}km 안 리드 {leadRadiusResult.leads.length.toLocaleString()}곳 지도에 표시 중
+                  </span>
+                ) : null}
+                {leadRadiusError ? <span className="font-black text-rose-600">{leadRadiusError}</span> : null}
+                {leadRadiusAnchorMode !== "point" || leadRadiusPoint ? (
+                  <span className="text-orange-700">지도 위 원 가장자리의 흰 손잡이를 마우스로 드래그해도 반경을 조절할 수 있습니다.</span>
+                ) : null}
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -1388,8 +1426,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     leadSearch={{
                       active: leadRadiusOpen && leadRadiusAnchorMode === "point" && !leadRadiusPoint,
                       onGrowStart: handleLeadSearchGrowStart,
+                      onGrowTick: setLeadRadiusGrowingMeters,
                       onLocked: handleLeadSearchLocked
                     }}
+                    onCenterChange={setMapCenterPoint}
                     radiusOverlay={
                       leadRadiusOpen && (leadRadiusAnchorMode !== "point" || leadRadiusPoint)
                         ? {
@@ -1403,6 +1443,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     showList={false}
                   />
                 </div>
+                {leadRadiusGrowing ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-3">
+                    <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-slate-950/90 px-4 py-2 text-white shadow-[0_10px_28px_rgba(15,23,42,.35)] backdrop-blur">
+                      <span className="text-lg font-black text-orange-400">{formatLeadSearchRadiusLabel(leadRadiusGrowingMeters)}</span>
+                      <span className="text-xs font-bold text-slate-200">지도를 다시 오른쪽 클릭하면 이 반경으로 고정하고 탐색합니다</span>
+                    </div>
+                  </div>
+                ) : null}
                 {previewStore ? (
                   <StoreQuickCard
                     driverOptions={deliveryDefaults.drivers}
@@ -2034,98 +2082,6 @@ function RouteWorkspaceGuide({
             </Link>
           ) : null}
         </div>
-      </div>
-    </section>
-  );
-}
-
-function OperationalFlowBar({
-  activeView,
-  courseCalculated,
-  dataRegistrationHref,
-  deliveryVehicleCount,
-  onChangeView,
-  sourceReady,
-  storeCount
-}: {
-  readonly activeView: WorkspaceView;
-  readonly courseCalculated: boolean;
-  readonly dataRegistrationHref: string;
-  readonly deliveryVehicleCount: number;
-  readonly onChangeView: (view: WorkspaceView) => void;
-  readonly sourceReady: boolean;
-  readonly storeCount: number;
-}) {
-  const steps: Array<{
-    action: ReactNode;
-    helper: string;
-    label: string;
-    ready: boolean;
-    selected?: boolean;
-  }> = [
-    {
-      action: (
-        <Link className="absolute inset-0 rounded-lg" href={dataRegistrationHref} title="거래처 등록으로 이동">
-          <span className="sr-only">거래처 등록</span>
-        </Link>
-      ),
-      helper: sourceReady ? `${storeCount.toLocaleString()}곳` : "필수",
-      label: "거래처 등록",
-      ready: sourceReady
-    },
-    {
-      action: <button aria-label="지도 확인" className="absolute inset-0 rounded-lg" onClick={() => onChangeView("map")} type="button" />,
-      helper: sourceReady ? "마커 확인" : "등록 후",
-      label: "지도 확인",
-      ready: sourceReady,
-      selected: activeView === "map"
-    },
-    {
-      action: <button aria-label="원장 관리" className="absolute inset-0 rounded-lg" onClick={() => onChangeView("customers")} type="button" />,
-      helper: sourceReady ? "상세·첨부" : "등록 후",
-      label: "원장 관리",
-      ready: sourceReady,
-      selected: activeView === "customers"
-    },
-    {
-      action: <button aria-label="코스 계산" className="absolute inset-0 rounded-lg" onClick={() => onChangeView("course")} type="button" />,
-      helper: courseCalculated ? "계산 완료" : sourceReady ? `${deliveryVehicleCount.toLocaleString()}대` : "등록 후",
-      label: "코스 계산",
-      ready: courseCalculated,
-      selected: activeView === "course"
-    }
-  ];
-
-  return (
-    <section className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-4 py-2">
-      <div className="grid gap-2 md:grid-cols-4">
-        {steps.map((step, index) => (
-          <div
-            className={`relative min-w-0 rounded-lg border px-3 py-2 transition ${
-              step.selected
-                ? "border-teal-300 bg-teal-50 shadow-[0_1px_0_rgba(15,23,42,0.04)]"
-                : step.ready
-                  ? "border-emerald-100 bg-white"
-                  : "border-slate-200 bg-white"
-            }`}
-            key={step.label}
-          >
-            {step.action}
-            <div className="flex items-center gap-2">
-              <span
-                className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black ${
-                  step.ready ? "bg-emerald-600 text-white" : step.selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {index + 1}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-black text-slate-900">{step.label}</p>
-                <p className={`truncate text-[11px] font-black ${step.ready ? "text-emerald-700" : "text-slate-400"}`}>{step.helper}</p>
-              </div>
-            </div>
-          </div>
-        ))}
       </div>
     </section>
   );
@@ -4738,7 +4694,7 @@ function TodayCourseView({
                 </div>
               </div>
             </div>
-            <div className="max-h-[calc(100vh-320px)] min-h-0 flex-1 space-y-2 overflow-auto p-3 xl:max-h-none">
+            <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 space-y-2 overflow-auto p-3 xl:max-h-none">
               <button
                 className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
                 onClick={() => onSelectVehicle("all")}
@@ -4849,7 +4805,7 @@ function TodayCourseView({
                 요약 · 티맵 계산
               </button>
             </div>
-            <div className="max-h-[calc(100vh-320px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
+            <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
               {routeRightPanelTab === "summary" ? (
               <div className="border-b border-slate-200/80 p-3">
                 <div className="maju-panel mb-3 p-3">
@@ -6500,10 +6456,10 @@ function Kpi({
   }[tone];
 
   return (
-    <div className={`relative min-w-0 overflow-hidden border-r border-slate-200/80 px-4 py-2.5 last:border-r-0 ${backgroundClass}`}>
+    <div className={`relative min-w-0 overflow-hidden border-r border-b border-slate-200/80 px-2.5 py-2 last:border-r-0 sm:px-4 sm:py-2.5 ${backgroundClass}`}>
       <span className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
-      <p className="truncate text-[11px] font-black text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-[20px] font-black leading-none ${valueClass}`}>{value}</p>
+      <p className="truncate text-[10px] font-black text-slate-500 sm:text-[11px]">{label}</p>
+      <p className={`mt-1 truncate text-[15px] font-black leading-none sm:text-[20px] ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-1.5 truncate text-[10px] font-bold text-slate-400">{helper}</p> : null}
     </div>
   );
@@ -7094,6 +7050,14 @@ function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+// "신규 리드 서치" 성장 중 플로팅 안내에 쓰는 반경 라벨입니다 — 1km 미만은 m 단위로 보여줘야
+// 초반(60m~수백m)에 "0.1km"처럼 어색하게 표시되지 않습니다.
+function formatLeadSearchRadiusLabel(radiusMeters: number) {
+  if (radiusMeters < 1000) return `${Math.round(radiusMeters).toLocaleString()}m`;
+  const km = Math.round((radiusMeters / 1000) * 10) / 10;
+  return `${km}km`;
 }
 
 function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {

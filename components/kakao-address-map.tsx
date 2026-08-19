@@ -40,6 +40,10 @@ export type KakaoRadiusOverlay = {
 export type KakaoLeadSearchInteraction = {
   readonly active: boolean;
   readonly onGrowStart?: () => void;
+  // 성장 중 실시간 반경(m)을 부모에 알려 지도 위 플로팅 안내(네이버 지도 반경 검색 패널처럼)에
+  // 쓸 수 있게 합니다. 매 틱(45ms)마다 부르면 부모 리렌더가 너무 잦아지므로 내부에서 스로틀링해
+  // 호출합니다 — 부모는 그냥 받은 값을 표시만 하면 됩니다.
+  readonly onGrowTick?: (radiusMeters: number) => void;
   readonly onLocked: (point: { lat: number; lng: number }, radiusMeters: number) => void;
 };
 
@@ -51,6 +55,7 @@ type KakaoAddressMapProps = {
   readonly leadSearch?: KakaoLeadSearchInteraction;
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
+  readonly onCenterChange?: (point: { lat: number; lng: number }) => void;
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
   readonly radiusOverlay?: KakaoRadiusOverlay;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
@@ -82,6 +87,7 @@ export function KakaoAddressMap({
   leadSearch,
   mapClassName = defaultMapClassName,
   markers,
+  onCenterChange,
   onMarkerClick,
   radiusOverlay,
   routePath = emptyRoutePath,
@@ -112,6 +118,7 @@ export function KakaoAddressMap({
   const leadSearchLabelRef = useRef<any>(null);
   const leadSearchIntervalRef = useRef<number | null>(null);
   const leadSearchPhaseRef = useRef<"idle" | "growing">("idle");
+  const onCenterChangeRef = useRef(onCenterChange);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const [fallbackReason, setFallbackReason] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
@@ -134,6 +141,10 @@ export function KakaoAddressMap({
   useEffect(() => {
     leadSearchRef.current = leadSearch;
   }, [leadSearch]);
+
+  useEffect(() => {
+    onCenterChangeRef.current = onCenterChange;
+  }, [onCenterChange]);
 
   // 성장 중인 원(주황)을 지도·인터벌에서 완전히 지웁니다. active가 꺼지거나(패널 닫힘) 컴포넌트가
   // 사라질 때 호출해 타이머가 백그라운드에서 계속 돌거나 원이 화면에 남아있지 않게 합니다.
@@ -240,15 +251,28 @@ export function KakaoAddressMap({
           leadSearchRef.current?.onGrowStart?.();
 
           let currentRadius = startRadius;
+          let tickCount = 0;
           leadSearchIntervalRef.current = window.setInterval(() => {
             currentRadius = Math.min(maxRadius, currentRadius + stepMeters);
             circle.setRadius(currentRadius);
             label.setContent(radiusLabelHtml(currentRadius / 1000));
+            // 부모에는 3틱(약 135ms)마다만 알려 리렌더 빈도를 낮춥니다 — 지도 위 원·라벨은 이미
+            // 매 틱 부드럽게 갱신되므로, 부모 쪽 플로팅 안내 카드는 이 정도 빈도로도 충분히 매끄럽습니다.
+            tickCount += 1;
+            if (tickCount % 3 === 0) leadSearchRef.current?.onGrowTick?.(currentRadius);
             if (currentRadius >= maxRadius && leadSearchIntervalRef.current !== null) {
               window.clearInterval(leadSearchIntervalRef.current);
               leadSearchIntervalRef.current = null;
             }
           }, intervalMs);
+        });
+
+        // 지도 중심이 바뀔 때(초기 로드·드래그·확대축소 끝)마다 알려, 부모가 "현재 지도 중심에서
+        // 검색" 같은 빠른 선택(프리셋 반경 칩)에 쓸 수 있게 합니다. 드래그 도중 매 프레임이 아니라
+        // idle(움직임이 끝났을 때)에만 쏘아 가볍게 유지합니다.
+        kakao.maps.event.addListener(map, "idle", () => {
+          const center = map.getCenter?.();
+          if (center) onCenterChangeRef.current?.({ lat: center.getLat(), lng: center.getLng() });
         });
 
         const geocoder = new kakao.maps.services.Geocoder();
