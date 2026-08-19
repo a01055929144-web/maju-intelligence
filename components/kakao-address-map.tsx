@@ -22,14 +22,25 @@ export type KakaoRoutePoint = {
   readonly lng: number;
 };
 
-// "신규 리드 반경"처럼 특정 중심점 주위 반경을 지도 위에 원으로 시각화하고, 원 가장자리의 손잡이를
-// 네이버·카카오 지도처럼 드래그해서 반경을 직접 조절할 수 있게 합니다. centerMarkerId를 주면 이미
-// 지오코딩된 마커 좌표(markerPositionsRef)를 중심으로 쓰고, 주지 않으면(예: "전체 거래처" 기준)
-// 현재 지도 중심을 기준으로 씁니다.
+// "신규 리드 서치"처럼 특정 중심점 주위 반경을 지도 위에 원으로 시각화하고, 원 가장자리의 손잡이를
+// 네이버·카카오 지도처럼 드래그해서 반경을 직접 조절할 수 있게 합니다. centerPoint를 주면 그 좌표를,
+// centerMarkerId를 주면 이미 지오코딩된 마커 좌표(markerPositionsRef)를 중심으로 쓰고, 둘 다 없으면
+// (예: "전체 거래처" 기준) 현재 지도 중심을 기준으로 씁니다.
 export type KakaoRadiusOverlay = {
   readonly centerMarkerId?: string;
+  readonly centerPoint?: { lat: number; lng: number };
   readonly onRadiusChange?: (radiusMeters: number) => void;
   readonly radiusMeters: number;
+};
+
+// "신규 리드 서치"의 지도 오른쪽 클릭 인터랙션입니다. active가 true인 동안 지도를 오른쪽 클릭하면
+// 그 지점에서 반경이 자동으로 커지고(onGrowStart), 다시 오른쪽 클릭하면 그 순간의 반경으로 고정되어
+// onLocked로 중심좌표·반경(m)을 부모에 알려줍니다. 성장 애니메이션은 이 컴포넌트 안에서 ref로만
+// 처리해(React state를 매 프레임 갱신하지 않음) 부모 리렌더나 지도 재생성 없이 부드럽게 동작합니다.
+export type KakaoLeadSearchInteraction = {
+  readonly active: boolean;
+  readonly onGrowStart?: () => void;
+  readonly onLocked: (point: { lat: number; lng: number }, radiusMeters: number) => void;
 };
 
 type KakaoAddressMapProps = {
@@ -37,6 +48,7 @@ type KakaoAddressMapProps = {
   readonly controlsOffsetPx?: number;
   readonly fallbackReason?: string;
   readonly focusedMarkerId?: string;
+  readonly leadSearch?: KakaoLeadSearchInteraction;
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
@@ -67,6 +79,7 @@ export function KakaoAddressMap({
   controlsOffsetClassName,
   controlsOffsetPx,
   focusedMarkerId,
+  leadSearch,
   mapClassName = defaultMapClassName,
   markers,
   onMarkerClick,
@@ -91,6 +104,14 @@ export function KakaoAddressMap({
   const radiusHandleMarkerRef = useRef<any>(null);
   const radiusLabelOverlayRef = useRef<any>(null);
   const radiusOnChangeRef = useRef(radiusOverlay?.onRadiusChange);
+  // "신규 리드 서치"의 우클릭-성장-확정 인터랙션 상태입니다. 성장 애니메이션은 매 프레임(수십ms) 진행
+  // 되므로 React state로 다루면 그때마다 부모까지 리렌더되어 무겁습니다 — ref로만 추적하고, 확정된
+  // 최종 값만 onLocked로 부모에 한 번 올립니다.
+  const leadSearchRef = useRef(leadSearch);
+  const leadSearchCircleRef = useRef<any>(null);
+  const leadSearchLabelRef = useRef<any>(null);
+  const leadSearchIntervalRef = useRef<number | null>(null);
+  const leadSearchPhaseRef = useRef<"idle" | "growing">("idle");
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const [fallbackReason, setFallbackReason] = useState("");
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
@@ -109,6 +130,31 @@ export function KakaoAddressMap({
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
   }, [onMarkerClick]);
+
+  useEffect(() => {
+    leadSearchRef.current = leadSearch;
+  }, [leadSearch]);
+
+  // 성장 중인 원(주황)을 지도·인터벌에서 완전히 지웁니다. active가 꺼지거나(패널 닫힘) 컴포넌트가
+  // 사라질 때 호출해 타이머가 백그라운드에서 계속 돌거나 원이 화면에 남아있지 않게 합니다.
+  function stopLeadSearchGrowth() {
+    if (leadSearchIntervalRef.current !== null) {
+      window.clearInterval(leadSearchIntervalRef.current);
+      leadSearchIntervalRef.current = null;
+    }
+    leadSearchCircleRef.current?.setMap(null);
+    leadSearchLabelRef.current?.setMap(null);
+    leadSearchCircleRef.current = null;
+    leadSearchLabelRef.current = null;
+    leadSearchPhaseRef.current = "idle";
+  }
+
+  useEffect(() => {
+    if (!leadSearch?.active) stopLeadSearchGrowth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadSearch?.active]);
+
+  useEffect(() => stopLeadSearchGrowth, []);
 
   useEffect(() => {
     let ignore = false;
@@ -137,6 +183,73 @@ export function KakaoAddressMap({
         mapInstanceRef.current = map;
         window.setTimeout(() => map.relayout?.(), 0);
         setStatus("ready");
+
+        // "신규 리드 서치": leadSearchRef.current?.active일 때만 반응합니다. 첫 우클릭은 그 지점에서
+        // 반경을 자동으로 키우기 시작하고, 성장 중일 때의 두 번째 우클릭은 (클릭 위치가 아니라) 그
+        // 원래 중심을 그대로 유지한 채 지금까지 커진 반경으로 고정해 부모에 알립니다.
+        kakao.maps.event.addListener(map, "rightclick", (mouseEvent: any) => {
+          if (!leadSearchRef.current?.active) return;
+
+          if (leadSearchPhaseRef.current === "growing") {
+            if (leadSearchIntervalRef.current !== null) {
+              window.clearInterval(leadSearchIntervalRef.current);
+              leadSearchIntervalRef.current = null;
+            }
+            const finalCircle = leadSearchCircleRef.current;
+            const finalRadius = finalCircle?.getRadius?.() ?? 1500;
+            const center = finalCircle?.getCenter?.() ?? mouseEvent.latLng;
+            finalCircle?.setMap(null);
+            leadSearchLabelRef.current?.setMap(null);
+            leadSearchCircleRef.current = null;
+            leadSearchLabelRef.current = null;
+            leadSearchPhaseRef.current = "idle";
+            if (center) leadSearchRef.current?.onLocked({ lat: center.getLat(), lng: center.getLng() }, finalRadius);
+            return;
+          }
+
+          const clickLatLng = mouseEvent.latLng;
+          if (!clickLatLng) return;
+          const startRadius = 60;
+          const maxRadius = 8000;
+          const stepMeters = 55;
+          const intervalMs = 45;
+
+          const circle = new kakao.maps.Circle({
+            center: clickLatLng,
+            fillColor: "#f97316",
+            fillOpacity: 0.12,
+            radius: startRadius,
+            strokeColor: "#c2410c",
+            strokeOpacity: 0.9,
+            strokeStyle: "solid",
+            strokeWeight: 2
+          });
+          circle.setMap(map);
+          leadSearchCircleRef.current = circle;
+
+          const label = new kakao.maps.CustomOverlay({
+            content: radiusLabelHtml(startRadius / 1000),
+            map,
+            position: clickLatLng,
+            yAnchor: -0.6,
+            zIndex: 12
+          });
+          leadSearchLabelRef.current = label;
+
+          leadSearchPhaseRef.current = "growing";
+          leadSearchRef.current?.onGrowStart?.();
+
+          let currentRadius = startRadius;
+          leadSearchIntervalRef.current = window.setInterval(() => {
+            currentRadius = Math.min(maxRadius, currentRadius + stepMeters);
+            circle.setRadius(currentRadius);
+            label.setContent(radiusLabelHtml(currentRadius / 1000));
+            if (currentRadius >= maxRadius && leadSearchIntervalRef.current !== null) {
+              window.clearInterval(leadSearchIntervalRef.current);
+              leadSearchIntervalRef.current = null;
+            }
+          }, intervalMs);
+        });
 
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
@@ -268,9 +381,11 @@ export function KakaoAddressMap({
     const map = mapInstanceRef.current;
     if (status !== "ready" || !radiusOverlay || !kakao?.maps || !map) return;
 
-    const centerPosition = radiusOverlay.centerMarkerId
-      ? markerPositionsRef.current.get(radiusOverlay.centerMarkerId)
-      : map.getCenter();
+    const centerPosition = radiusOverlay.centerPoint
+      ? new kakao.maps.LatLng(radiusOverlay.centerPoint.lat, radiusOverlay.centerPoint.lng)
+      : radiusOverlay.centerMarkerId
+        ? markerPositionsRef.current.get(radiusOverlay.centerMarkerId)
+        : map.getCenter();
     if (!centerPosition) return;
 
     const centerLat = centerPosition.getLat();
@@ -351,7 +466,7 @@ export function KakaoAddressMap({
       labelOverlay.setMap(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.radiusMeters, markersSignature]);
+  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.centerPoint?.lat, radiusOverlay?.centerPoint?.lng, radiusOverlay?.radiusMeters, markersSignature]);
 
   // 카카오맵은 초기화 시점의 컨테이너 크기를 기준으로 캔버스를 그리기 때문에, 사이드 패널 접힘/펼침,
   // 팝업 표시, 반응형 브레이크포인트 전환처럼 지도 영역 자체의 높이·너비가 나중에 바뀌면 위쪽에 빈

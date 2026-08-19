@@ -4480,10 +4480,16 @@ export type NearbyPermitLead = PermitLeadItem & {
 };
 
 export type FindNearbyPermitLeadsInput = {
-  /** "customer": 지정한 거래처 1곳 기준 반경 검색. "all": 활성 거래처 전체 합집합(각 리드에서 가장 가까운 거래처까지 거리). */
-  anchorMode: "customer" | "all";
+  /**
+   * "customer": 지정한 거래처 1곳 기준 반경 검색. "all": 활성 거래처 전체 합집합(각 리드에서 가장
+   * 가까운 거래처까지 거리). "point": 지도 위 임의의 좌표(예: 우클릭으로 고른 지점) 기준 반경 검색 —
+   * 거래처를 거치지 않고 좌표를 바로 씁니다.
+   */
+  anchorMode: "all" | "customer" | "point";
   /** anchorMode가 "customer"일 때 기준이 되는 거래처 id·이름·주소입니다. */
   anchorCustomer?: { address: string; id: string; name: string };
+  /** anchorMode가 "point"일 때 기준이 되는 좌표입니다. */
+  anchorPoint?: { lat: number; lng: number };
   radiusKm: number;
 };
 
@@ -4529,7 +4535,15 @@ export async function findNearbyPermitLeads(companyId: string, input: FindNearby
   const anchorPoints: Array<{ anchor: PermitLeadAnchor; point: GeoPoint }> = [];
   let unresolvedAnchorCount = 0;
 
-  if (input.anchorMode === "customer") {
+  if (input.anchorMode === "point") {
+    if (!input.anchorPoint || !Number.isFinite(input.anchorPoint.lat) || !Number.isFinite(input.anchorPoint.lng)) {
+      return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: 0, unresolvedLeadCount: 0 };
+    }
+    anchorPoints.push({
+      anchor: { id: "", name: "지도 클릭 지점", address: "", distanceKm: 0 },
+      point: input.anchorPoint
+    });
+  } else if (input.anchorMode === "customer") {
     if (!input.anchorCustomer?.address) return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: 0, unresolvedLeadCount: 0 };
     const point = await resolveAddressPoint(input.anchorCustomer.address);
     if (!point) return { anchorCount: 0, leads: [], radiusKm, unresolvedAnchorCount: 1, unresolvedLeadCount: 0 };

@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
     | {
         anchorCustomer?: { address?: string; id?: string; name?: string };
         anchorMode?: string;
+        anchorPoint?: { lat?: number; lng?: number };
         companyId?: string;
         radiusKm?: number;
       }
@@ -21,9 +22,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const anchorMode = body?.anchorMode === "all" ? "all" : "customer";
+  const anchorMode = body?.anchorMode === "all" ? "all" : body?.anchorMode === "point" ? "point" : "customer";
   if (anchorMode === "customer" && !body?.anchorCustomer?.address) {
     return NextResponse.json({ message: "기준 거래처를 선택하세요." }, { status: 400 });
+  }
+  if (anchorMode === "point" && (!Number.isFinite(body?.anchorPoint?.lat) || !Number.isFinite(body?.anchorPoint?.lng))) {
+    return NextResponse.json({ message: "지도에서 기준 지점을 먼저 선택하세요." }, { status: 400 });
   }
 
   try {
@@ -37,6 +41,7 @@ export async function POST(request: NextRequest) {
               name: body.anchorCustomer.name || "선택 거래처"
             }
           : undefined,
+      anchorPoint: anchorMode === "point" ? { lat: Number(body?.anchorPoint?.lat), lng: Number(body?.anchorPoint?.lng) } : undefined,
       radiusKm: Number(body?.radiusKm) || 5
     });
     return NextResponse.json(result);
