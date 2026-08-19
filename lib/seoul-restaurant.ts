@@ -134,9 +134,17 @@ function rotateStartPage(totalPages: number, pagesPerRun: number): number {
  * 페이지(기본 30페이지 = 30,000행)만 스캔하고 LASTMODTS 기준으로 최근분만 골라냅니다. 시작
  * 위치는 날짜에 따라 회전해 반복 호출 시 결국 서울 전체(약 53만 건)를 다 훑게 됩니다.
  */
+// 페이지를 순차로 하나씩 기다리면(await 30번) 응답 시간이 API 지연에 비례해 늘어나 Vercel 함수
+// 시간 제한(60초)을 넘기기 쉽습니다 — 실제로 라이브 테스트에서 타임아웃이 재현됐습니다(2026-08-19).
+// FETCH_CONCURRENCY만큼 동시에 요청하고, TIME_BUDGET_MS를 넘기면 지금까지 모은 행만으로 즉시
+// 반환합니다(다음 실행이 rotateStartPage로 이어서 훑으므로 데이터 유실은 아니고 진행이 느려질 뿐).
+const FETCH_CONCURRENCY = 5;
+const TIME_BUDGET_MS = 45_000;
+
 export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 30): Promise<SeoulRestaurantRow[]> {
   if (!isSeoulOpenDataConfigured()) return [];
 
+  const startedAt = Date.now();
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - Math.max(1, Math.min(days, MAX_LOOKBACK_DAYS)));
 
@@ -144,21 +152,24 @@ export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 30)
   if (!first) return [];
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
   const startPage = rotateStartPage(totalPages, pagesPerRun);
+  const pageNumbers = Array.from({ length: pagesPerRun }, (_, offset) => ((startPage - 1 + offset) % totalPages) + 1);
 
   const rows: SeoulRestaurantRow[] = [];
-  for (let offset = 0; offset < pagesPerRun; offset += 1) {
-    const pageNo = ((startPage - 1 + offset) % totalPages) + 1;
-    const page = pageNo === 1 ? first : await fetchPage(pageNo);
-    if (!page?.rows?.length) continue;
-
-    for (const raw of page.rows) {
-      const mapped = mapRow(raw);
-      if (!mapped) continue;
-      if (mapped.lastModified) {
-        const modified = new Date(mapped.lastModified.replace(" ", "T"));
-        if (!Number.isNaN(modified.getTime()) && modified < cutoff) continue;
+  for (let i = 0; i < pageNumbers.length; i += FETCH_CONCURRENCY) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+    const batch = pageNumbers.slice(i, i + FETCH_CONCURRENCY);
+    const pages = await Promise.all(batch.map((pageNo) => (pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo))));
+    for (const page of pages) {
+      if (!page?.rows?.length) continue;
+      for (const raw of page.rows) {
+        const mapped = mapRow(raw);
+        if (!mapped) continue;
+        if (mapped.lastModified) {
+          const modified = new Date(mapped.lastModified.replace(" ", "T"));
+          if (!Number.isNaN(modified.getTime()) && modified < cutoff) continue;
+        }
+        rows.push(mapped);
       }
-      rows.push(mapped);
     }
   }
 
