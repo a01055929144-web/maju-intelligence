@@ -139,7 +139,10 @@ function rotateStartPage(totalPages: number, pagesPerRun: number): number {
 // FETCH_CONCURRENCY만큼 동시에 요청하고, TIME_BUDGET_MS를 넘기면 지금까지 모은 행만으로 즉시
 // 반환합니다(다음 실행이 rotateStartPage로 이어서 훑으므로 데이터 유실은 아니고 진행이 느려질 뿐).
 const FETCH_CONCURRENCY = 5;
-const TIME_BUDGET_MS = 45_000;
+// 스캔 자체 예산은 30초로 잡아, 이후 이어지는 DB 적재(ingest) 단계까지 합쳐도 Vercel 함수 제한
+// 60초 안에 여유 있게 끝나도록 합니다(라이브 테스트에서 45초 예산 + ingest로 총 48.9초까지 나온
+// 적이 있어 안전 마진을 더 키웠습니다, 2026-08-19).
+const TIME_BUDGET_MS = 30_000;
 
 export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 150): Promise<SeoulRestaurantRow[]> {
   if (!isSeoulOpenDataConfigured()) return [];
