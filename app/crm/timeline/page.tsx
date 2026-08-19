@@ -5,6 +5,7 @@ import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { LinkifiedText } from "@/components/linkified-text";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 
@@ -1787,7 +1788,9 @@ export default function CrmTimelinePage() {
                           <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
                           <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
                         </div>
-                        <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{note.memo}</p>
+                        <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
+                          <LinkifiedText text={note.memo} />
+                        </p>
                         {note.nextAction ? <p className="mt-2 text-xs font-black text-blue-700">다음 액션: {note.nextAction}</p> : null}
                       </div>
                     ))

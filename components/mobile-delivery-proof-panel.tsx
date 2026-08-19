@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LinkifiedText } from "@/components/linkified-text";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type DeliveryStatus = "arrived" | "partial" | "issue";
@@ -304,7 +305,9 @@ export function MobileDeliveryProofPanel({
               <p className="text-xs font-black text-blue-700">{item.nextAction || "배송 기록"}</p>
               <p className="shrink-0 text-[11px] font-bold text-slate-400">{formatHistoryDate(item.createdAt)}</p>
             </div>
-            <p className="mt-2 whitespace-pre-line text-xs font-bold leading-5 text-slate-700">{item.memo}</p>
+            <p className="mt-2 whitespace-pre-line text-xs font-bold leading-5 text-slate-700">
+              <LinkifiedText text={item.memo} />
+            </p>
             <p className="mt-2 text-[11px] font-bold text-slate-400">{item.createdByName}</p>
           </div>
         ))}
