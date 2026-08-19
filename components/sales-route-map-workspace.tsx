@@ -2337,23 +2337,19 @@ function StoreQuickCard({
           <span className="line-clamp-2">{store.address || store.region}</span>
         </p>
         {!isEditing ? (
-          <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-bold text-slate-500">
-            <span className="flex items-center gap-1 truncate">
-              <Phone className="h-3 w-3 shrink-0 text-slate-400" />
-              {store.phone || "연락처 미등록"}
-            </span>
-            <span className="flex items-center gap-1 truncate">
-              <UserRound className="h-3 w-3 shrink-0 text-slate-400" />
-              {store.representativeName || "대표자 미등록"}
-            </span>
-            <span className="flex items-center gap-1 truncate">
-              <FileImage className="h-3 w-3 shrink-0 text-slate-400" />
-              {store.businessRegistrationNumber || "사업자번호 미등록"}
-            </span>
-            <span className="flex items-center gap-1 truncate">
-              <CalendarDays className="h-3 w-3 shrink-0 text-slate-400" />
-              {store.openingDate ? `개업 ${store.openingDate}` : "개업일 미등록"}
-            </span>
+          // 영업·배송 현장에서 실제로 바로 필요한 정보(담당자·배송차, 연락처)를 최상단에 배치합니다.
+          // 대표자/사업자번호/개업일 같은 등록 정보는 하루하루 영업엔 급하지 않은 행정 데이터라 아래로 내렸습니다.
+          <div className="mt-2 space-y-1">
+            <p className="flex items-center gap-1.5 truncate text-[12.5px] font-bold text-slate-700">
+              <Truck className="h-3.5 w-3.5 shrink-0 text-teal-600" />
+              <span className="truncate">
+                {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
+              </span>
+            </p>
+            <p className="flex items-center gap-1.5 truncate text-[12.5px] font-bold text-slate-700">
+              <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span className="truncate">{store.phone || "연락처 미등록"}</span>
+            </p>
           </div>
         ) : null}
         {!isEditing ? (
@@ -2438,9 +2434,19 @@ function StoreQuickCard({
           </div>
         ) : (
           <>
-            <p className="mt-2.5 break-words text-[11px] font-black leading-4 text-slate-400">
-              {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
-            </p>
+            {store.representativeName || store.businessRegistrationNumber || store.openingDate ? (
+              <p className="mt-2.5 truncate text-[10.5px] font-bold text-slate-400">
+                {[
+                  store.representativeName ? `대표 ${store.representativeName}` : null,
+                  store.businessRegistrationNumber ? `사업자 ${store.businessRegistrationNumber}` : null,
+                  store.openingDate ? `개업 ${store.openingDate}` : null
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : (
+              <p className="mt-2.5 text-[10.5px] font-bold text-slate-300">사업자 등록정보 미확인</p>
+            )}
             <div className="mt-1.5 flex items-center justify-end gap-2">
               {onSave ? (
                 <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
