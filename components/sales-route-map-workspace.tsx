@@ -4382,6 +4382,9 @@ function TodayCourseView({
   const [routeBatchIndex, setRouteBatchIndex] = useState(0);
   const [routePanelCollapsed, setRoutePanelCollapsed] = useState(false);
   const [routeLeftPanelCollapsed, setRouteLeftPanelCollapsed] = useState(false);
+  // 우측 패널 기본 탭을 "거래처"로 둬서, 실제 작업 순서(차량 선택 → 경유 거래처 고르기)에 맞게
+  // 전체 거래처 목록과 경유 추가/해제가 계산 요약보다 먼저 눈에 들어오게 합니다.
+  const [routeRightPanelTab, setRouteRightPanelTab] = useState<"list" | "summary">("list");
   const [routeQuery, setRouteQuery] = useState("");
   const [routeSelectedStoreId, setRouteSelectedStoreId] = useState("");
   const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
@@ -4748,7 +4751,28 @@ function TodayCourseView({
                 <PanelLeftClose className="h-4 w-4" />
               </button>
             </div>
+            <div className="flex gap-1.5 border-b border-slate-200/80 bg-slate-50/60 p-2">
+              <button
+                className={`h-8 flex-1 rounded-md text-xs font-black transition ${
+                  routeRightPanelTab === "list" ? "bg-white text-slate-950 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-700"
+                }`}
+                onClick={() => setRouteRightPanelTab("list")}
+                type="button"
+              >
+                거래처 · 경유 {selectedRouteStoresAll.length}곳
+              </button>
+              <button
+                className={`h-8 flex-1 rounded-md text-xs font-black transition ${
+                  routeRightPanelTab === "summary" ? "bg-white text-slate-950 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-700"
+                }`}
+                onClick={() => setRouteRightPanelTab("summary")}
+                type="button"
+              >
+                요약 · 티맵 계산
+              </button>
+            </div>
             <div className="min-h-0 flex-1 overflow-auto">
+              {routeRightPanelTab === "summary" ? (
               <div className="border-b border-slate-200/80 p-3">
                 <div className="maju-panel mb-3 p-3">
                   <div className="flex items-start justify-between gap-3">
@@ -4826,6 +4850,9 @@ function TodayCourseView({
                   />
                 ) : null}
               </div>
+              ) : null}
+              {routeRightPanelTab === "list" ? (
+              <>
               <div className="space-y-2 border-b border-slate-200/80 p-3">
                 <label className="relative block">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -5031,6 +5058,8 @@ function TodayCourseView({
                   )}
                 </div>
               </div>
+              </>
+              ) : null}
             </div>
           </div>
         )}
