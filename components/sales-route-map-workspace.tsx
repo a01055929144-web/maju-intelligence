@@ -2279,6 +2279,10 @@ function StoreQuickCard({
   const [isSaving, setIsSaving] = useState(false);
   // 리뷰 요약은 공간을 꽤 차지해서 기본 접힘 상태로 두고, 필요할 때만 펼쳐 보게 합니다.
   const [showReviews, setShowReviews] = useState(false);
+  // 메모는 전체 편집 폼(isEditing)을 열지 않고도 카드에서 바로 입력·수정할 수 있어야 현장에서 자주 남깁니다.
+  const [isMemoEditing, setIsMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState("");
+  const [isSavingMemo, setIsSavingMemo] = useState(false);
   const [draft, setDraft] = useState({
     name: store.name,
     phone: store.phone || "",
@@ -2300,7 +2304,24 @@ function StoreQuickCard({
       menuSummary: store.menuSummary || ""
     });
     setIsEditing(false);
+    setIsMemoEditing(false);
   }, [store.id]);
+
+  function startMemoEdit() {
+    setMemoDraft(store.memo || "");
+    setIsMemoEditing(true);
+  }
+
+  async function saveMemo() {
+    if (!onSave || isSavingMemo) return;
+    setIsSavingMemo(true);
+    try {
+      await onSave({ memo: memoDraft });
+      setIsMemoEditing(false);
+    } finally {
+      setIsSavingMemo(false);
+    }
+  }
 
   async function handleSave() {
     if (!onSave) return;
@@ -2391,7 +2412,48 @@ function StoreQuickCard({
             <span className="line-clamp-2">적재위치 · {store.loadingPosition}</span>
           </p>
         ) : null}
-        {!isEditing && store.memo ? (
+        {!isEditing && isMemoEditing ? (
+          <div className="mt-1.5 flex gap-1.5">
+            <MessageSquareText className="mt-2 h-3 w-3 shrink-0 text-slate-400" />
+            <div className="min-w-0 flex-1">
+              <textarea
+                autoFocus
+                className="min-h-[52px] w-full resize-none rounded-md border border-teal-300 bg-white p-2 text-[11px] font-bold leading-4 text-slate-700 outline-none focus:ring-2 focus:ring-teal-100"
+                onChange={(event) => setMemoDraft(event.target.value)}
+                placeholder="메모를 입력하세요 (예: 정기 납품 조건, 현장 특이사항)"
+                value={memoDraft}
+              />
+              <div className="mt-1 flex justify-end gap-1.5">
+                <button
+                  className="h-6 px-2 text-[10.5px] font-bold text-slate-500 hover:text-slate-700"
+                  onClick={() => setIsMemoEditing(false)}
+                  type="button"
+                >
+                  취소
+                </button>
+                <button
+                  className="h-6 rounded-md bg-teal-700 px-2.5 text-[10.5px] font-black text-white hover:bg-teal-800 disabled:opacity-60"
+                  disabled={isSavingMemo}
+                  onClick={saveMemo}
+                  type="button"
+                >
+                  {isSavingMemo ? "저장 중" : "저장"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : !isEditing && onSave ? (
+          <button
+            className="mt-1.5 flex w-full items-start gap-1.5 rounded-md py-0.5 text-left hover:bg-slate-50"
+            onClick={startMemoEdit}
+            type="button"
+          >
+            <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+            <span className={`line-clamp-2 text-[11px] font-bold leading-4 ${store.memo ? "text-slate-600" : "text-slate-300"}`}>
+              {store.memo ? `메모 · ${store.memo}` : "메모 추가하기"}
+            </span>
+          </button>
+        ) : !isEditing && store.memo ? (
           <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-600">
             <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
             <span className="line-clamp-2">메모 · {store.memo}</span>
