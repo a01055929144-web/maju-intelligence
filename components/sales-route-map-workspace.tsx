@@ -3424,6 +3424,8 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [seoulSyncBusy, setSeoulSyncBusy] = useState(false);
   const [seoulSyncResult, setSeoulSyncResult] = useState<SeoulSyncResult | null>(null);
   const [seoulSyncWarning, setSeoulSyncWarning] = useState("");
+  const [showSourceDetails, setShowSourceDetails] = useState(false);
+  const anySyncBusy = syncBusy || govSyncBusy || seoulSyncBusy;
 
   const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
   const [actionMessage, setActionMessage] = useState("");
@@ -3594,6 +3596,12 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
     }
   }
 
+  // 세 데이터 소스 모두 매일 새벽 cron으로 이미 자동 수집됩니다(설정된 소스만). 이 버튼은 지금 바로 최신
+  // 데이터를 당겨오고 싶을 때 쓰는 수동 새로고침이라, 소스별로 따로 누르지 않도록 한 번에 묶어서 호출합니다.
+  async function handleAllSourcesSync() {
+    await Promise.all([handleAutoSync(), handleGovAutoSync(), handleSeoulAutoSync()]);
+  }
+
   async function runLeadAction(lead: PermitLeadItem, actionType: "call" | "dm" | "visit" | "hold" | "exclude", result?: string) {
     setActionMessage("");
     try {
@@ -3748,8 +3756,9 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
         {uploadOpen ? (
           <div className="space-y-2 p-3">
             <p className="text-xs font-semibold leading-5 text-slate-500">
-              공공데이터포털(지방행정 인허가) 또는 자체 수집한 엑셀/CSV 파일을 업로드하세요. 사업장명, 인허가일자, 영업상태명, 업종명, 주소, 소재지전화
-              컬럼을 자동으로 인식합니다. 같은 사업자번호는 최신 인허가 상태로 갱신되고, 이미 거래처로 등록된 사업자번호는 자동으로 제외 처리됩니다.
+              연결된 데이터 소스(지방행정 인허가·전국/서울시 공공데이터)는 <span className="text-slate-700">매일 새벽 자동으로 수집</span>됩니다. 직접
+              모은 엑셀/CSV 파일을 올리거나, 지금 바로 최신 데이터를 확인하고 싶을 때만 아래 버튼을 누르면 됩니다. 같은 사업자번호는 최신 인허가
+              상태로 갱신되고, 이미 거래처로 등록된 사업자번호는 자동으로 제외 처리됩니다.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <label className="maju-button-primary inline-flex w-fit cursor-pointer">
@@ -3767,26 +3776,27 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                   type="file"
                 />
               </label>
-              <button className="maju-button-secondary inline-flex w-fit items-center gap-2" disabled={syncBusy} onClick={() => void handleAutoSync()} type="button">
+              <button className="maju-button-secondary inline-flex w-fit items-center gap-2" disabled={anySyncBusy} onClick={() => void handleAllSourcesSync()} type="button">
                 <Radar className="h-4 w-4" />
-                {syncBusy ? "가져오는 중..." : "인허가 데이터 지금 가져오기(API)"}
+                {anySyncBusy ? "수집 중..." : "신규 리드 지금 수집"}
               </button>
-              <button className="maju-button-secondary inline-flex w-fit items-center gap-2" disabled={govSyncBusy} onClick={() => void handleGovAutoSync()} type="button">
-                <Radar className="h-4 w-4" />
-                {govSyncBusy ? "가져오는 중..." : "지금 가져오기(전국 공공데이터)"}
-              </button>
-              <button className="maju-button-secondary inline-flex w-fit items-center gap-2" disabled={seoulSyncBusy} onClick={() => void handleSeoulAutoSync()} type="button">
-                <Radar className="h-4 w-4" />
-                {seoulSyncBusy ? "가져오는 중..." : "지금 가져오기(서울시 공공데이터)"}
+              <button
+                className="text-[11px] font-bold text-slate-400 underline decoration-dotted underline-offset-2 hover:text-slate-600"
+                onClick={() => setShowSourceDetails((value) => !value)}
+                type="button"
+              >
+                {showSourceDetails ? "소스 정보 접기" : "어떤 소스에서 가져오나요?"}
               </button>
             </div>
-            <p className="text-[11px] font-semibold leading-4 text-slate-400">
-              "인허가 데이터 지금 가져오기"는 localdata.go.kr Open API로 최근 3일 변경분을 자동으로 가져옵니다. LOCALDATA_API_KEY 환경변수가 설정된
-              회사만 사용할 수 있고, 매일 새벽 자동 실행도 함께 동작합니다. "전국 공공데이터"는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만
-              건)에서 가져오며 GOV_RESTAURANT_API_KEY가 필요합니다. "서울시 공공데이터"는 서울 열린데이터광장에서 서울시만(약 53만 건) 가져오되
-              좌표를 직접 변환해 채우므로 더 빠르며 SEOUL_OPENDATA_API_KEY가 필요합니다 — 두 API 모두 최근 변경분만 걸러주지 않아 한 번에 전체를
-              다 훑을 수 없어, 매일 다른 구간을 훑도록 되어 있어 완전 커버리지까지 시간이 걸릴 수 있습니다.
-            </p>
+            {showSourceDetails ? (
+              <p className="text-[11px] font-semibold leading-4 text-slate-400">
+                "지방행정 인허가"는 localdata.go.kr Open API로 최근 3일 변경분을 가져옵니다(LOCALDATA_API_KEY 필요). "전국 공공데이터"는
+                행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, "서울시 공공데이터"는 서울 열린데이터광장(서울시만
+                약 53만 건, SEOUL_OPENDATA_API_KEY 필요)에서 가져오며 좌표를 직접 변환해 채워 더 빠릅니다. 미설정된 소스는 건너뛰고 설정된 소스만
+                수집합니다 — 전국/서울시 두 API는 최근 변경분만 걸러주지 않아 한 번에 전체를 다 훑을 수 없어, 매일 다른 구간을 훑도록 되어 있고
+                완전 커버리지까지 시간이 걸릴 수 있습니다.
+              </p>
+            ) : null}
             {uploadWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{uploadWarning}</p> : null}
             {uploadResult ? (
               <div className="flex flex-wrap gap-2 rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-600">
@@ -3799,31 +3809,35 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                 {uploadResult.skippedNoName ? <span className="text-rose-600">상호명 없음 건너뜀 {uploadResult.skippedNoName.toLocaleString()}</span> : null}
               </div>
             ) : null}
-            {syncWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{syncWarning}</p> : null}
-            {syncResult ? (
-              <div className="flex flex-wrap gap-2 rounded-md bg-teal-50 p-3 text-xs font-bold text-teal-800">
-                <span>업종 {syncResult.opnSvcIds.length}종 · 수신 {syncResult.fetched.toLocaleString()}행</span>
-                <span className="text-emerald-700">신규 {syncResult.ingest.inserted.toLocaleString()}</span>
-                <span className="text-blue-700">갱신 {syncResult.ingest.updated.toLocaleString()}</span>
-                <span className="text-slate-500">기존 거래처 중복 {syncResult.ingest.duplicates.toLocaleString()}</span>
-              </div>
-            ) : null}
-            {govSyncWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{govSyncWarning}</p> : null}
-            {govSyncResult ? (
-              <div className="flex flex-wrap gap-2 rounded-md bg-teal-50 p-3 text-xs font-bold text-teal-800">
-                <span>수신 {govSyncResult.fetched.toLocaleString()}행</span>
-                <span className="text-emerald-700">신규 {govSyncResult.ingest.inserted.toLocaleString()}</span>
-                <span className="text-blue-700">갱신 {govSyncResult.ingest.updated.toLocaleString()}</span>
-                <span className="text-slate-500">기존 거래처 중복 {govSyncResult.ingest.duplicates.toLocaleString()}</span>
-              </div>
-            ) : null}
-            {seoulSyncWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{seoulSyncWarning}</p> : null}
-            {seoulSyncResult ? (
-              <div className="flex flex-wrap gap-2 rounded-md bg-teal-50 p-3 text-xs font-bold text-teal-800">
-                <span>수신 {seoulSyncResult.fetched.toLocaleString()}행</span>
-                <span className="text-emerald-700">신규 {seoulSyncResult.ingest.inserted.toLocaleString()}</span>
-                <span className="text-blue-700">갱신 {seoulSyncResult.ingest.updated.toLocaleString()}</span>
-                <span className="text-slate-500">기존 거래처 중복 {seoulSyncResult.ingest.duplicates.toLocaleString()}</span>
+            {syncResult || govSyncResult || seoulSyncResult || syncWarning || govSyncWarning || seoulSyncWarning ? (
+              <div className="space-y-1.5 rounded-md bg-slate-50 p-3">
+                {syncResult ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800">
+                    <span className="text-slate-500">지방행정 인허가 ·</span>
+                    <span className="text-emerald-700">신규 {syncResult.ingest.inserted.toLocaleString()}</span>
+                    <span className="text-blue-700">갱신 {syncResult.ingest.updated.toLocaleString()}</span>
+                    <span className="text-slate-400">중복 {syncResult.ingest.duplicates.toLocaleString()}</span>
+                  </div>
+                ) : null}
+                {syncWarning ? <p className="text-xs font-bold text-amber-800">지방행정 인허가 · {syncWarning}</p> : null}
+                {govSyncResult ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800">
+                    <span className="text-slate-500">전국 공공데이터 ·</span>
+                    <span className="text-emerald-700">신규 {govSyncResult.ingest.inserted.toLocaleString()}</span>
+                    <span className="text-blue-700">갱신 {govSyncResult.ingest.updated.toLocaleString()}</span>
+                    <span className="text-slate-400">중복 {govSyncResult.ingest.duplicates.toLocaleString()}</span>
+                  </div>
+                ) : null}
+                {govSyncWarning ? <p className="text-xs font-bold text-amber-800">전국 공공데이터 · {govSyncWarning}</p> : null}
+                {seoulSyncResult ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800">
+                    <span className="text-slate-500">서울시 공공데이터 ·</span>
+                    <span className="text-emerald-700">신규 {seoulSyncResult.ingest.inserted.toLocaleString()}</span>
+                    <span className="text-blue-700">갱신 {seoulSyncResult.ingest.updated.toLocaleString()}</span>
+                    <span className="text-slate-400">중복 {seoulSyncResult.ingest.duplicates.toLocaleString()}</span>
+                  </div>
+                ) : null}
+                {seoulSyncWarning ? <p className="text-xs font-bold text-amber-800">서울시 공공데이터 · {seoulSyncWarning}</p> : null}
               </div>
             ) : null}
           </div>
