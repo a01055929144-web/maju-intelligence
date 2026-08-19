@@ -4,7 +4,8 @@ import {
   sendBusinessClosureAlerts,
   sendDailyChurnRiskDigests,
   syncAllCompaniesGovRestaurantLeads,
-  syncAllCompaniesLocalDataPermitLeads
+  syncAllCompaniesLocalDataPermitLeads,
+  syncAllCompaniesSeoulRestaurantLeads
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,12 @@ export const maxDuration = 60;
  * 회전시켜, 반복 실행하면 결국 전국을 다 훑게 되지만 완전 커버리지까지 며칠~몇 주가 걸릴 수
  * 있습니다. 키가 없으면 syncAllCompaniesGovRestaurantLeads()가 즉시 빈 결과를 반환합니다.
  *
+ * (6) 서울 열린데이터광장(openapi.seoul.go.kr) 서울시 일반음식점 인허가 정보 자동 수집 —
+ * SEOUL_OPENDATA_API_KEY가 설정된 회사에 한해 매일 최근 3일 변경분을 가져와 적재합니다. 서울만
+ * 다루는 대신(약 53만 건, 전국판의 1/4 수준) 좌표계가 확정적(EPSG:5174)이라 좌표를 직접
+ * 변환해 채우므로 카카오 지오코더를 타지 않습니다. 이 API도 최근 변경분 필터가 없어 매일 다른
+ * 구간을 훑도록 회전시킵니다(lib/seoul-restaurant.ts). 키가 없으면 빈 결과를 반환합니다.
+ *
  * Vercel signs cron requests with an Authorization: Bearer header matching CRON_SECRET — see
  * https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs. Without CRON_SECRET
  * configured, the endpoint refuses all requests rather than running unauthenticated.
@@ -50,11 +57,19 @@ export async function GET(request: NextRequest) {
   }
 
   const businessStatus = await refreshAllCompaniesBusinessStatuses();
-  const [closureAlerts, churnRiskDigest, permitLeadSync, govRestaurantLeadSync] = await Promise.all([
+  const [closureAlerts, churnRiskDigest, permitLeadSync, govRestaurantLeadSync, seoulRestaurantLeadSync] = await Promise.all([
     sendBusinessClosureAlerts(businessStatus.closed),
     sendDailyChurnRiskDigests(),
     syncAllCompaniesLocalDataPermitLeads(),
-    syncAllCompaniesGovRestaurantLeads()
+    syncAllCompaniesGovRestaurantLeads(),
+    syncAllCompaniesSeoulRestaurantLeads()
   ]);
-  return NextResponse.json({ businessStatus, closureAlerts, churnRiskDigest, permitLeadSync, govRestaurantLeadSync });
+  return NextResponse.json({
+    businessStatus,
+    closureAlerts,
+    churnRiskDigest,
+    permitLeadSync,
+    govRestaurantLeadSync,
+    seoulRestaurantLeadSync
+  });
 }

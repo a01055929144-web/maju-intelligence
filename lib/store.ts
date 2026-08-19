@@ -2,6 +2,7 @@ import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
+import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { enrichLeadRecommendations } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
@@ -1861,7 +1862,8 @@ export function getSystemStatus(): SystemStatus {
       { key: "NTS_BUSINESS_API_KEY", present: ntsBusinessConfigured, required: false, scope: "server" },
       { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" },
       { key: "LOCALDATA_API_KEY", present: isLocalDataApiConfigured(), required: false, scope: "server" },
-      { key: "GOV_RESTAURANT_API_KEY", present: isGovRestaurantApiConfigured(), required: false, scope: "server" }
+      { key: "GOV_RESTAURANT_API_KEY", present: isGovRestaurantApiConfigured(), required: false, scope: "server" },
+      { key: "SEOUL_OPENDATA_API_KEY", present: isSeoulOpenDataConfigured(), required: false, scope: "server" }
     ],
     services: [
       {
@@ -4182,6 +4184,63 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
   const results = await Promise.all(companies.map((company) => syncGovRestaurantLeads(company.id)));
 
   return results.reduce<GovRestaurantDailySyncResult>(
+    (total, result) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalFetched: total.totalFetched + result.fetched,
+      totalInserted: total.totalInserted + result.ingest.inserted,
+      totalUpdated: total.totalUpdated + result.ingest.updated
+    }),
+    { ...empty, configured: true }
+  );
+}
+
+export type SeoulRestaurantSyncResult = {
+  configured: boolean;
+  fetched: number;
+  ingest: PermitLeadIngestResult;
+};
+
+/**
+ * 서울 열린데이터광장(openapi.seoul.go.kr) "서울시 일반음식점 인허가 정보"에서 최근 변경분을
+ * 가져와 ingestPermitLeadRows()로 흘려보냅니다. 좌표(X/Y)를 EPSG:5174→WGS84로 직접 변환해
+ * 채우므로(lib/seoul-restaurant.ts) 카카오 지오코더를 다시 타지 않고 바로 지도에 표시됩니다.
+ * SEOUL_OPENDATA_API_KEY가 없으면 configured: false를 반환합니다.
+ */
+export async function syncSeoulRestaurantLeads(companyId: string, days = 3): Promise<SeoulRestaurantSyncResult> {
+  if (!isSeoulOpenDataConfigured()) {
+    return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
+  }
+
+  const rows = await fetchRecentSeoulRestaurantRows(days);
+  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "seoul_opendata_api" });
+
+  return { configured: true, fetched: rows.length, ingest };
+}
+
+export type SeoulRestaurantDailySyncResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalFetched: number;
+  totalInserted: number;
+  totalUpdated: number;
+};
+
+/** 일일 cron에서 모든 회사에 대해 서울시 음식점 공공데이터 자동 수집을 실행합니다. */
+export async function syncAllCompaniesSeoulRestaurantLeads(): Promise<SeoulRestaurantDailySyncResult> {
+  const empty: SeoulRestaurantDailySyncResult = {
+    configured: isSeoulOpenDataConfigured(),
+    companiesProcessed: 0,
+    totalFetched: 0,
+    totalInserted: 0,
+    totalUpdated: 0
+  };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map((company) => syncSeoulRestaurantLeads(company.id)));
+
+  return results.reduce<SeoulRestaurantDailySyncResult>(
     (total, result) => ({
       configured: true,
       companiesProcessed: total.companiesProcessed + 1,
