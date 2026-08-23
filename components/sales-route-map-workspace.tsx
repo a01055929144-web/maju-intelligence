@@ -433,9 +433,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     const routeStores = routePlan.source === "supabase" ? createStoreRows(routePlan, mapMarkers) : [];
     return routeStores.length ? routeStores : ledgerFallbackStores;
   }, [ledgerFallbackStores, mapMarkers, routePlan]);
+  // manualDrivers도 넘겨야 "새 담당자·배송차 추가"로 등록한, 아직 거래처가 없는 담당자가 빈 배송차로
+  // 목록에 보입니다(2026-08-24 발견: 이전에는 manualVehicles만 반영되어 담당자만 추가하면 목록에
+  // 나타나지 않는 버그가 있었음 — 삭제 기능을 테스트하다 발견).
   const baseDeliveryVehicles = useMemo(
-    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualVehicles),
-    [routeSeedStores, vehicleFuelTypes, manualVehicles]
+    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualVehicles, manualDrivers),
+    [routeSeedStores, vehicleFuelTypes, manualVehicles, manualDrivers]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   const fuelTypeConfiguredByVehicleId = useMemo(() => {
@@ -9431,7 +9434,8 @@ function toCustomerPayload(store: StoreRow) {
 function createDeliveryVehiclesFromStores(
   stores: StoreRow[],
   vehicleFuelTypes?: Record<string, "gasoline" | "diesel">,
-  extraVehicles: string[] = []
+  extraVehicles: string[] = [],
+  extraDrivers: string[] = []
 ): DeliveryVehicle[] {
   const groups = new Map<string, StoreRow[]>();
   const explicitVehicleKeys = new Set<string>();
@@ -9452,6 +9456,14 @@ function createDeliveryVehiclesFromStores(
   extraVehicles.forEach((vehicleName) => {
     explicitVehicleKeys.add(vehicleName);
     if (!groups.has(vehicleName)) groups.set(vehicleName, []);
+  });
+
+  // extraDrivers("새 담당자·배송차 추가"로 등록한, 아직 거래처가 없는 담당자)는 배송차 "이름"이 아니라
+  // 담당자 이름이라 explicitVehicleKeys에는 넣지 않습니다 — 그래야 아래에서 배송차 이름은 자동
+  // 채번("배송 N호차")되고, 담당자 표시값만 이 이름을 그대로 씁니다. 이미 실제 거래처가 있어 groups에
+  // 존재하는 담당자면 건드리지 않습니다(중복 빈 그룹 방지).
+  extraDrivers.forEach((driverName) => {
+    if (!groups.has(driverName)) groups.set(driverName, []);
   });
 
   return Array.from(groups.entries()).map(([vehicleKey, stops], index) => {
