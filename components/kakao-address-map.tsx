@@ -818,20 +818,26 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
   // 아래 marker.grade 분기를 먼저 타서 등급 배지 안에 "신규" 텍스트만 남고 상호명이 통째로
   // 빠지는 문제가 있었습니다(2026-08-24 피드백: "3번째 사진에 신규라고만 마커가 있어서").
   if (marker.tone === "lead") {
-    // 기거래처 근접 리드는 테두리를 흰색 대신 앰버(주황)로 바꿔 눈에 띄게 합니다(2026-08-24
-    // 피드백: "기거래처 주변의 리드들은 별도의 뱃지가 있으면 가독성이 좋을 것 같네").
-    const nearAnchorBorder = marker.nearAnchor ? "#f59e0b" : "#ffffff";
+    // 기거래처 근접 리드는 마커 바깥에 청록(cyan) 헤일로(halo) 링을 둘러 눈에 띄게 합니다
+    // (2026-08-24 피드백: "기거래처 주변의 리드들은 별도의 뱃지가 있으면 가독성이 좋을 것 같네").
+    // 처음엔 테두리 색을 앰버로 바꾸는 방식이었는데, 마커 채우기 색(등급별 보라/파랑/회색/초록)과
+    // 섞여 탁해 보인다는 피드백("색상 조합이 이쁘지 않음")을 받아 — 테두리는 항상 흰색으로 깔끔하게
+    // 유지하고, 그 바깥에 별도 링(box-shadow)만 얹는 방식으로 바꿨습니다. 색도 다른 배지들(개업
+    // 임박=로즈, 인스타=핑크, A등급=보라)과 안 겹치는 청록으로 골랐습니다.
+    const nearAnchorHaloShadow = marker.nearAnchor ? "0 0 0 3px #0891b2," : "";
     const nearAnchorTitleSuffix = marker.nearAnchor ? " · 기거래처 인근" : "";
     if (compactLead) {
       return htmlToElement(`
-        <button type="button" title="${label} · ${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid ${nearAnchorBorder};border-radius:999px;box-shadow:0 4px 10px rgba(15,23,42,.32);"></button>
+        <button type="button" title="${label} · ${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid #ffffff;border-radius:999px;box-shadow:${nearAnchorHaloShadow}0 4px 10px rgba(15,23,42,.32);"></button>
       `);
     }
     const gradeBadge = marker.grade
       ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:999px;background:rgba(255,255,255,.3);font-size:9px;margin-right:5px;flex-shrink:0;">${escapeHtml(marker.grade)}</span>`
       : "";
+    // 뱃지는 알약의 채우기 색과 무관하게 항상 또렷이 보이도록 흰 배경 원 안에 청록색 별을 넣습니다
+    // (기존엔 배경 없이 옅은 별만 있어 등급 배지처럼 색이 섞여 잘 안 보였습니다).
     const nearAnchorBadge = marker.nearAnchor
-      ? `<span style="display:inline-flex;align-items:center;justify-content:center;margin-right:4px;flex-shrink:0;color:#fde68a;font-size:11px;line-height:1;">★</span>`
+      ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:999px;background:#ffffff;color:#0891b2;font-size:9px;margin-right:4px;flex-shrink:0;">★</span>`
       : "";
     return htmlToElement(`
       <button type="button" title="${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:6px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;">

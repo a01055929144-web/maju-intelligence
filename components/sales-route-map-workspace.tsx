@@ -420,6 +420,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   // "활성/숨김" 필터로 전환해서 볼 수 있게 합니다(2026-08-24 피드백: "숨김처리하게되면 별도의
   // 필터값이 있으면 좋을 것 같아 ... 추후에 숨김처리한 거래처도 거래할 수도 있으니깐").
   const [showDismissedLeadsOnMap, setShowDismissedLeadsOnMap] = useState(false);
+  // 네이버 부동산의 지역 드릴다운을 참고해, 검색창 아래에 시군구 → 동 단위로 리드를 좁혀볼 수 있는
+  // 칩 목록을 둡니다(2026-08-24 피드백: "시군구, 동 구분하여 리드 구분을 하게끔 만들것"). 동은
+  // 시군구를 먼저 골라야 그 안의 동만 추려서 보여줍니다.
+  const [mapLeadRegionSigungu, setMapLeadRegionSigungu] = useState("");
+  const [mapLeadRegionDong, setMapLeadRegionDong] = useState("");
   // 카드 안에 줄이 늘거나 줄 때(신규 리드 반경 열기, 리드 전체 필터 표시 등) ResizeObserver가 항상
   // 제때 다시 계산해 주는 건 아니라서(2026-08-24 발견: "내 현재위치 이모티콘 위치가 동떨어져있어") —
   // 카드 높이를 바꾸는 대표 상태들이 바뀔 때마다 렌더 직후 한 번 더 명시적으로 재계산합니다.
@@ -437,7 +442,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     mapLeadIndustryFilter,
     mapLeadOpenDateStart,
     mapLeadOpenDateEnd,
-    showDismissedLeadsOnMap
+    showDismissedLeadsOnMap,
+    mapLeadRegionSigungu,
+    mapLeadRegionDong
   ]);
   // 업종·메뉴 기반 견적서 초안 — 지도 위 리드 카드/거래처 카드 어디서든 열 수 있는 공용 상태입니다.
   const [quoteSubject, setQuoteSubject] = useState<QuoteSubject | null>(null);
@@ -738,16 +745,46 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     });
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 12);
   }, [statusScopedLeadsForMap]);
+  // 지도 "리드 전체"용 지역(시군구) 빠른 선택 옵션 — 네이버 부동산처럼 검색창 아래에서 시군구를
+  // 고르면 그 안의 동만 다시 추려 보여줍니다.
+  const mapLeadRegionOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    statusScopedLeadsForMap.forEach((lead) => {
+      const { sigungu } = parseLeadRegion(lead.address);
+      if (!sigungu) return;
+      counts.set(sigungu, (counts.get(sigungu) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);
+  }, [statusScopedLeadsForMap]);
+  const mapLeadDongOptions = useMemo(() => {
+    if (!mapLeadRegionSigungu) return [];
+    const counts = new Map<string, number>();
+    statusScopedLeadsForMap.forEach((lead) => {
+      const region = parseLeadRegion(lead.address);
+      if (region.sigungu !== mapLeadRegionSigungu || !region.dong) return;
+      counts.set(region.dong, (counts.get(region.dong) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);
+  }, [statusScopedLeadsForMap, mapLeadRegionSigungu]);
+  function selectMapLeadRegionSigungu(next: string) {
+    setMapLeadRegionSigungu((current) => (current === next ? "" : next));
+    setMapLeadRegionDong("");
+  }
   const filteredAllLeadsForMap = useMemo(() => {
-    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd) return statusScopedLeadsForMap;
+    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
       if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
       if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
         if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
       }
+      if (mapLeadRegionSigungu) {
+        const region = parseLeadRegion(lead.address);
+        if (region.sigungu !== mapLeadRegionSigungu) return false;
+        if (mapLeadRegionDong && region.dong !== mapLeadRegionDong) return false;
+      }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd]);
+  }, [statusScopedLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -760,7 +797,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
         label: "신규",
-        // 기거래처 근접 리드는 지도에서 앰버 테두리 + ★ 뱃지로 구분합니다(2026-08-24 피드백).
+        // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
+        // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
         nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
         name: lead.businessName,
         tone: "lead" as const,
@@ -1627,13 +1665,68 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             ) : null}
           </div>
         ) : null}
+        {activeView === "map" && showAllLeadsOnMap && mapLeadRegionOptions.length ? (
+          <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-black text-slate-400">
+              <MapPin className="h-3.5 w-3.5" />
+              지역
+            </span>
+            <button
+              className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
+                !mapLeadRegionSigungu ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+              onClick={() => selectMapLeadRegionSigungu("")}
+              type="button"
+            >
+              전체
+            </button>
+            {mapLeadRegionOptions.map(([sigungu, count]) => (
+              <button
+                className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
+                  mapLeadRegionSigungu === sigungu ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+                key={sigungu}
+                onClick={() => selectMapLeadRegionSigungu(sigungu)}
+                type="button"
+              >
+                {sigungu} <span className="opacity-70">{count.toLocaleString()}</span>
+              </button>
+            ))}
+            {mapLeadRegionSigungu && mapLeadDongOptions.length ? (
+              <>
+                <span className="mx-0.5 shrink-0 text-slate-300">›</span>
+                <button
+                  className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
+                    !mapLeadRegionDong ? "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                  onClick={() => setMapLeadRegionDong("")}
+                  type="button"
+                >
+                  {mapLeadRegionSigungu} 전체
+                </button>
+                {mapLeadDongOptions.map(([dong, count]) => (
+                  <button
+                    className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
+                      mapLeadRegionDong === dong ? "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                    key={dong}
+                    onClick={() => setMapLeadRegionDong((current) => (current === dong ? "" : dong))}
+                    type="button"
+                  >
+                    {dong} <span className="opacity-70">{count.toLocaleString()}</span>
+                  </button>
+                ))}
+              </>
+            ) : null}
+          </div>
+        ) : null}
         {activeView === "map" && showAllLeadsOnMap ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <span className="flex shrink-0 items-center gap-1.5 text-xs font-black text-slate-600">
               <Layers className="h-3.5 w-3.5" />
               리드 전체 필터
             </span>
-            <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 노란 테두리·★ = 기거래처 인근 리드." />
+            <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 청록 테두리·★ = 기거래처 인근 리드." />
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               <button
                 className={`h-8 px-2.5 text-[11px] font-black transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
@@ -3608,15 +3701,33 @@ function deleteQuoteDraftFromLocal(subject: QuoteSubject) {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(QUOTE_DRAFT_UPDATED_EVENT, { detail: { id: quoteDraftId(subject) } }));
 }
 
-function normalizeInstagramSeed(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^\da-z가-힣]/gi, "")
-    .slice(0, 20);
-}
-
 function normalizeLeadSearchToken(value: string) {
   return value.toLowerCase().replace(/[@._\-\s]/g, "");
+}
+
+const SIDO_PREFIX_PATTERN =
+  /^(서울특별시|서울|부산광역시|부산|대구광역시|대구|인천광역시|인천|광주광역시|광주|대전광역시|대전|울산광역시|울산|세종특별자치시|세종|경기도|경기|강원특별자치도|강원도|강원|충청북도|충북|충청남도|충남|전북특별자치도|전라북도|전북|전라남도|전남|경상북도|경북|경상남도|경남|제주특별자치도|제주)\s*/;
+
+/** 도로명주소 문자열에서 시군구/동을 뽑아 지도 리드를 지역별로 묶는 데 씁니다(2026-08-24 피드백:
+ * "시군구, 동 구분하여 리드 구분을 하게끔 만들것" — 네이버 부동산의 지역 드릴다운 참고). 정확한
+ * 행정구역 API 없이 문자열 패턴만으로 추출하는 근사치라, 시/군/구가 겹치는 드문 표기(고양시
+ * 일산동구 등)는 시 단위까지만 잡힐 수 있습니다 — 그 정도 오차는 지도 위 대략적인 지역 구분
+ * 용도로는 괜찮다고 판단했습니다. */
+function parseLeadRegion(address?: string): { dong: string; sigungu: string } {
+  const trimmed = (address || "").trim();
+  if (!trimmed) return { dong: "", sigungu: "" };
+
+  // 동/읍/면/가 명은 도로명주소 맨 끝 괄호 안에 병기되는 경우가 많습니다:
+  // "... 88 1층 (성수동1가)", "... 102동 205호 (마장동, 라봄 성동)".
+  const parenMatch = trimmed.match(/\(([^()]*)\)\s*$/);
+  const dongRaw = parenMatch?.[1]?.split(",")[0]?.trim() || "";
+  const dong = /(동|리|가)\d*$/.test(dongRaw) ? dongRaw : "";
+
+  const withoutSido = trimmed.replace(SIDO_PREFIX_PATTERN, "").trim();
+  const firstToken = withoutSido.split(/\s+/)[0] || "";
+  const sigungu = /(시|군|구)$/.test(firstToken) ? firstToken : "";
+
+  return { dong, sigungu };
 }
 
 function normalizeInstagramHandleValue(value: string | undefined) {
@@ -3640,13 +3751,11 @@ function getLeadInstagramHandle(lead: PermitLeadItem) {
   return normalizeInstagramHandleValue(lead.instagramUrl);
 }
 
-function getLeadInstagramDisplayLabel(lead: PermitLeadItem) {
-  const handle = getLeadInstagramHandle(lead);
-  if (handle) return handle;
-  const seed = normalizeInstagramSeed(lead.businessName);
-  return seed ? `@${seed}` : "";
-}
-
+// 2026-08-24 피드백("인스타 id 검색이 잘 안되고 있어")의 원인: 예전에는 실제 저장된 인스타 ID가
+// 없는 리드도 상호명에서 글자만 뽑아 "@추정아이디"를 만들어 표시/검색에 썼습니다. 이 추정값은
+// 실제 계정과 무관해서, 사용자가 진짜 아이디로 검색해도 안 걸리고, 클릭해도 엉뚱한(혹은 존재하지
+// 않는) 계정으로 연결되는 문제가 있었습니다. 이제 실제로 저장된 ID만 "확인됨"으로 표시/검색하고,
+// 없으면 명확히 "검색 필요" 상태로 보여줍니다.
 function getLeadInstagramSearchUrl(lead: PermitLeadItem) {
   const handle = getLeadInstagramHandle(lead);
   if (handle) return `https://www.instagram.com/${encodeURIComponent(handle.replace(/^@/, ""))}/`;
@@ -3655,8 +3764,8 @@ function getLeadInstagramSearchUrl(lead: PermitLeadItem) {
 
 function getLeadInstagramSearchTokens(lead: PermitLeadItem) {
   const handle = getLeadInstagramHandle(lead);
-  const displayLabel = getLeadInstagramDisplayLabel(lead);
-  return [lead.instagramUrl || "", handle, handle.replace(/^@/, ""), displayLabel, displayLabel.replace(/^@/, ""), normalizeLeadSearchToken(handle), normalizeLeadSearchToken(displayLabel)].filter(Boolean);
+  if (!handle) return [];
+  return [lead.instagramUrl || "", handle, handle.replace(/^@/, ""), normalizeLeadSearchToken(handle)].filter(Boolean);
 }
 
 function permitLeadActionLabel(actionType: string) {
@@ -3896,8 +4005,8 @@ function PermitLeadMapQuickCard({
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">개업 임박</span>
             ) : null}
             {isNearAnchor ? (
-              <span className="flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700">
-                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+              <span className="flex items-center gap-0.5 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-black text-cyan-700 ring-1 ring-inset ring-cyan-100">
+                <Star className="h-2.5 w-2.5 fill-cyan-600 text-cyan-600" />
                 기거래처 근접
               </span>
             ) : null}
@@ -6129,7 +6238,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                     const quoteDraft = quoteDrafts[quoteDraftId(getPermitLeadQuoteSubject(lead))];
                     const tableActionLabel = tableAction.mode === "quote" && quoteDraft ? "이어 작성" : tableAction.label;
                     const selected = selectedLeadIds.includes(lead.id);
-                    const instagramDisplayLabel = getLeadInstagramDisplayLabel(lead);
+                    const instagramHandle = getLeadInstagramHandle(lead);
                     const instagramSearchUrl = getLeadInstagramSearchUrl(lead);
                     return (
                       <tr
@@ -6189,15 +6298,17 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                         </td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <a
-                            className="inline-flex max-w-[96px] items-center gap-1 truncate rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-black text-pink-800 transition hover:bg-pink-100"
+                            className={`inline-flex max-w-[96px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-black transition ${
+                              instagramHandle ? "bg-pink-50 text-pink-800 hover:bg-pink-100" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            }`}
                             href={instagramSearchUrl}
                             onClick={(event) => event.stopPropagation()}
                             rel="noreferrer"
                             target="_blank"
-                            title="인스타 검색 열기"
+                            title={instagramHandle ? "인스타 프로필 열기" : "인스타 아이디 검색 필요 — 클릭하면 인스타그램 검색이 열립니다."}
                           >
                             <Instagram className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{instagramDisplayLabel || "검색"}</span>
+                            <span className="truncate">{instagramHandle || "검색 필요"}</span>
                           </a>
                         </td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 font-bold text-slate-700">
