@@ -11,6 +11,7 @@ export type PlaceLinks = {
   checkedAt: string | null;
   enrichedPhone: string;
   enrichedIndustry: string;
+  enrichedAddress: string;
 };
 
 type ExistingPlaceLinks = Partial<Pick<PlaceLinks, "googleMapUrl" | "kakaoPlaceUrl" | "naverPlaceUrl">>;
@@ -31,7 +32,8 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
     naverBlogSearchUrl: buildNaverBlogSearchUrl(query),
     checkedAt,
     enrichedPhone: kakaoResult.phone,
-    enrichedIndustry: kakaoResult.industry
+    enrichedIndustry: kakaoResult.industry,
+    enrichedAddress: kakaoResult.address
   };
 }
 
@@ -62,10 +64,11 @@ type KakaoPlaceResult = {
   placeUrl: string;
   phone: string;
   industry: string;
+  address: string;
 };
 
 async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
-  const empty: KakaoPlaceResult = { placeUrl: "", phone: "", industry: "" };
+  const empty: KakaoPlaceResult = { placeUrl: "", phone: "", industry: "", address: "" };
   const restKey = process.env.KAKAO_REST_KEY;
   if (!restKey || restKey === "replace-with-kakao-rest-api-key" || !query.trim()) return empty;
 
@@ -79,7 +82,7 @@ async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
 
     if (!response.ok) return empty;
     const payload = (await response.json()) as {
-      documents?: Array<{ id?: string; place_url?: string; phone?: string; category_name?: string }>;
+      documents?: Array<{ id?: string; place_url?: string; phone?: string; category_name?: string; road_address_name?: string; address_name?: string }>;
     };
     const place = payload.documents?.[0];
     if (!place) return empty;
@@ -91,7 +94,9 @@ async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
     return {
       placeUrl,
       phone: place.phone?.trim() || "",
-      industry
+      industry,
+      // 도로명 주소를 우선하고, 없으면 지번 주소로 대체합니다(영업리드 주소 미확인 보강, 2026-08-24 피드백).
+      address: place.road_address_name?.trim() || place.address_name?.trim() || ""
     };
   } catch {
     return empty;

@@ -4663,6 +4663,9 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
     payload.google_place_url = placeLinks.googleMapUrl || row.google_place_url;
     if (!row.phone && placeLinks.enrichedPhone) payload.phone = placeLinks.enrichedPhone;
     if ((!row.industry_primary || row.industry_primary === "미분류") && placeLinks.enrichedIndustry) payload.industry_primary = placeLinks.enrichedIndustry;
+    // 주소 미확인 리드 보강(2026-08-24 피드백: "영업리드들의 정보들이 비어져있는게 많네") — 인허가
+    // 원본 데이터에 주소가 없을 때만 카카오 로컬 검색 결과의 도로명/지번 주소로 채웁니다.
+    if (!row.address && placeLinks.enrichedAddress) payload.address = placeLinks.enrichedAddress;
     sources.placeLinks = Boolean(payload.naver_place_url || payload.kakao_place_url || payload.google_place_url);
   }
 
@@ -4692,7 +4695,7 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
       isTarget: row.is_target_industry,
       industryKnown,
       hasPhone: Boolean((payload.phone as string | undefined) ?? row.phone),
-      hasAddress: Boolean(row.address),
+      hasAddress: Boolean((payload.address as string | undefined) ?? row.address),
       keywordVolume: (payload.keyword_volume as number | undefined) ?? row.keyword_volume ?? undefined,
       reviewCount: (payload.review_count as number | undefined) ?? row.review_count ?? undefined,
       rating: (payload.rating as number | undefined) ?? row.rating ?? undefined
@@ -4710,7 +4713,7 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
     "rating",
     "keyword_volume"
   ];
-  const profileFieldKeys = ["phone", "industry_primary"];
+  const profileFieldKeys = ["phone", "industry_primary", "address"];
   const payloadTiers = [
     Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)),
     Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key))),
@@ -4769,6 +4772,66 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
       ? "외부 정보 일부는 DB 컬럼이 아직 반영되지 않아 저장하지 못했습니다. 링크 확인 이력은 남겼습니다."
       : undefined
   };
+}
+
+export type LeadContactInfoBackfillResult = {
+  addressFilled: number;
+  phoneFilled: number;
+  processed: number;
+};
+
+const LEAD_CONTACT_BACKFILL_BATCH_SIZE = 30;
+
+/**
+ * 연락처/주소가 비어있는 리드를 찾아 enrichPermitLeadExternalInfo()로 한 건씩 보강합니다(2026-08-24
+ * 피드백: "영업리드들의 정보들이 비어져있는게 많네, 기거래처 카드 참고해서 보충해야할 듯"). 인허가
+ * 원본 데이터 자체에 없는 값이라 대표자명까지는 채울 수 없지만, 카카오 로컬 검색으로 연락처·주소는
+ * 상당수 채울 수 있습니다. 한 번에 다 훑으면 리드 수(수천 건)만큼 외부 API를 호출하게 되어 크론
+ * 시간 예산을 넘길 수 있으므로, 오래된 순으로 배치(기본 30건)만 처리하고 다음 날 이어서 훑습니다.
+ */
+export async function enrichLeadsMissingContactInfo(companyId: string, limit = LEAD_CONTACT_BACKFILL_BATCH_SIZE): Promise<LeadContactInfoBackfillResult> {
+  const empty: LeadContactInfoBackfillResult = { addressFilled: 0, phoneFilled: 0, processed: 0 };
+  if (!isProductionStoreConfigured()) return empty;
+
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=updated_at.asc&limit=${limit}`
+  ).catch(() => []);
+
+  let phoneFilled = 0;
+  let addressFilled = 0;
+  for (const row of rows) {
+    const result = await enrichPermitLeadExternalInfo(companyId, row.id).catch(() => null);
+    if (result?.lead?.phone) phoneFilled += 1;
+    if (result?.lead?.address) addressFilled += 1;
+  }
+
+  return { addressFilled, phoneFilled, processed: rows.length };
+}
+
+export type LeadContactInfoBackfillDailyResult = {
+  companiesProcessed: number;
+  totalAddressFilled: number;
+  totalPhoneFilled: number;
+  totalProcessed: number;
+};
+
+/** 일일 cron(app/api/cron/recommend-refresh)에서 모든 회사에 대해 리드 연락처/주소 보강을 실행합니다. */
+export async function enrichAllCompaniesLeadsMissingContactInfo(): Promise<LeadContactInfoBackfillDailyResult> {
+  const empty: LeadContactInfoBackfillDailyResult = { companiesProcessed: 0, totalAddressFilled: 0, totalPhoneFilled: 0, totalProcessed: 0 };
+  if (!isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map((company) => enrichLeadsMissingContactInfo(company.id).catch(() => ({ addressFilled: 0, phoneFilled: 0, processed: 0 }))));
+
+  return results.reduce<LeadContactInfoBackfillDailyResult>(
+    (total, result) => ({
+      companiesProcessed: total.companiesProcessed + 1,
+      totalAddressFilled: total.totalAddressFilled + result.addressFilled,
+      totalPhoneFilled: total.totalPhoneFilled + result.phoneFilled,
+      totalProcessed: total.totalProcessed + result.processed
+    }),
+    empty
+  );
 }
 
 /** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */

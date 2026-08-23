@@ -212,6 +212,13 @@ export function KakaoAddressMap({
         const roadPathSegments = splitRoutePath(routePath).map((segment) => segment.map((point) => new kakao.maps.LatLng(point.lat, point.lng)));
         const hasRoadPath = roadPathSegments.some((segment) => segment.length >= 2);
 
+        // 신규 리드 마커가 한 번에 많이(20개 초과) 뜨면 상호명이 적힌 넓은 알약형 라벨끼리 서로
+        // 겹쳐 지도가 읽기 어려워집니다(2026-08-24 피드백: "카드가 겹쳐지고 있어서 가독성이
+        // 떨어지는 게 있어"). 그럴 때는 리드 마커만 이름 없는 작은 점으로 축약하고, 상호명은
+        // title 툴팁(마우스 오버)과 클릭 시 뜨는 카드로 확인하도록 합니다.
+        const leadMarkerCount = markers.filter((marker) => marker.tone === "lead").length;
+        const compactLeadMarkers = leadMarkerCount > 20;
+
         await Promise.all(
           markers.map(
             (marker) =>
@@ -225,7 +232,7 @@ export function KakaoAddressMap({
 
                   if (geocodeStatus === kakao.maps.services.Status.OK && result[0]) {
                     const position = new kakao.maps.LatLng(Number(result[0].y), Number(result[0].x));
-                    const overlayContent = createMarkerOverlay(marker);
+                    const overlayContent = createMarkerOverlay(marker, compactLeadMarkers);
                     overlayContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
                     new kakao.maps.CustomOverlay({
                       content: overlayContent,
@@ -732,7 +739,7 @@ function waitForKakaoServices(resolve: () => void, reject: (error: Error) => voi
   });
 }
 
-function createMarkerOverlay(marker: KakaoMapMarker) {
+function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
   const toneClass = marker.tone === "origin"
       ? "background:#111827;color:#ffffff;"
       : marker.markerColor
@@ -769,6 +776,25 @@ function createMarkerOverlay(marker: KakaoMapMarker) {
     return htmlToElement(`
       <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
         ${label}
+      </button>
+    `);
+  }
+
+  // 신규 리드 마커는 등급(A/B/C) 배지가 있어도 항상 상호명을 라벨에 함께 표시합니다 — 예전에는
+  // 아래 marker.grade 분기를 먼저 타서 등급 배지 안에 "신규" 텍스트만 남고 상호명이 통째로
+  // 빠지는 문제가 있었습니다(2026-08-24 피드백: "3번째 사진에 신규라고만 마커가 있어서").
+  if (marker.tone === "lead") {
+    if (compactLead) {
+      return htmlToElement(`
+        <button type="button" title="${label} · ${name}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid #ffffff;border-radius:999px;box-shadow:0 4px 10px rgba(15,23,42,.32);"></button>
+      `);
+    }
+    const gradeBadge = marker.grade
+      ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:999px;background:rgba(255,255,255,.3);font-size:9px;margin-right:5px;flex-shrink:0;">${escapeHtml(marker.grade)}</span>`
+      : "";
+    return htmlToElement(`
+      <button type="button" title="${name}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:6px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;">
+        ${gradeBadge}${label} · ${name}
       </button>
     `);
   }

@@ -18,6 +18,7 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  EyeOff,
   FileImage,
   Gauge,
   Instagram,
@@ -394,6 +395,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(false);
   const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
   const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
+  // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
+  // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
+  const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
+  const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
+  const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
   // 업종·메뉴 기반 견적서 초안 — 지도 위 리드 카드/거래처 카드 어디서든 열 수 있는 공용 상태입니다.
   const [quoteSubject, setQuoteSubject] = useState<QuoteSubject | null>(null);
   const ledgerFallbackStores = useMemo(() => createStoreRowsFromLedgerMarkers(mapMarkers), [mapMarkers]);
@@ -517,6 +524,26 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAllLeadsOnMap]);
 
+  // 지도 위 리드 카드에서 바로 "관심 없음"으로 숨길 수 있게 합니다(2026-08-24 피드백: "관심 없으면
+  // 숨김처리 하면 좋을 것 같네"). 신규 리드 탭의 runLeadAction과 같은 액션 API를 쓰지만, 이 컴포넌트
+  // (SalesRouteMapWorkspace)와 신규 리드 탭(PermitLeadsView)은 서로 다른 컴포넌트라 상태를 공유하지
+  // 않으므로, 지도 쪽 로컬 목록만 직접 갱신합니다.
+  async function dismissLeadFromMap(lead: PermitLeadItem) {
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType: "exclude", result: "제외" })
+      });
+      if (!response.ok) return;
+      setAllLeadsForMap((current) => current.filter((item) => item.id !== lead.id));
+      setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((item) => item.id !== lead.id) } : current));
+      setPreviewLeadId("");
+    } catch {
+      // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다 — 신규 리드 탭에서 다시 시도할 수 있습니다.
+    }
+  }
+
   // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
   // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
   const vehicleNameOptions = useMemo(() => {
@@ -633,12 +660,32 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         y: 0
       }));
   }, [leadRadiusOpen, leadRadiusResult]);
+  // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — allLeadsForMap 원본 기준이라
+  // 필터를 바꿔도 목록 자체는 그대로 유지됩니다.
+  const mapLeadIndustryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    allLeadsForMap.forEach((lead) => {
+      const industry = lead.industryPrimary || "미분류";
+      counts.set(industry, (counts.get(industry) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  }, [allLeadsForMap]);
+  const filteredAllLeadsForMap = useMemo(() => {
+    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd) return allLeadsForMap;
+    return allLeadsForMap.filter((lead) => {
+      if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
+      if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
+        if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
+      }
+      return true;
+    });
+  }, [allLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
     if (!showAllLeadsOnMap) return [];
     const radiusLeadIds = new Set(leadRadiusMapMarkers.map((marker) => marker.id));
-    return allLeadsForMap
+    return filteredAllLeadsForMap
       .filter((lead) => lead.address && !radiusLeadIds.has(lead.id))
       .map((lead) => ({
         address: lead.address!,
@@ -650,7 +697,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         x: 0,
         y: 0
       }));
-  }, [showAllLeadsOnMap, allLeadsForMap, leadRadiusMapMarkers]);
+  }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
   const mapDisplayMarkers = useMemo(
     () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers],
     [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers]
@@ -1470,6 +1517,58 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             ) : null}
           </div>
         ) : null}
+        {activeView === "map" && showAllLeadsOnMap ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="flex shrink-0 items-center gap-1.5 text-xs font-black text-slate-600">
+              <Layers className="h-3.5 w-3.5" />
+              리드 전체 필터
+            </span>
+            <select
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+              onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
+              value={mapLeadIndustryFilter}
+            >
+              <option value="">업종 전체</option>
+              {mapLeadIndustryOptions.map(([industry, count]) => (
+                <option key={industry} value={industry}>
+                  {industry} ({count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1">
+              <span className="text-[11px] font-black text-slate-400">개시일</span>
+              <input
+                className="h-6 rounded border-0 text-[11px] font-bold text-slate-900 outline-none"
+                onChange={(event) => setMapLeadOpenDateStart(event.target.value)}
+                type="date"
+                value={mapLeadOpenDateStart}
+              />
+              <span className="text-[11px] font-bold text-slate-400">~</span>
+              <input
+                className="h-6 rounded border-0 text-[11px] font-bold text-slate-900 outline-none"
+                onChange={(event) => setMapLeadOpenDateEnd(event.target.value)}
+                type="date"
+                value={mapLeadOpenDateEnd}
+              />
+            </div>
+            {mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd ? (
+              <button
+                className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
+                onClick={() => {
+                  setMapLeadIndustryFilter("");
+                  setMapLeadOpenDateStart("");
+                  setMapLeadOpenDateEnd("");
+                }}
+                type="button"
+              >
+                필터 초기화
+              </button>
+            ) : null}
+            <span className="ml-auto text-[11px] font-bold text-slate-500">
+              {allLeadsLoadState === "loading" ? "불러오는 중..." : `${filteredAllLeadsForMap.length.toLocaleString()} / ${allLeadsForMap.length.toLocaleString()}곳 표시 중`}
+            </span>
+          </div>
+        ) : null}
       </section>
 
       {activeView === "map" ? (
@@ -1571,6 +1670,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                       setAllLeadsForMap((current) => current.filter((lead) => lead.id !== previewLeadId));
                       setPreviewLeadId("");
                     }}
+                    onDismiss={dismissLeadFromMap}
                     onOpenQuote={(lead) =>
                       setQuoteSubject(getPermitLeadQuoteSubject(lead))
                     }
@@ -3488,17 +3588,30 @@ function PermitLeadMapQuickCard({
   leftPanelCollapsed,
   onClose,
   onConverted,
+  onDismiss,
   onOpenQuote
 }: {
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
   readonly leftPanelCollapsed?: boolean;
   readonly onClose: () => void;
   readonly onConverted: () => void;
+  readonly onDismiss: (lead: PermitLeadItem) => void | Promise<void>;
   readonly onOpenQuote: (lead: PermitLeadItem) => void;
 }) {
   const [isConverting, setIsConverting] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
   const [message, setMessage] = useState("");
   if (!lead) return null;
+
+  async function dismiss() {
+    if (!lead) return;
+    setIsDismissing(true);
+    try {
+      await onDismiss(lead);
+    } finally {
+      setIsDismissing(false);
+    }
+  }
 
   async function convert() {
     if (!lead) return;
@@ -3536,9 +3649,21 @@ function PermitLeadMapQuickCard({
             ) : null}
           </div>
         </div>
-        <button aria-label="닫기" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
-          <X className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            aria-label="관심 없음 · 숨김 처리"
+            className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+            disabled={isDismissing}
+            onClick={() => void dismiss()}
+            title="관심 없음 · 숨김 처리"
+            type="button"
+          >
+            <EyeOff className="h-3.5 w-3.5" />
+          </button>
+          <button aria-label="닫기" className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
       <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2.5">
         <p className="flex gap-2 text-[13px] font-bold leading-5 text-slate-600">
@@ -4026,6 +4151,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [bulkMessage, setBulkMessage] = useState("");
   const [bulkActionBusy, setBulkActionBusy] = useState<BulkLeadActionBusy>("");
+  const [dismissingLeadId, setDismissingLeadId] = useState("");
   const [bulkNextActionDate, setBulkNextActionDate] = useState("");
   const [leadPage, setLeadPage] = useState(1);
   const [leadPageSize, setLeadPageSize] = useState<ListPageSize>(30);
@@ -5811,21 +5937,38 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                           ) : null}
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            className={`${tableAction.primary ? "maju-button-primary" : "maju-button-secondary"} h-8 justify-center px-2.5 text-xs`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (tableAction.mode === "detail") {
-                                setSelectedLeadIntent(tableAction.intent);
-                                setSelectedLead(lead);
-                                return;
-                              }
-                              onOpenQuote(lead);
-                            }}
-                            type="button"
-                          >
-                            {tableActionLabel}
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              aria-label={`${lead.businessName} 관심 없음 · 숨김 처리`}
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              disabled={dismissingLeadId === lead.id}
+                              onClick={async (event) => {
+                                event.stopPropagation();
+                                setDismissingLeadId(lead.id);
+                                await runLeadAction(lead, "exclude", "제외");
+                                setDismissingLeadId("");
+                              }}
+                              title="관심 없음 · 숨김 처리"
+                              type="button"
+                            >
+                              {dismissingLeadId === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              className={`${tableAction.primary ? "maju-button-primary" : "maju-button-secondary"} h-8 justify-center px-2.5 text-xs`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (tableAction.mode === "detail") {
+                                  setSelectedLeadIntent(tableAction.intent);
+                                  setSelectedLead(lead);
+                                  return;
+                                }
+                                onOpenQuote(lead);
+                              }}
+                              type="button"
+                            >
+                              {tableActionLabel}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
