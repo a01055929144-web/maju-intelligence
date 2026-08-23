@@ -3902,7 +3902,7 @@ function formatLeadOpenDateFilterLabel(mode: LeadOpenDateFilterMode, year: strin
   return `${endDate} 이전`;
 }
 
-// 지방행정 인허가 데이터 표준 컬럼명(공공데이터포털/LOCALDATA 기준)과 흔히 쓰는 변형을 함께 인식합니다.
+// 인허가 데이터 표준 컬럼명(공공데이터포털 기준)과 흔히 쓰는 변형을 함께 인식합니다.
 const PERMIT_HEADER_ALIASES: Record<string, string[]> = {
   businessName: ["사업장명", "상호명", "업체명", "거래처명"],
   businessNumber: ["사업자번호", "사업자등록번호"],
@@ -3966,13 +3966,6 @@ type PermitUploadResult = {
   updated: number;
 };
 
-type PermitSyncResult = {
-  configured: boolean;
-  opnSvcIds: string[];
-  fetched: number;
-  ingest: PermitUploadResult;
-};
-
 type GovSyncResult = {
   configured: boolean;
   fetched: number;
@@ -3992,8 +3985,6 @@ type PermitLeadSourceStatus = {
   };
   sources?: {
     govRestaurant?: boolean;
-    localData?: boolean;
-    localDataOpnSvcIds?: string[];
     seoulRestaurant?: boolean;
   };
 };
@@ -4043,9 +4034,6 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadResult, setUploadResult] = useState<PermitUploadResult | null>(null);
   const [uploadWarning, setUploadWarning] = useState("");
-  const [syncBusy, setSyncBusy] = useState(false);
-  const [syncResult, setSyncResult] = useState<PermitSyncResult | null>(null);
-  const [syncWarning, setSyncWarning] = useState("");
   const [govSyncBusy, setGovSyncBusy] = useState(false);
   const [govSyncResult, setGovSyncResult] = useState<GovSyncResult | null>(null);
   const [govSyncWarning, setGovSyncWarning] = useState("");
@@ -4054,7 +4042,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [seoulSyncWarning, setSeoulSyncWarning] = useState("");
   const [showSourceDetails, setShowSourceDetails] = useState(false);
   const [sourceStatus, setSourceStatus] = useState<PermitLeadSourceStatus | null>(null);
-  const anySyncBusy = syncBusy || govSyncBusy || seoulSyncBusy;
+  const anySyncBusy = govSyncBusy || seoulSyncBusy;
   const [recommendBusy, setRecommendBusy] = useState(false);
   const [recommendMessage, setRecommendMessage] = useState("");
   const [recommendTopIndustries, setRecommendTopIndustries] = useState<string[]>([]);
@@ -4593,34 +4581,6 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
     }
   }
 
-  // 인허가 데이터 자동 수집: 수동 업로드와 같은 파이프라인을 API 호출로 대체합니다(LOCALDATA_API_KEY 필요).
-  // days=30(이 소스의 최대 조회 범위, lib/localdata.ts의 MAX_LOOKBACK_DAYS) — 매일 도는 cron은
-  // days=3으로 최신성만 챙기지만, 사람이 직접 누르는 "지금 가져오기"는 그동안 못 채운 변경분까지
-  // 한 번에 최대한 넓게 긁어오도록 범위를 크게 잡습니다(2026-08-23, "DB가 적다" 피드백 대응).
-  async function handleAutoSync() {
-    setSyncBusy(true);
-    setSyncResult(null);
-    setSyncWarning("");
-    try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/sync"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 30 })
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        setSyncWarning(payload?.message || "자동 수집에 실패했습니다.");
-        return;
-      }
-      setSyncResult(payload);
-      loadLeads();
-    } catch (error) {
-      setSyncWarning(error instanceof Error ? error.message : "네트워크 오류로 자동 수집하지 못했습니다.");
-    } finally {
-      setSyncBusy(false);
-    }
-  }
-
   // 전국 공공데이터(행정안전부_식품_일반음식점) 자동 수집: GOV_RESTAURANT_API_KEY 필요.
   // days=14(이 소스의 최대 조회 범위) — 이 API는 "최근 변경분만" 걸러주는 파라미터가 없어 매일
   // 전체 스냅샷의 한 구간(약 15만 행)만 훑고 그 안에서 최근 변경분을 골라냅니다. days를 크게
@@ -4676,10 +4636,10 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
     }
   }
 
-  // 세 데이터 소스 모두 매일 새벽 cron으로 이미 자동 수집됩니다(설정된 소스만). 이 버튼은 지금 바로 최신
+  // 두 데이터 소스 모두 매일 새벽 cron으로 이미 자동 수집됩니다(설정된 소스만). 이 버튼은 지금 바로 최신
   // 데이터를 당겨오고 싶을 때 쓰는 수동 새로고침이라, 소스별로 따로 누르지 않도록 한 번에 묶어서 호출합니다.
   async function handleAllSourcesSync() {
-    await Promise.all([handleAutoSync(), handleGovAutoSync(), handleSeoulAutoSync()]);
+    await Promise.all([handleGovAutoSync(), handleSeoulAutoSync()]);
   }
 
   // "기거래처 주변 리드 + 업종 유사도" 추천 점수 갱신(2026-08-24 피드백: "거래 성사 확률이 높은 곳을
@@ -4853,7 +4813,6 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   }, [filteredLeads, viewMode]);
 
   const summary = queues?.summary;
-  const localDataConfigured = Boolean(sourceStatus?.sources?.localData);
   const govRestaurantConfigured = Boolean(sourceStatus?.sources?.govRestaurant);
   const seoulRestaurantConfigured = Boolean(sourceStatus?.sources?.seoulRestaurant);
   const keywordVolumeSourceConfigured = Boolean(sourceStatus?.enrichment?.keywordVolume);
@@ -4864,14 +4823,6 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
       status: uploadBusy ? "처리 중" : uploadResult ? "최근 업로드 완료" : "필요 시 사용",
       tone: uploadWarning ? "warning" : uploadResult ? "ready" : "idle",
       title: "수동 업로드"
-    },
-    {
-      description: syncResult
-        ? `수집 ${syncResult.fetched.toLocaleString()} · 신규 ${syncResult.ingest.inserted.toLocaleString()}`
-        : syncWarning || `localdata.go.kr · ${sourceStatus?.sources?.localDataOpnSvcIds?.length || 3}개 업종`,
-      status: syncBusy ? "수집 중" : syncResult || localDataConfigured ? "연결됨" : syncWarning ? "확인 필요" : "설정 필요",
-      tone: syncWarning || (!localDataConfigured && sourceStatus) ? "warning" : syncResult || localDataConfigured ? "ready" : "idle",
-      title: "지방행정 인허가"
     },
     {
       description: govSyncResult
@@ -5050,11 +5001,10 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
             </div>
             {showSourceDetails ? (
               <p className="text-[11px] font-semibold leading-4 text-slate-400">
-                "지방행정 인허가"는 localdata.go.kr Open API로 최근 3일 변경분을 가져옵니다(LOCALDATA_API_KEY 필요). "전국 공공데이터"는
-                행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, "서울시 공공데이터"는 서울 열린데이터광장(서울시만
-                약 53만 건, SEOUL_OPENDATA_API_KEY 필요)에서 가져오며 좌표를 직접 변환해 채워 더 빠릅니다. 미설정된 소스는 건너뛰고 설정된 소스만
-                수집합니다 — 전국/서울시 두 API는 최근 변경분만 걸러주지 않아 한 번에 전체를 다 훑을 수 없어, 매일 다른 구간을 훑도록 되어 있고
-                완전 커버리지까지 시간이 걸릴 수 있습니다.
+                "전국 공공데이터"는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, "서울시 공공데이터"는
+                서울 열린데이터광장(서울시만 약 53만 건, SEOUL_OPENDATA_API_KEY 필요)에서 가져오며 좌표를 직접 변환해 채워 더 빠릅니다. 미설정된
+                소스는 건너뛰고 설정된 소스만 수집합니다 — 두 API 모두 최근 변경분만 걸러주지 않아 한 번에 전체를 다 훑을 수 없어, 매일 다른
+                구간을 훑도록 되어 있고 완전 커버리지까지 시간이 걸릴 수 있습니다.
               </p>
             ) : null}
             {uploadWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{uploadWarning}</p> : null}
@@ -5069,17 +5019,8 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                 {uploadResult.skippedNoName ? <span className="text-rose-600">상호명 없음 건너뜀 {uploadResult.skippedNoName.toLocaleString()}</span> : null}
               </div>
             ) : null}
-            {syncResult || govSyncResult || seoulSyncResult || syncWarning || govSyncWarning || seoulSyncWarning ? (
+            {govSyncResult || seoulSyncResult || govSyncWarning || seoulSyncWarning ? (
               <div className="space-y-1.5 rounded-md bg-slate-50 p-3">
-                {syncResult ? (
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800">
-                    <span className="text-slate-500">지방행정 인허가 ·</span>
-                    <span className="text-emerald-700">신규 {syncResult.ingest.inserted.toLocaleString()}</span>
-                    <span className="text-blue-700">갱신 {syncResult.ingest.updated.toLocaleString()}</span>
-                    <span className="text-slate-400">중복 {syncResult.ingest.duplicates.toLocaleString()}</span>
-                  </div>
-                ) : null}
-                {syncWarning ? <p className="text-xs font-bold text-amber-800">지방행정 인허가 · {syncWarning}</p> : null}
                 {govSyncResult ? (
                   <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-teal-800">
                     <span className="text-slate-500">전국 공공데이터 ·</span>

@@ -1,6 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
-import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
@@ -1906,7 +1905,6 @@ export function getSystemStatus(): SystemStatus {
       { key: "NAVER_SEARCH_CLIENT_ID + NAVER_SEARCH_CLIENT_SECRET", present: naverSearchConfigured, required: false, scope: "server" },
       { key: "NTS_BUSINESS_API_KEY", present: ntsBusinessConfigured, required: false, scope: "server" },
       { key: "CLOVA_OCR_INVOKE_URL + CLOVA_OCR_SECRET 또는 UPSTAGE_API_KEY", present: ocrConfigured, required: false, scope: "server" },
-      { key: "LOCALDATA_API_KEY", present: isLocalDataApiConfigured(), required: false, scope: "server" },
       { key: "GOV_RESTAURANT_API_KEY", present: isGovRestaurantApiConfigured(), required: false, scope: "server" },
       { key: "SEOUL_OPENDATA_API_KEY", present: isSeoulOpenDataConfigured(), required: false, scope: "server" }
     ],
@@ -4168,13 +4166,6 @@ export async function ingestPermitLeadRows(
   return result;
 }
 
-export type LocalDataPermitSyncResult = {
-  configured: boolean;
-  opnSvcIds: string[];
-  fetched: number;
-  ingest: PermitLeadIngestResult;
-};
-
 const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   total: 0,
   inserted: 0,
@@ -4185,63 +4176,6 @@ const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   skippedNoName: 0
 };
 
-/**
- * 지방행정 인허가 데이터개방(localdata.go.kr) Open API에서 최근 변경분을 가져와 곧바로
- * ingestPermitLeadRows()에 흘려보냅니다. 수동 엑셀 업로드와 완전히 같은 분류·점수·중복판정
- * 로직을 타므로 두 경로의 결과가 서로 다르게 계산될 일이 없습니다. LOCALDATA_API_KEY가 없으면
- * configured: false로 조용히 빈 결과를 반환합니다 — 온디맨드 버튼과 일일 cron 양쪽에서 그대로
- * "API 키 필요" 안내에 사용할 수 있습니다.
- */
-export async function syncLocalDataPermitLeads(companyId: string, days = 3): Promise<LocalDataPermitSyncResult> {
-  const opnSvcIds = getConfiguredOpnSvcIds();
-  if (!isLocalDataApiConfigured()) {
-    return { configured: false, opnSvcIds, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
-  }
-
-  const rowSets = await Promise.all(opnSvcIds.map((opnSvcId) => fetchLocalDataPermitRows(opnSvcId, days)));
-  const rows = rowSets.flat();
-  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "localdata_api" });
-
-  return { configured: true, opnSvcIds, fetched: rows.length, ingest };
-}
-
-export type LocalDataPermitDailySyncResult = {
-  configured: boolean;
-  companiesProcessed: number;
-  totalFetched: number;
-  totalInserted: number;
-  totalUpdated: number;
-};
-
-/** 일일 cron(app/api/cron/business-status)에서 모든 회사에 대해 인허가 데이터 자동 수집을 실행합니다. */
-export async function syncAllCompaniesLocalDataPermitLeads(): Promise<LocalDataPermitDailySyncResult> {
-  const empty: LocalDataPermitDailySyncResult = {
-    configured: isLocalDataApiConfigured(),
-    companiesProcessed: 0,
-    totalFetched: 0,
-    totalInserted: 0,
-    totalUpdated: 0
-  };
-  if (!empty.configured || !isProductionStoreConfigured()) return empty;
-
-  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  // days=30(이 소스의 최대 조회 범위) — localdata.go.kr은 실제 날짜 범위 쿼리를 지원하는 API라
-  // 범위를 넓혀도 스캔량이 늘지 않고(같은 "최근 변경분" 쿼리), 그동안 못 채운 변경분까지 매일
-  // 자동으로 따라잡습니다(2026-08-23, "DB가 적다" 피드백 대응).
-  const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id, 30)));
-
-  return results.reduce<LocalDataPermitDailySyncResult>(
-    (total, result) => ({
-      configured: true,
-      companiesProcessed: total.companiesProcessed + 1,
-      totalFetched: total.totalFetched + result.fetched,
-      totalInserted: total.totalInserted + result.ingest.inserted,
-      totalUpdated: total.totalUpdated + result.ingest.updated
-    }),
-    { ...empty, configured: true }
-  );
-}
-
 export type GovRestaurantSyncResult = {
   configured: boolean;
   fetched: number;
@@ -4250,7 +4184,7 @@ export type GovRestaurantSyncResult = {
 
 /**
  * 행정안전부_식품_일반음식점 조회서비스(공공데이터포털, 전국 약 229만 건)에서 최근 변경분을
- * 가져와 ingestPermitLeadRows()로 흘려보냅니다. localdata.go.kr과 마찬가지로 수동 업로드와 완전히
+ * 가져와 ingestPermitLeadRows()로 흘려보냅니다. 수동 업로드와 완전히
  * 같은 파이프라인을 타며, GOV_RESTAURANT_API_KEY가 없으면 configured: false를 반환합니다.
  */
 export async function syncGovRestaurantLeads(companyId: string, days = 3): Promise<GovRestaurantSyncResult> {

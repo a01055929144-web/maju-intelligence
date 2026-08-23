@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { isGoogleReviewsApiConfigured } from "@/lib/google-reviews";
 import { isGovRestaurantApiConfigured } from "@/lib/gov-restaurant";
-import { getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "@/lib/localdata";
 import { isNaverDatalabConfigured } from "@/lib/naver-datalab";
 import { isSeoulOpenDataConfigured } from "@/lib/seoul-restaurant";
 
@@ -24,8 +23,6 @@ export async function GET(request: NextRequest) {
     },
     sources: {
       govRestaurant: isGovRestaurantApiConfigured(),
-      localData: isLocalDataApiConfigured(),
-      localDataOpnSvcIds: getConfiguredOpnSvcIds(),
       seoulRestaurant: isSeoulOpenDataConfigured()
     }
   });
