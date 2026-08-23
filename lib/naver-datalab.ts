@@ -2,14 +2,17 @@
  * 네이버 데이터랩 "검색어 트렌드" API로 거래처명 키워드 검색량을 상대 지수로 가져옵니다
  * (영업리드 정렬용, 2026-08-20 피드백: "영업리드 > 키워드 검색량 순으로 진행").
  *
- * 2026-08-23: 네이버가 이 API를 구 developers.naver.com 체계에서 네이버클라우드플랫폼(NCP)
- * "AI·NAVER API > Search Trend" 콘솔로 이전했습니다(구 앱은 신규 등록 불가 — 사용자가 실제로
- * 겪은 "신규로 등록할 수 없는 API" 에러가 이 이전 때문이었음). 엔드포인트와 인증 헤더가
- * X-NCP-APIGW-API-KEY-ID / X-NCP-APIGW-API-KEY 로 바뀌었을 뿐, 요청/응답 바디 스키마는 동일합니다.
+ * 2026-08-23~24: 네이버가 이 API를 구 developers.naver.com 체계에서 "NAVER API HUB"(네이버클라우드
+ * 플랫폼이 중개 운영)로 이전했습니다(구 앱은 신규 등록 불가 — 사용자가 실제로 겪은 "신규로 등록할
+ * 수 없는 API" 에러가 이 이전 때문이었음). 주의: 과거 한때 존재했던 "AI·NAVER API"(구 NCP 단독
+ * 상품, naveropenapi.apigw.ntruss.com)와도 다른, 더 최신의 통합 플랫폼입니다 — 이 구 NCP 주소로
+ * 호출하면 Application에 API가 등록돼 있어도 "errorCode 210 A subscription to the API is
+ * required"로 거부됩니다. 실제 살아있는 주소는 naverapihub.apigw.ntruss.com/search-trend/v1/search
+ * 이고, 인증 헤더(X-NCP-APIGW-API-KEY-ID / X-NCP-APIGW-API-KEY)와 요청/응답 바디 스키마는 동일합니다.
  *
  * 주의: NAVER_CLIENT_ID/NAVER_CLIENT_SECRET 이름은 app/api/auth/naver/* (네이버 로그인 OAuth,
  * developers.naver.com 앱 키)에서 이미 쓰고 있는 변수라서 여기서 재사용하면 로그인이 깨집니다.
- * 그래서 이 NCP 데이터랩 키는 별도 변수명(NCP_DATALAB_CLIENT_ID/NCP_DATALAB_CLIENT_SECRET)을 씁니다.
+ * 그래서 이 NAVER API HUB 데이터랩 키는 별도 변수명(NCP_DATALAB_CLIENT_ID/NCP_DATALAB_CLIENT_SECRET)을 씁니다.
  *
  * 다른 선택형 외부 API들(lib/google-reviews.ts, lib/business-status.ts)과 같은
  * graceful-degradation 패턴을 따릅니다: 키가 없거나 요청이 실패해도 절대 throw하지 않고
@@ -22,7 +25,7 @@
  * 완벽한 절대값은 아니지만(네이버 검색광고 API의 월간 검색량과 달리), 정렬 용도로는 충분합니다.
  */
 
-const DATALAB_SEARCH_URL = "https://naveropenapi.apigw.ntruss.com/datalab/v1/search";
+const DATALAB_SEARCH_URL = "https://naverapihub.apigw.ntruss.com/search-trend/v1/search";
 const ANCHOR_KEYWORD = "커피";
 const MAX_KEYWORDS_PER_GROUP_CALL = 4; // 앵커 1개 + 거래처명 4개 = 데이터랩 최대 5그룹
 

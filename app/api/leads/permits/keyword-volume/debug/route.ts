@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const format = (d: Date) => d.toISOString().slice(0, 10);
 
   try {
-    const response = await fetch("https://naveropenapi.apigw.ntruss.com/datalab/v1/search", {
+    const response = await fetch("https://naverapihub.apigw.ntruss.com/search-trend/v1/search", {
       method: "POST",
       headers: {
         "X-NCP-APIGW-API-KEY-ID": clientId,
