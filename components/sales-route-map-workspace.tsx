@@ -4057,6 +4057,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const anySyncBusy = syncBusy || govSyncBusy || seoulSyncBusy;
   const [recommendBusy, setRecommendBusy] = useState(false);
   const [recommendMessage, setRecommendMessage] = useState("");
+  const [recommendTopIndustries, setRecommendTopIndustries] = useState<string[]>([]);
 
   const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
   const [selectedLeadIntent, setSelectedLeadIntent] = useState<PermitLeadActionIntent>("");
@@ -4234,6 +4235,20 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   // (2026-08-24)을 반영한 정렬 지표입니다. lib/store.ts의 computePermitLeadScoreBreakdown과 같은
   // 가중치를 써서(검색량 최대 15점 + 평점 최대 8점 + 리뷰수 최대 7점, 로그 스케일) 화면에 뜨는
   // 숫자와 저장되는 등급 점수가 서로 어긋나지 않게 합니다.
+  // "왜 이 리드를 추천하는지"를 짧은 태그로 보여줍니다(2026-08-24 피드백: "거래 성사 확률이 높은
+  // 곳을 추천해야 한다" — 등급 알파벳만으로는 담당자가 이유를 알 수 없어서 추가). route_fit_score/
+  // industry_fit_score는 refreshPermitLeadRecommendationScores가 채운 값을 그대로 읽고, 업종 일치
+  // 여부는 "추천 점수 갱신"을 이번 세션에서 실행했을 때만(recommendTopIndustries) 정확히 표시됩니다.
+  function recommendationTagsOf(lead: PermitLeadItem): string[] {
+    const tags: string[] = [];
+    if (lead.leadPeriod === "today" || lead.leadPeriod === "week") tags.push("개업 임박");
+    const routeFit = lead.scoreBreakdown?.route_fit_score ?? 0;
+    if (routeFit >= 15) tags.push("기거래처 인근");
+    else if (routeFit >= 11) tags.push("기거래처 근접");
+    if (recommendTopIndustries.includes(lead.industryPrimary)) tags.push("주력 업종");
+    return tags;
+  }
+
   function businessAttractivenessOf(lead: PermitLeadItem): number {
     const keywordPoints = Math.min(15, Math.round(keywordVolumeOf(lead) / 5));
     const ratingPoints = lead.rating ? Math.round((Math.min(lead.rating, 5) / 5) * 8) : 0;
@@ -4686,6 +4701,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
       }
       const industryLabel = payload.topIndustries?.length ? payload.topIndustries.join("·") : "확인 필요";
       setRecommendMessage(`${payload.updated.toLocaleString()}곳 갱신 완료 · 주력 업종: ${industryLabel}`);
+      setRecommendTopIndustries(Array.isArray(payload.topIndustries) ? payload.topIndustries : []);
       loadLeads();
     } catch {
       setRecommendMessage("추천 점수 갱신 중 오류가 발생했습니다.");
@@ -5764,6 +5780,18 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                         <td className="min-w-0 border-r border-slate-100 px-4 py-3">
                           <p className="truncate font-black text-slate-950">{lead.businessName}</p>
                           <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                          {(() => {
+                            const tags = recommendationTagsOf(lead);
+                            return tags.length ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {tags.map((tag) => (
+                                  <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-black text-teal-700" key={tag}>
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
                         </td>
                         <td className="max-w-[90px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.industryPrimary}</td>
                         <td className="border-r border-slate-100 px-4 py-3">
