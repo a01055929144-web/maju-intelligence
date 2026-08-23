@@ -307,8 +307,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [isBulkRegistering, setIsBulkRegistering] = useState(false);
   const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
-  // 지도 우선 화면: 좌우 패널과 통계는 기본 접힘 상태입니다.
-  const [leftCollapsed, setLeftCollapsed] = useState(true);
+  // 지도 우선 화면이라 통계·오른쪽 거래처 패널은 기본 접힘 상태를 유지하지만, 왼쪽 배송차량·담당자
+  // 필터 패널은 기본으로 펼쳐 둡니다(2026-08-24 피드백: "차량, 매니저 필터랑 거래처 필터가 안보이네"
+  // → 확인 결과 왼쪽 사이드 패널이 접혀 있어 안 보였던 것).
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(true);
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
@@ -328,21 +330,24 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const mapHeaderRef = useRef<HTMLElement>(null);
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const [mapHeaderHeightPx, setMapHeaderHeightPx] = useState(0);
+  const recomputeMapHeaderOffset = useCallback(() => {
+    const headerNode = mapHeaderRef.current;
+    const areaNode = mapAreaRef.current;
+    if (!headerNode || !areaNode) return;
+    const headerRect = headerNode.getBoundingClientRect();
+    const areaRect = areaNode.getBoundingClientRect();
+    setMapHeaderHeightPx(Math.max(0, headerRect.bottom - areaRect.top + 16));
+  }, []);
   useEffect(() => {
     const headerNode = mapHeaderRef.current;
     const areaNode = mapAreaRef.current;
     if (!headerNode || !areaNode || typeof ResizeObserver === "undefined") return;
-    const recompute = () => {
-      const headerRect = headerNode.getBoundingClientRect();
-      const areaRect = areaNode.getBoundingClientRect();
-      setMapHeaderHeightPx(Math.max(0, headerRect.bottom - areaRect.top + 16));
-    };
-    const observer = new ResizeObserver(recompute);
+    const observer = new ResizeObserver(recomputeMapHeaderOffset);
     observer.observe(headerNode);
     observer.observe(areaNode);
-    recompute();
+    recomputeMapHeaderOffset();
     return () => observer.disconnect();
-  }, []);
+  }, [recomputeMapHeaderOffset]);
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -401,6 +406,24 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
+  // 카드 안에 줄이 늘거나 줄 때(신규 리드 반경 열기, 리드 전체 필터 표시 등) ResizeObserver가 항상
+  // 제때 다시 계산해 주는 건 아니라서(2026-08-24 발견: "내 현재위치 이모티콘 위치가 동떨어져있어") —
+  // 카드 높이를 바꾸는 대표 상태들이 바뀔 때마다 렌더 직후 한 번 더 명시적으로 재계산합니다.
+  useEffect(() => {
+    recomputeMapHeaderOffset();
+  }, [
+    recomputeMapHeaderOffset,
+    leadRadiusOpen,
+    leadRadiusAnchorMode,
+    leadRadiusPoint,
+    leadRadiusResult,
+    leadRadiusError,
+    showAllLeadsOnMap,
+    allLeadsLoadState,
+    mapLeadIndustryFilter,
+    mapLeadOpenDateStart,
+    mapLeadOpenDateEnd
+  ]);
   // 업종·메뉴 기반 견적서 초안 — 지도 위 리드 카드/거래처 카드 어디서든 열 수 있는 공용 상태입니다.
   const [quoteSubject, setQuoteSubject] = useState<QuoteSubject | null>(null);
   const ledgerFallbackStores = useMemo(() => createStoreRowsFromLedgerMarkers(mapMarkers), [mapMarkers]);
@@ -5780,10 +5803,10 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                 ) : null}
               </div>
               <div className="overflow-x-auto">
-              <table className="w-full min-w-[1260px] border-separate border-spacing-0 text-left text-sm">
+              <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
-                    <th className="w-[44px] border-r border-slate-200 px-3 py-3">
+                    <th className="w-[40px] border-r border-slate-200 px-2 py-2">
                       <input
                         aria-label="현재 페이지 전체 선택"
                         checked={allVisibleSelected}
@@ -5791,23 +5814,23 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                         type="checkbox"
                       />
                     </th>
-                    <th className="w-[26%] border-r border-slate-200 px-4 py-3">거래처</th>
-                    <th className="w-[90px] border-r border-slate-200 px-4 py-3">업종</th>
-                    <th className="w-[72px] border-r border-slate-200 px-4 py-3">등급</th>
-                    <th className="w-[90px] border-r border-slate-200 px-4 py-3">안정도</th>
-                    <th className="w-[130px] border-r border-slate-200 px-4 py-3">인스타</th>
-                    <th className="w-[130px] border-r border-slate-200 px-4 py-3">전화</th>
+                    <th className="w-[24%] border-r border-slate-200 px-3 py-2">거래처</th>
+                    <th className="w-[84px] border-r border-slate-200 px-3 py-2">업종</th>
+                    <th className="w-[64px] border-r border-slate-200 px-3 py-2">등급</th>
+                    <th className="w-[84px] border-r border-slate-200 px-3 py-2">안정도</th>
+                    <th className="w-[110px] border-r border-slate-200 px-3 py-2">인스타</th>
+                    <th className="w-[118px] border-r border-slate-200 px-3 py-2">전화</th>
                     {leadQualityMode === "keyword" ? (
-                      <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right" title="검색량 지수(최대 15) + 평점(최대 8) + 리뷰수(최대 7)를 합친 영업 매력도 점수입니다.">
+                      <th className="w-[110px] border-r border-slate-200 px-3 py-2 text-right" title="검색량 지수(최대 15) + 평점(최대 8) + 리뷰수(최대 7)를 합친 영업 매력도 점수입니다.">
                         영업 매력도
                       </th>
                     ) : (
-                      <th className="w-[110px] border-r border-slate-200 px-4 py-3">개시일</th>
+                      <th className="w-[96px] border-r border-slate-200 px-3 py-2">개시일</th>
                     )}
-                    <th className="w-[140px] border-r border-slate-200 px-4 py-3">다음 액션</th>
-                    {showNearbyOnly && nearbyResult ? <th className="w-[90px] border-r border-slate-200 px-4 py-3 text-right">거리</th> : null}
-                    <th className="w-[180px] border-r border-slate-200 px-4 py-3">상태</th>
-                    <th className="w-[120px] px-4 py-3">작업</th>
+                    <th className="w-[110px] border-r border-slate-200 px-3 py-2">다음 액션</th>
+                    {showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
+                    <th className="w-[140px] border-r border-slate-200 px-3 py-2">상태</th>
+                    <th className="w-[164px] px-3 py-2">작업</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -5835,7 +5858,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                         role="button"
                         tabIndex={0}
                       >
-                        <td className="border-r border-slate-100 px-3 py-3">
+                        <td className="border-r border-slate-100 px-2 py-2">
                           <input
                             aria-label={`${lead.businessName} 선택`}
                             checked={selected}
@@ -5844,15 +5867,15 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                             type="checkbox"
                           />
                         </td>
-                        <td className="min-w-0 border-r border-slate-100 px-4 py-3">
+                        <td className="min-w-0 border-r border-slate-100 px-3 py-2">
                           <p className="truncate font-black text-slate-950">{lead.businessName}</p>
-                          <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                           {(() => {
-                            const tags = recommendationTagsOf(lead);
+                            const tags = recommendationTagsOf(lead).slice(0, 2);
                             return tags.length ? (
-                              <div className="mt-1 flex flex-wrap gap-1">
+                              <div className="mt-0.5 flex flex-nowrap items-center gap-1 overflow-hidden">
                                 {tags.map((tag) => (
-                                  <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-black text-teal-700" key={tag}>
+                                  <span className="shrink-0 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-black text-teal-700" key={tag}>
                                     {tag}
                                   </span>
                                 ))}
@@ -5860,11 +5883,11 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                             ) : null;
                           })()}
                         </td>
-                        <td className="max-w-[90px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.industryPrimary}</td>
-                        <td className="border-r border-slate-100 px-4 py-3">
+                        <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade || "-"}</Badge>
                         </td>
-                        <td className="border-r border-slate-100 px-4 py-3">
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           {(() => {
                             const confidence = getLeadConfidence(lead);
                             return (
@@ -5874,9 +5897,9 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                             );
                           })()}
                         </td>
-                        <td className="border-r border-slate-100 px-4 py-3">
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <a
-                            className="inline-flex max-w-[112px] items-center gap-1 truncate rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-black text-pink-800 transition hover:bg-pink-100"
+                            className="inline-flex max-w-[96px] items-center gap-1 truncate rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-black text-pink-800 transition hover:bg-pink-100"
                             href={instagramSearchUrl}
                             onClick={(event) => event.stopPropagation()}
                             rel="noreferrer"
@@ -5887,7 +5910,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                             <span className="truncate">{instagramDisplayLabel || "검색"}</span>
                           </a>
                         </td>
-                        <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-700">
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 font-bold text-slate-700">
                           {lead.phone ? (
                             <a className="inline-flex rounded-md px-1 py-0.5 transition hover:bg-teal-50 hover:text-teal-700" href={`tel:${lead.phone.replace(/[^0-9+]/g, "")}`} onClick={(event) => event.stopPropagation()}>
                               {lead.phone}
@@ -5897,7 +5920,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                           )}
                         </td>
                         {leadQualityMode === "keyword" ? (
-                          <td className="border-r border-slate-100 px-4 py-3 text-right">
+                          <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right">
                             {keywordVolumeOf(lead) > 0 || lead.rating || lead.reviewCount ? (
                               <>
                                 <p className="font-black text-teal-700">{businessAttractivenessOf(lead).toLocaleString()}점</p>
@@ -5911,36 +5934,42 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                             )}
                           </td>
                         ) : (
-                          <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{getPermitLeadOpenDate(lead) || "-"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 font-bold text-slate-500">{getPermitLeadOpenDate(lead) || "-"}</td>
                         )}
-                        <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{lead.nextAction || "-"}</td>
+                        <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.nextAction || "-"}</td>
                         {showNearbyOnly && nearbyResult ? (
-                          <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-teal-700">
+                          <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right font-black text-teal-700">
                             {nearbyDistanceById.get(lead.id)?.toLocaleString() ?? "-"}km
                           </td>
                         ) : null}
-                        <td className="border-r border-slate-100 px-4 py-3">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.status}</span>
-                          {quoteDraft ? (
-                            <span className="ml-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">초안 있음</span>
-                          ) : null}
-                          {lead.status === "견적 발송" ? (
-                            <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700">발송됨</span>
-                          ) : null}
-                          {lead.status === "재연락 예정" ? (
-                            <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700">후속 예정</span>
-                          ) : null}
-                          {lead.leadPeriod === "today" ? (
-                            <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
-                              {PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}
-                            </span>
-                          ) : null}
+                        <td className="border-r border-slate-100 px-3 py-2">
+                          {(() => {
+                            // 상태 배지를 한 줄로 유지하려고 부가 배지는 우선순위 1개만 보여줍니다(2026-08-24
+                            // 피드백: "표 형식에 글들이 깨지거나 두줄로 보여 간결히 한줄로 보이게 만들어").
+                            const extraBadge = lead.leadPeriod === "today"
+                              ? { tone: "bg-emerald-50 text-emerald-700", label: PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod] }
+                              : lead.status === "견적 발송"
+                                ? { tone: "bg-blue-50 text-blue-700", label: "발송됨" }
+                                : lead.status === "재연락 예정"
+                                  ? { tone: "bg-amber-50 text-amber-700", label: "후속 예정" }
+                                  : quoteDraft
+                                    ? { tone: "bg-teal-50 text-teal-700", label: "초안 있음" }
+                                    : null;
+                            return (
+                              <div className="flex flex-nowrap items-center gap-1 overflow-hidden">
+                                <span className="shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.status}</span>
+                                {extraBadge ? (
+                                  <span className={`shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-black ${extraBadge.tone}`}>{extraBadge.label}</span>
+                                ) : null}
+                              </div>
+                            );
+                          })()}
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-3 py-2">
+                          <div className="flex flex-nowrap items-center justify-end gap-1">
                             <button
                               aria-label={`${lead.businessName} 관심 없음 · 숨김 처리`}
-                              className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                               disabled={dismissingLeadId === lead.id}
                               onClick={async (event) => {
                                 event.stopPropagation();
@@ -5954,7 +5983,7 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                               {dismissingLeadId === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <EyeOff className="h-3.5 w-3.5" />}
                             </button>
                             <button
-                              className={`${tableAction.primary ? "maju-button-primary" : "maju-button-secondary"} h-8 justify-center px-2.5 text-xs`}
+                              className={`${tableAction.primary ? "maju-button-primary" : "maju-button-secondary"} h-7 shrink-0 justify-center whitespace-nowrap px-2 text-[11px]`}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (tableAction.mode === "detail") {
