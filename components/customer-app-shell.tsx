@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
-import { customerNavigationGroups, CustomerWorkspaceKey, flattenCustomerNavigationItems, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
+import { customerNavigationGroups, CustomerWorkspaceKey, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 
 type CustomerAppShellProps = {
   readonly active: CustomerWorkspaceKey;
@@ -57,11 +57,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
-  // 사이드바 "현재 작업" 카드는 우선 현재 경로(pathname)로 정확히 일치하는 항목을 찾고,
-  // 못 찾으면(예: 서버 렌더 초기) active 키로 대체 매칭합니다.
-  const flatNavigationItems = flattenCustomerNavigationItems(visibleNavigationGroups);
-  const activeNavigationItem =
-    flatNavigationItems.find((item) => isCurrentNavItem(pathname, item.href)) || flatNavigationItems.find((item) => item.active === active);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -96,58 +91,41 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full xl:grid-rows-[minmax(0,1fr)]" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200 bg-white shadow-[6px_0_22px_rgba(15,23,42,0.035)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
-            <div className="border-b border-slate-200/80 px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0">
-              <div className={`flex w-full items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
-                <Link className={`flex min-w-0 items-center gap-3 ${collapsed ? "justify-center" : ""}`} href={scopedHref("/dashboard")}>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
-                  {!collapsed ? (
+            <div className={`border-b border-slate-200/80 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
+              {collapsed ? (
+                <>
+                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
+                  </Link>
+                  <button
+                    aria-label="사이드바 펼치기"
+                    className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
+                    onClick={() => setCollapsed((value) => !value)}
+                    type="button"
+                  >
+                    <PanelLeftOpen className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <div className="flex w-full items-center justify-between gap-2">
+                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-black">MAJU Intelligence</span>
                       <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
                     </span>
-                  ) : null}
-                </Link>
-                <button
-                  aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-                  className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
-                  onClick={() => setCollapsed((value) => !value)}
-                  type="button"
-                >
-                  {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            {!collapsed ? (
-              <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black text-teal-700">{workspaceLabel}</p>
-                      <p className="mt-0.5 truncate text-sm font-black text-slate-950">{activeWorkspaceLabel}</p>
-                    </div>
-                    {userName ? <Badge className="shrink-0 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">{userName}님</Badge> : null}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-1.5">
-                    <Link className="maju-button-secondary h-8 justify-center px-2 text-xs shadow-none" href={settingsHref}>
-                      <MapPinned className="h-3.5 w-3.5" />
-                      {settingsLabel}
-                    </Link>
-                    <Link className="maju-button-primary h-8 justify-center px-2 text-xs shadow-none" href={scopedHref("/assistant")}>
-                      <MessageSquareText className="h-3.5 w-3.5" />
-                      AI
-                    </Link>
-                    {mode === "customer" ? (
-                      <Link className="maju-button-secondary h-8 justify-center px-2 text-xs shadow-none" href="/mobile/today">
-                        <Smartphone className="h-3.5 w-3.5" />
-                        모바일
-                      </Link>
-                    ) : null}
-                    {mode === "customer" ? <CustomerAccountActions compact /> : null}
-                  </div>
+                  </Link>
+                  <button
+                    aria-label="사이드바 접기"
+                    className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
+                    onClick={() => setCollapsed((value) => !value)}
+                    type="button"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
                 </div>
-              </div>
-            ) : null}
+              )}
+            </div>
 
             <nav className="flex-1 space-y-4 overflow-auto p-3">
               {visibleNavigationGroups.map((group) => (
@@ -219,19 +197,23 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ))}
             </nav>
 
-            {!collapsed ? (
-              <div className="border-t border-slate-200/80 bg-white p-3">
-                <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
-                    <Badge className="shrink-0 bg-teal-50 px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-100">현재</Badge>
+            <div className={`border-t border-slate-200/80 bg-white ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
+              {collapsed ? (
+                <Link aria-label={settingsLabel} className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                  <Settings className="h-4 w-4" />
+                </Link>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-950">{userName ? `${userName}님` : companyName}</p>
+                    <p className="truncate text-xs font-bold text-slate-500">{companyName}</p>
                   </div>
-                  <p className="mt-1 truncate text-[11px] font-bold text-slate-600">
-                    {activeNavigationItem?.description || "지도 기준 업무"}
-                  </p>
+                  <Link aria-label={settingsLabel} className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                    <Settings className="h-4 w-4" />
+                  </Link>
                 </div>
-              </div>
-            ) : null}
+              )}
+            </div>
           </div>
         </aside>
 
