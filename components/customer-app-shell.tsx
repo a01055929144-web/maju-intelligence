@@ -39,11 +39,12 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const pathname = usePathname();
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
-  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 운영 화면";
+  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-700 text-white ring-1 ring-inset ring-teal-700";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
-  const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
+  const settingsLabel = mode === "admin-preview" ? "고객사" : "출발지";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
+  const compactMapHome = fullBleed && hidePageTitle;
   const scopedHref = (href: string) => {
     if (mode !== "admin-preview" || !previewCompanyId) return href;
     if (href === "/dashboard/settings") return "/admin/companies";
@@ -78,9 +79,21 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     };
   }, [mode, workspaceRole]);
 
+  // xl:overflow-y-auto(hidden 대신) — 내부 패널들이 각자 자기 높이를 정확히 계산해 스크롤하는 게
+  // 기본이지만, 콘텐츠가 예상보다 늘어나는 경우(새 버튼 줄 추가, 검색 결과가 많을 때 등)에 대비한
+  // 안전망입니다. overflow-hidden이면 내부 계산이 어긋났을 때 그 초과분이 어떤 스크롤로도 닿지
+  // 않는 채로 화면 밖에 잘려나가는데, auto로 두면 평소엔 티 안 나다가(내용이 딱 맞으면 스크롤바
+  // 자체가 안 생김) 예외적으로 넘칠 때만 페이지 스크롤로 마지막 탈출구가 생깁니다(2026-08-23,
+  // "스크롤이 안 되는 경우가 있다" 피드백 대응).
   return (
-    <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-hidden" : ""}`}>
-      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
+    <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-y-auto" : ""}`}>
+      {/* xl:grid-rows-[minmax(0,1fr)] — CSS Grid의 암묵적 행은 기본이 auto(내용 기준) 높이라, h-full을
+          줘도 자식(section)의 내용이 부모보다 크면 행 자체가 늘어나 버립니다(2026-08-23, "스크롤이
+          안 되는 경우가 있다" 피드백 — main의 overflow-hidden이 그 초과분을 화면 밖으로 그냥
+          잘라버려서 어떤 스크롤로도 닿지 않는 영역이 생겼던 원인). minmax(0,1fr)로 행을 컨테이너
+          높이에 고정해야 section이 실제로 h-full만큼만 받고, 그 안의 xl:overflow-y-auto가 넘치는
+          내용을 스크롤로 보여줄 수 있습니다. */}
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full xl:grid-rows-[minmax(0,1fr)]" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
         <aside className="border-b border-slate-200 bg-white shadow-[6px_0_22px_rgba(15,23,42,0.035)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
             <div className="border-b border-slate-200/80 px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0">
@@ -89,7 +102,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
                   {!collapsed ? (
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-black">MAJU Map OS</span>
+                      <span className="block truncate text-sm font-black">MAJU Intelligence</span>
                       <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
                     </span>
                   ) : null}
@@ -104,6 +117,37 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 </button>
               </div>
             </div>
+
+            {!collapsed ? (
+              <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-black text-teal-700">{workspaceLabel}</p>
+                      <p className="mt-0.5 truncate text-sm font-black text-slate-950">{activeWorkspaceLabel}</p>
+                    </div>
+                    {userName ? <Badge className="shrink-0 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">{userName}님</Badge> : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-1.5">
+                    <Link className="maju-button-secondary h-8 justify-center px-2 text-xs shadow-none" href={settingsHref}>
+                      <MapPinned className="h-3.5 w-3.5" />
+                      {settingsLabel}
+                    </Link>
+                    <Link className="maju-button-primary h-8 justify-center px-2 text-xs shadow-none" href={scopedHref("/assistant")}>
+                      <MessageSquareText className="h-3.5 w-3.5" />
+                      AI
+                    </Link>
+                    {mode === "customer" ? (
+                      <Link className="maju-button-secondary h-8 justify-center px-2 text-xs shadow-none" href="/mobile/today">
+                        <Smartphone className="h-3.5 w-3.5" />
+                        모바일
+                      </Link>
+                    ) : null}
+                    {mode === "customer" ? <CustomerAccountActions compact /> : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <nav className="flex-1 space-y-4 overflow-auto p-3">
               {visibleNavigationGroups.map((group) => (
@@ -177,10 +221,10 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             {!collapsed ? (
               <div className="border-t border-slate-200/80 bg-white p-3">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
-                    <Badge className="shrink-0 bg-white px-1.5 py-0 text-[10px] text-slate-700 ring-1 ring-inset ring-slate-200">현재</Badge>
+                    <Badge className="shrink-0 bg-teal-50 px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-100">현재</Badge>
                   </div>
                   <p className="mt-1 truncate text-[11px] font-bold text-slate-600">
                     {activeNavigationItem?.description || "지도 기준 업무"}
@@ -191,8 +235,8 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
           </div>
         </aside>
 
-        <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
-          <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.035)] ${fullBleed ? "xl:static" : ""}`}>
+        <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:min-h-0 xl:flex-col" : ""}`}>
+          <header className={`${compactMapHome ? "hidden" : "sticky top-0 z-20"} shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.035)] ${fullBleed ? "xl:static" : ""}`}>
             <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -213,7 +257,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                 </div>
               )}
-              <div className={`flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
+              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
                 <Link
                   className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none"
                   href={settingsHref}
@@ -225,10 +269,10 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 <Link
                   className="maju-button-primary h-8 shrink-0 px-2.5 text-xs shadow-none"
                   href={scopedHref("/assistant")}
-                  title="AI 도우미"
+                  title="AI 영업"
                 >
                   <MessageSquareText className="h-4 w-4" />
-                  <span className={fullBleed ? "hidden 2xl:inline" : ""}>AI 도우미</span>
+                  <span className={fullBleed ? "hidden 2xl:inline" : ""}>AI</span>
                 </Link>
                 {mode === "customer" ? (
                   <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="모바일로 보기">
@@ -276,7 +320,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   );
 }
 
-function CustomerAccountActions() {
+function CustomerAccountActions({ compact = false }: { readonly compact?: boolean }) {
   async function logout() {
     await fetch("/api/customer/logout", { method: "POST" });
     window.location.href = "/dashboard/login";
@@ -284,13 +328,13 @@ function CustomerAccountActions() {
 
   return (
     <button
-      className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className={`maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 ${compact ? "justify-center" : ""}`}
       onClick={logout}
       title="로그아웃"
       type="button"
     >
       <LogOut className="h-4 w-4" />
-      <span className="hidden 2xl:inline">로그아웃</span>
+      <span className={compact ? "" : "hidden 2xl:inline"}>로그아웃</span>
     </button>
   );
 }

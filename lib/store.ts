@@ -449,6 +449,13 @@ export type PersonalOAuthWorkspaceInput = {
   provider: OAuthProvider;
   providerUserId: string;
 };
+export type StaffInvitationPreview = {
+  companyId: string;
+  companyName: string;
+  employeeName: string;
+  role: StaffInvitation["role"];
+  status: StaffInvitation["status"];
+};
 export type DatabaseCheck = {
   name: string;
   status: "ready" | "fallback" | "missing";
@@ -1462,6 +1469,43 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     name: user.name || displayName,
     persisted: true,
     workspaceRole: invitation.role || "member"
+  };
+}
+
+export async function getStaffInvitationPreview(inviteCode: string): Promise<StaffInvitationPreview | null> {
+  const normalizedInviteCode = inviteCode.trim();
+  if (!normalizedInviteCode) return null;
+
+  if (!isProductionStoreConfigured()) {
+    const companyId = getDefaultCompanyId();
+    const company = await getCompanySettings(companyId).catch(() => null);
+    return {
+      companyId,
+      companyName: company?.name || "마주식자재",
+      employeeName: "모바일 직원",
+      role: "driver",
+      status: "pending"
+    };
+  }
+
+  const rows = await staffStoreRequest(supabaseRequest<
+    Array<{
+      company_id: string;
+      employee_name: string | null;
+      role: StaffInvitation["role"];
+      status: StaffInvitation["status"];
+    }>
+  >(`staff_invitations?select=company_id,employee_name,role,status&invite_code=eq.${encodeURIComponent(normalizedInviteCode)}&limit=1`));
+
+  const invitation = rows[0];
+  if (!invitation) return null;
+  const company = await getCompanySettings(invitation.company_id).catch(() => null);
+  return {
+    companyId: invitation.company_id,
+    companyName: company?.name || "회사 워크스페이스",
+    employeeName: invitation.employee_name || "모바일 직원",
+    role: invitation.role || "member",
+    status: invitation.status
   };
 }
 
@@ -3679,6 +3723,24 @@ export type PermitLeadItem = {
   updatedAt: string;
 };
 
+export type PermitLeadActionItem = {
+  id: string;
+  actionType: string;
+  result?: string;
+  memo?: string;
+  actorName?: string;
+  createdAt: string;
+};
+
+type PermitLeadActionRow = {
+  id: string;
+  action_type: string;
+  result: string | null;
+  memo: string | null;
+  actor_name: string | null;
+  created_at: string;
+};
+
 type PermitLeadRow = {
   id: string;
   business_name: string;
@@ -4126,7 +4188,10 @@ export async function syncAllCompaniesLocalDataPermitLeads(): Promise<LocalDataP
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id)));
+  // days=30(이 소스의 최대 조회 범위) — localdata.go.kr은 실제 날짜 범위 쿼리를 지원하는 API라
+  // 범위를 넓혀도 스캔량이 늘지 않고(같은 "최근 변경분" 쿼리), 그동안 못 채운 변경분까지 매일
+  // 자동으로 따라잡습니다(2026-08-23, "DB가 적다" 피드백 대응).
+  const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id, 30)));
 
   return results.reduce<LocalDataPermitDailySyncResult>(
     (total, result) => ({
@@ -4182,7 +4247,9 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  const results = await Promise.all(companies.map((company) => syncGovRestaurantLeads(company.id)));
+  // days=14(이 소스의 최대 조회 범위) — 스캔하는 구간(페이지 수)은 그대로고 그 안에서 걸러내는
+  // 날짜 필터만 넓어지므로 비용 증가 없이 회수율만 올라갑니다(2026-08-23 피드백 대응).
+  const results = await Promise.all(companies.map((company) => syncGovRestaurantLeads(company.id, 14)));
 
   return results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({
@@ -4239,7 +4306,9 @@ export async function syncAllCompaniesSeoulRestaurantLeads(): Promise<SeoulResta
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  const results = await Promise.all(companies.map((company) => syncSeoulRestaurantLeads(company.id)));
+  // days=14(이 소스의 최대 조회 범위) — 행정안전부 소스와 같은 이유로 비용 증가 없이 회수율만
+  // 올라갑니다(2026-08-23 피드백 대응).
+  const results = await Promise.all(companies.map((company) => syncSeoulRestaurantLeads(company.id, 14)));
 
   return results.reduce<SeoulRestaurantDailySyncResult>(
     (total, result) => ({
@@ -4296,10 +4365,14 @@ export type PermitLeadQueues = {
   callToday: PermitLeadItem[];
   dmCandidates: PermitLeadItem[];
   needsEnrichment: PermitLeadItem[];
+  quoteFollowUps: PermitLeadItem[];
+  quoteRequests: PermitLeadItem[];
   summary: {
     active: number;
     gradeA: number;
     hasPhone: number;
+    quoteFollowUps: number;
+    quoteRequests: number;
     todayNew: number;
     total: number;
   };
@@ -4324,8 +4397,11 @@ export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20)
   const callToday = active.filter((lead) => lead.nextAction === "오늘 바로 전화").slice(0, limitPerQueue);
   const dmCandidates = active.filter((lead) => lead.nextAction === "오늘 DM 발송").slice(0, limitPerQueue);
   const needsEnrichment = active.filter((lead) => lead.nextAction === "정보 보강").slice(0, limitPerQueue);
+  const quoteRequests = active.filter((lead) => lead.status === "견적 요청").slice(0, limitPerQueue);
+  const quoteFollowUps = active.filter((lead) => lead.status === "견적 발송" || lead.status === "재연락 예정").slice(0, limitPerQueue);
   const visitThisWeek = active
     .filter((lead) => lead.nextAction !== "오늘 바로 전화" && lead.nextAction !== "오늘 DM 발송" && lead.nextAction !== "정보 보강")
+    .filter((lead) => lead.status !== "견적 요청" && lead.status !== "견적 발송" && lead.status !== "재연락 예정")
     .filter((lead) => {
       const key = extractPermitLeadRegionKey(lead.address);
       return Boolean(key && (regionCounts.get(key) || 0) >= 3);
@@ -4336,33 +4412,42 @@ export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20)
     callToday,
     dmCandidates,
     needsEnrichment,
+    quoteFollowUps,
+    quoteRequests,
     visitThisWeek,
     summary: {
       total: leads.length,
       active: active.length,
       gradeA: active.filter((lead) => lead.grade === "A").length,
       todayNew: active.filter((lead) => lead.leadPeriod === "today").length,
+      quoteFollowUps: quoteFollowUps.length,
+      quoteRequests: quoteRequests.length,
       hasPhone: active.filter((lead) => Boolean(lead.phone)).length
     }
   };
 }
 
-export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude";
+export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
 
 const PERMIT_LEAD_ACTION_TO_STATUS: Record<PermitLeadActionType, string> = {
   call: "전화 대상",
   dm: "DM 대상",
-  visit: "방문 대상",
+  exclude: "제외",
   hold: "검토 필요",
-  exclude: "제외"
+  quote: "견적 요청",
+  visit: "방문 대상"
 };
 
 const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
   "통화 성공": "연락 완료",
   부재중: "전화 대상",
+  "DM 발송": "DM 발송",
   "관심 있음": "미팅 예정",
   "견적 요청": "견적 요청",
+  "견적 발송": "견적 발송",
+  "재연락 예정": "재연락 예정",
   "다음 방문": "방문 대상",
+  보류: "검토 필요",
   거절: "제외",
   제외: "제외"
 };
@@ -4372,12 +4457,12 @@ export async function recordPermitLeadAction(
   companyId: string,
   leadId: string,
   input: { actionType: PermitLeadActionType; actorName?: string; memo?: string; result?: string }
-): Promise<{ ok: boolean; status: string }> {
+): Promise<{ action?: PermitLeadActionItem; ok: boolean; status: string }> {
   if (!isProductionStoreConfigured()) return { ok: false, status: "" };
 
-  await supabaseRequest("lead_actions", {
+  const actionRows = await supabaseRequest<PermitLeadActionRow[]>("lead_actions?select=id,action_type,result,memo,actor_name,created_at", {
     method: "POST",
-    headers: { Prefer: "return=minimal" },
+    headers: { Prefer: "return=representation" },
     body: JSON.stringify({
       company_id: companyId,
       lead_id: leadId,
@@ -4398,7 +4483,31 @@ export async function recordPermitLeadAction(
     }
   );
 
-  return { ok: true, status: nextStatus };
+  return { action: actionRows?.[0] ? toPermitLeadActionItem(actionRows[0]) : undefined, ok: true, status: nextStatus };
+}
+
+export async function listPermitLeadActions(companyId: string, leadId: string, limit = 12): Promise<PermitLeadActionItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+
+  const safeLimit = Math.max(1, Math.min(50, limit));
+  const rows = await supabaseRequest<PermitLeadActionRow[]>(
+    `lead_actions?select=id,action_type,result,memo,actor_name,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(
+      leadId
+    )}&order=created_at.desc&limit=${safeLimit}`
+  ).catch(() => []);
+
+  return rows.map(toPermitLeadActionItem);
+}
+
+function toPermitLeadActionItem(row: PermitLeadActionRow): PermitLeadActionItem {
+  return {
+    id: row.id,
+    actionType: row.action_type,
+    result: row.result || undefined,
+    memo: row.memo || undefined,
+    actorName: row.actor_name || undefined,
+    createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+  };
 }
 
 /** 잘못 들어온 리드(테스트 데이터, 완전한 오탐 등)를 완전히 삭제합니다. 목록에서 숨기고 싶을 뿐이면
@@ -4412,6 +4521,41 @@ export async function deletePermitLead(companyId: string, leadId: string): Promi
   });
 
   return { ok: true };
+}
+
+export async function updatePermitLeadProfile(
+  companyId: string,
+  leadId: string,
+  input: { instagramUrl?: string | null }
+): Promise<{ lead?: PermitLeadItem; ok: boolean; message?: string }> {
+  if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if ("instagramUrl" in input) payload.instagram_url = input.instagramUrl || null;
+
+  const updatedRows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&select=*`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(payload)
+    }
+  );
+
+  await supabaseRequest("lead_actions", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "hold",
+      result: "인스타 정보 수정",
+      memo: input.instagramUrl ? `인스타: ${input.instagramUrl}` : "인스타 정보 삭제",
+      actor_name: "MAJU"
+    })
+  }).catch(() => null);
+
+  return { lead: updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined, ok: true };
 }
 
 /**
@@ -4463,6 +4607,144 @@ export async function enrichPermitLeadKeywordVolume(companyId: string, leadIds: 
     result[update.id] = update.score;
   });
   return result;
+}
+
+export type PermitLeadExternalEnrichmentResult = {
+  lead?: PermitLeadItem;
+  message?: string;
+  ok: boolean;
+  persisted: boolean;
+  skippedFields?: string[];
+  sources: {
+    googleReviews: boolean;
+    keywordVolume: boolean;
+    placeLinks: boolean;
+  };
+};
+
+/**
+ * 신규 리드의 영업 전 확인값을 외부 API로 보강합니다.
+ * - 카카오/네이버/구글 검색 링크는 resolvePlaceLinks()의 graceful fallback을 그대로 사용합니다.
+ * - Google Places API가 연결되어 있으면 리뷰 수/평점을 저장합니다.
+ * - 네이버 검색량 API가 연결되어 있으면 keyword_volume을 저장합니다.
+ * 어떤 API가 실패해도 나머지 값은 저장하고, DB 컬럼이 아직 없으면 실패 메시지만 돌려줍니다.
+ */
+export async function enrichPermitLeadExternalInfo(companyId: string, leadId: string): Promise<PermitLeadExternalEnrichmentResult> {
+  const emptySources = { googleReviews: false, keywordVolume: false, placeLinks: false };
+  if (!isProductionStoreConfigured()) {
+    return { ok: false, persisted: false, sources: emptySources, message: "데이터베이스가 연결되어 있지 않습니다." };
+  }
+
+  const rows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row) return { ok: false, persisted: false, sources: emptySources, message: "리드를 찾을 수 없습니다." };
+
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const sources = { ...emptySources };
+
+  const placeLinks = await resolvePlaceLinks(
+    { address: row.address || undefined, customerName: row.business_name },
+    {
+      googleMapUrl: row.google_place_url || undefined,
+      kakaoPlaceUrl: row.kakao_place_url || undefined,
+      naverPlaceUrl: row.naver_place_url || undefined
+    }
+  ).catch(() => null);
+
+  if (placeLinks) {
+    payload.naver_place_url = placeLinks.naverPlaceUrl || row.naver_place_url;
+    payload.kakao_place_url = placeLinks.kakaoPlaceUrl || row.kakao_place_url;
+    payload.google_place_url = placeLinks.googleMapUrl || row.google_place_url;
+    if (!row.phone && placeLinks.enrichedPhone) payload.phone = placeLinks.enrichedPhone;
+    if ((!row.industry_primary || row.industry_primary === "미분류") && placeLinks.enrichedIndustry) payload.industry_primary = placeLinks.enrichedIndustry;
+    sources.placeLinks = Boolean(payload.naver_place_url || payload.kakao_place_url || payload.google_place_url);
+  }
+
+  const googleReviews = await syncGoogleReviewsForCustomer({ customerName: row.business_name, address: row.address || undefined }).catch(() => null);
+  if (googleReviews) {
+    payload.review_count = googleReviews.userRatingsTotal ?? googleReviews.reviewCount;
+    payload.rating = googleReviews.rating;
+    sources.googleReviews = Boolean(googleReviews.userRatingsTotal || googleReviews.reviewCount || googleReviews.rating);
+  }
+
+  if (isNaverDatalabConfigured()) {
+    const scores = await fetchKeywordVolumeScores([row.business_name]).catch((): Record<string, number> => ({}));
+    const score = scores[row.business_name];
+    if (typeof score === "number") {
+      payload.keyword_volume = score;
+      sources.keywordVolume = true;
+    }
+  }
+
+  const externalFieldKeys = [
+    "naver_place_url",
+    "kakao_place_url",
+    "google_place_url",
+    "review_count",
+    "rating",
+    "keyword_volume"
+  ];
+  const profileFieldKeys = ["phone", "industry_primary"];
+  const payloadTiers = [
+    Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)),
+    Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key))),
+    Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key) && !profileFieldKeys.includes(key))),
+    { updated_at: payload.updated_at }
+  ];
+
+  let updatedRows: PermitLeadRow[] | undefined;
+  let persisted = false;
+  let skippedFields: string[] = [];
+  for (let index = 0; index < payloadTiers.length; index += 1) {
+    const tier = payloadTiers[index];
+    try {
+      updatedRows = await supabaseRequest<PermitLeadRow[]>(
+        `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&select=*`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(tier)
+        }
+      );
+      persisted = true;
+      if (index === 1) skippedFields = externalFieldKeys.filter((key) => key in payload);
+      if (index === 2) skippedFields = [...externalFieldKeys, ...profileFieldKeys].filter((key) => key in payload);
+      if (index === 3) skippedFields = [...externalFieldKeys, ...profileFieldKeys].filter((key) => key in payload);
+      break;
+    } catch (error) {
+      if (!isMissingColumnError(error) || index === payloadTiers.length - 1) throw error;
+    }
+  }
+
+  await supabaseRequest("lead_actions", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "hold",
+      result: "외부 정보 보강",
+      memo: [
+        sources.placeLinks ? "플레이스 링크 확인" : "",
+        sources.googleReviews ? "구글 리뷰/평점 확인" : "",
+        sources.keywordVolume ? "키워드 검색량 확인" : ""
+      ].filter(Boolean).join("\n") || "외부 정보 확인 시도",
+      actor_name: "MAJU"
+    })
+  }).catch(() => null);
+
+  return {
+    lead: updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined,
+    ok: true,
+    persisted,
+    skippedFields,
+    sources,
+    message: skippedFields.length
+      ? "외부 정보 일부는 DB 컬럼이 아직 반영되지 않아 저장하지 못했습니다. 링크 확인 이력은 남겼습니다."
+      : undefined
+  };
 }
 
 /** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */
