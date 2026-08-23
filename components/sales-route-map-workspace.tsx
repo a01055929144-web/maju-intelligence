@@ -18,9 +18,11 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  Eye,
   EyeOff,
   FileImage,
   Gauge,
+  GripVertical,
   Instagram,
   Layers,
   ListFilter,
@@ -40,6 +42,7 @@ import {
   Radar,
   RefreshCw,
   Search,
+  Star,
   Store,
   Trash2,
   Truck,
@@ -54,6 +57,7 @@ import { LinkifiedText } from "@/components/linkified-text";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -407,6 +411,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
+  // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
+  // 반영되도록 Draft/Applied 상태를 분리합니다(2026-08-24 피드백: "리드들의 날짜 기간을 설정하면
+  // 조회 버튼이 필요해보여").
+  const [mapLeadOpenDateStartDraft, setMapLeadOpenDateStartDraft] = useState("");
+  const [mapLeadOpenDateEndDraft, setMapLeadOpenDateEndDraft] = useState("");
+  // 숨김(제외) 처리한 리드도 나중에 다시 거래할 수 있으니, 지도에서 완전히 사라지게 하지 않고
+  // "활성/숨김" 필터로 전환해서 볼 수 있게 합니다(2026-08-24 피드백: "숨김처리하게되면 별도의
+  // 필터값이 있으면 좋을 것 같아 ... 추후에 숨김처리한 거래처도 거래할 수도 있으니깐").
+  const [showDismissedLeadsOnMap, setShowDismissedLeadsOnMap] = useState(false);
   // 카드 안에 줄이 늘거나 줄 때(신규 리드 반경 열기, 리드 전체 필터 표시 등) ResizeObserver가 항상
   // 제때 다시 계산해 주는 건 아니라서(2026-08-24 발견: "내 현재위치 이모티콘 위치가 동떨어져있어") —
   // 카드 높이를 바꾸는 대표 상태들이 바뀔 때마다 렌더 직후 한 번 더 명시적으로 재계산합니다.
@@ -423,7 +436,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     allLeadsLoadState,
     mapLeadIndustryFilter,
     mapLeadOpenDateStart,
-    mapLeadOpenDateEnd
+    mapLeadOpenDateEnd,
+    showDismissedLeadsOnMap
   ]);
   // 업종·메뉴 기반 견적서 초안 — 지도 위 리드 카드/거래처 카드 어디서든 열 수 있는 공용 상태입니다.
   const [quoteSubject, setQuoteSubject] = useState<QuoteSubject | null>(null);
@@ -533,7 +547,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   async function loadAllLeadsForMap() {
     setAllLeadsLoadState("loading");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits"), { cache: "no-store" });
+      // 숨김(제외) 리드도 함께 받아와서, "활성/숨김" 토글로 클라이언트에서 바로 전환할 수 있게
+      // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits?excludeExcluded=false"), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) {
         setAllLeadsLoadState("error");
@@ -563,11 +579,30 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         body: JSON.stringify({ actionType: "exclude", result: "제외" })
       });
       if (!response.ok) return;
-      setAllLeadsForMap((current) => current.filter((item) => item.id !== lead.id));
+      // 목록에서 완전히 지우지 않고 상태만 "제외"로 바꿔둡니다 — "숨김 리드" 필터로 다시 볼 수 있고,
+      // 나중에 복구도 가능합니다(2026-08-24 피드백).
+      setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "제외" } : item)));
       setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((item) => item.id !== lead.id) } : current));
       setPreviewLeadId("");
     } catch {
       // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다 — 신규 리드 탭에서 다시 시도할 수 있습니다.
+    }
+  }
+
+  // 숨김(제외) 처리한 리드를 다시 활성으로 되돌립니다. 전용 "복구" 액션 타입은 따로 없어 기존
+  // "hold"(검토 필요) 액션을 재사용합니다 — 제외 상태만 아니면 지도/리드 탭 양쪽에서 정상적으로
+  // 다시 보이기 때문입니다.
+  async function restoreLeadFromMap(lead: PermitLeadItem) {
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType: "hold" })
+      });
+      if (!response.ok) return;
+      setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "검토 필요" } : item)));
+    } catch {
+      // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다.
     }
   }
 
@@ -687,26 +722,32 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         y: 0
       }));
   }, [leadRadiusOpen, leadRadiusResult]);
-  // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — allLeadsForMap 원본 기준이라
-  // 필터를 바꿔도 목록 자체는 그대로 유지됩니다.
+  // "활성/숨김" 토글의 1차 분리 — 숨김 보기에서는 status가 "제외"인 것만, 활성 보기에서는 그 외
+  // 전부를 보여줍니다(2026-08-24 피드백: 숨김 리드도 별도로 조회 가능해야 함).
+  const statusScopedLeadsForMap = useMemo(
+    () => allLeadsForMap.filter((lead) => (showDismissedLeadsOnMap ? lead.status === "제외" : lead.status !== "제외")),
+    [allLeadsForMap, showDismissedLeadsOnMap]
+  );
+  // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — 활성/숨김 범위 기준이라
+  // 토글을 바꾸면 옵션 목록도 그 범위에 맞게 갱신됩니다.
   const mapLeadIndustryOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    allLeadsForMap.forEach((lead) => {
+    statusScopedLeadsForMap.forEach((lead) => {
       const industry = lead.industryPrimary || "미분류";
       counts.set(industry, (counts.get(industry) || 0) + 1);
     });
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 12);
-  }, [allLeadsForMap]);
+  }, [statusScopedLeadsForMap]);
   const filteredAllLeadsForMap = useMemo(() => {
-    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd) return allLeadsForMap;
-    return allLeadsForMap.filter((lead) => {
+    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd) return statusScopedLeadsForMap;
+    return statusScopedLeadsForMap.filter((lead) => {
       if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
       if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
         if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
       }
       return true;
     });
-  }, [allLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd]);
+  }, [statusScopedLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -719,6 +760,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
         label: "신규",
+        // 기거래처 근접 리드는 지도에서 앰버 테두리 + ★ 뱃지로 구분합니다(2026-08-24 피드백).
+        nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
         name: lead.businessName,
         tone: "lead" as const,
         x: 0,
@@ -1590,6 +1633,23 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <Layers className="h-3.5 w-3.5" />
               리드 전체 필터
             </span>
+            <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 노란 테두리·★ = 기거래처 인근 리드." />
+            <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+              <button
+                className={`h-8 px-2.5 text-[11px] font-black transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                onClick={() => setShowDismissedLeadsOnMap(false)}
+                type="button"
+              >
+                활성 리드
+              </button>
+              <button
+                className={`h-8 px-2.5 text-[11px] font-black transition ${showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                onClick={() => setShowDismissedLeadsOnMap(true)}
+                type="button"
+              >
+                숨김 리드
+              </button>
+            </div>
             <select
               className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
@@ -1606,18 +1666,29 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               <span className="text-[11px] font-black text-slate-400">개시일</span>
               <input
                 className="h-6 rounded border-0 text-[11px] font-bold text-slate-900 outline-none"
-                onChange={(event) => setMapLeadOpenDateStart(event.target.value)}
+                onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)}
                 type="date"
-                value={mapLeadOpenDateStart}
+                value={mapLeadOpenDateStartDraft}
               />
               <span className="text-[11px] font-bold text-slate-400">~</span>
               <input
                 className="h-6 rounded border-0 text-[11px] font-bold text-slate-900 outline-none"
-                onChange={(event) => setMapLeadOpenDateEnd(event.target.value)}
+                onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)}
                 type="date"
-                value={mapLeadOpenDateEnd}
+                value={mapLeadOpenDateEndDraft}
               />
             </div>
+            <button
+              className="h-8 shrink-0 rounded-md bg-teal-700 px-3 text-[11px] font-black text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              disabled={mapLeadOpenDateStartDraft === mapLeadOpenDateStart && mapLeadOpenDateEndDraft === mapLeadOpenDateEnd}
+              onClick={() => {
+                setMapLeadOpenDateStart(mapLeadOpenDateStartDraft);
+                setMapLeadOpenDateEnd(mapLeadOpenDateEndDraft);
+              }}
+              type="button"
+            >
+              조회
+            </button>
             {mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd ? (
               <button
                 className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
@@ -1625,6 +1696,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                   setMapLeadIndustryFilter("");
                   setMapLeadOpenDateStart("");
                   setMapLeadOpenDateEnd("");
+                  setMapLeadOpenDateStartDraft("");
+                  setMapLeadOpenDateEndDraft("");
                 }}
                 type="button"
               >
@@ -1632,7 +1705,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               </button>
             ) : null}
             <span className="ml-auto text-[11px] font-bold text-slate-500">
-              {allLeadsLoadState === "loading" ? "불러오는 중..." : `${filteredAllLeadsForMap.length.toLocaleString()} / ${allLeadsForMap.length.toLocaleString()}곳 표시 중`}
+              {allLeadsLoadState === "loading"
+                ? "불러오는 중..."
+                : showDismissedLeadsOnMap
+                  ? `숨김 리드 ${filteredAllLeadsForMap.length.toLocaleString()}곳`
+                  : `${filteredAllLeadsForMap.length.toLocaleString()} / ${statusScopedLeadsForMap.length.toLocaleString()}곳 표시 중`}
             </span>
           </div>
         ) : null}
@@ -1741,6 +1818,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                     onOpenQuote={(lead) =>
                       setQuoteSubject(getPermitLeadQuoteSubject(lead))
                     }
+                    onRestore={restoreLeadFromMap}
                   />
                 ) : null}
               </>
@@ -3700,7 +3778,8 @@ function PermitLeadMapQuickCard({
   onClose,
   onConverted,
   onDismiss,
-  onOpenQuote
+  onOpenQuote,
+  onRestore
 }: {
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
   readonly leftPanelCollapsed?: boolean;
@@ -3708,11 +3787,45 @@ function PermitLeadMapQuickCard({
   readonly onConverted: () => void;
   readonly onDismiss: (lead: PermitLeadItem) => void | Promise<void>;
   readonly onOpenQuote: (lead: PermitLeadItem) => void;
+  readonly onRestore: (lead: PermitLeadItem) => void | Promise<void>;
 }) {
   const [isConverting, setIsConverting] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [message, setMessage] = useState("");
+  // 카드를 사용자가 자유롭게 끌어서 옮길 수 있게 합니다(2026-08-24 피드백: "리드 카드를 사용자가
+  // 자유롭게 움직일 수 있도록 만들어"). 기존 절대 위치(positionClassName) 위에 transform으로만
+  // 오프셋을 얹어, 리드가 바뀌어도 기본 위치 로직은 그대로 유지합니다.
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    setDragOffset({ x: 0, y: 0 });
+  }, [lead?.id]);
+
   if (!lead) return null;
+
+  const isDismissed = lead.status === "제외";
+  const routeFit = lead.scoreBreakdown?.route_fit_score ?? 0;
+  const isNearAnchor = routeFit >= 11;
+  const isOpeningSoon = lead.leadPeriod === "today" || lead.leadPeriod === "week";
+  const instagramUrl = getLeadInstagramSearchUrl(lead);
+  const instagramHandle = getLeadInstagramHandle(lead);
+
+  function onDragHandleMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startOffset = dragOffset;
+    const handleMove = (moveEvent: globalThis.MouseEvent) => {
+      setDragOffset({ x: startOffset.x + (moveEvent.clientX - startX), y: startOffset.y + (moveEvent.clientY - startY) });
+    };
+    const handleUp = () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }
 
   async function dismiss() {
     if (!lead) return;
@@ -3721,6 +3834,16 @@ function PermitLeadMapQuickCard({
       await onDismiss(lead);
     } finally {
       setIsDismissing(false);
+    }
+  }
+
+  async function restore() {
+    if (!lead) return;
+    setIsRestoring(true);
+    try {
+      await onRestore(lead);
+    } finally {
+      setIsRestoring(false);
     }
   }
 
@@ -3743,12 +3866,23 @@ function PermitLeadMapQuickCard({
     }
   }
 
-  const positionClassName = `left-4 w-[min(300px,calc(100%-32px))] ${
-    leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(300px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(300px,calc(100%-352px))]"
+  const positionClassName = `left-4 w-[min(320px,calc(100%-32px))] ${
+    leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(320px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(320px,calc(100%-352px))]"
   }`;
 
   return (
-    <div className={`absolute top-4 xl:top-20 z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}>
+    <div
+      className={`absolute top-4 xl:top-20 z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
+      style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
+    >
+      <button
+        className="flex w-full cursor-grab items-center justify-center gap-1 border-b border-slate-100 bg-slate-50 py-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+        onMouseDown={onDragHandleMouseDown}
+        title="드래그해서 카드 위치를 옮길 수 있습니다."
+        type="button"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
       <div className="flex items-start justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
           <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{lead.businessName}</p>
@@ -3758,19 +3892,42 @@ function PermitLeadMapQuickCard({
             {typeof lead.distanceKm === "number" ? (
               <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
             ) : null}
+            {isOpeningSoon ? (
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">개업 임박</span>
+            ) : null}
+            {isNearAnchor ? (
+              <span className="flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700">
+                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                기거래처 근접
+              </span>
+            ) : null}
+            {isDismissed ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-600">숨김</span> : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            aria-label="관심 없음 · 숨김 처리"
-            className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-            disabled={isDismissing}
-            onClick={() => void dismiss()}
-            title="관심 없음 · 숨김 처리"
-            type="button"
-          >
-            <EyeOff className="h-3.5 w-3.5" />
-          </button>
+          {isDismissed ? (
+            <button
+              aria-label="복구"
+              className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-teal-50 hover:text-teal-700 disabled:opacity-50"
+              disabled={isRestoring}
+              onClick={() => void restore()}
+              title="숨김 해제 · 복구"
+              type="button"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              aria-label="관심 없음 · 숨김 처리"
+              className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+              disabled={isDismissing}
+              onClick={() => void dismiss()}
+              title="관심 없음 · 숨김 처리"
+              type="button"
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button aria-label="닫기" className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
             <X className="h-3.5 w-3.5" />
           </button>
@@ -3790,9 +3947,54 @@ function PermitLeadMapQuickCard({
             <CalendarDays className="h-3 w-3 shrink-0 text-slate-400" />
             {getPermitLeadOpenDate(lead) || "개시일 미확인"}
           </span>
+          <span className="flex items-center gap-1 truncate">
+            <UserRound className="h-3 w-3 shrink-0 text-slate-400" />
+            {lead.representativeName || "대표자 미확인"}
+          </span>
+          <span className="flex items-center gap-1 truncate">
+            <Gauge className="h-3 w-3 shrink-0 text-slate-400" />
+            {lead.status || "상태 미확인"}
+          </span>
+          {typeof lead.rating === "number" ? (
+            <span className="flex items-center gap-1 truncate">
+              <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+              {lead.rating.toFixed(1)}
+              {typeof lead.reviewCount === "number" ? ` (${lead.reviewCount.toLocaleString()})` : ""}
+            </span>
+          ) : null}
+          {typeof lead.keywordVolume === "number" ? (
+            <span className="flex items-center gap-1 truncate">
+              <Search className="h-3 w-3 shrink-0 text-slate-400" />
+              검색량 {lead.keywordVolume.toLocaleString()}
+            </span>
+          ) : null}
         </div>
         {lead.nearestAnchor ? (
           <p className="mt-1.5 text-[11px] font-bold text-slate-400">기준 거래처: {lead.nearestAnchor.name}</p>
+        ) : null}
+        {lead.naverPlaceUrl || lead.kakaoPlaceUrl || lead.googlePlaceUrl || instagramHandle ? (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {lead.naverPlaceUrl ? (
+              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={lead.naverPlaceUrl} rel="noreferrer" target="_blank">
+                네이버
+              </a>
+            ) : null}
+            {lead.kakaoPlaceUrl ? (
+              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={lead.kakaoPlaceUrl} rel="noreferrer" target="_blank">
+                카카오맵
+              </a>
+            ) : null}
+            {lead.googlePlaceUrl ? (
+              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={lead.googlePlaceUrl} rel="noreferrer" target="_blank">
+                구글
+              </a>
+            ) : null}
+            {instagramHandle ? (
+              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
+                인스타그램
+              </a>
+            ) : null}
+          </div>
         ) : null}
         {message ? <p className="mt-1.5 text-[11px] font-bold text-rose-600">{message}</p> : null}
         <div className="mt-2 grid grid-cols-2 gap-1.5">

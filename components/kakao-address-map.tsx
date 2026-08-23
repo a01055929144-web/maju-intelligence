@@ -11,6 +11,9 @@ export type KakaoMapMarker = {
   readonly id?: string;
   readonly label: string;
   readonly markerColor?: string;
+  // 기거래처 근접 리드 표시(2026-08-24 피드백: "기거래처 주변의 리드들은 별도의 뱃지가 있으면
+  // 가독성이 좋을 것 같네") — tone: "lead" 마커에만 의미가 있습니다.
+  readonly nearAnchor?: boolean;
   readonly name: string;
   readonly tone: "customer" | "lead" | "origin" | "unregistered";
   readonly x: number;
@@ -99,6 +102,11 @@ export function KakaoAddressMap({
   // 멈추는 현상이 생깁니다. 최초 로드 때 한 번만 계산해 여기 저장해두고, 이후 포커스 이동은
   // 이 캐시를 읽어 지도만 살짝 이동시키는 훨씬 가벼운 두 번째 effect에서 처리합니다.
   const markerPositionsRef = useRef<Map<string, any>>(new Map());
+  // 신규 리드 마커만 확대/축소 수준에 따라 "이름표 있는 알약" ↔ "작은 점"으로 다시 그립니다(2026-08-24
+  // 피드백: "신규 거래처명 이렇게 뜨게 끔 만들어" — 예전 겹침 문제 때문에 항상 점으로 축약했던 걸,
+  // 지도를 확대(level 낮음)했을 때는 화면에 보이는 개수가 자연히 줄어드니 이름표를 다시 보여주도록
+  // 절충). CustomOverlay.setContent()로 좌표 재지오코딩 없이 내용만 바꿔 가볍게 유지합니다.
+  const leadOverlayEntriesRef = useRef<Array<{ element: HTMLElement; marker: KakaoMapMarker; overlay: any }>>([]);
   // onMarkerClick은 부모(sales-route-map-workspace.tsx)에서 매 렌더마다 새로 만들어지는 인라인
   // 함수일 수 있습니다. 이 값을 boot effect의 의존성 배열에 그대로 두면 부모가 리렌더될 때마다
   // (마커 클릭과 무관하게) 지도가 통째로 재생성됩니다. ref로 최신 콜백만 따로 추적해 boot effect가
@@ -207,17 +215,26 @@ export function KakaoAddressMap({
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
         markerPositionsRef.current = new Map();
+        leadOverlayEntriesRef.current = [];
         let focusedPosition: any = null;
         let found = 0;
         const roadPathSegments = splitRoutePath(routePath).map((segment) => segment.map((point) => new kakao.maps.LatLng(point.lat, point.lng)));
         const hasRoadPath = roadPathSegments.some((segment) => segment.length >= 2);
 
-        // 신규 리드 마커가 한 번에 많이(20개 초과) 뜨면 상호명이 적힌 넓은 알약형 라벨끼리 서로
-        // 겹쳐 지도가 읽기 어려워집니다(2026-08-24 피드백: "카드가 겹쳐지고 있어서 가독성이
-        // 떨어지는 게 있어"). 그럴 때는 리드 마커만 이름 없는 작은 점으로 축약하고, 상호명은
-        // title 툴팁(마우스 오버)과 클릭 시 뜨는 카드로 확인하도록 합니다.
+        // 신규 리드 마커가 한 번에 많이 뜨면 상호명이 적힌 넓은 알약형 라벨끼리 서로 겹쳐 지도가
+        // 읽기 어려워집니다(2026-08-24 피드백: "카드가 겹쳐지고 있어서 가독성이 떨어지는 게 있어").
+        // 하지만 항상 점으로만 축약하면 반대로 "신규 거래처명이 안 보인다"는 피드백이 나옵니다.
+        // 그래서 확대/축소 수준(level, 낮을수록 확대)에 따라 동적으로 전환합니다 — 지도를 확대하면
+        // 같은 화면에 보이는 마커 수가 자연히 줄어드니 그때는 이름표를 보여주고, 축소해서 한 화면에
+        // 많이 몰릴 때만 점으로 축약합니다. leadMarkerCount가 아주 많으면(150개 초과) 확대해도
+        // 여전히 빽빽할 수 있어 그 경우엔 항상 점으로 유지하는 안전장치를 둡니다.
         const leadMarkerCount = markers.filter((marker) => marker.tone === "lead").length;
-        const compactLeadMarkers = leadMarkerCount > 20;
+        const computeCompactLeadMarkers = (level: number) => leadMarkerCount > 150 || level >= 7;
+        let compactLeadMarkers = computeCompactLeadMarkers(map.getLevel());
+
+        const attachLeadOverlayEntry = (overlay: any, marker: KakaoMapMarker, element: HTMLElement) => {
+          leadOverlayEntriesRef.current.push({ element, marker, overlay });
+        };
 
         await Promise.all(
           markers.map(
@@ -232,14 +249,15 @@ export function KakaoAddressMap({
 
                   if (geocodeStatus === kakao.maps.services.Status.OK && result[0]) {
                     const position = new kakao.maps.LatLng(Number(result[0].y), Number(result[0].x));
-                    const overlayContent = createMarkerOverlay(marker, compactLeadMarkers);
+                    const overlayContent = createMarkerOverlay(marker, marker.tone === "lead" && compactLeadMarkers);
                     overlayContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
-                    new kakao.maps.CustomOverlay({
+                    const overlay = new kakao.maps.CustomOverlay({
                       content: overlayContent,
                       map,
                       position,
                       yAnchor: 1.75
                     });
+                    if (marker.tone === "lead") attachLeadOverlayEntry(overlay, marker, overlayContent);
 
                     bounds.extend(position);
                     found += 1;
@@ -257,6 +275,20 @@ export function KakaoAddressMap({
               ).catch(() => undefined)
           )
         );
+
+        // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
+        // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
+        kakao.maps.event.addListener(map, "zoom_changed", () => {
+          const nextCompact = computeCompactLeadMarkers(map.getLevel());
+          if (nextCompact === compactLeadMarkers) return;
+          compactLeadMarkers = nextCompact;
+          leadOverlayEntriesRef.current = leadOverlayEntriesRef.current.map((entry) => {
+            const nextElement = createMarkerOverlay(entry.marker, compactLeadMarkers);
+            nextElement.addEventListener("click", () => onMarkerClickRef.current?.(entry.marker));
+            entry.overlay.setContent(nextElement);
+            return { ...entry, element: nextElement };
+          });
+        });
 
         if (ignore) return;
 
@@ -784,17 +816,24 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
   // 아래 marker.grade 분기를 먼저 타서 등급 배지 안에 "신규" 텍스트만 남고 상호명이 통째로
   // 빠지는 문제가 있었습니다(2026-08-24 피드백: "3번째 사진에 신규라고만 마커가 있어서").
   if (marker.tone === "lead") {
+    // 기거래처 근접 리드는 테두리를 흰색 대신 앰버(주황)로 바꿔 눈에 띄게 합니다(2026-08-24
+    // 피드백: "기거래처 주변의 리드들은 별도의 뱃지가 있으면 가독성이 좋을 것 같네").
+    const nearAnchorBorder = marker.nearAnchor ? "#f59e0b" : "#ffffff";
+    const nearAnchorTitleSuffix = marker.nearAnchor ? " · 기거래처 인근" : "";
     if (compactLead) {
       return htmlToElement(`
-        <button type="button" title="${label} · ${name}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid #ffffff;border-radius:999px;box-shadow:0 4px 10px rgba(15,23,42,.32);"></button>
+        <button type="button" title="${label} · ${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid ${nearAnchorBorder};border-radius:999px;box-shadow:0 4px 10px rgba(15,23,42,.32);"></button>
       `);
     }
     const gradeBadge = marker.grade
       ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:999px;background:rgba(255,255,255,.3);font-size:9px;margin-right:5px;flex-shrink:0;">${escapeHtml(marker.grade)}</span>`
       : "";
+    const nearAnchorBadge = marker.nearAnchor
+      ? `<span style="display:inline-flex;align-items:center;justify-content:center;margin-right:4px;flex-shrink:0;color:#fde68a;font-size:11px;line-height:1;">★</span>`
+      : "";
     return htmlToElement(`
-      <button type="button" title="${name}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:6px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;">
-        ${gradeBadge}${label} · ${name}
+      <button type="button" title="${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:6px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;">
+        ${nearAnchorBadge}${gradeBadge}${label} · ${name}
       </button>
     `);
   }
