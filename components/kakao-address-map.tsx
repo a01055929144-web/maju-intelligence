@@ -226,10 +226,12 @@ export function KakaoAddressMap({
         // 하지만 항상 점으로만 축약하면 반대로 "신규 거래처명이 안 보인다"는 피드백이 나옵니다.
         // 그래서 확대/축소 수준(level, 낮을수록 확대)에 따라 동적으로 전환합니다 — 지도를 확대하면
         // 같은 화면에 보이는 마커 수가 자연히 줄어드니 그때는 이름표를 보여주고, 축소해서 한 화면에
-        // 많이 몰릴 때만 점으로 축약합니다. leadMarkerCount가 아주 많으면(150개 초과) 확대해도
-        // 여전히 빽빽할 수 있어 그 경우엔 항상 점으로 유지하는 안전장치를 둡니다.
+        // 많이 몰릴 때만 점으로 축약합니다. 리드 전체 개수(leadMarkerCount)는 전국 기준이라 몇백
+        // 건이어도 화면에 다 보이는 게 아니므로 줌 판단에 그대로 쓰면 안 됩니다 — 아주 극단적으로
+        // 많을 때만(800개 초과) 확대해도 항상 점으로 유지하는 안전장치로 두고, 평소에는 줌 레벨만
+        // 봅니다.
         const leadMarkerCount = markers.filter((marker) => marker.tone === "lead").length;
-        const computeCompactLeadMarkers = (level: number) => leadMarkerCount > 150 || level >= 7;
+        const computeCompactLeadMarkers = (level: number) => leadMarkerCount > 800 || level >= 7;
         let compactLeadMarkers = computeCompactLeadMarkers(map.getLevel());
 
         const attachLeadOverlayEntry = (overlay: any, marker: KakaoMapMarker, element: HTMLElement) => {
