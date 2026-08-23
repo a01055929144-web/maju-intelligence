@@ -2,6 +2,11 @@
  * 네이버 데이터랩 "검색어 트렌드" API로 거래처명 키워드 검색량을 상대 지수로 가져옵니다
  * (영업리드 정렬용, 2026-08-20 피드백: "영업리드 > 키워드 검색량 순으로 진행").
  *
+ * 2026-08-23: 네이버가 이 API를 구 developers.naver.com 체계에서 네이버클라우드플랫폼(NCP)
+ * "AI·NAVER API > Search Trend" 콘솔로 이전했습니다(구 앱은 신규 등록 불가 — 사용자가 실제로
+ * 겪은 "신규로 등록할 수 없는 API" 에러가 이 이전 때문이었음). 엔드포인트와 인증 헤더가
+ * X-NCP-APIGW-API-KEY-ID / X-NCP-APIGW-API-KEY 로 바뀌었을 뿐, 요청/응답 바디 스키마는 동일합니다.
+ *
  * 다른 선택형 외부 API들(lib/google-reviews.ts, lib/business-status.ts)과 같은
  * graceful-degradation 패턴을 따릅니다: 키가 없거나 요청이 실패해도 절대 throw하지 않고
  * 빈 결과를 돌려주므로, 호출하는 쪽은 별도 에러 처리 없이 항상 안전하게 호출할 수 있습니다.
@@ -13,10 +18,12 @@
  * 완벽한 절대값은 아니지만(네이버 검색광고 API의 월간 검색량과 달리), 정렬 용도로는 충분합니다.
  */
 
-const DATALAB_SEARCH_URL = "https://openapi.naver.com/v1/datalab/search";
+const DATALAB_SEARCH_URL = "https://naveropenapi.apigw.ntruss.com/datalab/v1/search";
 const ANCHOR_KEYWORD = "커피";
 const MAX_KEYWORDS_PER_GROUP_CALL = 4; // 앵커 1개 + 거래처명 4개 = 데이터랩 최대 5그룹
 
+// 환경변수 이름은 이전(구 데이터랩) 값 그대로 재사용합니다 — Vercel에는 NCP 콘솔에서 새로 발급받은
+// Client ID/Client Secret 값만 다시 넣어주면 되고, 변수명을 새로 만들 필요는 없습니다.
 function getNaverClientId() {
   return (process.env.NAVER_CLIENT_ID || "").trim();
 }
@@ -73,8 +80,8 @@ export async function fetchKeywordVolumeScores(names: string[]): Promise<Record<
       const response = await fetch(DATALAB_SEARCH_URL, {
         method: "POST",
         headers: {
-          "X-Naver-Client-Id": clientId,
-          "X-Naver-Client-Secret": clientSecret,
+          "X-NCP-APIGW-API-KEY-ID": clientId,
+          "X-NCP-APIGW-API-KEY": clientSecret,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
