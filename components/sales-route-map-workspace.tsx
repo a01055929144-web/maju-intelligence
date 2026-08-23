@@ -4228,9 +4228,20 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
     return keywordVolumeScores[lead.id] ?? lead.keywordVolume ?? 0;
   }
 
+  // "영업리드"는 검색량만이 아니라 "영업이 잘되는지·리뷰가 좋은지"까지 함께 봐야 한다는 피드백
+  // (2026-08-24)을 반영한 정렬 지표입니다. lib/store.ts의 computePermitLeadScoreBreakdown과 같은
+  // 가중치를 써서(검색량 최대 15점 + 평점 최대 8점 + 리뷰수 최대 7점, 로그 스케일) 화면에 뜨는
+  // 숫자와 저장되는 등급 점수가 서로 어긋나지 않게 합니다.
+  function businessAttractivenessOf(lead: PermitLeadItem): number {
+    const keywordPoints = Math.min(15, Math.round(keywordVolumeOf(lead) / 5));
+    const ratingPoints = lead.rating ? Math.round((Math.min(lead.rating, 5) / 5) * 8) : 0;
+    const reviewCountPoints = lead.reviewCount ? Math.min(7, Math.round(Math.log10(lead.reviewCount + 1) * 3)) : 0;
+    return keywordPoints + ratingPoints + reviewCountPoints;
+  }
+
   const sortedLeads = useMemo(() => {
     if (leadQualityMode !== "keyword") return filteredLeads;
-    return [...filteredLeads].sort((a, b) => keywordVolumeOf(b) - keywordVolumeOf(a));
+    return [...filteredLeads].sort((a, b) => businessAttractivenessOf(b) - businessAttractivenessOf(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredLeads, leadQualityMode, keywordVolumeScores]);
   const leadTotalPages = Math.max(1, Math.ceil(sortedLeads.length / leadPageSize));
@@ -5664,7 +5675,9 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                     <th className="w-[130px] border-r border-slate-200 px-4 py-3">인스타</th>
                     <th className="w-[130px] border-r border-slate-200 px-4 py-3">전화</th>
                     {leadQualityMode === "keyword" ? (
-                      <th className="w-[100px] border-r border-slate-200 px-4 py-3 text-right">검색량 지수</th>
+                      <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right" title="검색량 지수(최대 15) + 평점(최대 8) + 리뷰수(최대 7)를 합친 영업 매력도 점수입니다.">
+                        영업 매력도
+                      </th>
                     ) : (
                       <th className="w-[110px] border-r border-slate-200 px-4 py-3">개시일</th>
                     )}
@@ -5749,8 +5762,18 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
                           )}
                         </td>
                         {leadQualityMode === "keyword" ? (
-                          <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-teal-700">
-                            {keywordVolumeOf(lead) > 0 ? keywordVolumeOf(lead).toLocaleString() : keywordVolumeLoading ? "조회 중..." : "미확인"}
+                          <td className="border-r border-slate-100 px-4 py-3 text-right">
+                            {keywordVolumeOf(lead) > 0 || lead.rating || lead.reviewCount ? (
+                              <>
+                                <p className="font-black text-teal-700">{businessAttractivenessOf(lead).toLocaleString()}점</p>
+                                <p className="mt-0.5 text-[11px] font-bold text-slate-400">
+                                  {lead.rating ? `★${lead.rating.toFixed(1)}` : "평점 미확인"}
+                                  {lead.reviewCount ? ` · 리뷰${lead.reviewCount.toLocaleString()}` : ""}
+                                </p>
+                              </>
+                            ) : (
+                              <span className="font-bold text-slate-400">{keywordVolumeLoading ? "조회 중..." : "미확인"}</span>
+                            )}
                           </td>
                         ) : (
                           <td className="border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{getPermitLeadOpenDate(lead) || "-"}</td>

@@ -3826,7 +3826,10 @@ export function classifyPermitLeadIndustry(rawIndustryText: string, businessName
   };
 }
 
-/** 인허가일 기준으로 오늘/이번 주(월요일 시작)/이번 달/최근 90일 중 어느 구간에 속하는지 계산합니다. */
+/**
+ * 기준 날짜(호출하는 쪽에서 개업일 우선, 없으면 인허가일을 넘겨줌)로 오늘/이번 주(월요일 시작)/
+ * 이번 달/최근 90일 중 어느 구간에 속하는지 계산합니다.
+ */
 export function computePermitLeadPeriod(permitDateText: string | null | undefined, referenceDate: Date = new Date()): PermitLeadPeriod {
   if (!permitDateText) return "recent";
   const permitDate = new Date(permitDateText);
@@ -3852,10 +3855,12 @@ function isPermitStatusActive(statusText?: string) {
 }
 
 /**
- * v1 점수 산식입니다. 설계 문서의 6개 축 중 실데이터로 바로 계산 가능한 3개(인허가 신선도,
- * 업종 적합도, 연락처/주소 기반 영업 접근성)만 계산하고, 나머지 3개(키워드 검색량, 리뷰·활성도,
- * 동선 적합도)는 외부 보강 데이터가 들어오기 전까지 0점으로 둡니다. 그래서 보강 전 리드는
- * A등급(85점 이상)에 도달하기 어려운데, 이는 의도된 것입니다 — 화면은 등급보다 "다음 액션"을
+ * v1 점수 산식입니다. 설계 문서의 6개 축 중 5개를 계산합니다: 인허가(개업일 우선) 신선도,
+ * 업종 적합도, 연락처/주소 기반 영업 접근성은 실데이터로 바로 계산하고, 키워드 검색량·리뷰
+ * 활성도는 외부 보강(네이버 데이터랩 검색량, 구글 리뷰) 값이 들어온 뒤부터 채워집니다
+ * (2026-08-24, "영업리드는 영업이 잘되는지·리뷰가 좋은지가 중요하다" 피드백 반영).
+ * 나머지 1개(동선 적합도)는 아직 계산 기반이 없어 0점으로 둡니다.
+ * 보강 전 리드는 A등급(85점 이상)에 도달하기 어렵지만, 화면은 등급보다 "다음 액션"을
  * 우선 노출하므로(computePermitLeadNextAction 참고) 보강 전이라도 오늘 전화할 곳은 놓치지 않습니다.
  */
 function computePermitLeadScoreBreakdown(input: {
@@ -3864,16 +3869,32 @@ function computePermitLeadScoreBreakdown(input: {
   industryKnown: boolean;
   hasPhone: boolean;
   hasAddress: boolean;
+  keywordVolume?: number;
+  reviewCount?: number;
+  rating?: number;
 }) {
   const freshness = input.leadPeriod === "today" ? 30 : input.leadPeriod === "week" ? 22 : input.leadPeriod === "month" ? 14 : 6;
   const industryFit = !input.isTarget ? 0 : input.industryKnown ? 20 : 10;
   const outreachFit = (input.hasPhone ? 6 : 0) + (input.hasAddress ? 2 : 0);
 
+  // 검색량 지수(앵커 "커피"=100 기준 상대값)를 0~15점으로 환산합니다. 대부분의 개별 매장명은
+  // 지수가 한 자릿수~수십 대라 15점 만점을 받는 경우는 드물고, 온라인에서 화제가 되는 매장만
+  // 높은 점수를 받습니다.
+  const keywordDemand =
+    typeof input.keywordVolume === "number" && input.keywordVolume > 0 ? Math.min(15, Math.round(input.keywordVolume / 5)) : 0;
+
+  // 리뷰 활성도는 평점(최대 8점)과 리뷰 수(최대 7점, 로그 스케일 — 리뷰 10개와 100개의 차이가
+  // 100개와 1000개의 차이보다 체감상 크다고 보고 완만하게 늘어나도록 함)를 합산합니다.
+  const ratingPoints = typeof input.rating === "number" && input.rating > 0 ? Math.round((Math.min(input.rating, 5) / 5) * 8) : 0;
+  const reviewCountPoints =
+    typeof input.reviewCount === "number" && input.reviewCount > 0 ? Math.min(7, Math.round(Math.log10(input.reviewCount + 1) * 3)) : 0;
+  const placeActivity = ratingPoints + reviewCountPoints;
+
   return {
     license_freshness_score: freshness,
     industry_fit_score: industryFit,
-    keyword_demand_score: 0,
-    place_activity_score: 0,
+    keyword_demand_score: keywordDemand,
+    place_activity_score: placeActivity,
     route_fit_score: 0,
     outreach_fit_score: outreachFit
   };
@@ -4011,8 +4032,8 @@ export async function ingestPermitLeadRows(
         ).catch(() => [])
       : Promise.resolve([]),
     businessNumbers.length
-      ? supabaseRequest<Array<{ id: string; business_number: string }>>(
-          `business_permit_leads?select=id,business_number&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${businessNumbers
+      ? supabaseRequest<Array<{ id: string; business_number: string; keyword_volume: number | null; review_count: number | null; rating: number | null }>>(
+          `business_permit_leads?select=id,business_number,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${businessNumbers
             .map(encodeURIComponent)
             .join(",")})`
         ).catch(() => [])
@@ -4020,6 +4041,15 @@ export async function ingestPermitLeadRows(
   ]);
   const customerBizNoSet = new Set(existingCustomersByBizNo.map((row) => row.business_registration_number));
   const leadBizNoToId = new Map(existingLeadsByBizNo.map((row) => [row.business_number, row.id]));
+  // 재수집(업데이트) 시 이미 보강된 검색량/리뷰 값을 점수 계산에 계속 반영하기 위한 조회맵입니다.
+  // 이게 없으면 크론이 매일 같은 리드를 재수집할 때마다 keyword_demand_score/place_activity_score가
+  // 0으로 리셋되어, 어렵게 보강한 점수가 다음 날 사라지는 문제가 생깁니다.
+  const leadEnrichmentByBizNo = new Map(
+    existingLeadsByBizNo.map((row) => [
+      row.business_number,
+      { keywordVolume: row.keyword_volume ?? undefined, reviewCount: row.review_count ?? undefined, rating: row.rating ?? undefined }
+    ])
+  );
 
   const today = new Date();
   const inserts: Record<string, unknown>[] = [];
@@ -4042,17 +4072,24 @@ export async function ingestPermitLeadRows(
     const isDuplicate = businessNumber ? customerBizNoSet.has(businessNumber) : false;
     if (isDuplicate) result.duplicates += 1;
 
-    const leadPeriod = computePermitLeadPeriod(row.permitDate, today);
+    // 프레시니스는 인허가일보다 개업일을 우선 씁니다("신규 리드는 개업일자가 중요하다"는 피드백,
+    // 2026-08-24) — 인허가를 미리 받고 나중에 문을 여는 경우가 흔해서, 개업일이 실제 "방금 생긴
+    // 잠재고객"을 더 정확히 나타냅니다. 개업일이 아직 없으면 인허가일로 대체합니다.
+    const leadPeriod = computePermitLeadPeriod(row.openDate || row.permitDate, today);
     const industryKnown = classification.primary !== "미분류";
     const hasPhone = Boolean(row.phone);
     const hasAddress = Boolean(row.address);
+    const priorEnrichment = businessNumber ? leadEnrichmentByBizNo.get(businessNumber) : undefined;
 
     const scoreBreakdown = computePermitLeadScoreBreakdown({
       leadPeriod,
       isTarget: classification.isTarget,
       industryKnown,
       hasPhone,
-      hasAddress
+      hasAddress,
+      keywordVolume: priorEnrichment?.keywordVolume,
+      reviewCount: priorEnrichment?.reviewCount,
+      rating: priorEnrichment?.rating
     });
     const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
     const grade = permitLeadGradeFromScore(scoreTotal);
@@ -4570,8 +4607,21 @@ export async function enrichPermitLeadKeywordVolume(companyId: string, leadIds: 
   if (!isNaverDatalabConfigured()) return {};
 
   const idsParam = leadIds.map((id) => encodeURIComponent(id)).join(",");
-  const rows = await supabaseRequest<Array<{ id: string; business_name: string; keyword_volume: number | null }>>(
-    `business_permit_leads?select=id,business_name,keyword_volume&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${idsParam})`
+  const rows = await supabaseRequest<
+    Array<{
+      id: string;
+      business_name: string;
+      keyword_volume: number | null;
+      review_count: number | null;
+      rating: number | null;
+      phone: string | null;
+      address: string | null;
+      lead_period: PermitLeadPeriod;
+      is_target_industry: boolean;
+      industry_primary: string | null;
+    }>
+  >(
+    `business_permit_leads?select=id,business_name,keyword_volume,review_count,rating,phone,address,lead_period,is_target_industry,industry_primary&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${idsParam})`
   ).catch(() => []);
 
   const alreadyScored: Record<string, number> = {};
@@ -4586,20 +4636,40 @@ export async function enrichPermitLeadKeywordVolume(companyId: string, leadIds: 
 
   const nameToScore = await fetchKeywordVolumeScores(needsScore.map((row) => row.business_name));
 
-  const updates: Array<{ id: string; score: number }> = [];
+  const updates: Array<{ id: string; score: number; row: (typeof needsScore)[number] }> = [];
   needsScore.forEach((row) => {
     const score = nameToScore[row.business_name];
-    if (typeof score === "number") updates.push({ id: row.id, score });
+    if (typeof score === "number") updates.push({ id: row.id, score, row });
   });
 
+  // 검색량을 새로 채운 리드는 점수도 같이 다시 계산해 저장합니다(그래야 "영업리드" 정렬이 실제
+  // 검색량순으로 반영되고, 인허가 목록의 등급·다음 액션에도 반영됨). 나머지 값(리뷰 등)은 그대로
+  // 유지합니다.
   await Promise.all(
-    updates.map((update) =>
-      supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(update.id)}`, {
+    updates.map((update) => {
+      const scoreBreakdown = computePermitLeadScoreBreakdown({
+        leadPeriod: update.row.lead_period,
+        isTarget: update.row.is_target_industry,
+        industryKnown: (update.row.industry_primary || "미분류") !== "미분류",
+        hasPhone: Boolean(update.row.phone),
+        hasAddress: Boolean(update.row.address),
+        keywordVolume: update.score,
+        reviewCount: update.row.review_count ?? undefined,
+        rating: update.row.rating ?? undefined
+      });
+      const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
+      return supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(update.id)}`, {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ keyword_volume: update.score, updated_at: new Date().toISOString() })
-      }).catch(() => null)
-    )
+        body: JSON.stringify({
+          keyword_volume: update.score,
+          score_total: scoreTotal,
+          score_breakdown: scoreBreakdown,
+          grade: permitLeadGradeFromScore(scoreTotal),
+          updated_at: new Date().toISOString()
+        })
+      }).catch(() => null);
+    })
   );
 
   const result: Record<string, number> = { ...alreadyScored };
@@ -4676,6 +4746,26 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
       payload.keyword_volume = score;
       sources.keywordVolume = true;
     }
+  }
+
+  // 방금 보강한 값(payload)을 기존 값(row)에 덮어써서 점수를 다시 계산합니다 — "영업리드는
+  // 영업이 잘되는지·리뷰가 좋은지가 중요하다"는 피드백(2026-08-24)을 반영해 keyword_demand_score/
+  // place_activity_score가 이 시점부터 실제 값을 반영하게 됩니다.
+  {
+    const industryKnown = (row.industry_primary || "미분류") !== "미분류";
+    const scoreBreakdown = computePermitLeadScoreBreakdown({
+      leadPeriod: row.lead_period,
+      isTarget: row.is_target_industry,
+      industryKnown,
+      hasPhone: Boolean((payload.phone as string | undefined) ?? row.phone),
+      hasAddress: Boolean(row.address),
+      keywordVolume: (payload.keyword_volume as number | undefined) ?? row.keyword_volume ?? undefined,
+      reviewCount: (payload.review_count as number | undefined) ?? row.review_count ?? undefined,
+      rating: (payload.rating as number | undefined) ?? row.rating ?? undefined
+    });
+    payload.score_total = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
+    payload.score_breakdown = scoreBreakdown;
+    payload.grade = permitLeadGradeFromScore(payload.score_total as number);
   }
 
   const externalFieldKeys = [
