@@ -205,8 +205,8 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-slate-950">{userName ? `${userName}님` : companyName}</p>
-                    <p className="truncate text-xs font-bold text-slate-500">{companyName}</p>
+                    <p className="truncate text-sm font-black text-slate-950">{companyName}</p>
+                    {userName ? <p className="truncate text-xs font-bold text-slate-500">{userName}님</p> : null}
                   </div>
                   <Link aria-label={settingsLabel} className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
                     <Settings className="h-4 w-4" />

@@ -307,11 +307,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const [isBulkRegistering, setIsBulkRegistering] = useState(false);
   const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
-  // 지도 우선 화면이라 통계·오른쪽 거래처 패널은 기본 접힘 상태를 유지하지만, 왼쪽 배송차량·담당자
-  // 필터 패널은 기본으로 펼쳐 둡니다(2026-08-24 피드백: "차량, 매니저 필터랑 거래처 필터가 안보이네"
-  // → 확인 결과 왼쪽 사이드 패널이 접혀 있어 안 보였던 것).
+  // 지도 우선 화면이라 통계 패널은 기본 접힘 상태를 유지하지만, 왼쪽 배송차량·담당자 필터와 오른쪽
+  // 거래처 필터 패널은 기본으로 펼쳐 둡니다(2026-08-24 피드백: "차량, 매니저 필터랑 거래처 필터가
+  // 안보이네" → 왼쪽은 이미 펼침으로 고쳤는데도 "매장 필터가 안 보이네"가 다시 나와 확인해보니
+  // 거래처 목록은 오른쪽 패널(StoreManagementPanel)이라 rightCollapsed 기본값이 문제였음).
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(true);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -998,6 +999,46 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     }
 
     setManualDrivers((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    return { ok: true };
+  }
+
+  // 2026-08-24 피드백("추가는 있는데 삭제가 없다")에 대응한 삭제 함수입니다. 이미 거래처가 배정된
+  // 배송차(vehicle.stops.length > 0)는 담당자를 지우면 그 거래처들이 그룹을 잃어버리므로, 호출부인
+  // DeliveryAssignmentPanel에서 빈 배송차(stops.length === 0)에만 삭제 버튼을 보여주고 그 경우만
+  // 이 함수를 호출합니다.
+  async function deleteVehicle(vehicle: DeliveryVehicle): Promise<{ ok: boolean; message?: string }> {
+    if (vehicle.stops.length > 0) {
+      return { ok: false, message: "거래처가 배정되어 있어 삭제할 수 없습니다. 거래처 관리에서 담당자를 먼저 변경하세요." };
+    }
+
+    if (vehicle.driver) {
+      try {
+        const response = await fetch("/api/delivery-vehicles", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+            driverName: vehicle.driver
+          })
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          return { ok: false, message: payload?.message || "삭제에 실패했습니다." };
+        }
+      } catch {
+        return { ok: false, message: "삭제에 실패했습니다. 네트워크 상태를 확인하세요." };
+      }
+    }
+
+    setManualDrivers((current) => current.filter((name) => name !== vehicle.driver));
+    setManualVehicles((current) => current.filter((name) => name !== vehicle.name));
+    setVehicleEdits((current) => {
+      if (!(vehicle.id in current)) return current;
+      const next = { ...current };
+      delete next[vehicle.id];
+      return next;
+    });
+    if (vehicleFilterId === vehicle.id) setVehicleFilterId("all");
     return { ok: true };
   }
 
@@ -1710,15 +1751,22 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             )}
           </div>
 
+          {/* 2026-08-24 피드백("차량 매니저 필터가 검색창하고 겹쳐보여"): 이 좌우 패널은 mapAreaRef
+              기준 xl:absolute 오버레이인데, 위 mapHeaderRef 검색창 카드도 같은 좌표계에 xl:absolute로
+              떠 있고 리드 필터 행이 늘어나면 높이가 커집니다. 좌우 패널이 고정 xl:top-3만 쓰면 헤더가
+              커질 때 그 아래로 가려지므로, 크로스헤어 버튼과 동일하게 mapHeaderHeightPx를 top 인라인
+              스타일로 반영합니다. */}
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:top-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
+            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
               leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[300px]"
             }`}
+            style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
             <DeliveryAssignmentPanel
               collapsed={leftCollapsed}
               fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
               onAddDriver={addManualDriver}
+              onDeleteVehicle={deleteVehicle}
               onSelectVehicle={selectVehicle}
               onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
               onUpdateVehicle={updateVehicle}
@@ -1729,9 +1777,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </div>
 
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:top-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
+            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
               rightCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[340px]"
             }`}
+            style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
             <StoreManagementPanel
               collapsed={rightCollapsed}
@@ -2028,6 +2077,7 @@ function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
   onAddDriver,
+  onDeleteVehicle,
   onSelectVehicle,
   onToggleCollapsed,
   onUpdateVehicle,
@@ -2038,6 +2088,7 @@ function DeliveryAssignmentPanel({
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onDeleteVehicle: (vehicle: DeliveryVehicle) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
@@ -2047,6 +2098,20 @@ function DeliveryAssignmentPanel({
 }) {
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ vehicleId: string; message: string } | null>(null);
+
+  // 2026-08-24 피드백("새 담당자, 배송차 추가는 있는데 삭제가 없다") 대응 삭제 핸들러입니다. 거래처가
+  // 이미 배정된 배송차는 담당자를 지우면 그 거래처들이 그룹을 잃어버리므로, 빈 배송차(stops.length
+  // === 0)에만 삭제 버튼을 노출합니다(아래 목록 렌더링부에서 조건 처리).
+  async function handleDelete(vehicle: DeliveryVehicle) {
+    if (!window.confirm(`"${vehicle.name}" 배송차를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    setDeletingVehicleId(vehicle.id);
+    setDeleteError(null);
+    const result = await onDeleteVehicle(vehicle);
+    setDeletingVehicleId(null);
+    if (!result.ok) setDeleteError({ vehicleId: vehicle.id, message: result.message || "삭제에 실패했습니다." });
+  }
 
   if (collapsed) {
     return (
@@ -2145,18 +2210,38 @@ function DeliveryAssignmentPanel({
                   </p>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
-                    <span
-                      className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setEditingVehicleId(vehicle.id);
-                      }}
-                      role="button"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                      편집
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {vehicle.stops.length === 0 ? (
+                        <span
+                          className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (deletingVehicleId) return;
+                            void handleDelete(vehicle);
+                          }}
+                          role="button"
+                          title="배정된 거래처가 없어 바로 삭제할 수 있습니다"
+                        >
+                          {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          삭제
+                        </span>
+                      ) : null}
+                      <span
+                        className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setEditingVehicleId(vehicle.id);
+                        }}
+                        role="button"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        편집
+                      </span>
+                    </div>
                   </div>
+                  {deleteError?.vehicleId === vehicle.id ? (
+                    <p className="mt-1.5 text-[11px] font-bold leading-4 text-rose-600">{deleteError.message}</p>
+                  ) : null}
                 </button>
               )}
             </div>

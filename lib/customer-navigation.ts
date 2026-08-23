@@ -120,19 +120,10 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
         label: "운영 리포트"
       }
     ]
-  },
-  {
-    label: "관리",
-    items: [
-      {
-        active: "settings",
-        description: "회사 정보와 물류 출발지 관리",
-        href: "/dashboard/settings",
-        icon: Settings,
-        label: "회사 설정"
-      }
-    ]
   }
+  // "관리 > 회사 설정" 그룹은 2026-08-24 피드백("설정 이모티콘으로 갈음하면 될 것 같아")에 따라
+  // 제거했습니다. 동일한 /dashboard/settings 링크가 CustomerAppShell 하단 바의 설정(Settings)
+  // 아이콘으로 이미 노출되고 있어 중복이었습니다.
 ];
 
 /** Expands each group's items into a flat leaf-item list — items with children contribute their children, not the parent. */

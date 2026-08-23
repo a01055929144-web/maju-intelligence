@@ -5352,6 +5352,28 @@ export async function upsertDeliveryVehicleFuelType(
   }
 }
 
+/**
+ * 거래처가 배정되지 않은(stops.length === 0) 담당자·배송차를 삭제할 때 delivery_vehicles의 연료
+ * 타입 설정 행도 같이 지웁니다(2026-08-24 피드백: "새 담당자, 배송차 추가는 있는데 삭제가 없다").
+ * 거래처가 이미 배정된 배송차는 호출부(components/sales-route-map-workspace.tsx)에서 애초에 이
+ * 함수를 호출하지 않도록 막습니다 — 담당자를 지우면 해당 거래처들이 그룹을 잃기 때문입니다.
+ */
+export async function deleteDeliveryVehicleFuelType(companyId: string, driverName: string): Promise<{ deleted: boolean }> {
+  if (!driverName.trim()) return { deleted: false };
+  if (!isProductionStoreConfigured()) return { deleted: false };
+
+  try {
+    await supabaseRequest(
+      `delivery_vehicles?company_id=eq.${encodeURIComponent(companyId)}&driver_name=eq.${encodeURIComponent(driverName.trim())}`,
+      { method: "DELETE" }
+    );
+    return { deleted: true };
+  } catch (error) {
+    if (isMissingDeliveryVehiclesTableError(error)) return { deleted: false };
+    throw error;
+  }
+}
+
 async function getRouteDistanceCacheMap(companyId: string) {
   const cache = new Map<
     string,
