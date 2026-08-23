@@ -5134,6 +5134,36 @@ export async function refreshPermitLeadRecommendationScores(companyId: string, r
   };
 }
 
+export type RecommendationRefreshAllResult = {
+  companiesProcessed: number;
+  totalUpdated: number;
+};
+
+/**
+ * 매일 자동으로 "추천 점수"(기거래처 근접도 + 업종 유사도, 2026-08-24 피드백)를 다시 계산합니다.
+ * app/api/cron/business-status와 같은 크론에 얹지 않고 별도 크론(app/api/cron/recommend-refresh)
+ * 에서만 호출합니다 — business-status 크론은 이미 60초 예산을 거의 다 쓰고 있는데, 이 작업은
+ * 거래처 지오코딩(Tmap 호출)이 들어가 시간이 걸릴 수 있어 같이 묶으면 타임아웃 위험이 있습니다.
+ * 회사 하나가 실패해도(Tmap 오류 등) 나머지 회사는 계속 처리합니다.
+ */
+export async function refreshAllCompaniesRecommendationScores(): Promise<RecommendationRefreshAllResult> {
+  if (!isProductionStoreConfigured()) return { companiesProcessed: 0, totalUpdated: 0 };
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(
+    companies.map((company) =>
+      refreshPermitLeadRecommendationScores(company.id).catch(
+        (): RecommendationScoreRefreshResult => ({ ok: false, updated: 0, topIndustries: [], unresolvedAnchorCount: 0, unresolvedLeadCount: 0 })
+      )
+    )
+  );
+
+  return {
+    companiesProcessed: companies.length,
+    totalUpdated: results.reduce((sum, result) => sum + result.updated, 0)
+  };
+}
+
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
   const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
   const customerMaster = await getCustomerMaster(companyId);
