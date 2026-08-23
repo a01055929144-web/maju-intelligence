@@ -5038,6 +5038,102 @@ export async function findNearbyPermitLeads(companyId: string, input: FindNearby
   return { anchorCount: anchorPoints.length, leads: nearby, radiusKm, unresolvedAnchorCount, unresolvedLeadCount };
 }
 
+/** 반경(km)을 route_fit_score(0~15)로 환산합니다. 가까울수록 기존 배송 동선에 얹기 쉬워 점수가 높습니다. */
+function routeFitScoreFromDistanceKm(distanceKm: number): number {
+  if (distanceKm <= 1) return 15;
+  if (distanceKm <= 3) return 11;
+  if (distanceKm <= 7) return 7;
+  if (distanceKm <= 15) return 3;
+  return 0;
+}
+
+export type RecommendationScoreRefreshResult = {
+  ok: boolean;
+  message?: string;
+  updated: number;
+  topIndustries: string[];
+  unresolvedAnchorCount: number;
+  unresolvedLeadCount: number;
+};
+
+/**
+ * "기거래처 주변 리드 추천"과 "기존 거래처와 업종·메뉴가 비슷한 곳 추천"(2026-08-24 피드백)을
+ * 점수에 반영합니다. 기존 findNearbyPermitLeads(anchorMode:"all")를 그대로 재사용해 거래처 반경
+ * 지오코딩을 새로 만들지 않고, 반환된 거리값만 route_fit_score로 환산해 채웁니다. 업종 유사도는
+ * 활성 거래처의 업종 분포에서 상위 업종을 뽑아, 리드의 업종이 여기 속하면 industry_fit_score에
+ * 가산점을 줍니다(완전히 새로운 업종이라 이 회사가 잘 모르는 곳보다, 이미 잘 파는 업종의 새 매장이
+ * 성사 확률이 높다고 봄). 두 축 모두 기존 keyword_demand_score/place_activity_score는 그대로
+ * 보존하고 route_fit_score/industry_fit_score만 갱신한 뒤 등급을 다시 매깁니다.
+ */
+export async function refreshPermitLeadRecommendationScores(companyId: string, radiusKm = 30): Promise<RecommendationScoreRefreshResult> {
+  if (!isProductionStoreConfigured()) {
+    return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다.", updated: 0, topIndustries: [], unresolvedAnchorCount: 0, unresolvedLeadCount: 0 };
+  }
+
+  const [nearbyResult, customerMaster] = await Promise.all([
+    findNearbyPermitLeads(companyId, { anchorMode: "all", radiusKm: Math.max(1, Math.min(50, radiusKm)) }),
+    getCustomerMaster(companyId)
+  ]);
+
+  // 활성 거래처 업종 분포에서 상위 3개를 "이 회사가 잘 파는 업종"으로 봅니다.
+  const industryCounts = new Map<string, number>();
+  customerMaster.customers.forEach((customer) => {
+    const industry = customer.industry?.trim();
+    if (!industry || customer.businessStatus === "closed") return;
+    industryCounts.set(industry, (industryCounts.get(industry) || 0) + 1);
+  });
+  const topIndustries = Array.from(industryCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([industry]) => industry);
+
+  let updated = 0;
+  await Promise.all(
+    nearbyResult.leads.map(async (lead) => {
+      const industryKnown = lead.industryPrimary !== "미분류";
+      const industryMatchesTop = topIndustries.includes(lead.industryPrimary);
+      const baseIndustryFit = !lead.isTargetIndustry ? 0 : industryKnown ? 20 : 10;
+      // 상위 업종과 일치하면 20점 만점을 보장하고(이미 최고점이면 그대로), 아니면 기존 계산을 씁니다 —
+      // "성사 확률이 높은 곳"을 상위 업종 일치 리드로 자연스럽게 끌어올리기 위함입니다.
+      const industryFit = industryMatchesTop && lead.isTargetIndustry ? 20 : baseIndustryFit;
+
+      const scoreBreakdown = computePermitLeadScoreBreakdown({
+        leadPeriod: lead.leadPeriod,
+        isTarget: lead.isTargetIndustry,
+        industryKnown,
+        hasPhone: Boolean(lead.phone),
+        hasAddress: Boolean(lead.address),
+        keywordVolume: lead.keywordVolume,
+        reviewCount: lead.reviewCount,
+        rating: lead.rating
+      });
+      scoreBreakdown.industry_fit_score = industryFit;
+      scoreBreakdown.route_fit_score = routeFitScoreFromDistanceKm(lead.distanceKm);
+      const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
+
+      await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(lead.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          score_total: scoreTotal,
+          score_breakdown: scoreBreakdown,
+          grade: permitLeadGradeFromScore(scoreTotal),
+          updated_at: new Date().toISOString()
+        })
+      }).catch(() => null);
+      updated += 1;
+    })
+  );
+
+  return {
+    ok: true,
+    updated,
+    topIndustries,
+    unresolvedAnchorCount: nearbyResult.unresolvedAnchorCount,
+    unresolvedLeadCount: nearbyResult.unresolvedLeadCount
+  };
+}
+
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
   const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
   const customerMaster = await getCustomerMaster(companyId);

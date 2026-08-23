@@ -4055,6 +4055,8 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
   const [showSourceDetails, setShowSourceDetails] = useState(false);
   const [sourceStatus, setSourceStatus] = useState<PermitLeadSourceStatus | null>(null);
   const anySyncBusy = syncBusy || govSyncBusy || seoulSyncBusy;
+  const [recommendBusy, setRecommendBusy] = useState(false);
+  const [recommendMessage, setRecommendMessage] = useState("");
 
   const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
   const [selectedLeadIntent, setSelectedLeadIntent] = useState<PermitLeadActionIntent>("");
@@ -4665,6 +4667,33 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
     await Promise.all([handleAutoSync(), handleGovAutoSync(), handleSeoulAutoSync()]);
   }
 
+  // "기거래처 주변 리드 + 업종 유사도" 추천 점수 갱신(2026-08-24 피드백: "거래 성사 확률이 높은 곳을
+  // 추천해야 한다"). 기존 리드 탐색(전체 거래처 반경) 지오코딩을 재사용해 route_fit_score/
+  // industry_fit_score를 다시 계산하므로, 버튼을 눌러야만 실행됩니다(Tmap 호출량 때문에 자동 실행 안 함).
+  async function handleRecommendationRefresh() {
+    setRecommendBusy(true);
+    setRecommendMessage("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/recommend-refresh"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ radiusKm: 30 })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.ok) {
+        setRecommendMessage(payload?.message || "추천 점수 갱신에 실패했습니다.");
+        return;
+      }
+      const industryLabel = payload.topIndustries?.length ? payload.topIndustries.join("·") : "확인 필요";
+      setRecommendMessage(`${payload.updated.toLocaleString()}곳 갱신 완료 · 주력 업종: ${industryLabel}`);
+      loadLeads();
+    } catch {
+      setRecommendMessage("추천 점수 갱신 중 오류가 발생했습니다.");
+    } finally {
+      setRecommendBusy(false);
+    }
+  }
+
   async function runLeadAction(lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string): Promise<PermitLeadActionResult> {
     setActionMessage("");
     try {
@@ -4934,8 +4963,19 @@ function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead:
               <Radar className="h-3.5 w-3.5" />
               {anySyncBusy ? "수집 중" : "전체 소스 갱신"}
             </button>
+            <button
+              className="maju-button-secondary h-8 text-xs"
+              disabled={recommendBusy}
+              onClick={() => void handleRecommendationRefresh()}
+              title="기거래처 반경 안 리드에 근접도 점수를, 주력 업종과 같은 리드에 업종 가산점을 매깁니다."
+              type="button"
+            >
+              <Radar className="h-3.5 w-3.5" />
+              {recommendBusy ? "계산 중" : "추천 점수 갱신"}
+            </button>
           </div>
         </div>
+        {recommendMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{recommendMessage}</p> : null}
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {leadSourceCards.map((source) => (
             <LeadSourceStatusCard
