@@ -53,6 +53,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       <section className="mx-auto flex w-full max-w-[1760px] flex-col xl:h-full xl:min-h-0">
         <SalesRouteMapWorkspace
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
+          churnRiskCustomers={churnRiskCustomers}
           mapMarkers={mapMarkers}
           routePlan={routePlan}
           timelineHref={timelineHref}

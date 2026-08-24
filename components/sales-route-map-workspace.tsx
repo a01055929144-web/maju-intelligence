@@ -67,7 +67,7 @@ import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/l
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import { CustomerContactItem, DeliveryVehicle, PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues, RoutePlan, RoutePlanStop } from "@/lib/store";
+import { ChurnRiskCustomer, CustomerContactItem, DeliveryVehicle, PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues, RoutePlan, RoutePlanStop } from "@/lib/store";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type RevenueGrade = "A" | "B" | "C";
@@ -244,6 +244,10 @@ type BusinessOcrSuggestion = {
 
 type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
+  /** 2026-08-24 피드백: "전반적으로 속도가 더뎌" — 서버 컴포넌트가 이미 계산한 이탈 위험 거래처
+   * 목록을 그대로 내려받아, ChurnRiskAlert가 마운트되자마자 같은 데이터를 다시 fetch하는 중복
+   * 네트워크 왕복을 없앱니다. */
+  readonly churnRiskCustomers?: ChurnRiskCustomer[];
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
   readonly timelineHref?: string;
@@ -302,7 +306,7 @@ const localStoreKeys = {
   vehicleEdits: "maju:sales-route:vehicle-edits"
 };
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -1350,7 +1354,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       <div className={`relative flex flex-1 flex-col ${activeView === "map" ? "xl:min-h-0" : ""}`}>
         {timelineHref ? (
           <div className="shrink-0 px-4 pt-3 empty:hidden">
-            <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
+            <ChurnRiskAlert companyId={churnRiskCompanyId} initialCustomers={churnRiskCustomers} timelineHref={timelineHref} />
           </div>
         ) : null}
 

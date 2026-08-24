@@ -81,6 +81,42 @@ const defaultMapClassName = "h-[360px]";
 const kakaoSdkTimeoutMs = 5000;
 const kakaoGeocodeTimeoutMs = 4500;
 
+// 2026-08-24 피드백: "전반적으로 속도가 더뎌, 빠른 속도가 중요할 것 같아". 지도를 열 때마다 모든
+// 거래처·리드 주소를 매번 카카오 API로 다시 지오코딩하고 있었는데, 주소가 늘어날수록(거래처가
+// 늘어날수록) 이게 가장 큰 병목이었습니다. 주소의 좌표는 사실상 바뀌지 않으므로, 한 번 조회한
+// 결과는 메모리(같은 탭에서 재사용)와 localStorage(새로고침·재방문에도 유지)에 남겨두고, 다음부터는
+// API를 다시 호출하지 않고 캐시에서 바로 꺼내 씁니다.
+const GEOCODE_CACHE_STORAGE_KEY = "maju:kakao-geocode-cache:v1";
+const GEOCODE_CACHE_MAX_ENTRIES = 3000;
+const geocodeMemoryCache = new Map<string, { lat: number; lng: number }>();
+let geocodeStorageLoaded = false;
+
+function loadGeocodeCacheFromStorage() {
+  if (geocodeStorageLoaded || typeof window === "undefined") return;
+  geocodeStorageLoaded = true;
+  try {
+    const raw = window.localStorage.getItem(GEOCODE_CACHE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, { lat: number; lng: number }>;
+    Object.entries(parsed).forEach(([address, point]) => {
+      if (Number.isFinite(point?.lat) && Number.isFinite(point?.lng)) geocodeMemoryCache.set(address, point);
+    });
+  } catch {
+    // 캐시 파싱에 실패해도 치명적이지 않습니다 — 그냥 다시 지오코딩하면 됩니다.
+  }
+}
+
+function saveGeocodeCacheToStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    // 캐시가 무한정 커지지 않도록 최근 항목 위주로만 저장합니다.
+    const entries = Array.from(geocodeMemoryCache.entries()).slice(-GEOCODE_CACHE_MAX_ENTRIES);
+    window.localStorage.setItem(GEOCODE_CACHE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // localStorage 용량 초과 등은 무시합니다 — 캐시는 있으면 좋고 없어도 동작에는 지장 없습니다.
+  }
+}
+
 export function KakaoAddressMap({
   controlsOffsetClassName,
   controlsOffsetPx,
@@ -238,11 +274,42 @@ export function KakaoAddressMap({
           leadOverlayEntriesRef.current.push({ element, marker, overlay });
         };
 
+        // 2026-08-24 피드백: "전반적으로 속도가 더뎌, 빠른 속도가 중요할 것 같아" — 캐시에 이미 있는
+        // 주소는 API 호출 없이 바로 마커를 그리고, 처음 보는 주소만 실제로 지오코딩합니다.
+        loadGeocodeCacheFromStorage();
+        let geocodeCacheMissCount = 0;
+
+        const placeMarkerAtPosition = (marker: KakaoMapMarker, lat: number, lng: number) => {
+          const position = new kakao.maps.LatLng(lat, lng);
+          const overlayContent = createMarkerOverlay(marker, marker.tone === "lead" && compactLeadMarkers);
+          overlayContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
+          const overlay = new kakao.maps.CustomOverlay({
+            content: overlayContent,
+            map,
+            position,
+            yAnchor: 1.75
+          });
+          if (marker.tone === "lead") attachLeadOverlayEntry(overlay, marker, overlayContent);
+
+          bounds.extend(position);
+          found += 1;
+          if (marker.id) markerPositionsRef.current.set(marker.id, position);
+          if (focusedMarkerId && marker.id === focusedMarkerId) {
+            focusedPosition = position;
+          }
+        };
+
         await Promise.all(
-          markers.map(
-            (marker) =>
-              withTimeout(
-                new Promise<void>((resolve) => {
+          markers.map((marker) => {
+            const cachedPoint = geocodeMemoryCache.get(marker.address);
+            if (cachedPoint) {
+              if (!ignore) placeMarkerAtPosition(marker, cachedPoint.lat, cachedPoint.lng);
+              return Promise.resolve();
+            }
+
+            geocodeCacheMissCount += 1;
+            return withTimeout(
+              new Promise<void>((resolve) => {
                 geocoder.addressSearch(marker.address, (result: any[], geocodeStatus: string) => {
                   if (ignore) {
                     resolve();
@@ -250,33 +317,22 @@ export function KakaoAddressMap({
                   }
 
                   if (geocodeStatus === kakao.maps.services.Status.OK && result[0]) {
-                    const position = new kakao.maps.LatLng(Number(result[0].y), Number(result[0].x));
-                    const overlayContent = createMarkerOverlay(marker, marker.tone === "lead" && compactLeadMarkers);
-                    overlayContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
-                    const overlay = new kakao.maps.CustomOverlay({
-                      content: overlayContent,
-                      map,
-                      position,
-                      yAnchor: 1.75
-                    });
-                    if (marker.tone === "lead") attachLeadOverlayEntry(overlay, marker, overlayContent);
-
-                    bounds.extend(position);
-                    found += 1;
-                    if (marker.id) markerPositionsRef.current.set(marker.id, position);
-                    if (focusedMarkerId && marker.id === focusedMarkerId) {
-                      focusedPosition = position;
-                    }
+                    const lat = Number(result[0].y);
+                    const lng = Number(result[0].x);
+                    geocodeMemoryCache.set(marker.address, { lat, lng });
+                    placeMarkerAtPosition(marker, lat, lng);
                   }
 
                   resolve();
                 });
-                }),
-                kakaoGeocodeTimeoutMs,
-                "Kakao address search timed out"
-              ).catch(() => undefined)
-          )
+              }),
+              kakaoGeocodeTimeoutMs,
+              "Kakao address search timed out"
+            ).catch(() => undefined);
+          })
         );
+
+        if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
 
         // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
         // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
