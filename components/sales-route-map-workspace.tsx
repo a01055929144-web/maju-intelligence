@@ -1187,6 +1187,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     setDistanceRecalcError("");
     try {
       const companyId = new URLSearchParams(window.location.search).get("companyId") || undefined;
+      const allFailures: Array<{ address: string; message: string }> = [];
       for (let index = 0; index < destinations.length; index += 25) {
         const chunk = destinations.slice(index, index + 25);
         const response = await fetch("/api/routes/batch-distance", {
@@ -1194,14 +1195,20 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ companyId, destinations: chunk })
         });
+        const payload = await response.json().catch(() => null);
         if (!response.ok) {
-          const payload = await response.json().catch(() => null);
           const message = payload?.error || "거리 계산에 실패했습니다.";
           setDistanceRecalcError(message);
           return { ok: false, message };
         }
+        if (Array.isArray(payload?.failures)) allFailures.push(...payload.failures);
       }
       router.refresh();
+      if (allFailures.length) {
+        const message = `${allFailures.length}곳은 계산에 실패했습니다 (${allFailures[0].message}).`;
+        setDistanceRecalcError(message);
+        return { ok: true, message };
+      }
       return { ok: true };
     } catch {
       const message = "거리 계산 중 오류가 발생했습니다. 네트워크 상태를 확인하세요.";
