@@ -2031,6 +2031,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       {activeView === "course" ? (
         <TodayCourseView
           dataRegistrationHref={dataRegistrationHref}
+          fuelPrices={fuelPrices}
           markers={markers}
           onConsumePendingAddStore={() => setPendingCourseStoreId("")}
           onPreviewStore={setPreviewStoreId}
@@ -2839,6 +2840,10 @@ function StoreQuickCard({
   // 출입방법 비밀번호는 카드가 열려 있는 동안 실수로 어깨너머로 노출되지 않도록 기본은 가려두고,
   // 필요할 때만 눌러서 확인합니다.
   const [showAccessPassword, setShowAccessPassword] = useState(false);
+  // 2026-08-24 피드백: "기거래처 카드도 움직일 수 있도록 해줘" — 지도 위 리드 카드(PermitLeadMapQuickCard)와
+  // 같은 방식으로, 기본 위치에서 마우스로 끌어 옮긴 만큼만 transform으로 얹습니다. 다른 거래처를 클릭해
+  // 카드 내용이 바뀌면 다시 기본 위치로 돌아갑니다.
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [draft, setDraft] = useState({
     name: store.name,
     phone: store.phone || "",
@@ -2862,7 +2867,25 @@ function StoreQuickCard({
     setIsEditing(false);
     setIsMemoEditing(false);
     setShowAccessPassword(false);
+    setDragOffset({ x: 0, y: 0 });
   }, [store.id]);
+
+  function onDragHandleMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const originX = dragOffset.x;
+    const originY = dragOffset.y;
+    function handleMove(moveEvent: globalThis.MouseEvent) {
+      setDragOffset({ x: originX + (moveEvent.clientX - startX), y: originY + (moveEvent.clientY - startY) });
+    }
+    function handleUp() {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    }
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }
 
   function startMemoEdit() {
     setMemoDraft(store.memo || "");
@@ -2903,8 +2926,22 @@ function StoreQuickCard({
   const topClassName = variant === "grid" ? "top-4" : "top-4 xl:top-20";
 
   return (
-    <div className={`absolute ${topClassName} z-30 h-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}>
-      <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+    <div
+      className={`absolute ${topClassName} z-30 h-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
+      style={{ transform: dragOffset.x || dragOffset.y ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined }}
+    >
+      <div className="flex items-start gap-1 px-1.5 pt-1.5">
+        <span
+          aria-label="카드 위치 옮기기"
+          className="grid h-5 w-6 shrink-0 cursor-grab place-items-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
+          onMouseDown={onDragHandleMouseDown}
+          role="button"
+          title="드래그해서 카드 위치 옮기기"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </span>
+      </div>
+      <div className="flex items-start justify-between gap-2 px-3 pb-2.5 pt-0.5">
         <div className="min-w-0 flex-1">
           {isEditing ? (
             <input
@@ -7425,6 +7462,7 @@ function LeadQuickFilterChip({
 
 function TodayCourseView({
   dataRegistrationHref,
+  fuelPrices,
   markers,
   onConsumePendingAddStore,
   onPreviewStore,
@@ -7441,6 +7479,9 @@ function TodayCourseView({
   vehicles
 }: {
   readonly dataRegistrationHref: string;
+  /** 2026-08-24 피드백: "출발지에서 거래처, 거래처에서의 경유지까지 예상 유류비 나와야할 텐데" — 구간별
+   * 예상 유류비 계산에 씁니다. */
+  readonly fuelPrices: FuelPriceByType;
   readonly markers: KakaoMapMarker[];
   /** 지도 홈 퀵카드의 "경유지 추가"로 넘어온 경우, pendingAddStoreId를 소비했음을 알립니다. */
   readonly onConsumePendingAddStore?: () => void;
@@ -7489,6 +7530,14 @@ function TodayCourseView({
   const routeRevenue = selectedRouteTotals.expectedRevenue;
   const routeRoadPointCount = routeSequence ? countFiniteRoutePoints(routeSequence.path) : 0;
   const tmapLegCount = routeSequence?.legs.filter((leg) => leg.provider === "tmap").length || 0;
+  // 2026-08-24 피드백: "출발지에서 거래처, 거래처에서의 경유지까지 예상 유류비 나와야할 텐데" — 티맵으로
+  // 경유 순서를 계산하면 legs 배열에 구간별(출발지→1번째, 1번째→2번째, ...) 거리가 이미 들어있으므로,
+  // 상단 KPI의 하루 전체 합산 유류비와 별개로 구간마다 예상 유류비를 따로 보여줄 수 있습니다.
+  const courseFuelType = selectedVehicle?.fuelType || "diesel";
+  const courseFuelPricePerLiter = fuelPrices[courseFuelType]?.pricePerLiter || 0;
+  const courseFuelPriceReady = Boolean(fuelPrices[courseFuelType]);
+  const routeSequenceLegFuelCosts = routeSequence?.legs.map((leg) => estimateFuelCostWon(leg.distanceKm, courseFuelPricePerLiter)) || [];
+  const routeSequenceFuelCostWon = routeSequenceLegFuelCosts.reduce((total, cost) => total + cost, 0);
   const inactiveSelectedCount = Math.max(0, selectedRouteStoresAll.length - selectedRouteStores.length);
   const routeCandidateStores = isVehicleScoped
     ? orderedStores.filter((store) => {
@@ -8083,6 +8132,39 @@ function TodayCourseView({
                       경유지 {routeSequence.stops.length}곳 · 실도로 {tmapLegCount}/{routeSequence.legs.length}구간 · 경유 코스 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeRoadPointCount.toLocaleString()}개
                     </p>
                     {tmapLegCount < routeSequence.legs.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">일부 구간은 티맵 주소 지오코딩이 실패해 도로선 없이 기초 거리값만 반영됐습니다.</p> : null}
+                  </div>
+                ) : null}
+                {routeSequence?.legs.length ? (
+                  <div className="mb-3 rounded-md border border-slate-200 bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-black text-slate-950">구간별 예상 유류비</p>
+                      <span className="text-[11px] font-bold text-slate-500">
+                        {courseFuelPriceReady ? `${courseFuelType === "gasoline" ? "휘발유" : "경유"} ${courseFuelPricePerLiter.toLocaleString()}원/L 기준` : "유가 정보를 불러오는 중"}
+                      </span>
+                    </div>
+                    <div className="max-h-[220px] space-y-1.5 overflow-auto pr-1">
+                      {routeSequence.legs.map((leg, index) => {
+                        const fromLabel = index === 0 ? routeOriginLabel : sequencedRouteStores[index - 1]?.name || "이전 경유지";
+                        const toLabel = sequencedRouteStores[index]?.name || `경유지 ${index + 1}`;
+                        return (
+                          <div className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1.5" key={`${leg.order}-${leg.toAddress}`}>
+                            <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-700" title={`${fromLabel} → ${toLabel}`}>
+                              {fromLabel} → {toLabel}
+                            </span>
+                            <span className="shrink-0 text-xs font-bold text-slate-500">{leg.distanceKm.toLocaleString()}km</span>
+                            <span className="shrink-0 text-xs font-black text-teal-700">
+                              {courseFuelPriceReady ? `${routeSequenceLegFuelCosts[index]?.toLocaleString() || 0}원` : "-"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
+                      <span className="text-xs font-black text-slate-950">구간 합계</span>
+                      <span className="text-xs font-black text-teal-700">
+                        {courseFuelPriceReady ? `${routeSequenceFuelCostWon.toLocaleString()}원` : "유가 정보를 불러오는 중"}
+                      </span>
+                    </div>
                   </div>
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
