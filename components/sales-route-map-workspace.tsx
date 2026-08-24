@@ -391,6 +391,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
+  const [recalculatingDistances, setRecalculatingDistances] = useState(false);
+  const [distanceRecalcError, setDistanceRecalcError] = useState("");
   // 지도 탭에서 바로 켜는 "반경 리드" — 리드 탭의 리드 탐색과 같은 API를 쓰지만,
   // 지도 위에 마커로 바로 보여주기 위한 별도 상태입니다(리드 탭 상태와는 독립적).
   // 기본 모드는 "point"(지도 클릭) — 네이버 지도 반경 도구처럼 지도를 클릭하면 그 지점에
@@ -1171,6 +1173,43 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     // 배정 해제된 거래처가 있었다면 서버 데이터를 다시 받아와야 그 거래처들이 "미배정"으로 바로 반영됩니다.
     if (vehicle.stops.length > 0) router.refresh();
     return { ok: true };
+  }
+
+  // 2026-08-24 피드백("전체 거래처 0km가 되네") 대응: distanceKm은 거리 계산을 한 번도 안 돌린
+  // 거래처는 0으로 채워지는데, 계산 자체가 자동으로 도는 곳이 없어서 신규/미계산 거래처는 계속 0으로
+  // 남아 있었습니다. 이미 있는 /api/routes/batch-distance(코스 탭 티맵 계산과 같은 API)를 재사용해
+  // "전체 거래처" 패널에서 바로 일괄 계산할 수 있게 합니다. 한 번 호출에 최대 25개 주소까지만
+  // 받으므로 25개씩 나눠서 순차 호출합니다.
+  async function recalculateStoreDistances(missingStores: StoreRow[]): Promise<{ ok: boolean; message?: string }> {
+    const destinations = Array.from(new Set(missingStores.map((store) => store.address).filter(Boolean)));
+    if (!destinations.length) return { ok: false, message: "계산할 거래처 주소가 없습니다." };
+    setRecalculatingDistances(true);
+    setDistanceRecalcError("");
+    try {
+      const companyId = new URLSearchParams(window.location.search).get("companyId") || undefined;
+      for (let index = 0; index < destinations.length; index += 25) {
+        const chunk = destinations.slice(index, index + 25);
+        const response = await fetch("/api/routes/batch-distance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId, destinations: chunk })
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          const message = payload?.error || "거리 계산에 실패했습니다.";
+          setDistanceRecalcError(message);
+          return { ok: false, message };
+        }
+      }
+      router.refresh();
+      return { ok: true };
+    } catch {
+      const message = "거리 계산 중 오류가 발생했습니다. 네트워크 상태를 확인하세요.";
+      setDistanceRecalcError(message);
+      return { ok: false, message };
+    } finally {
+      setRecalculatingDistances(false);
+    }
   }
 
   /**
@@ -2012,8 +2051,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             <StoreManagementPanel
               collapsed={rightCollapsed}
               dataRegistrationHref={dataRegistrationHref}
+              distanceRecalcError={distanceRecalcError}
+              onRecalculateDistances={recalculateStoreDistances}
               onSelectStore={setSelectedId}
               onToggleCollapsed={() => setRightCollapsed((value) => !value)}
+              recalculatingDistances={recalculatingDistances}
               selectedStoreId={selectedId}
               sourceReady={sourceReady}
               title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
@@ -2301,6 +2343,45 @@ function QuickRegisterDrawer({
   );
 }
 
+// 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아. 확인이 필요해")에 대응해 만든 공용 확인
+// 모달입니다. 기존에는 window.confirm()을 썼는데, 이건 페이지에서 확인창이 짧은 시간 안에 여러 번
+// 뜨면 브라우저가 "이 페이지에서 대화상자를 추가로 표시하지 않음" 체크박스를 자동으로 붙이고, 사용자가
+// 이걸 한 번이라도 체크하면 그 뒤로는 confirm()이 화면에 아무것도 안 띄우고 조용히 false만 반환합니다
+// — 즉 삭제 버튼을 눌러도 아무 반응이 없는 것처럼 보일 수 있습니다. 화면 안에서 직접 그리는 모달로
+// 바꾸면 이 문제 자체가 사라집니다.
+function ConfirmDialog({
+  cancelLabel = "취소",
+  confirmLabel = "확인",
+  message,
+  onCancel,
+  onConfirm,
+  title
+}: {
+  readonly cancelLabel?: string;
+  readonly confirmLabel?: string;
+  readonly message: string;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+  readonly title?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        {title ? <p className="text-sm font-black text-slate-950">{title}</p> : null}
+        <p className={`whitespace-pre-line text-sm font-bold leading-6 text-slate-700 ${title ? "mt-2" : ""}`}>{message}</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="maju-button-secondary h-9 px-4 text-xs" onClick={onCancel} type="button">
+            {cancelLabel}
+          </button>
+          <button className="maju-button-primary h-9 bg-rose-600 px-4 text-xs hover:bg-rose-700" onClick={onConfirm} type="button">
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
@@ -2328,16 +2409,19 @@ function DeliveryAssignmentPanel({
   const [isAdding, setIsAdding] = useState(false);
   const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<{ vehicleId: string; message: string } | null>(null);
+  const [pendingDeleteVehicle, setPendingDeleteVehicle] = useState<DeliveryVehicle | null>(null);
 
-  // 2026-08-24 피드백("새 담당자, 배송차 추가는 있는데 삭제가 없다") 대응 삭제 핸들러입니다. 거래처가
-  // 이미 배정된 배송차는 담당자를 지우면 그 거래처들이 그룹을 잃어버리므로, 빈 배송차(stops.length
-  // === 0)에만 삭제 버튼을 노출합니다(아래 목록 렌더링부에서 조건 처리).
-  async function handleDelete(vehicle: DeliveryVehicle) {
-    const confirmMessage =
-      vehicle.stops.length > 0
-        ? `"${vehicle.name}" 배송차를 삭제할까요? 배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다. 이 작업은 되돌릴 수 없습니다.`
-        : `"${vehicle.name}" 배송차를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`;
-    if (!window.confirm(confirmMessage)) return;
+  // 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아") 대응: 삭제 버튼을 누르면 바로
+  // window.confirm()을 띄우던 예전 방식 대신, 화면 안에 확인 모달(ConfirmDialog)을 띄우도록 2단계로
+  // 나눴습니다. 실제 삭제 동작은 사용자가 모달 안의 "삭제" 버튼을 눌렀을 때(runDelete)만 실행됩니다.
+  function handleDelete(vehicle: DeliveryVehicle) {
+    setPendingDeleteVehicle(vehicle);
+  }
+
+  async function runPendingDelete() {
+    const vehicle = pendingDeleteVehicle;
+    if (!vehicle) return;
+    setPendingDeleteVehicle(null);
     setDeletingVehicleId(vehicle.id);
     setDeleteError(null);
     const result = await onDeleteVehicle(vehicle);
@@ -2499,6 +2583,18 @@ function DeliveryAssignmentPanel({
           </button>
         )}
       </div>
+      {pendingDeleteVehicle ? (
+        <ConfirmDialog
+          confirmLabel="삭제"
+          message={
+            pendingDeleteVehicle.stops.length > 0
+              ? `"${pendingDeleteVehicle.name}" 배송차를 삭제할까요? 배정된 거래처 ${pendingDeleteVehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다. 이 작업은 되돌릴 수 없습니다.`
+              : `"${pendingDeleteVehicle.name}" 배송차를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`
+          }
+          onCancel={() => setPendingDeleteVehicle(null)}
+          onConfirm={runPendingDelete}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -3514,8 +3610,11 @@ function VehicleEditForm({
 function StoreManagementPanel({
   collapsed,
   dataRegistrationHref,
+  distanceRecalcError,
+  onRecalculateDistances,
   onSelectStore,
   onToggleCollapsed,
+  recalculatingDistances,
   selectedStoreId,
   sourceReady,
   stores,
@@ -3523,13 +3622,17 @@ function StoreManagementPanel({
 }: {
   readonly collapsed: boolean;
   readonly dataRegistrationHref: string;
+  readonly distanceRecalcError: string;
+  readonly onRecalculateDistances: (missingStores: StoreRow[]) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectStore: (storeId: string) => void;
   readonly onToggleCollapsed: () => void;
+  readonly recalculatingDistances: boolean;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
   readonly title: string;
 }) {
+  const storesMissingDistance = stores.filter((store) => !store.distanceKm && store.address);
   if (collapsed) {
     return (
       <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
@@ -3569,6 +3672,23 @@ function StoreManagementPanel({
           </button>
           <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
         </div>
+        {storesMissingDistance.length > 0 ? (
+          <div className="shrink-0 border-b border-slate-200/80 bg-amber-50 px-4 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold leading-4 text-amber-800">거리 미계산 {storesMissingDistance.length}곳</p>
+              <button
+                className="maju-button-secondary h-7 shrink-0 px-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={recalculatingDistances}
+                onClick={() => void onRecalculateDistances(storesMissingDistance)}
+                type="button"
+              >
+                {recalculatingDistances ? <Loader2 className="h-3 w-3 animate-spin" /> : <Navigation className="h-3 w-3" />}
+                거리 계산
+              </button>
+            </div>
+            {distanceRecalcError ? <p className="mt-1 text-[11px] font-bold leading-4 text-rose-600">{distanceRecalcError}</p> : null}
+          </div>
+        ) : null}
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {stores.length ? (
             stores.map((store) => (
@@ -3587,7 +3707,7 @@ function StoreManagementPanel({
                 <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                 <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
                   <p className="text-xs font-bold text-slate-400">
-                    {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
+                    {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
                   </p>
                   <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
                 </div>
@@ -5306,7 +5426,7 @@ function TodayCourseView({
                             <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                             <span className="mt-2 block text-xs font-bold text-slate-400">
-                              출발지 기준 {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원
+                              출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원
                             </span>
                           </span>
                           <span className="flex shrink-0 flex-col items-end gap-2">
@@ -5433,7 +5553,7 @@ function TodayCourseView({
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
                           <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
-                          <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
+                          <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-2">
                           <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
@@ -6301,7 +6421,7 @@ function StoreDetail({
               </CollapsibleSection>
               <CollapsibleSection defaultOpen title="배송·방문 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
+                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={formatDistanceKmLabel(store.distanceKm)} />
                   <MetricRow icon={<Clock className="h-4 w-4" />} label="출발지 기준 시간" value={formatMinutes(store.durationMinutes || 0)} />
                   <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
                   <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
@@ -7555,6 +7675,16 @@ function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+// 2026-08-24 피드백("전체 거래처 0km가 되네")에 대응한 헬퍼입니다. distanceKm은 아직 거리 계산을
+// 한 번도 돌리지 않은 거래처는 그냥 숫자 0으로 채워져 있는데, 기존 코드는 `distanceKm?.toLocaleString()
+// || "-"`로 표시해서 — 0은 falsy가 아니라 (0).toLocaleString()이 "0"이라는 truthy 문자열을 반환하는
+// 바람에 "0km"로 그대로 찍혔습니다. 실제로는 "0km 떨어져 있다"가 아니라 "아직 계산 안 됨"이므로,
+// 값이 없을 때는 명확하게 안내 문구를 보여줍니다.
+function formatDistanceKmLabel(distanceKm: number | undefined) {
+  if (!distanceKm) return "거리 확인 필요";
+  return `${distanceKm.toLocaleString()}km`;
 }
 
 function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {
