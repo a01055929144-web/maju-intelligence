@@ -1110,13 +1110,29 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     return { ok: true };
   }
 
-  // 2026-08-24 피드백("추가는 있는데 삭제가 없다")에 대응한 삭제 함수입니다. 이미 거래처가 배정된
-  // 배송차(vehicle.stops.length > 0)는 담당자를 지우면 그 거래처들이 그룹을 잃어버리므로, 호출부인
-  // DeliveryAssignmentPanel에서 빈 배송차(stops.length === 0)에만 삭제 버튼을 보여주고 그 경우만
-  // 이 함수를 호출합니다.
+  // 2026-08-24 피드백("추가는 있는데 삭제가 없다")에 대응해 처음 만든 삭제 함수는 거래처가 하나도
+  // 없는(stops.length === 0) 배송차만 지울 수 있었습니다. 그런데 실제로 화면에 보이는 배송차는
+  // 대부분 이미 거래처가 배정돼 있어서 사실상 아무것도 못 지우는 것과 같았습니다(2026-08-24 재피드백:
+  // "배송 담당자 필터에서 배송차, 매니저 삭제해야하는데 개선이 안된것 같아"). 이제 배정된 거래처가
+  // 있어도, 그 거래처들을 먼저 "담당자 미지정" 상태로 되돌린 뒤 배송차 자체를 지웁니다.
   async function deleteVehicle(vehicle: DeliveryVehicle): Promise<{ ok: boolean; message?: string }> {
     if (vehicle.stops.length > 0) {
-      return { ok: false, message: "거래처가 배정되어 있어 삭제할 수 없습니다. 거래처 관리에서 담당자를 먼저 변경하세요." };
+      try {
+        const clearResponse = await fetch("/api/customers/bulk-clear-assignment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+            customerIds: vehicle.stops.map((stop) => stop.id)
+          })
+        });
+        if (!clearResponse.ok) {
+          const payload = await clearResponse.json().catch(() => null);
+          return { ok: false, message: payload?.message || "배정된 거래처를 해제하는 데 실패했습니다." };
+        }
+      } catch {
+        return { ok: false, message: "배정된 거래처를 해제하는 데 실패했습니다. 네트워크 상태를 확인하세요." };
+      }
     }
 
     if (vehicle.driver) {
@@ -1147,6 +1163,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       return next;
     });
     if (vehicleFilterId === vehicle.id) setVehicleFilterId("all");
+    // 배정 해제된 거래처가 있었다면 서버 데이터를 다시 받아와야 그 거래처들이 "미배정"으로 바로 반영됩니다.
+    if (vehicle.stops.length > 0) router.refresh();
     return { ok: true };
   }
 

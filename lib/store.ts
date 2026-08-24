@@ -5930,6 +5930,27 @@ export async function bulkUpdateDeliveryVehicle(companyId: string, customerIds: 
   return { updated: customerIds.length };
 }
 
+// 담당자/배송차를 삭제할 때, 이미 거래처가 배정되어 있으면(2026-08-24 피드백: "배송 담당자 필터에서
+// 배송차, 매니저 삭제해야하는데 개선이 안된것 같아" — 이전 라운드는 거래처가 하나도 없는 빈 배송차만
+// 삭제할 수 있었는데, 실제로는 대부분의 배송차에 거래처가 배정돼 있어 사실상 아무것도 못 지우는
+// 상태였습니다) 그 거래처들을 "담당자 미지정" 상태로 되돌려야 배송차 자체를 지울 수 있습니다.
+// delivery_manager·delivery_vehicle을 함께 비워, 지도/코스 화면에서 다시 "미배정" 그룹으로 보이게 합니다.
+export async function bulkClearDeliveryAssignment(companyId: string, customerIds: string[]): Promise<{ updated: number }> {
+  if (!customerIds.length) return { updated: 0 };
+  if (!isProductionStoreConfigured()) return { updated: 0 };
+
+  await supabaseRequest(
+    `normalized_customers?company_id=eq.${encodeURIComponent(companyId)}&id=in.(${customerIds.map((id) => encodeURIComponent(id)).join(",")})`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ delivery_manager: null, delivery_vehicle: null })
+    }
+  );
+
+  return { updated: customerIds.length };
+}
+
 export const RELATIONSHIP_STATUS_ACTIVE = "거래중";
 export const RELATIONSHIP_STATUS_TERMINATED = "거래종료";
 
