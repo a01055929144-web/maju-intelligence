@@ -2328,7 +2328,11 @@ function DeliveryAssignmentPanel({
   // 이미 배정된 배송차는 담당자를 지우면 그 거래처들이 그룹을 잃어버리므로, 빈 배송차(stops.length
   // === 0)에만 삭제 버튼을 노출합니다(아래 목록 렌더링부에서 조건 처리).
   async function handleDelete(vehicle: DeliveryVehicle) {
-    if (!window.confirm(`"${vehicle.name}" 배송차를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    const confirmMessage =
+      vehicle.stops.length > 0
+        ? `"${vehicle.name}" 배송차를 삭제할까요? 배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다. 이 작업은 되돌릴 수 없습니다.`
+        : `"${vehicle.name}" 배송차를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`;
+    if (!window.confirm(confirmMessage)) return;
     setDeletingVehicleId(vehicle.id);
     setDeleteError(null);
     const result = await onDeleteVehicle(vehicle);
@@ -2434,21 +2438,23 @@ function DeliveryAssignmentPanel({
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
                     <div className="flex shrink-0 items-center gap-1">
-                      {vehicle.stops.length === 0 ? (
-                        <span
-                          className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (deletingVehicleId) return;
-                            void handleDelete(vehicle);
-                          }}
-                          role="button"
-                          title="배정된 거래처가 없어 바로 삭제할 수 있습니다"
-                        >
-                          {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          삭제
-                        </span>
-                      ) : null}
+                      <span
+                        className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (deletingVehicleId) return;
+                          void handleDelete(vehicle);
+                        }}
+                        role="button"
+                        title={
+                          vehicle.stops.length === 0
+                            ? "배정된 거래처가 없어 바로 삭제할 수 있습니다"
+                            : `배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
+                        }
+                      >
+                        {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        삭제
+                      </span>
                       <span
                         className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
                         onClick={(event) => {
