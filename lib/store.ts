@@ -104,6 +104,9 @@ export type CustomerMasterItem = {
   industry: string;
   lastOrderDays: number;
   loadingPosition?: string;
+  accessMethodType?: string;
+  accessNote?: string;
+  accessPassword?: string;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -142,6 +145,9 @@ export type CustomerMasterInput = {
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
+  accessMethodType?: string;
+  accessNote?: string;
+  accessPassword?: string;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -206,6 +212,9 @@ export type RoutePlanStop = LeadItem & {
   email?: string;
   industry?: string;
   loadingPosition?: string;
+  accessMethodType?: string;
+  accessNote?: string;
+  accessPassword?: string;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -484,6 +493,10 @@ const CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE = `${CUSTOMER_MASTER_SELECT_W
 // supabase/migrations/20260818b_customer_contacts_and_review_enrichment.sql을 아직 실행하지 않은 환경에서도
 // 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
 const CUSTOMER_MASTER_SELECT_WITH_REVIEWS = `${CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE},review_summary,review_keywords,review_source,reviews_updated_at`;
+// 거래처 출입방법(열쇠/카드/비밀번호/숨김위치)·비밀번호를 저장하기 위한 컬럼입니다(2026-08-24 피드백:
+// "거래처의 출입방법과 비밀번호를 저장해야해. 놓친 것 같아"). supabase/migrations/20260824_customer_access_method.sql을
+// 아직 실행하지 않은 환경에서도 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
+const CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD = `${CUSTOMER_MASTER_SELECT_WITH_REVIEWS},access_method_type,access_note,access_password`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -2092,6 +2105,9 @@ export async function getCustomerMaster(
     representative_name: string | null;
     visit_count: number | null;
     loading_position: string | null;
+    access_method_type?: string | null;
+    access_note?: string | null;
+    access_password?: string | null;
     business_hours?: string | null;
     menu_summary?: string | null;
     relationship_status?: string | null;
@@ -2110,6 +2126,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD,
     CUSTOMER_MASTER_SELECT_WITH_REVIEWS,
     CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE,
     CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS,
@@ -2195,6 +2212,9 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
       representative_name: input.representativeName || null,
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
+      access_method_type: input.accessMethodType || null,
+      access_note: input.accessNote || null,
+      access_password: input.accessPassword || null,
       business_hours: input.businessHours || null,
       menu_summary: input.menuSummary || null,
       review_summary: input.reviewSummary || null,
@@ -2273,10 +2293,17 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
   if (input.reviewKeywords !== undefined) reviewFields.review_keywords = input.reviewKeywords || [];
   if (input.reviewSource !== undefined) reviewFields.review_source = input.reviewSource || null;
   if (Object.keys(reviewFields).length) reviewFields.reviews_updated_at = new Date().toISOString();
+  // 거래처 출입방법/비밀번호(2026-08-24 피드백). undefined면 이 저장 요청에서 손대지 않은 값이므로
+  // 기존 값을 덮어쓰지 않도록 payload에서 뺍니다.
+  const accessMethodFields: Record<string, unknown> = {};
+  if (input.accessMethodType !== undefined) accessMethodFields.access_method_type = input.accessMethodType || null;
+  if (input.accessNote !== undefined) accessMethodFields.access_note = input.accessNote || null;
+  if (input.accessPassword !== undefined) accessMethodFields.access_password = input.accessPassword || null;
   // 가장 넓은 페이로드(모든 선택 컬럼 포함)부터 시도하고, "컬럼 없음" 에러를 만나면 그 선택 컬럼
   // 묶음만 제외한 다음 티어로 재시도합니다. 위 getCustomerMaster()의 select 캐스케이드와 동일한
   // 원칙(특정 컬럼 이름을 매칭하지 않고 generic한 42703/does not exist 판별만 사용)을 씁니다.
   const UPSERT_PAYLOAD_TIERS = [
+    { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields, ...accessMethodFields },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields },
@@ -5188,6 +5215,9 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         email: customer.email,
         industry: customer.industry,
         loadingPosition: customer.loadingPosition,
+        accessMethodType: customer.accessMethodType,
+        accessNote: customer.accessNote,
+        accessPassword: customer.accessPassword,
         businessHours: customer.businessHours,
         menuSummary: customer.menuSummary,
         naverPlaceUrl: customer.naverPlaceUrl,
@@ -7035,6 +7065,9 @@ function toCustomerMasterItem(
     representative_name: string | null;
     visit_count: number | null;
     loading_position: string | null;
+    access_method_type?: string | null;
+    access_note?: string | null;
+    access_password?: string | null;
     business_hours?: string | null;
     menu_summary?: string | null;
     relationship_status?: string | null;
@@ -7069,6 +7102,9 @@ function toCustomerMasterItem(
     industry: row.industry || "미분류",
     lastOrderDays: Number(row.last_order_days || 0),
     loadingPosition: row.loading_position || undefined,
+    accessMethodType: row.access_method_type || undefined,
+    accessNote: row.access_note || undefined,
+    accessPassword: row.access_password || undefined,
     businessHours: row.business_hours || undefined,
     menuSummary: row.menu_summary || undefined,
     googleMapUrl: row.google_map_url || undefined,

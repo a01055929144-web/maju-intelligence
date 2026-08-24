@@ -14,6 +14,7 @@ import {
   CircleSlash,
   Clock,
   Copy,
+  CreditCard,
   Crosshair,
   Download,
   Edit3,
@@ -24,12 +25,15 @@ import {
   Gauge,
   GripVertical,
   Instagram,
+  KeyRound,
   Layers,
   ListFilter,
   Loader2,
+  Lock,
   Maximize2,
   Minimize2,
   MapPin,
+  MapPinned,
   MessageCircle,
   MessageSquareText,
   Navigation,
@@ -170,6 +174,9 @@ type StoreEdit = Partial<
     | "businessRegistrationNumber"
     | "businessStatus"
     | "businessHours"
+    | "accessMethodType"
+    | "accessNote"
+    | "accessPassword"
     | "deliveryArea"
     | "deliveryDriver"
     | "deliveryVehicleName"
@@ -573,6 +580,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     if (showAllLeadsOnMap && allLeadsLoadState === "idle") void loadAllLeadsForMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAllLeadsOnMap]);
+  // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
+  // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
+  // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
+  useEffect(() => {
+    if (query.trim().length >= 2 && allLeadsLoadState === "idle") void loadAllLeadsForMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   // 지도 위 리드 카드에서 바로 "관심 없음"으로 숨길 수 있게 합니다(2026-08-24 피드백: "관심 없으면
   // 숨김처리 하면 좋을 것 같네"). 신규 리드 탭의 runLeadAction과 같은 액션 API를 쓰지만, 이 컴포넌트
@@ -640,6 +654,16 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       .filter((store) => `${store.name} ${store.region} ${store.address || ""}`.toLowerCase().includes(keyword))
       .slice(0, 8);
   }, [allStores, query]);
+  // 신규 리드도 같은 검색창에서 함께 찾을 수 있게 합니다(2026-08-24 피드백). 이미 "제외" 처리한 리드는
+  // 다른 신규 리드 목록들과 마찬가지로 기본 검색 결과에서는 뺍니다.
+  const leadMatches = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (keyword.length < 2) return [];
+    return allLeadsForMap
+      .filter((lead) => lead.status !== "제외")
+      .filter((lead) => `${lead.businessName} ${lead.address || ""} ${lead.industryPrimary || ""}`.toLowerCase().includes(keyword))
+      .slice(0, 8);
+  }, [allLeadsForMap, query]);
   // 검색어가 바뀌면 이전 검색 결과에 대한 체크 선택은 의미가 없으므로 함께 초기화합니다.
   useEffect(() => {
     setSelectedResultIds(new Set());
@@ -1379,7 +1403,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               onBlur={() => setShowExternalResults(false)}
               onChange={(event) => setQuery(event.target.value)}
               onFocus={() => setShowExternalResults(true)}
-              placeholder="거래처명·지역·주소 검색"
+              placeholder="거래처명·리드·지역·주소 검색"
               value={query}
             />
             {showExternalResults && query.trim().length >= 2 ? (
@@ -1405,6 +1429,31 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                         </div>
                         <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">지도에서 보기</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {leadMatches.length ? (
+                  <div className="border-b border-slate-100">
+                    <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                      신규 리드 {leadMatches.length.toLocaleString()}건
+                    </p>
+                    {leadMatches.map((lead) => (
+                      <button
+                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
+                        key={lead.id}
+                        onClick={() => {
+                          setPreviewLeadId(lead.id);
+                          setShowExternalResults(false);
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="button"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-black text-cyan-700">리드 카드 보기</span>
                       </button>
                     ))}
                   </div>
@@ -1665,59 +1714,40 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             ) : null}
           </div>
         ) : null}
+        {/* 지역 필터: 칩을 죽 나열하던 방식은 시군구가 많아지면 가독성이 떨어진다는 피드백(2026-08-24:
+        "지역 필터는 사용성이 떨어지네, 드롭다운으로 시군구동까지 나눠서 필터하는게 더 가독성이
+        좋아보임")을 받아, 네이버 부동산 스타일 드릴다운 칩 목록 대신 시군구·동 2단 드롭다운으로 바꿨습니다. */}
         {activeView === "map" && showAllLeadsOnMap && mapLeadRegionOptions.length ? (
-          <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
             <span className="flex shrink-0 items-center gap-1 text-[11px] font-black text-slate-400">
               <MapPin className="h-3.5 w-3.5" />
               지역
             </span>
-            <button
-              className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
-                !mapLeadRegionSigungu ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-              onClick={() => selectMapLeadRegionSigungu("")}
-              type="button"
+            <select
+              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-black text-slate-700 outline-none focus:border-teal-300"
+              onChange={(event) => selectMapLeadRegionSigungu(event.target.value)}
+              value={mapLeadRegionSigungu}
             >
-              전체
-            </button>
-            {mapLeadRegionOptions.map(([sigungu, count]) => (
-              <button
-                className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
-                  mapLeadRegionSigungu === sigungu ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-                key={sigungu}
-                onClick={() => selectMapLeadRegionSigungu(sigungu)}
-                type="button"
-              >
-                {sigungu} <span className="opacity-70">{count.toLocaleString()}</span>
-              </button>
-            ))}
-            {mapLeadRegionSigungu && mapLeadDongOptions.length ? (
-              <>
-                <span className="mx-0.5 shrink-0 text-slate-300">›</span>
-                <button
-                  className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
-                    !mapLeadRegionDong ? "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                  onClick={() => setMapLeadRegionDong("")}
-                  type="button"
-                >
-                  {mapLeadRegionSigungu} 전체
-                </button>
-                {mapLeadDongOptions.map(([dong, count]) => (
-                  <button
-                    className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-black transition ${
-                      mapLeadRegionDong === dong ? "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                    key={dong}
-                    onClick={() => setMapLeadRegionDong((current) => (current === dong ? "" : dong))}
-                    type="button"
-                  >
-                    {dong} <span className="opacity-70">{count.toLocaleString()}</span>
-                  </button>
-                ))}
-              </>
-            ) : null}
+              <option value="">시군구 전체</option>
+              {mapLeadRegionOptions.map(([sigungu, count]) => (
+                <option key={sigungu} value={sigungu}>
+                  {sigungu} ({count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-black text-slate-700 outline-none focus:border-teal-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              disabled={!mapLeadRegionSigungu || !mapLeadDongOptions.length}
+              onChange={(event) => setMapLeadRegionDong(event.target.value)}
+              value={mapLeadRegionDong}
+            >
+              <option value="">{mapLeadRegionSigungu ? `${mapLeadRegionSigungu} 전체` : "동 전체"}</option>
+              {mapLeadDongOptions.map(([dong, count]) => (
+                <option key={dong} value={dong}>
+                  {dong} ({count.toLocaleString()})
+                </option>
+              ))}
+            </select>
           </div>
         ) : null}
         {activeView === "map" && showAllLeadsOnMap ? (
@@ -2788,6 +2818,9 @@ function StoreQuickCard({
   const [isMemoEditing, setIsMemoEditing] = useState(false);
   const [memoDraft, setMemoDraft] = useState("");
   const [isSavingMemo, setIsSavingMemo] = useState(false);
+  // 출입방법 비밀번호는 카드가 열려 있는 동안 실수로 어깨너머로 노출되지 않도록 기본은 가려두고,
+  // 필요할 때만 눌러서 확인합니다.
+  const [showAccessPassword, setShowAccessPassword] = useState(false);
   const [draft, setDraft] = useState({
     name: store.name,
     phone: store.phone || "",
@@ -2810,6 +2843,7 @@ function StoreQuickCard({
     });
     setIsEditing(false);
     setIsMemoEditing(false);
+    setShowAccessPassword(false);
   }, [store.id]);
 
   function startMemoEdit() {
@@ -2916,6 +2950,35 @@ function StoreQuickCard({
             <Warehouse className="mt-0.5 h-3 w-3 shrink-0 text-teal-500" />
             <span className="line-clamp-2">적재위치 · {store.loadingPosition}</span>
           </p>
+        ) : null}
+        {/* 출입방법·비밀번호(2026-08-24 피드백: "거래처의 출입방법과 비밀번호를 저장해야해 ... 퀵카드,
+        상세에도 적재해서 보여줘야해"). 비밀번호는 기본 마스킹, 눌러야만 노출됩니다. 적재위치 사진도
+        같이 보여달라는 요청(1-1)에 맞춰 바로 아래에 사진 미리보기를 함께 붙입니다. */}
+        {!isEditing && (store.accessMethodType || store.accessNote || store.accessPassword) ? (
+          <div className="mt-1.5 rounded-md bg-teal-50/60 px-2 py-1.5">
+            <p className="flex items-start gap-1.5 text-[11px] font-bold leading-4 text-slate-700">
+              {(() => {
+                const AccessIcon = getAccessMethodIcon(store.accessMethodType);
+                return <AccessIcon className="mt-0.5 h-3 w-3 shrink-0 text-teal-600" />;
+              })()}
+              <span className="min-w-0 flex-1">
+                {store.accessMethodType ? <span className="font-black text-teal-800">{store.accessMethodType}</span> : null}
+                {store.accessMethodType && store.accessNote ? " · " : ""}
+                <span className="line-clamp-2">{store.accessNote}</span>
+              </span>
+            </p>
+            {store.accessPassword ? (
+              <button
+                className="mt-1 inline-flex items-center gap-1 text-[11px] font-black text-teal-700"
+                onClick={() => setShowAccessPassword((value) => !value)}
+                type="button"
+              >
+                {showAccessPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                비밀번호 {showAccessPassword ? store.accessPassword : "••••••"}
+              </button>
+            ) : null}
+            <QuickCardAccessPhotoPreview customerId={store.id} />
+          </div>
         ) : null}
         {!isEditing && isMemoEditing ? (
           <div className="mt-1.5 flex gap-1.5">
@@ -8367,6 +8430,12 @@ function StoreDetail({
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
   const [draftBusinessHours, setDraftBusinessHours] = useState(store.businessHours || "");
   const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
+  // 출입방법(열쇠/카드/비밀번호/숨김위치)·비밀번호(2026-08-24 피드백: "거래처의 출입방법과 비밀번호를
+  // 저장해야해. 놓친 것 같아 ... 열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등 넣어야해").
+  const [draftAccessMethodType, setDraftAccessMethodType] = useState(store.accessMethodType || "");
+  const [draftAccessNote, setDraftAccessNote] = useState(store.accessNote || "");
+  const [draftAccessPassword, setDraftAccessPassword] = useState(store.accessPassword || "");
+  const [showDraftAccessPassword, setShowDraftAccessPassword] = useState(false);
   const [draftReviewSummary, setDraftReviewSummary] = useState(store.reviewSummary || "");
   const [draftReviewKeywords, setDraftReviewKeywords] = useState((store.reviewKeywords || []).join(", "));
   const [draftReviewSource, setDraftReviewSource] = useState(store.reviewSource || "");
@@ -8417,6 +8486,9 @@ function StoreDetail({
       businessStatus: draftBusinessStatus,
       businessHours: draftBusinessHours,
       menuSummary: draftMenuSummary,
+      accessMethodType: draftAccessMethodType,
+      accessNote: draftAccessNote,
+      accessPassword: draftAccessPassword,
       reviewSummary: draftReviewSummary,
       reviewKeywords: draftReviewKeywords
         .split(",")
@@ -8754,6 +8826,62 @@ function StoreDetail({
                     />
                   </label>
                   {store.reviewsUpdatedAt ? <p className="text-[11px] font-bold text-slate-400">마지막 업데이트: {new Date(store.reviewsUpdatedAt).toLocaleString("ko-KR")}</p> : null}
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection defaultOpen title="출입방법">
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-bold leading-5 text-slate-500">
+                    배송 기사님이 현장에서 어떻게 들어가는지 남겨두세요. 열쇠·카드는 어디에 있는지, 비밀번호는 값을 함께 적어두면 헷갈리지 않습니다.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ACCESS_METHOD_TYPE_OPTIONS.map(({ icon: OptionIcon, label }) => (
+                      <button
+                        className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-black transition ${
+                          draftAccessMethodType === label
+                            ? "border-teal-600 bg-teal-700 text-white"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                        key={label}
+                        onClick={() => setDraftAccessMethodType((current) => (current === label ? "" : label))}
+                        type="button"
+                      >
+                        <OptionIcon className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">위치/방법 설명</span>
+                    <textarea
+                      className="min-h-16 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setDraftAccessNote(event.target.value)}
+                      placeholder="예: 화단 옆 돌 밑에 보조키, 경비실에 카드 맡겨둠, 정문 도어락"
+                      value={draftAccessNote}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">비밀번호</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
+                        onChange={(event) => setDraftAccessPassword(event.target.value)}
+                        placeholder="도어락 비밀번호 등"
+                        type={showDraftAccessPassword ? "text" : "password"}
+                        value={draftAccessPassword}
+                      />
+                      <button
+                        aria-label={showDraftAccessPassword ? "비밀번호 숨기기" : "비밀번호 표시"}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                        onClick={() => setShowDraftAccessPassword((value) => !value)}
+                        type="button"
+                      >
+                        {showDraftAccessPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </label>
+                  {/* 적재위치 사진도 바로 아래 "첨부자료"에서 함께 보이므로(2026-08-24 피드백: "출입방법은
+                  적재위치 사진도 보여주면 사용성이 높아짐"), 출입방법 섹션을 그 바로 위에 붙여둡니다. */}
                 </div>
               </CollapsibleSection>
 
@@ -9109,6 +9237,49 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
       </button>
       {open ? <div className="border-t border-slate-200 px-4 pb-5">{children}</div> : null}
     </section>
+  );
+}
+
+// 지도 퀵카드는 공간이 좁아 전체 업로드 박스(LoadingPositionAttachmentBox) 대신 최근 3장만 조회
+// 전용으로 가볍게 보여줍니다(2026-08-24 피드백: "출입방법은 적재위치 사진도 보여주면 사용성이
+// 높아짐"). 사진이 없으면 카드에 빈 칸을 남기지 않도록 아무것도 렌더링하지 않습니다.
+function QuickCardAccessPhotoPreview({ customerId }: { readonly customerId: string }) {
+  const [items, setItems] = useState<LoadingPositionMediaItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { attachments?: Array<LoadingPositionMediaItem & { attachmentType: string }> } | null) => {
+        if (cancelled) return;
+        setItems(
+          (payload?.attachments || [])
+            .filter((item) => item.attachmentType === "loading_position" && !item.mimeType?.startsWith("video"))
+            .slice(0, 3)
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  if (!items.length) return null;
+
+  return (
+    <div className="mt-1.5 flex gap-1">
+      {items.map((item) => (
+        <img
+          alt={item.title}
+          className="h-10 w-10 shrink-0 rounded object-cover ring-1 ring-inset ring-teal-100"
+          key={item.id}
+          loading="lazy"
+          src={item.fileUrl}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -9723,6 +9894,9 @@ function toCustomerPayload(store: StoreRow) {
     email: store.email,
     industry: store.industry,
     loadingPosition: store.memo || "",
+    accessMethodType: store.accessMethodType,
+    accessNote: store.accessNote,
+    accessPassword: store.accessPassword,
     businessHours: store.businessHours || "",
     menuSummary: store.menuSummary || "",
     monthlyRevenue: Number(store.expectedRevenue || 0),
@@ -10091,6 +10265,21 @@ function businessStatusClass(status: StoreRow["businessStatus"]) {
 
 function roundToOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+// 거래처 출입방법 종류(2026-08-24 피드백: "열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등
+// 넣어야해"). 자유 텍스트도 허용하되(과거 데이터·기타 케이스), 현장에서 가장 자주 쓰는 4가지는
+// 버튼 한 번으로 바로 고를 수 있게 합니다.
+const ACCESS_METHOD_TYPE_OPTIONS: Array<{ icon: LucideIcon; label: string }> = [
+  { icon: KeyRound, label: "열쇠" },
+  { icon: CreditCard, label: "카드" },
+  { icon: Lock, label: "비밀번호" },
+  { icon: MapPinned, label: "숨김위치" },
+  { icon: Store, label: "기타" }
+];
+
+function getAccessMethodIcon(type?: string): LucideIcon {
+  return ACCESS_METHOD_TYPE_OPTIONS.find((option) => option.label === type)?.icon || KeyRound;
 }
 
 function roundToSix(value: number) {
