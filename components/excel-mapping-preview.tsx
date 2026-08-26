@@ -8,6 +8,8 @@ import { UploadTemplateField } from "@/lib/sample-data";
 
 type RawRow = Record<string, string | number | boolean | null | undefined>;
 type FieldMap = Record<string, string>;
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function ExcelHeaderMappingPreview({
   fieldMap,
@@ -442,7 +444,7 @@ function MappingWorkspaceModal({
                     key={value}
                     className={`h-9 rounded-md border px-2 text-xs font-black transition ${
                       fieldFilter === value
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                        ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
                         : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
                     }`}
                     type="button"
@@ -645,45 +647,68 @@ function FieldMappingGroup({
 }
 
 function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawRow[] }) {
-  const [showAllRows, setShowAllRows] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(30);
 
   if (!headers.length || !rows.length) return null;
 
-  const previewLimit = 120;
-  const visibleRows = showAllRows ? rows : rows.slice(0, previewLimit);
-  const hiddenRows = Math.max(0, rows.length - visibleRows.length);
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const visibleRows = rows.slice(start, start + pageSize);
+  const pageStart = rows.length ? start + 1 : 0;
+  const pageEnd = Math.min(rows.length, start + pageSize);
 
   return (
     <div className="border-t-8 border-slate-100 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4">
         <div>
-          <Badge className="mb-2 bg-slate-900 text-white">2. 전체 데이터 검수</Badge>
+          <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">2. 전체 데이터 검수</Badge>
           <p className="text-sm font-black text-slate-950">업로드 데이터 전체 보기</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-            빠른 검수를 위해 먼저 일부 행을 보여주고, 필요하면 전체 행을 펼쳐 누락값과 이상값을 확인하세요.
+            전체 행을 한 번에 펼치지 않고 페이지 단위로 확인해 누락값과 이상값을 빠르게 점검합니다.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="bg-slate-100 text-slate-700">
-            {visibleRows.length.toLocaleString()}/{rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼
+            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {rows.length.toLocaleString()}행 · {headers.length.toLocaleString()}컬럼
           </Badge>
-          {hiddenRows > 0 ? (
-            <button
-              type="button"
-              onClick={() => setShowAllRows(true)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          <label className="flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-black text-slate-500 shadow-sm">
+            보기
+            <select
+              className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+              onChange={(event) => {
+                setPageSize(Number(event.target.value) as ListPageSize);
+                setPage(1);
+              }}
+              value={pageSize}
             >
-              전체 {rows.length.toLocaleString()}행 보기
-            </button>
-          ) : rows.length > previewLimit ? (
-            <button
-              type="button"
-              onClick={() => setShowAllRows(false)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              빠른 검수로 접기
-            </button>
-          ) : null}
+              {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}개
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            이전
+          </button>
+          <span className="text-xs font-black text-slate-400">
+            {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+          </span>
+          <button
+            type="button"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            다음
+          </button>
         </div>
       </div>
       <div className="overflow-x-auto bg-white">
@@ -700,8 +725,8 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
           </thead>
           <tbody>
             {visibleRows.map((row, index) => (
-              <tr key={index} className="odd:bg-white even:bg-slate-50/70 hover:bg-blue-50/40">
-                <td className="sticky left-0 z-0 border-r border-slate-100 bg-inherit px-3 py-2 font-black text-slate-400">{index + 2}</td>
+              <tr key={`${start}-${index}`} className="odd:bg-white even:bg-slate-50/70 hover:bg-blue-50/40">
+                <td className="sticky left-0 z-0 border-r border-slate-100 bg-inherit px-3 py-2 font-black text-slate-400">{start + index + 2}</td>
                 {headers.map((header) => {
                   const value = String(row[header] ?? "").trim();
                   return (

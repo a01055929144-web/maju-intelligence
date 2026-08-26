@@ -192,7 +192,7 @@ export default async function RevenueTransactionsPage({
           <div className="space-y-4">
             <section className="maju-section-card">
               <div className="maju-card-header">
-                <Badge className="mb-2 w-fit bg-blue-50 text-blue-700">품목 이탈 감지 기준</Badge>
+                <Badge className="mb-2 w-fit bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">품목 이탈 기준</Badge>
                 <h2 className="text-lg font-black text-slate-950">품목별 매출</h2>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">품목 비중과 감소 가능성을 봅니다.</p>
               </div>
@@ -260,7 +260,7 @@ function RevenueDataBasisPanel({
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
-          <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 대시보드와 운영 리포트에 반영되는 기준값입니다.</p>
+          <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 지도 홈과 AI 리포트에 반영되는 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
           거래처 정보와 매출 원장의 사업자번호 또는 상호명·주소가 맞아야 거래처별 매출, 등급, 품목 이탈 분석이 정확해집니다.

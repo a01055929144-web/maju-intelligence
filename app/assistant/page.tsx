@@ -52,8 +52,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="방문 기록과 견적 요청을 실행 문장으로 정리합니다."
-      title="영업 도우미"
+      subtitle="방문 기록과 견적 요청을 바로 쓸 문장으로 정리합니다."
+      title="AI 영업"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
@@ -61,8 +61,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
         <div className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black text-slate-950">후속 작업함</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">방문 기록 · 견적 요청 기준</p>
+              <p className="text-sm font-black text-slate-950">후속 작업</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">방문 · 견적 기준</p>
             </div>
             <Badge className={drafts.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{drafts.length ? "초안 생성됨" : "방문 기록 필요"}</Badge>
           </div>
@@ -95,7 +95,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               </h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">담당자가 검토 후 사용합니다.</p>
             </div>
-            <Badge className="bg-slate-900 text-white">{drafts.length.toLocaleString()}개 표시</Badge>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{drafts.length.toLocaleString()}개</Badge>
           </div>
           <div className="divide-y divide-slate-100">
             {drafts.map((draft) => (
@@ -151,20 +151,20 @@ function AssistantBasisPanel({
     { label: "코스 연결", value: "방문 순서 확인", helper: "현장 실행 기준" }
   ];
   const actionLinks = [
-    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "방문 기록 보완" },
-    { href: withCompanyQuery("/revenue/pipeline"), icon: TrendingUp, label: "매출 후보 확인" },
-    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈에서 코스 확인" }
+    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "기록 보완" },
+    { href: withCompanyQuery("/revenue/pipeline"), icon: TrendingUp, label: "기회 확인" },
+    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈" }
   ];
 
   return (
     <div className="maju-section-card">
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
-          <p className="maju-section-title">운영 기준 데이터</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 초안은 방문 결과와 영업 메모를 실행 문장으로 바꾸는 보조 기능입니다.</p>
+          <p className="maju-section-title">생성 기준</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">방문 결과와 영업 메모를 문장으로 정리합니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
-          초안 품질은 거래처 히스토리의 메모, 견적 요청 상태, 방문 코스 데이터에 좌우됩니다. 자동 발송 전 담당자가 반드시 내용을 검토해야 합니다.
+          초안 품질은 거래처 메모, 견적 상태, 방문 코스에 좌우됩니다. 발송 전 담당자 검토가 필요합니다.
         </p>
         <div className="flex flex-wrap gap-2">
           {actionLinks.map((item) => {

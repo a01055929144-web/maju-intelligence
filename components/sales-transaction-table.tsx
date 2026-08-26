@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { SalesTransactionItem } from "@/lib/store";
+
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function SalesTransactionTable({
   companyId,
@@ -21,6 +24,16 @@ export function SalesTransactionTable({
   const [truncated, setTruncated] = useState(initialTruncated);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(30);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return items.slice(start, start + pageSize);
+  }, [currentPage, items, pageSize]);
+  const pageStart = items.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(items.length, currentPage * pageSize);
 
   async function loadMore() {
     if (isLoadingMore || !truncated) return;
@@ -52,11 +65,56 @@ export function SalesTransactionTable({
           <h2 className="text-lg font-black text-slate-950">원장 테이블</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">최근 업로드 행</p>
         </div>
-        <Badge className="bg-slate-900 text-white">{items.length.toLocaleString()}행 표시</Badge>
+        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{items.length.toLocaleString()}행 표시</Badge>
       </div>
-      <div className="max-h-[520px] overflow-auto">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+            보기
+            <select
+              className="h-7 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+              onChange={(event) => {
+                setPageSize(Number(event.target.value) as ListPageSize);
+                setPage(1);
+              }}
+              value={pageSize}
+            >
+              {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}개
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="rounded-full bg-slate-50 px-2 py-1 text-xs font-black text-slate-500">
+            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {items.length.toLocaleString()}행
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            type="button"
+          >
+            이전
+          </button>
+          <span className="text-xs font-black text-slate-400">
+            {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+          </span>
+          <button
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            type="button"
+          >
+            다음
+          </button>
+        </div>
+      </div>
+      <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
         <table className="w-full min-w-[920px] border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-white">
+          <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_#e2e8f0]">
             <tr className="text-left text-xs font-black text-slate-500">
               <th className="border-b border-slate-200 px-3 py-3 text-center">No</th>
               <th className="border-b border-slate-200 px-3 py-3">매출일</th>
@@ -69,9 +127,9 @@ export function SalesTransactionTable({
             </tr>
           </thead>
           <tbody>
-            {items.map((item, index) => (
+            {pagedItems.map((item, index) => (
               <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
-                <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{index + 1}</td>
+                <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{(currentPage - 1) * pageSize + index + 1}</td>
                 <td className="border-b border-slate-100 px-3 py-3">{item.salesDate || "-"}</td>
                 <td className="border-b border-slate-100 px-3 py-3">{item.customerName}</td>
                 <td className="border-b border-slate-100 px-3 py-3">{item.businessRegistrationNumber || "-"}</td>

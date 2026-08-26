@@ -21,12 +21,16 @@ const emptyCompany: ManagedCompanyAccountInput = {
   customerEmail: "",
   customerPassword: ""
 };
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [companies, setCompanies] = useState(initialCompanies);
   const [selectedId, setSelectedId] = useState(initialCompanies[0]?.id || "new");
   const [query, setQuery] = useState("");
   const [companyFilter, setCompanyFilter] = useState<"all" | "active" | "needs-setup" | "paused">("all");
+  const [companyPage, setCompanyPage] = useState(1);
+  const [companyPageSize, setCompanyPageSize] = useState<ListPageSize>(30);
   const [form, setForm] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
   const [showPassword, setShowPassword] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,6 +55,14 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       return matchesKeyword && matchesFilter;
     });
   }, [companies, companyFilter, query]);
+  const companyTotalPages = Math.max(1, Math.ceil(filteredCompanies.length / companyPageSize));
+  const currentCompanyPage = Math.min(companyPage, companyTotalPages);
+  const pagedCompanies = useMemo(() => {
+    const start = (currentCompanyPage - 1) * companyPageSize;
+    return filteredCompanies.slice(start, start + companyPageSize);
+  }, [companyPageSize, currentCompanyPage, filteredCompanies]);
+  const companyPageStart = filteredCompanies.length ? (currentCompanyPage - 1) * companyPageSize + 1 : 0;
+  const companyPageEnd = Math.min(filteredCompanies.length, currentCompanyPage * companyPageSize);
 
   function selectCompany(company: ManagedCompanyAccount) {
     setSelectedId(company.id);
@@ -285,7 +297,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 className="h-10 w-full rounded-md border border-input bg-white pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 placeholder="회사명, 이메일 검색"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setCompanyPage(1);
+                }}
               />
             </label>
             <Button type="button" onClick={startNewCompany}>
@@ -294,15 +309,56 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </Button>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <CompanyFilterButton active={companyFilter === "all"} count={companies.length} label="전체" onClick={() => setCompanyFilter("all")} />
-            <CompanyFilterButton active={companyFilter === "active"} count={activeCompanies} label="운영중" onClick={() => setCompanyFilter("active")} />
-            <CompanyFilterButton active={companyFilter === "needs-setup"} count={needsSetupCompanies} label="준비 미흡" onClick={() => setCompanyFilter("needs-setup")} tone="warning" />
-            <CompanyFilterButton active={companyFilter === "paused"} count={pausedCompanies} label="중지" onClick={() => setCompanyFilter("paused")} />
+            <CompanyFilterButton active={companyFilter === "all"} count={companies.length} label="전체" onClick={() => { setCompanyFilter("all"); setCompanyPage(1); }} />
+            <CompanyFilterButton active={companyFilter === "active"} count={activeCompanies} label="운영중" onClick={() => { setCompanyFilter("active"); setCompanyPage(1); }} />
+            <CompanyFilterButton active={companyFilter === "needs-setup"} count={needsSetupCompanies} label="준비 미흡" onClick={() => { setCompanyFilter("needs-setup"); setCompanyPage(1); }} tone="warning" />
+            <CompanyFilterButton active={companyFilter === "paused"} count={pausedCompanies} label="중지" onClick={() => { setCompanyFilter("paused"); setCompanyPage(1); }} />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2">
+            <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-muted-foreground">
+              보기
+              <select
+                className="h-6 border-0 bg-transparent p-0 text-xs font-black text-foreground outline-none focus:ring-0"
+                onChange={(event) => {
+                  setCompanyPageSize(Number(event.target.value) as ListPageSize);
+                  setCompanyPage(1);
+                }}
+                value={companyPageSize}
+              >
+                {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}개
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-muted-foreground">
+              {companyPageStart.toLocaleString()}-{companyPageEnd.toLocaleString()} / {filteredCompanies.length.toLocaleString()}곳
+            </span>
+            <button
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentCompanyPage <= 1}
+              onClick={() => setCompanyPage((page) => Math.max(1, page - 1))}
+              type="button"
+            >
+              이전
+            </button>
+            <span className="text-xs font-black text-muted-foreground">
+              {currentCompanyPage.toLocaleString()} / {companyTotalPages.toLocaleString()}
+            </span>
+            <button
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentCompanyPage >= companyTotalPages}
+              onClick={() => setCompanyPage((page) => Math.min(companyTotalPages, page + 1))}
+              type="button"
+            >
+              다음
+            </button>
           </div>
         </div>
 
         <div className="max-h-[680px] space-y-2 overflow-y-auto p-3">
-          {filteredCompanies.map((company) => (
+          {pagedCompanies.map((company) => (
             <button
               key={company.id}
               className={`w-full rounded-lg border p-4 text-left transition ${

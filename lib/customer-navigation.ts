@@ -47,8 +47,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "dashboard",
-        badge: "실시간",
-        description: "지도, 거래처 위치, 영업·배송 코스, 신규 리드",
+        description: "거래처, 코스, 신규 리드를 지도에서 관리",
         href: "/dashboard",
         icon: MapPinned,
         label: "지도 홈"
@@ -56,14 +55,14 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "거래처",
+    label: "운영",
     items: [
       {
         active: "customers-summary",
-        description: "전체 거래처, 등급, 보완 상태 요약",
+        description: "거래처 수, 등급, 보완 상태",
         href: "/crm/summary",
         icon: LayoutDashboard,
-        label: "거래처 전체 현황"
+        label: "전체 현황"
       },
       {
         active: "data",
@@ -74,14 +73,14 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       },
       {
         active: "customers",
-        description: "상세, 메모, 첨부자료 관리",
+        description: "상세, 메모, 첨부 관리",
         href: "/crm/timeline",
         icon: Building2,
         label: "거래처 관리"
       },
       {
         active: "data-management",
-        description: "업로드 이력, 저장 상태, 누락 상태 확인",
+        description: "업로드, 저장, 누락 확인",
         href: "/customers/data",
         icon: Database,
         label: "저장 이력"
@@ -89,35 +88,35 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "매출",
+    label: "성장",
     items: [
       {
         active: "revenue",
-        description: "기회, 이탈 징후, 업셀링 후보",
+        description: "기회, 이탈, 업셀링 후보",
         href: "/revenue/pipeline",
         icon: BarChart3,
-        label: "매출 기회"
+        label: "기회 관리"
       },
       {
         active: "revenue-ledger",
         description: "ERP 매출 원장 조회",
         href: "/revenue/transactions",
         icon: ReceiptText,
-        label: "매출 거래내역"
+        label: "거래내역"
       },
       {
         active: "assistant",
         description: "견적, 메모, 후속 액션",
         href: "/assistant",
         icon: Sparkles,
-        label: "영업 도우미"
+        label: "AI 영업"
       },
       {
         active: "report",
-        description: "회사 건강도와 운영 리포트",
+        description: "회사 건강도와 실행 제안",
         href: "/reports/latest",
         icon: HeartPulse,
-        label: "운영 리포트"
+        label: "AI 리포트"
       }
     ]
   }
@@ -137,13 +136,13 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 
 export function getCustomerQuickActions() {
   return [
-    { active: "dashboard" as const, helper: "지도·코스", icon: MapPinned, label: "지도 홈" },
+    { active: "dashboard" as const, helper: "통합 지도", icon: MapPinned, label: "지도 홈" },
     { active: "customers" as const, helper: "원장", icon: Building2, label: "거래처" },
-    { active: "revenue" as const, helper: "성장", icon: BarChart3, label: "매출" }
+    { active: "revenue" as const, helper: "기회", icon: BarChart3, label: "매출" }
   ];
 }
 
 export const customerUtilityActions = {
-  assistant: { icon: MessageSquareText, label: "AI 도우미" },
+  assistant: { icon: MessageSquareText, label: "AI" },
   settings: { icon: Settings, label: "설정" }
 };

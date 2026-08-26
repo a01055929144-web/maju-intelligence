@@ -50,6 +50,8 @@ const Report = dynamic(() => import("@/components/data-registration-report").the
 
 type RawRow = Record<string, string | number | boolean | null | undefined>;
 type FieldMap = Record<string, string>;
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 type EntryMode = "document" | "excel" | "manual";
 type OcrMeta = {
   confidence: number;
@@ -107,7 +109,7 @@ const initialPipelineSteps: PipelineStep[] = [
   { key: "raw", label: "Raw 데이터 적재", description: "원본 행 데이터를 재분석 가능하게 보존합니다.", status: "pending" },
   { key: "normalize", label: "거래처 정제", description: "거래처명, 주소, 업종, 매출 정보를 표준화합니다.", status: "pending" },
   { key: "score", label: "회사 건강도 계산", description: "영업력, 배송효율, 리스크 점수를 계산합니다.", status: "pending" },
-  { key: "report", label: "운영 리포트 생성", description: "회사 현황과 추천 액션을 생성합니다.", status: "pending" }
+  { key: "report", label: "AI 리포트 생성", description: "회사 현황과 추천 액션을 생성합니다.", status: "pending" }
 ];
 const initialRegistrationStatus: RegistrationStatus = {
   actionLabel: "대기 중",
@@ -201,7 +203,7 @@ export default function Home() {
     if (!customers.length) {
       setRegistrationStatus({
         actionLabel: "등록 데이터 필요",
-        description: "운영 리포트는 저장된 거래처와 매출 원장을 기준으로 생성합니다.",
+        description: "AI 리포트는 저장된 거래처와 매출 원장을 기준으로 생성합니다.",
         nextAction: "거래처를 수기 등록하거나 엑셀로 업로드한 뒤 저장 상태를 확인하세요.",
         status: "warning",
         title: "아직 리포트로 만들 운영 데이터가 없습니다."
@@ -423,8 +425,8 @@ export default function Home() {
       });
       setRegistrationStatus({
         actionLabel: persisted ? "저장 완료" : "분석 완료 · 저장 확인 필요",
-        description: persisted ? `${nextFilename} 데이터가 저장되고 운영 리포트가 갱신됐습니다.` : "분석은 완료됐지만 저장 결과가 확인되지 않았습니다.",
-        nextAction: persisted ? "운영 리포트와 거래처 히스토리, 매출 원장에서 결과를 확인하세요." : "로그인/운영 환경값을 확인한 뒤 다시 저장을 시도하세요.",
+        description: persisted ? `${nextFilename} 데이터가 저장되고 AI 리포트가 갱신됐습니다.` : "분석은 완료됐지만 저장 결과가 확인되지 않았습니다.",
+        nextAction: persisted ? "AI 리포트와 거래처 히스토리, 매출 원장에서 결과를 확인하세요." : "로그인/운영 환경값을 확인한 뒤 다시 저장을 시도하세요.",
         status: persisted ? "success" : "warning",
         title: persisted ? "데이터 등록이 완료됐습니다." : "분석은 됐지만 저장 확인이 필요합니다."
       });
@@ -548,12 +550,12 @@ function WorkspaceModeTabs({
   const tabs = [
     ["briefing", "등록 가이드"],
     ["onboarding", "데이터 등록"],
-    ["report", "운영 리포트"]
+    ["report", "AI 리포트"]
   ] as const;
   const copy = {
     briefing: ["등록 가이드", "기초정보는 1회 저장하고 매출 원장은 반복 업데이트합니다."],
     onboarding: ["데이터 작업공간", "수기 등록, 엑셀 업로드, ERP 필드 매칭을 한 화면에서 처리합니다."],
-    report: ["운영 리포트", "저장된 거래처와 매출 기준으로 회사 현황 리포트를 생성합니다."]
+    report: ["AI 리포트", "저장된 거래처와 매출 기준으로 회사 현황 리포트를 생성합니다."]
   }[active as "briefing" | "onboarding" | "report"] || ["데이터 작업공간", "거래처와 매출 데이터를 운영 기준값으로 관리합니다."];
 
   return (
@@ -572,7 +574,7 @@ function WorkspaceModeTabs({
               disabled
                 ? "cursor-not-allowed bg-slate-100 text-slate-400"
                 : active === key
-                  ? "bg-blue-700 text-white shadow-sm"
+                  ? "bg-teal-700 text-white shadow-sm"
                   : "bg-transparent text-slate-600 hover:bg-white hover:text-slate-950"
             }`}
             disabled={disabled}
@@ -602,7 +604,7 @@ function Briefing({
     ["01", "회사 기준값 확인", "회사명, 물류 출발지, 담당자, 배송권역을 먼저 정리합니다.", "회사 설정"],
     ["02", "거래처 등록", "사업자번호, 대표자, 배송주소, 연락처, 적재위치 자료를 저장합니다.", "기초 등록"],
     ["03", "매출 원장 업데이트", "ERP 원장을 업로드하고 거래처와 매출 컬럼을 매칭합니다.", "반복 업데이트"],
-    ["04", "검증 후 리포트 갱신", "누락값과 사업자번호 형식을 확인한 뒤 운영 리포트를 갱신합니다.", "리포트 생성"]
+    ["04", "검증 후 리포트 갱신", "누락값과 사업자번호 형식을 확인한 뒤 AI 리포트를 갱신합니다.", "리포트 생성"]
   ] as const;
   const dataSets = [
     {
@@ -639,13 +641,13 @@ function Briefing({
     <section className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="rounded-md border border-slate-200 bg-white p-4">
-          <Badge className="mb-4 bg-blue-50 text-blue-700">등록 가이드</Badge>
+          <Badge className="mb-4 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">등록 가이드</Badge>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-end">
             <div>
               <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">처음 등록은 어렵지 않게, 이후 업데이트는 반복 가능하게</h1>
               <p className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-slate-600">
                 엑셀 업로드는 등록 방법 중 하나입니다. 핵심은 거래처 기본정보를 회사의 기준 데이터로 저장하고, 매출 원장을 주기적으로 업데이트해서
-                현황판과 운영 리포트가 계속 갱신되도록 만드는 것입니다.
+                현황판과 AI 리포트가 계속 갱신되도록 만드는 것입니다.
               </p>
             </div>
             <div className="grid gap-2">
@@ -683,7 +685,7 @@ function Briefing({
         {guideSteps.map(([step, title, description, tag]) => (
           <div key={step} className="rounded-md border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-black text-blue-600">{step}</span>
+              <span className="text-xs font-black text-teal-700">{step}</span>
               <Badge className="bg-slate-100 text-slate-700">{tag}</Badge>
             </div>
             <p className="mt-4 text-base font-black text-slate-950">{title}</p>
@@ -700,7 +702,7 @@ function Briefing({
               <div key={dataSet.title} className="rounded-md border border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-700">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700">
                       <Icon className="h-5 w-5" />
                     </span>
                     <div>
@@ -729,7 +731,7 @@ function Briefing({
 
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-blue-700" />
+            <Database className="h-5 w-5 text-teal-700" />
             <p className="text-lg font-black text-slate-950">저장 전 검증 기준</p>
           </div>
           <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">ERP 양식이 달라도 아래 기준으로 정규화하면 같은 원장 구조에 저장됩니다.</p>
@@ -744,13 +746,13 @@ function Briefing({
         </div>
       </div>
 
-      <div className="rounded-md border border-blue-100 bg-blue-50 p-4">
+      <div className="rounded-md border border-teal-100 bg-teal-50 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="font-black text-blue-950">권장 순서</p>
-            <p className="mt-1 text-sm font-semibold leading-6 text-blue-800">회사 설정 확인 → 거래처 등록 → 매출 원장 업데이트 → 리포트 확인 → 히스토리와 코스 운영</p>
+            <p className="font-black text-teal-950">권장 순서</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-teal-800">회사 설정 → 거래처 등록 → 매출 갱신 → 리포트 확인 → 코스 운영</p>
           </div>
-          <Link className="inline-flex h-10 items-center justify-center rounded-md bg-blue-700 px-4 text-sm font-black text-white transition hover:bg-blue-800" href="/crm/timeline">
+          <Link className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white transition hover:bg-teal-800" href="/crm/timeline">
             거래처 히스토리 보기
           </Link>
         </div>
@@ -863,8 +865,8 @@ function DataRegistrationSidePanel({
   return (
     <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
       <div className="px-2 pb-2 pt-1">
-        <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">등록 흐름</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">거래처와 매출 원장을 구분해서 처리합니다.</p>
+        <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">진행 요약</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">기초정보 저장 후 매출 원장을 반복 갱신합니다.</p>
       </div>
       {items.map((item) => {
         const selected = activeSection === item.key;
@@ -948,6 +950,15 @@ function DataRegistrationFlowBar({
 
   return (
     <section className="maju-section-card p-2">
+      <div className="mb-2 flex flex-col gap-1 px-2 pt-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">작업 선택</p>
+          <p className="mt-0.5 text-xs font-bold text-slate-500">거래처, 매출, 저장 상태를 한 번에 전환합니다.</p>
+        </div>
+        <Badge className={persisted ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-100" : canAnalyze ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100" : "bg-slate-100 text-slate-600"}>
+          {persisted ? "저장 완료" : canAnalyze ? "저장 가능" : "입력 대기"}
+        </Badge>
+      </div>
       <div className="grid gap-2 md:grid-cols-3">
         {steps.map((step, index) => {
           const Icon = step.icon;
@@ -1600,8 +1611,8 @@ function Onboarding({
           <details className="maju-section-card overflow-hidden">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <span>
-              <span className="block text-sm font-black text-slate-950">저장 상태</span>
-              <span className="mt-0.5 block text-xs font-bold text-slate-500">저장 가능 여부와 확인 경로를 바로 봅니다.</span>
+              <span className="block text-sm font-black text-slate-950">검수·저장 상태</span>
+              <span className="mt-0.5 block text-xs font-bold text-slate-500">저장 가능 여부, 누락값, 확인 경로를 봅니다.</span>
               </span>
               <Badge className={canAnalyze ? "bg-teal-700 text-white" : pipelineMeta.persisted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
                 {pipelineMeta.persisted ? "저장 완료" : canAnalyze ? "저장 가능" : "확인 필요"}
@@ -1630,8 +1641,8 @@ function Onboarding({
           <details className="maju-section-card overflow-hidden" open={showOperationalReview}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <span>
-                <span className="block text-sm font-black text-slate-950">운영 확인</span>
-                <span className="mt-0.5 block text-xs font-bold text-slate-500">등록 후 원장, 대시보드, 지도 반영 상태만 확인합니다.</span>
+                <span className="block text-sm font-black text-slate-950">반영 화면 확인</span>
+                <span className="mt-0.5 block text-xs font-bold text-slate-500">원장, 대시보드, 지도에 같은 데이터가 보이는지 확인합니다.</span>
               </span>
               <Badge className={readinessPercent >= 80 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
                 준비율 {readinessPercent}%
@@ -1651,10 +1662,10 @@ function Onboarding({
             </div>
           </details>
 
-        <div className="maju-section-card scroll-mt-4 border-l-4 border-l-slate-950 p-4" id="entry-panel">
+        <div className="maju-section-card scroll-mt-4 border-l-4 border-l-teal-700 p-4" id="entry-panel">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Badge className="mb-3 bg-teal-700 text-white">2. 입력</Badge>
+              <Badge className="mb-3 bg-teal-700 text-white">입력</Badge>
               <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
               <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">등록 방식에 맞는 입력만 남겼습니다. 올리고, 확인하고, 저장하면 됩니다.</p>
             </div>
@@ -1999,7 +2010,7 @@ function Onboarding({
                     })}
                   </div>
                   <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-500">
-                    <span className="rounded-md bg-slate-900 px-2 py-0.5 font-black text-white">{activeReviewTab.label}</span>
+                    <span className="rounded-md bg-teal-700 px-2 py-0.5 font-black text-white">{activeReviewTab.label}</span>
                     <span className="truncate">{activeReviewTab.actionHint}</span>
                   </div>
                 </div>
@@ -2131,12 +2142,12 @@ function DataRegistrationQuickPanel({
         : "거래처 또는 매출 원장을 선택하고 등록 방식을 고르세요.";
 
   return (
-    <div className="maju-section-card overflow-hidden border-l-4 border-l-slate-950">
+    <div className="maju-section-card overflow-hidden border-l-4 border-l-teal-700">
       <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="p-3">
           <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center">
             <div className="flex min-w-[150px] items-center gap-2">
-              <Badge className="bg-teal-700 text-white ring-1 ring-inset ring-teal-700">1. 등록 설정</Badge>
+              <Badge className="bg-teal-700 text-white ring-1 ring-inset ring-teal-700">등록 설정</Badge>
               <Badge className={`w-fit px-2.5 py-1 text-[11px] font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
             </div>
             <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
@@ -2579,7 +2590,7 @@ function DeploymentReadinessChecklist({
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,auto)] lg:items-center">
         <div>
-          <Badge className="bg-slate-900 text-white">저장 후 체크</Badge>
+          <Badge className="bg-teal-700 text-white">저장 후 체크</Badge>
           <h2 className="mt-3 text-lg font-black text-slate-950">등록 후 확인할 화면</h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
             저장 이력, 거래처 원장, 지도·코스가 같은 고객사 기준으로 이어지는지 확인합니다.
@@ -2709,7 +2720,7 @@ function CoreFlowCheckPanel({
             >
               <div className="flex items-start justify-between gap-3">
                 <span className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-md bg-slate-900 text-white">
+                  <span className="grid h-9 w-9 place-items-center rounded-md bg-teal-700 text-white">
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
@@ -2853,7 +2864,7 @@ function RegistrationEntrySummary({
   const stateClassName = persisted
     ? "bg-emerald-100 text-emerald-800"
     : canAnalyze
-      ? "bg-blue-100 text-blue-800"
+      ? "bg-teal-100 text-teal-800"
       : rowsWaiting
         ? "bg-amber-100 text-amber-800"
         : "bg-slate-100 text-slate-600";
@@ -2904,13 +2915,13 @@ function OperationalDataSplit({
     <div className="rounded-md border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-200 p-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <Badge className="mb-2 bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200">1. 데이터 기준 선택</Badge>
-          <h2 className="text-xl font-black text-slate-950">무엇을 등록할지 먼저 선택하세요</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처는 고정 기준값, 매출은 반복 업데이트 값입니다.</p>
+          <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">등록 유형</Badge>
+          <h2 className="text-xl font-black text-slate-950">거래처 기준값과 매출 원장을 구분합니다</h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처는 처음 저장하고, 매출은 주기적으로 갱신합니다.</p>
         </div>
         <div className="grid gap-2 text-xs font-black text-slate-500 sm:grid-cols-2">
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">저장 대기 {rowsWaiting.toLocaleString()}행</span>
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">최근 반영 {latestUploadAt || "확인 필요"}</span>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">대기 {rowsWaiting.toLocaleString()}행</span>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">최근 {latestUploadAt || "없음"}</span>
         </div>
       </div>
 
@@ -2935,7 +2946,7 @@ function OperationalDataSplit({
                   </span>
                   <div className="min-w-0">
                     <p className={`text-base font-black ${active ? "text-white" : "text-slate-950"}`}>{card.label}</p>
-                    <p className={`mt-1 text-xs font-bold leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>{card.description}</p>
+                    <p className={`mt-1 text-xs font-bold leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>{card.rhythm}</p>
                   </div>
                 </div>
                 {active ? <CheckCircle2 className="h-5 w-5 shrink-0 text-white" /> : <Badge className="bg-slate-100 text-slate-600">선택</Badge>}
@@ -2978,7 +2989,7 @@ function DataRegistrationDecisionPanel({
 }) {
   const activeLabel = activeType === "customer-master" ? "거래처 등록" : "매출 원장";
   const modeLabel = entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력";
-  const syncTarget = activeType === "customer-master" ? "지도 · 거래처 히스토리 · 배송 코스" : "매출 원장 · 등급 · 운영 리포트";
+  const syncTarget = activeType === "customer-master" ? "지도 · 거래처 히스토리 · 배송 코스" : "매출 원장 · 등급 · AI 리포트";
   const modeHint =
     entryMode === "excel"
       ? "ERP 헤더 매핑 후 일괄 저장"
@@ -2990,13 +3001,13 @@ function DataRegistrationDecisionPanel({
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-200 p-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <Badge className="mb-2 bg-slate-100 text-slate-700">현재 선택 요약</Badge>
+          <Badge className="mb-2 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">현재 작업</Badge>
           <h2 className="text-lg font-black text-slate-950">{activeLabel} · {modeLabel}</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{modeHint}</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{modeHint} · {syncTarget}</p>
         </div>
         <div className="grid gap-2 text-xs font-black text-slate-600 sm:grid-cols-2">
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">저장 대기 {rowsWaiting.toLocaleString()}행</span>
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">최근 반영 {latestUploadAt || "확인 필요"}</span>
+          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">대기 {rowsWaiting.toLocaleString()}행</span>
+          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">최근 {latestUploadAt || "없음"}</span>
         </div>
       </div>
       <div className="grid gap-0 md:grid-cols-3">
@@ -3064,15 +3075,15 @@ function DocumentOcrRegistrationPanel({
   return (
     <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-3">
-        <label className="flex min-h-48 cursor-pointer flex-col justify-between rounded-md border-2 border-dashed border-blue-200 bg-blue-50/60 p-4 transition hover:bg-blue-50">
+        <label className="flex min-h-48 cursor-pointer flex-col justify-between rounded-md border-2 border-dashed border-teal-200 bg-teal-50/60 p-4 transition hover:bg-teal-50">
           <span>
-            <span className="grid h-11 w-11 place-items-center rounded-md bg-white text-blue-700 ring-1 ring-inset ring-blue-100">
+            <span className="grid h-11 w-11 place-items-center rounded-md bg-white text-teal-700 ring-1 ring-inset ring-teal-100">
               <FileSpreadsheet className="h-5 w-5" />
             </span>
             <span className="mt-4 block text-base font-black text-slate-950">OCR 보조 입력</span>
             <span className="mt-2 block text-sm font-semibold leading-6 text-slate-500">서류가 있으면 후보값을 채우고, 없으면 수기 등록으로 바로 진행합니다.</span>
           </span>
-          <span className="mt-4 w-fit rounded-md bg-white px-3 py-2 text-xs font-black text-blue-700">파일 선택</span>
+          <span className="mt-4 w-fit rounded-md bg-white px-3 py-2 text-xs font-black text-teal-700">파일 선택</span>
           <input className="sr-only" type="file" accept="image/*,.pdf" onChange={onDocumentFile} />
         </label>
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
@@ -3085,12 +3096,12 @@ function DocumentOcrRegistrationPanel({
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <Badge className="mb-2 bg-blue-100 text-blue-800">보조 입력값</Badge>
+              <Badge className="mb-2 bg-teal-100 text-teal-800">보조 입력값</Badge>
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-lg font-black text-slate-950">{filename || "서류 업로드 대기"}</h3>
                 {previewUrl ? (
                   <a
-                    className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-black text-blue-700 hover:bg-blue-100"
+                    className="inline-flex h-7 items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2.5 text-xs font-black text-teal-700 hover:bg-teal-100"
                     href={previewUrl}
                     rel="noopener noreferrer"
                     target="_blank"
@@ -3130,7 +3141,7 @@ function DocumentOcrRegistrationPanel({
               <label key={key} className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
                 <span className="text-xs font-black text-slate-500">{label}</span>
                 <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                   onChange={(event) => onManualChange({ ...manualDraft, [key]: event.target.value })}
                   value={String(manualDraft[key] ?? "")}
                 />
@@ -3369,7 +3380,7 @@ function BulkEntryProgress({
           <p className="text-sm font-black text-slate-950">대량 등록 준비 상태</p>
           <p className="mt-1 text-xs font-bold text-slate-500">파일, 매핑, 품질 검증 후 저장을 실행합니다.</p>
         </div>
-        <Badge className={complete ? "bg-emerald-700 text-white" : "bg-slate-900 text-white"}>
+        <Badge className={complete ? "bg-emerald-700 text-white" : "bg-teal-700 text-white"}>
           {doneCount}/4 완료
         </Badge>
       </div>
@@ -3434,7 +3445,7 @@ function BulkNextActionPanel({
           }
         : {
             badge: canAnalyze ? "저장 가능" : "저장 확인",
-            body: "원장 저장과 운영 리포트 갱신을 실행할 준비가 됐습니다.",
+            body: "원장 저장과 AI 리포트 갱신을 실행할 준비가 됐습니다.",
             buttonLabel: "저장 열기",
             disabled: false,
             icon: Check,
@@ -3708,6 +3719,8 @@ function DataQualityCard({
   onOpenSaveReview: () => void;
   summary: DataQualitySummary;
 }) {
+  const [issuePage, setIssuePage] = useState(1);
+  const [issuePageSize, setIssuePageSize] = useState<ListPageSize>(10);
   const hasRows = summary.rows > 0;
   const hasRowIssues = summary.issueRows.length > 0 || summary.invalidBusinessNumbers.length > 0;
   const hasIssues = hasRowIssues || summary.duplicateCandidates > 0;
@@ -3726,7 +3739,12 @@ function DataQualityCard({
       type: "사업자번호 오류"
     }))
   ].sort((a, b) => a.rowNumber - b.rowNumber);
-  const visibleIssues = issuePreview.slice(0, 4);
+  const issueTotalPages = Math.max(1, Math.ceil(issuePreview.length / issuePageSize));
+  const currentIssuePage = Math.min(issuePage, issueTotalPages);
+  const issueStart = (currentIssuePage - 1) * issuePageSize;
+  const visibleIssues = issuePreview.slice(issueStart, issueStart + issuePageSize);
+  const issuePageStart = issuePreview.length ? issueStart + 1 : 0;
+  const issuePageEnd = Math.min(issuePreview.length, issueStart + issuePageSize);
 
   return (
     <div className={`maju-section-card mb-4 overflow-hidden ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
@@ -3767,10 +3785,51 @@ function DataQualityCard({
                 <p className="text-sm font-black text-slate-950">보완 대상</p>
                 <p className="mt-1 text-xs font-bold text-slate-500">저장 전 아래 행을 먼저 확인하세요.</p>
               </div>
-              <Button className="bg-teal-700 text-white hover:bg-teal-800" onClick={onDownloadIssues} size="sm">
-                <Download className="h-4 w-4" />
-                문제 행 다운로드
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                  보기
+                  <select
+                    className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+                    onChange={(event) => {
+                      setIssuePageSize(Number(event.target.value) as ListPageSize);
+                      setIssuePage(1);
+                    }}
+                    value={issuePageSize}
+                  >
+                    {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}개
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500">
+                  {issuePageStart.toLocaleString()}-{issuePageEnd.toLocaleString()} / {issuePreview.length.toLocaleString()}건
+                </span>
+                <button
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={currentIssuePage <= 1}
+                  onClick={() => setIssuePage((page) => Math.max(1, page - 1))}
+                  type="button"
+                >
+                  이전
+                </button>
+                <span className="text-xs font-black text-slate-400">
+                  {currentIssuePage.toLocaleString()} / {issueTotalPages.toLocaleString()}
+                </span>
+                <button
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={currentIssuePage >= issueTotalPages}
+                  onClick={() => setIssuePage((page) => Math.min(issueTotalPages, page + 1))}
+                  type="button"
+                >
+                  다음
+                </button>
+                <Button className="bg-teal-700 text-white hover:bg-teal-800" onClick={onDownloadIssues} size="sm">
+                  <Download className="h-4 w-4" />
+                  문제 행 다운로드
+                </Button>
+              </div>
             </div>
             <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
               <div className="max-h-[320px] overflow-auto">
@@ -3798,7 +3857,7 @@ function DataQualityCard({
                 </table>
               </div>
             </div>
-            {issuePreview.length > visibleIssues.length ? <p className="text-xs font-bold text-amber-700">외 {issuePreview.length - visibleIssues.length}개 문제 행은 다운로드 파일에서 확인하세요.</p> : null}
+            {issuePreview.length > visibleIssues.length ? <p className="text-xs font-bold text-amber-700">다른 문제 행은 다음 페이지에서 계속 확인하거나 다운로드 파일로 볼 수 있습니다.</p> : null}
           </div>
         ) : (
           <div className="grid gap-3 rounded-md border border-emerald-100 bg-emerald-50 p-3 md:grid-cols-[minmax(0,1fr)_180px] md:items-center">
@@ -4078,10 +4137,17 @@ function MappingPresetCard({
 }
 
 function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
-  const latestUploads = uploads.slice(0, 4);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(10);
   const completedCount = uploads.filter((upload) => upload.status === "completed").length;
   const failedCount = uploads.filter((upload) => upload.status === "failed").length;
   const averageQuality = uploads.length ? Math.round(uploads.reduce((sum, upload) => sum + upload.qualityScore, 0) / uploads.length) : 0;
+  const totalPages = Math.max(1, Math.ceil(uploads.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const latestUploads = uploads.slice(start, start + pageSize);
+  const pageStart = uploads.length ? start + 1 : 0;
+  const pageEnd = Math.min(uploads.length, start + pageSize);
 
   return (
     <div className="maju-section-card mb-4 overflow-hidden">
@@ -4093,10 +4159,50 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
           </p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장된 업로드 결과와 품질, 중복 후보를 확인합니다.</p>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-xs lg:min-w-[320px]">
+        <div className="grid gap-2 text-xs lg:min-w-[520px] lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
           <MiniStatus label="완료" value={`${completedCount.toLocaleString()}건`} />
           <MiniStatus label="실패" value={`${failedCount.toLocaleString()}건`} />
           <MiniStatus label="평균 품질" value={uploads.length ? `${averageQuality}%` : "-"} />
+          {uploads.length ? (
+            <div className="flex flex-wrap items-center gap-1 rounded-md bg-white px-2 py-2">
+              <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                보기
+                <select
+                  className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value) as ListPageSize);
+                    setPage(1);
+                  }}
+                  value={pageSize}
+                >
+                  {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}개
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="rounded-full bg-slate-50 px-2 py-1 text-xs font-black text-slate-500">
+                {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {uploads.length.toLocaleString()}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                type="button"
+              >
+                이전
+              </button>
+              <button
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                type="button"
+              >
+                다음
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 

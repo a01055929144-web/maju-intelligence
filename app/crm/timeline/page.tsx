@@ -83,6 +83,8 @@ type AddressSearchResult = {
 
 type CustomerDetailTab = "ledger" | "history";
 type OperationFilter = "all" | "address-missing" | "business-check" | "business-number-missing" | "contact-missing" | "loading-missing" | "manager-missing";
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
@@ -188,6 +190,8 @@ export default function CrmTimelinePage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
   const [operationFilter, setOperationFilter] = useState<OperationFilter>("all");
+  const [customerPage, setCustomerPage] = useState(1);
+  const [customerPageSize, setCustomerPageSize] = useState<ListPageSize>(30);
 
   useEffect(() => {
     let active = true;
@@ -437,6 +441,13 @@ export default function CrmTimelinePage() {
         return matchesGrade && matchesOperation && matchesKeyword;
       });
   }, [customerSearch, customers, gradeFilter, operationFilter]);
+  const customerTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / customerPageSize));
+  const pagedCustomers = useMemo(() => {
+    const start = (customerPage - 1) * customerPageSize;
+    return filteredCustomers.slice(start, start + customerPageSize);
+  }, [customerPage, customerPageSize, filteredCustomers]);
+  const customerPageStart = filteredCustomers.length ? (customerPage - 1) * customerPageSize + 1 : 0;
+  const customerPageEnd = Math.min(filteredCustomers.length, customerPage * customerPageSize);
   const addressMissingCount = customers.filter((customer) => !customer.address).length;
   const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
   const businessNumberMissingCount = customers.filter((customer) => !customer.businessNumber).length;
@@ -458,6 +469,14 @@ export default function CrmTimelinePage() {
       (customer) => customer.id !== selectedCustomer.id && customer.customerName.trim().replace(/\s+/g, "").toLowerCase() === key
     );
   }, [customers, selectedCustomer.customerName, selectedCustomer.id]);
+
+  useEffect(() => {
+    setCustomerPage((current) => Math.min(Math.max(current, 1), customerTotalPages));
+  }, [customerTotalPages]);
+
+  useEffect(() => {
+    setCustomerPage(1);
+  }, [customerPageSize, customerSearch, gradeFilter, operationFilter]);
 
   function jumpToCustomer(customerId: string | undefined) {
     if (!customerId) return;
@@ -991,9 +1010,9 @@ export default function CrmTimelinePage() {
       <section className="mx-auto max-w-[1560px]">
         <WorkspaceSectionNav
           items={[
-            { active: true, description: "검색, 등급, 보완 필요 항목을 빠르게 좁힙니다.", href: "#customer-ledger-list", icon: Search, label: "목록·필터" },
-            { description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "원장 편집" },
-            { description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "활동 기록" }
+            { active: true, description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: "#customer-ledger-list", icon: Search, label: "목록" },
+            { description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "원장" },
+            { description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "기록" }
           ]}
           title="거래처 관리"
         />
@@ -1005,6 +1024,29 @@ export default function CrmTimelinePage() {
             title="거래처 목록"
             description="거래처를 선택하면 오른쪽에서 원장을 편집합니다."
           />
+          <div className="grid gap-2 border-t border-slate-200/80 bg-white p-3 sm:grid-cols-3">
+            {[
+              { label: "1. 거래처 선택", value: `${filteredCustomers.length.toLocaleString()}곳`, icon: Search },
+              { label: "2. 원장 확인", value: selectedCustomer.customerName || "미선택", icon: Building2 },
+              { label: "3. 첨부·메모", value: `${combinedAttachments.length.toLocaleString()}건 · ${historyCount.toLocaleString()}건`, icon: FileText }
+            ].map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2"
+                  key={item.label}
+                >
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md ${index === 1 ? "bg-teal-700 text-white" : "bg-white text-teal-700 ring-1 ring-inset ring-teal-100"}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-black text-slate-500">{item.label}</span>
+                    <span className="mt-0.5 block truncate text-sm font-black text-slate-950">{item.value}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
           {/*
             검색·필터 사이드바(360~400px)가 거래처 상세(원장/첨부자료) 그리드 옆에 항상 펼쳐져 있으면,
             상세 쪽에 실제로 남는 폭이 좁아져 안의 정보가 눌려 보였습니다. 거래처를 고르면 목록을
@@ -1072,7 +1114,7 @@ export default function CrmTimelinePage() {
                         <button
                           className={`h-9 rounded-md border text-xs font-black transition ${
                             gradeFilter === grade
-                              ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
+                              ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
                               : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
                           }`}
                           key={grade}
@@ -1149,14 +1191,63 @@ export default function CrmTimelinePage() {
               </div>
             ) : null}
             {filteredCustomers.length ? (
+              <div className="space-y-2 border-b border-slate-200/80 bg-white px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-500">
+                    보기
+                    <select
+                      className="h-6 border-0 bg-transparent p-0 text-[11px] font-black text-slate-900 outline-none focus:ring-0"
+                      onChange={(event) => setCustomerPageSize(Number(event.target.value) as ListPageSize)}
+                      value={customerPageSize}
+                    >
+                      {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}개
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-500">
+                    {customerPageStart.toLocaleString()}-{customerPageEnd.toLocaleString()} / {filteredCustomers.length.toLocaleString()}곳
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={customerPage <= 1}
+                    onClick={() => setCustomerPage((page) => Math.max(1, page - 1))}
+                    type="button"
+                  >
+                    이전
+                  </button>
+                  <span className="px-1 text-[11px] font-black text-slate-400">
+                    {customerPage.toLocaleString()} / {customerTotalPages.toLocaleString()}
+                  </span>
+                  <button
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={customerPage >= customerTotalPages}
+                    onClick={() => setCustomerPage((page) => Math.min(customerTotalPages, page + 1))}
+                    type="button"
+                  >
+                    다음
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {filteredCustomers.length ? (
               <div className="grid grid-cols-[20px_minmax(0,1fr)_44px_64px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
                 <input
-                  aria-label="현재 목록 전체 선택"
-                  checked={filteredCustomers.some(({ customer }) => Boolean(customer.id)) && filteredCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
+                  aria-label="현재 페이지 전체 선택"
+                  checked={pagedCustomers.some(({ customer }) => Boolean(customer.id)) && pagedCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
                   className="h-3.5 w-3.5 shrink-0"
                   onChange={(event) => {
-                    const ids = filteredCustomers.map(({ customer }) => customer.id).filter((id): id is string => Boolean(id));
-                    setBulkSelectedIds(event.target.checked ? new Set(ids) : new Set());
+                    const pageIds = pagedCustomers.map(({ customer }) => customer.id).filter((id): id is string => Boolean(id));
+                    setBulkSelectedIds((current) => {
+                      if (event.target.checked) return new Set([...Array.from(current), ...pageIds]);
+                      const next = new Set(current);
+                      pageIds.forEach((id) => next.delete(id));
+                      return next;
+                    });
                   }}
                   type="checkbox"
                 />
@@ -1166,7 +1257,7 @@ export default function CrmTimelinePage() {
               </div>
             ) : null}
             <div className="divide-y divide-slate-100">
-              {filteredCustomers.map(({ customer, index }) => {
+              {pagedCustomers.map(({ customer, index }) => {
                 const issues = customerOperationalIssues(customer);
                 const selected = index === selectedIndex;
                 return (
@@ -1413,7 +1504,7 @@ export default function CrmTimelinePage() {
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wide text-blue-600">Customer Ledger</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-teal-700">거래처 원장</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">기본정보 / 배송정보</h3>
                   </div>
                   {isEditing ? (
@@ -1435,9 +1526,9 @@ export default function CrmTimelinePage() {
                 ) : null}
                 {isEditing && draftCustomer ? (
                   <div className="p-4">
-                    <div className="maju-panel border-blue-100 bg-blue-50/60 p-3">
+                    <div className="maju-panel border-teal-100 bg-teal-50/60 p-3">
                       <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-                        <MapPin className="h-4 w-4 text-blue-700" />
+                        <MapPin className="h-4 w-4 text-teal-700" />
                         주소 API 검색
                       </div>
                       <div className="mt-3 flex flex-col gap-2 lg:flex-row">
@@ -1467,19 +1558,19 @@ export default function CrmTimelinePage() {
                           {isAddressSearching ? "검색 중" : "주소 검색"}
                         </button>
                       </div>
-                      {addressSearchMessage ? <p className="mt-2 text-xs font-black text-blue-700">{addressSearchMessage}</p> : null}
+                      {addressSearchMessage ? <p className="mt-2 text-xs font-black text-teal-700">{addressSearchMessage}</p> : null}
                       {addressResults.length ? (
                         <div className="mt-3 max-h-56 space-y-2 overflow-auto">
                           {addressResults.map((result) => (
                             <button
-                              className="maju-filter-box w-full bg-white p-3 text-left hover:border-blue-300 hover:bg-blue-50"
+                              className="maju-filter-box w-full bg-white p-3 text-left hover:border-teal-300 hover:bg-teal-50"
                               key={`${result.address}-${result.longitude}-${result.latitude}`}
                               onClick={() => selectAddress(result)}
                               type="button"
                             >
                               <span className="block text-sm font-black text-slate-950">{result.address}</span>
                               {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
-                              <span className="mt-1 block text-xs font-black text-blue-700">
+                              <span className="mt-1 block text-xs font-black text-teal-700">
                                 {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
                               </span>
                             </button>
@@ -1487,7 +1578,7 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-3 gap-y-3">
+                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-3 gap-y-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
@@ -1554,7 +1645,7 @@ export default function CrmTimelinePage() {
 
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header px-4 py-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
+                  <p className="text-xs font-black uppercase tracking-wide text-teal-700">첨부자료</p>
                   <h3 className="mt-1 text-base font-black text-slate-950">첨부자료 / 적재위치</h3>
                 </div>
                 <div className="p-4">
@@ -1573,7 +1664,7 @@ export default function CrmTimelinePage() {
                         <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
                         <p className="mt-1 text-sm font-black text-slate-950">파일 업로드와 외부 URL 등록을 구분해서 저장합니다.</p>
                       </div>
-                      <Badge className="w-fit bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-100">
+                      <Badge className="w-fit bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
                         파일 선택 즉시 저장
                       </Badge>
                     </div>
@@ -1606,8 +1697,8 @@ export default function CrmTimelinePage() {
                         </label>
                       </div>
                       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,.8fr)]">
-                        <label className="maju-panel flex min-h-28 cursor-pointer items-center gap-3 border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-700 text-white">
+                        <label className="maju-panel flex min-h-28 cursor-pointer items-center gap-3 border-dashed border-teal-200 bg-teal-50/60 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
                             <Plus className="h-4 w-4" />
                           </span>
                           <span className="min-w-0">
@@ -1620,7 +1711,7 @@ export default function CrmTimelinePage() {
                             {newAttachmentFiles.length ? (
                               <span className="mt-2 flex flex-wrap gap-1">
                                 {newAttachmentFiles.slice(0, 4).map((file) => (
-                                  <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-blue-100" key={`${file.name}-${file.size}`}>
+                                  <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-teal-100" key={`${file.name}-${file.size}`}>
                                     {file.name}
                                   </span>
                                 ))}
@@ -1713,7 +1804,7 @@ export default function CrmTimelinePage() {
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wide text-violet-600">History</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-teal-700">활동 기록</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">메모 히스토리</h3>
                     <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 시간순으로 누적합니다.</p>
                   </div>
@@ -1813,7 +1904,7 @@ export default function CrmTimelinePage() {
                   <h3 className="text-base font-black text-slate-950">최근 액션</h3>
                   <p className="mt-1 text-sm font-medium leading-6 text-slate-500">메모 저장, 방문 결과, 견적 요청이 거래처 기준으로 누적됩니다.</p>
                 </div>
-                <div className="max-h-[620px] space-y-3 overflow-auto bg-slate-50/60 p-3 xl:max-h-[calc(100vh-360px)]">
+                <div className="space-y-3 bg-slate-50/60 p-3">
                   {timeline.length ? (
                     timeline.map((item) => (
                       <div key={item.id} className="maju-stat-card p-3">
@@ -2295,10 +2386,10 @@ function HistoryInputSummary({
 }) {
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="maju-panel border-violet-100 bg-violet-50/80 p-3">
+      <div className="maju-panel border-teal-100 bg-teal-50/80 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className="bg-white text-violet-700 ring-1 ring-inset ring-violet-200">기록 요약</Badge>
-          <Badge className="bg-violet-700 text-white">{historyCount}건</Badge>
+          <Badge className="bg-white text-teal-700 ring-1 ring-inset ring-teal-200">기록 요약</Badge>
+          <Badge className="bg-teal-700 text-white">{historyCount}건</Badge>
         </div>
         <p className="mt-2 text-sm font-black text-slate-950">
           {latestNote ? "최근 메모가 저장 이력으로 관리 중입니다." : "아직 저장된 메모가 없습니다."}
@@ -2330,15 +2421,15 @@ function LoadingPositionFieldCard({
   const ready = Boolean(loadingPosition && attachmentCount > 0);
 
   return (
-    <div className={`maju-section-card p-4 ${ready ? "border-blue-100 bg-blue-50/80" : "border-amber-200 bg-amber-50/80"}`}>
+    <div className={`maju-section-card p-4 ${ready ? "border-teal-100 bg-teal-50/80" : "border-amber-200 bg-amber-50/80"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={ready ? "bg-blue-700 text-white" : "bg-amber-500 text-white"}>배송 핵심</Badge>
+            <Badge className={ready ? "bg-teal-700 text-white" : "bg-amber-500 text-white"}>배송 핵심</Badge>
             <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{attachmentCount}개 자료</Badge>
           </div>
           <h4 className="mt-3 text-base font-black text-slate-950">배송 적재위치</h4>
-          <p className="mt-2 rounded-md border border-white/80 bg-white px-3 py-2 text-sm font-black leading-6 text-blue-900">
+          <p className="mt-2 rounded-md border border-white/80 bg-white px-3 py-2 text-sm font-black leading-6 text-teal-900">
             {loadingPosition || "배송 적재위치가 아직 등록되지 않았습니다."}
           </p>
           <p className="mt-2 text-xs font-bold leading-5 text-slate-600">
@@ -2392,7 +2483,7 @@ function AttachmentChecklistPanel({
             key={item.type}
             className={`grid gap-2 px-4 py-3 md:grid-cols-[140px_72px_80px_minmax(0,1fr)] md:items-center md:gap-3 ${
               item.type === "loading_position"
-                ? "bg-blue-50/60"
+                ? "bg-teal-50/60"
                 : item.count > 0
                   ? "bg-emerald-50/40"
                   : "bg-white"
@@ -2400,7 +2491,7 @@ function AttachmentChecklistPanel({
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-slate-950">{item.label}</p>
-              {item.type === "loading_position" ? <p className="mt-0.5 text-[11px] font-black text-blue-700">배송 최우선 자료</p> : null}
+              {item.type === "loading_position" ? <p className="mt-0.5 text-[11px] font-black text-teal-700">배송 최우선 자료</p> : null}
             </div>
             <Badge className={`w-fit ${item.required ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100" : "bg-slate-100 text-slate-600"}`}>
               {item.required ? "필수" : "선택"}

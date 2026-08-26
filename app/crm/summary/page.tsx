@@ -36,6 +36,8 @@ type OperationsSummaryEntry = {
 };
 
 type StatusFilter = "all" | "정상" | "휴업" | "폐업" | "확인 필요";
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 function getAdminCompanyIdFromUrl() {
   if (typeof window === "undefined") return "";
@@ -100,6 +102,8 @@ export default function CrmSummaryPage() {
   const [operationsSummary, setOperationsSummary] = useState<Record<string, OperationsSummaryEntry>>({});
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [tablePage, setTablePage] = useState(1);
+  const [tablePageSize, setTablePageSize] = useState<ListPageSize>(30);
   const [exportMessage, setExportMessage] = useState("");
   const [isExportingImage, setIsExportingImage] = useState(false);
   const exportTableRef = useRef<HTMLDivElement>(null);
@@ -244,6 +248,22 @@ export default function CrmSummaryPage() {
       return matchesStatus && matchesKeyword;
     });
   }, [customers, statusFilter, tableSearch]);
+  const tableTotalPages = Math.max(1, Math.ceil(filteredRows.length / tablePageSize));
+  const currentTablePage = Math.min(tablePage, tableTotalPages);
+  const pagedRows = useMemo(() => {
+    const start = (currentTablePage - 1) * tablePageSize;
+    return filteredRows.slice(start, start + tablePageSize);
+  }, [currentTablePage, filteredRows, tablePageSize]);
+  const tablePageStart = filteredRows.length ? (currentTablePage - 1) * tablePageSize + 1 : 0;
+  const tablePageEnd = Math.min(filteredRows.length, currentTablePage * tablePageSize);
+
+  useEffect(() => {
+    setTablePage((current) => Math.min(Math.max(current, 1), tableTotalPages));
+  }, [tableTotalPages]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [statusFilter, tablePageSize, tableSearch]);
 
   async function downloadExcel() {
     setExportMessage("");
@@ -303,15 +323,15 @@ export default function CrmSummaryPage() {
       companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="전체 거래처, 사업자 상태, 메모·첨부 현황"
-      title="거래처 전체 현황"
+      subtitle="거래처, 사업자 상태, 메모·첨부 현황"
+      title="전체 현황"
       userName={isAdminPreview ? "관리자" : "정두영"}
     >
       <section className="mx-auto max-w-[1560px] space-y-3">
         <div className="maju-section-card">
           <SectionHeader
             eyebrow="지도 작업공간"
-            title="거래처 전체 현황"
+            title="전체 현황"
             description="지도 홈이 사용하는 거래처 기준입니다."
           />
           <div className="p-3">
@@ -423,26 +443,71 @@ export default function CrmSummaryPage() {
               <Search className="h-4 w-4 text-slate-400" />
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
-                onChange={(event) => setTableSearch(event.target.value)}
+                onChange={(event) => {
+                  setTableSearch(event.target.value);
+                  setTablePage(1);
+                }}
                 placeholder="상호명, 대표자, 연락처, 사업자번호 검색"
                 value={tableSearch}
               />
             </label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {(["all", "정상", "휴업", "폐업", "확인 필요"] as const).map((status) => (
                 <button
                   className={`rounded-md border px-2.5 py-1.5 text-xs font-black transition ${
                     statusFilter === status
-                      ? "border-slate-900 bg-slate-900 text-white"
+                      ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
                       : "border-transparent bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                   }`}
                   key={status}
-                  onClick={() => setStatusFilter(status)}
+                  onClick={() => {
+                    setStatusFilter(status);
+                    setTablePage(1);
+                  }}
                   type="button"
                 >
                   {status === "all" ? "전체" : status} {statusCounts[status].toLocaleString()}
                 </button>
               ))}
+              <label className="ml-1 flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                보기
+                <select
+                  className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+                  onChange={(event) => {
+                    setTablePageSize(Number(event.target.value) as ListPageSize);
+                    setTablePage(1);
+                  }}
+                  value={tablePageSize}
+                >
+                  {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}개
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500">
+                {tablePageStart.toLocaleString()}-{tablePageEnd.toLocaleString()} / {filteredRows.length.toLocaleString()}곳
+              </span>
+              <button
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={currentTablePage <= 1}
+                onClick={() => setTablePage((page) => Math.max(1, page - 1))}
+                type="button"
+              >
+                이전
+              </button>
+              <span className="px-1 text-xs font-black text-slate-400">
+                {currentTablePage.toLocaleString()} / {tableTotalPages.toLocaleString()}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={currentTablePage >= tableTotalPages}
+                onClick={() => setTablePage((page) => Math.min(tableTotalPages, page + 1))}
+                type="button"
+              >
+                다음
+              </button>
             </div>
           </div>
           <div className="bg-white" id="crm-summary-print-target" ref={exportTableRef}>
@@ -464,7 +529,7 @@ export default function CrmSummaryPage() {
             </div>
           )}
           <div className="divide-y divide-slate-100">
-            {filteredRows.map((customer) => {
+            {pagedRows.map((customer) => {
               const summaryEntry = customer.id ? operationsSummary[customer.id] : undefined;
               const status = customer.businessStatus || "확인 필요";
               return (

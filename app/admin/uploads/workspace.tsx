@@ -17,11 +17,15 @@ const statusCopy = {
 };
 
 type UploadStatusFilter = keyof typeof statusCopy;
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[] }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<UploadStatusFilter>("all");
   const [companyId, setCompanyId] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(30);
 
   const companyOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; total: number; issues: number }>();
@@ -45,6 +49,14 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       return matchesCompany && matchesStatus && matchesQuery;
     });
   }, [companyId, query, status, uploads]);
+  const totalPages = Math.max(1, Math.ceil(filteredUploads.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedUploads = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredUploads.slice(start, start + pageSize);
+  }, [currentPage, filteredUploads, pageSize]);
+  const pageStart = filteredUploads.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(filteredUploads.length, currentPage * pageSize);
   const issueUploads = useMemo(() => uploads.filter(needsReview), [uploads]);
   const activeCompany = companyOptions.find((company) => company.id === companyId);
   const issueReasons = useMemo(() => getIssueReasonSummary(uploads), [uploads]);
@@ -122,7 +134,10 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             className="h-full min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(1);
+            }}
             placeholder="파일명, 고객사, 날짜 검색..."
             value={query}
           />
@@ -132,7 +147,10 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
           <select
             className="h-11 w-full rounded-md border border-border bg-white px-3 text-sm font-black outline-none transition focus:ring-2 focus:ring-ring"
             value={companyId}
-            onChange={(event) => setCompanyId(event.target.value)}
+            onChange={(event) => {
+              setCompanyId(event.target.value);
+              setPage(1);
+            }}
           >
             <option value="all">전체 고객사</option>
             {companyOptions.map((company) => (
@@ -149,7 +167,10 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
                 status === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-foreground hover:bg-muted"
               }`}
               key={key}
-              onClick={() => setStatus(key)}
+              onClick={() => {
+                setStatus(key);
+                setPage(1);
+              }}
               type="button"
             >
               {statusCopy[key]}
@@ -163,9 +184,48 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       </div>
 
       <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-muted-foreground">검색 결과</span>
-          <span className="ml-2 font-black">{filteredUploads.length.toLocaleString()}건</span>
+          <span className="font-black">{filteredUploads.length.toLocaleString()}건</span>
+          <label className="ml-2 flex h-8 items-center gap-1 rounded-md border border-border bg-white px-2 text-xs font-black text-muted-foreground">
+            보기
+            <select
+              className="h-6 border-0 bg-transparent p-0 text-xs font-black text-foreground outline-none focus:ring-0"
+              onChange={(event) => {
+                setPageSize(Number(event.target.value) as ListPageSize);
+                setPage(1);
+              }}
+              value={pageSize}
+            >
+              {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}개
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-muted-foreground">
+            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredUploads.length.toLocaleString()}건
+          </span>
+          <button
+            className="rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            type="button"
+          >
+            이전
+          </button>
+          <span className="text-xs font-black text-muted-foreground">
+            {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+          </span>
+          <button
+            className="rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            type="button"
+          >
+            다음
+          </button>
         </div>
         <div className="text-right text-xs font-bold text-muted-foreground">
           {activeCompany ? (
@@ -192,7 +252,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
               <span className="text-center">운영 액션</span>
             </div>
             <div className="divide-y divide-border">
-              {filteredUploads.map((upload) => (
+              {pagedUploads.map((upload) => (
                 <UploadRow key={upload.id} upload={upload} />
               ))}
             </div>

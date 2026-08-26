@@ -10,6 +10,8 @@ export default async function TodayRoutePage({ searchParams }: { searchParams?: 
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
-  const dashboardHref = adminSession && !customerSession && companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard";
+  const params = new URLSearchParams({ view: "course" });
+  if (adminSession && !customerSession && companyId) params.set("companyId", companyId);
+  const dashboardHref = `/dashboard?${params.toString()}`;
   redirect(dashboardHref);
 }

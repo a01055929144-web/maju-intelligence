@@ -216,7 +216,7 @@ export function MobileDeliveryProofPanel({
         {messageChannels.map((item) => (
           <button
             className={`h-10 rounded-lg border px-2 text-xs font-black transition ${
-              messageChannel === item.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
+              messageChannel === item.value ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
             onClick={() => setMessageChannel(item.value)}

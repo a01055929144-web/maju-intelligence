@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { PermitLeadActionType, recordPermitLeadAction } from "@/lib/store";
 
-const VALID_ACTION_TYPES: PermitLeadActionType[] = ["call", "dm", "visit", "hold", "exclude"];
+const VALID_ACTION_TYPES: PermitLeadActionType[] = ["call", "dm", "visit", "hold", "exclude", "quote"];
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

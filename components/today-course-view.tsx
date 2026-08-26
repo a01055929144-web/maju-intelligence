@@ -327,8 +327,8 @@ export function TodayCourseView({
       : "xl:grid-cols-[280px_minmax(0,1fr)_400px]";
 
   return (
-    <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:min-h-0 ${routeGridColsClassName}`}>
-      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
+    <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-visible rounded-b-xl bg-[#f6f8fb] xl:min-h-0 xl:overflow-hidden ${routeGridColsClassName}`}>
+      <aside className="flex min-h-0 flex-col border-r border-slate-200/80 bg-white xl:h-full">
         {routeLeftPanelCollapsed ? (
           <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
             <button
@@ -392,7 +392,7 @@ export function TodayCourseView({
                 </div>
               </div>
             </div>
-            <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 space-y-2 overflow-auto p-3 xl:max-h-none">
+            <div className="space-y-2 p-3 xl:min-h-0 xl:flex-1 xl:overflow-auto">
               <button
                 className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-teal-300 bg-teal-50 ring-1 ring-teal-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
                 onClick={() => onSelectVehicle("all")}
@@ -451,7 +451,7 @@ export function TodayCourseView({
         ) : null}
       </div>
 
-      <aside className="min-h-0 border-l border-slate-200/80 bg-white">
+      <aside className="min-h-0 border-l border-slate-200/80 bg-white xl:h-full">
         {routePanelCollapsed ? (
           <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
             <button
@@ -503,7 +503,7 @@ export function TodayCourseView({
                 요약 · 티맵 계산
               </button>
             </div>
-            <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
+            <div className="min-h-0 xl:flex-1 xl:overflow-auto">
               {routeRightPanelTab === "summary" ? (
               <div className="border-b border-slate-200/80 p-3">
                 <div className="maju-panel mb-3 p-3">
@@ -645,7 +645,7 @@ export function TodayCourseView({
                   </span>
                 </div>
                 {selectedRouteStores.length ? (
-                  <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+                  <div className="space-y-2">
                     {selectedRouteStores.map((store, index) => (
                       <button
                         className={`w-full rounded-md border p-3 text-left transition hover:bg-white ${
@@ -722,7 +722,7 @@ export function TodayCourseView({
                         {courseFuelPriceReady ? `${courseFuelType === "gasoline" ? "휘발유" : "경유"} ${courseFuelPricePerLiter.toLocaleString()}원/L 기준` : "유가 정보를 불러오는 중"}
                       </span>
                     </div>
-                    <div className="max-h-[220px] space-y-1.5 overflow-auto pr-1">
+                    <div className="space-y-1.5">
                       {routeSequence.legs.map((leg, index) => {
                         const fromLabel = index === 0 ? routeOriginLabel : sequencedRouteStores[index - 1]?.name || "이전 경유지";
                         const toLabel = sequencedRouteStores[index]?.name || `경유지 ${index + 1}`;

@@ -49,7 +49,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
     {
       description: "단가표와 방문일 확정",
       label: "견적 요청",
-      tone: "blue" as const,
+      tone: "teal" as const,
       value: `${pipeline.quoteRequests}건`
     },
     {
@@ -72,30 +72,30 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="방문 결과와 견적 요청을 매출 후보로 정리합니다."
-      title="매출 기회"
+      subtitle="방문 기록과 견적 요청을 매출 후보로 정리합니다."
+      title="기회 관리"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <WorkspaceSectionNav
           items={[
-            { active: true, badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: "#pipeline-summary", icon: TrendingUp, label: "기회 현황" },
-            { description: "방문·원장 연결 기준", href: "#pipeline-basis", icon: FileText, label: "기준" },
+            { active: true, badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: "#pipeline-summary", icon: TrendingUp, label: "현황" },
+            { description: "방문·원장 연결", href: "#pipeline-basis", icon: FileText, label: "기준" },
             { description: "견적·관심·보류", href: "#pipeline-status", icon: Percent, label: "상태" },
             { description: "후속 영업 대상", href: "#pipeline-table", icon: ReceiptText, label: "후보" }
           ]}
-          title="매출 기회"
+          title="기회 관리"
         />
 
         <div className="min-w-0 space-y-4">
         <div className="maju-section-card scroll-mt-28" id="pipeline-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="maju-section-title">매출 기회 현황</p>
-              <p className="mt-1 maju-muted-label">방문 메모 · 견적 요청 기준</p>
+              <p className="maju-section-title">기회 현황</p>
+              <p className="mt-1 maju-muted-label">방문 기록 · 견적 요청</p>
             </div>
-            <Badge className="bg-blue-100 text-blue-800">{pipeline.items.length.toLocaleString()}건 관리 중</Badge>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{pipeline.items.length.toLocaleString()}건 관리</Badge>
           </div>
           <div className="grid md:grid-cols-4">
             <Metric icon={Banknote} label="예상 총매출" value={`${pipeline.expectedRevenue.toLocaleString()}만원`} />
@@ -145,12 +145,12 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           <section className="maju-section-card scroll-mt-28" id="pipeline-table">
             <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-black text-slate-950">성장 후보 목록</h2>
+                <h2 className="text-lg font-black text-slate-950">후보 목록</h2>
                 <p className="mt-1 text-sm font-semibold text-slate-500">견적·관심 거래처 우선순위</p>
               </div>
-              <Badge className="bg-slate-900 text-white">가중 매출 {pipeline.weightedRevenue.toLocaleString()}만원</Badge>
+              <Badge className="bg-teal-700 text-white">가중 {pipeline.weightedRevenue.toLocaleString()}만원</Badge>
             </div>
-            <div className="max-h-[640px] overflow-auto">
+            <div className="overflow-x-auto">
               <table className="w-full min-w-[880px] border-separate border-spacing-0 text-sm">
                 <thead className="sticky top-0 z-10 bg-white">
                   <tr className="text-left text-xs font-black text-slate-500">
@@ -163,7 +163,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
                 </thead>
                 <tbody>
                   {pipeline.items.map((item, index) => (
-                    <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-blue-50/60">
+                    <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/60">
                       <td className="border-b border-slate-100 px-4 py-3 text-center text-xs text-slate-400">{index + 1}</td>
                       <td className="border-b border-slate-100 px-4 py-3">
                         <p className="font-black text-slate-950">{item.leadName}</p>
@@ -172,7 +172,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
                       <td className="border-b border-slate-100 px-4 py-3">
                         <div className="flex flex-wrap gap-1.5">
                           <Badge className="bg-slate-100 text-slate-700">{item.region}</Badge>
-                          <Badge className="bg-blue-100 text-blue-800">{resultLabels[item.result] || item.result}</Badge>
+                          <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{resultLabels[item.result] || item.result}</Badge>
                         </div>
                       </td>
                       <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black">{Math.round(item.probability * 100)}%</td>
@@ -221,9 +221,9 @@ function PipelineBasisPanel({
   ];
   const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);
   const actionLinks = [
-    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "방문 메모 보완" },
-    { href: withCompanyQuery("/revenue/transactions"), icon: ReceiptText, label: "매출 원장 확인" },
-    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈에서 코스 조정" }
+    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "메모 보완" },
+    { href: withCompanyQuery("/revenue/transactions"), icon: ReceiptText, label: "원장 확인" },
+    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈" }
   ];
 
   return (
@@ -285,13 +285,13 @@ function PipelineActionCard({
 }: {
   description: string;
   label: string;
-  tone: "blue" | "emerald" | "slate";
+  tone: "emerald" | "slate" | "teal";
   value: string;
 }) {
   const toneClassName = {
-    blue: "border-blue-100 bg-blue-50/70 text-blue-800",
     emerald: "border-emerald-100 bg-emerald-50/70 text-emerald-800",
-    slate: "border-slate-200 bg-slate-50/80 text-slate-800"
+    slate: "border-slate-200 bg-slate-50/80 text-slate-800",
+    teal: "border-teal-100 bg-teal-50/70 text-teal-800"
   }[tone];
 
   return (

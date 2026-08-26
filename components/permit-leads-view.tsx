@@ -1605,58 +1605,63 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             </div>
           ) : (
             <div className="flex min-h-[420px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-black text-slate-500">선택 {selectedLeads.length.toLocaleString()}곳</span>
-                  {selectedLeads.length ? (
-                    <span className="flex flex-wrap items-center gap-1">
-                      <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">전화 {selectedLeadSummary.phone.toLocaleString()}</span>
-                      <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-black text-pink-700 ring-1 ring-inset ring-pink-100">인스타 {selectedLeadSummary.instagram.toLocaleString()}</span>
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">견적 {selectedLeadSummary.quoteRequested.toLocaleString()}</span>
+              <div className="shrink-0 divide-y divide-slate-100 border-b border-slate-200 bg-white">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">
+                      선택 {selectedLeads.length.toLocaleString()}곳
                     </span>
-                  ) : null}
-                  <button className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50" onClick={toggleAllVisibleLeads} type="button">
-                    {allVisibleSelected ? "현재 페이지 선택 해제" : "현재 페이지 전체 선택"}
-                  </button>
-                  <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-500">
-                    보기
-                    <select
-                      className="h-6 border-0 bg-transparent p-0 text-[11px] font-black text-slate-900 outline-none focus:ring-0"
-                      onChange={(event) => setLeadPageSize(Number(event.target.value) as ListPageSize)}
-                      value={leadPageSize}
+                    {selectedLeads.length ? (
+                      <span className="flex flex-wrap items-center gap-1">
+                        <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">전화 {selectedLeadSummary.phone.toLocaleString()}</span>
+                        <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-black text-pink-700 ring-1 ring-inset ring-pink-100">인스타 {selectedLeadSummary.instagram.toLocaleString()}</span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">견적 {selectedLeadSummary.quoteRequested.toLocaleString()}</span>
+                      </span>
+                    ) : null}
+                    <button className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600 hover:bg-slate-50" onClick={toggleAllVisibleLeads} type="button">
+                      {allVisibleSelected ? "페이지 선택 해제" : "현재 페이지 선택"}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-500">
+                      보기
+                      <select
+                        className="h-6 border-0 bg-transparent p-0 text-[11px] font-black text-slate-900 outline-none focus:ring-0"
+                        onChange={(event) => setLeadPageSize(Number(event.target.value) as ListPageSize)}
+                        value={leadPageSize}
+                      >
+                        {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}개
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-500">
+                      {leadPageStart.toLocaleString()}-{leadPageEnd.toLocaleString()} / {sortedLeads.length.toLocaleString()}곳
+                    </span>
+                    <button
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={leadPage <= 1}
+                      onClick={() => setLeadPage((page) => Math.max(1, page - 1))}
+                      type="button"
                     >
-                      {LIST_PAGE_SIZE_OPTIONS.map((size) => (
-                        <option key={size} value={size}>
-                          {size}개
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-500">
-                    {leadPageStart.toLocaleString()}-{leadPageEnd.toLocaleString()} / {sortedLeads.length.toLocaleString()}곳
-                  </span>
-                  <button
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    disabled={leadPage <= 1}
-                    onClick={() => setLeadPage((page) => Math.max(1, page - 1))}
-                    type="button"
-                  >
-                    이전
-                  </button>
-                  <span className="text-[11px] font-black text-slate-400">
-                    {leadPage.toLocaleString()} / {leadTotalPages.toLocaleString()}
-                  </span>
-                  <button
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    disabled={leadPage >= leadTotalPages}
-                    onClick={() => setLeadPage((page) => Math.min(leadTotalPages, page + 1))}
-                    type="button"
-                  >
-                    다음
-                  </button>
+                      이전
+                    </button>
+                    <span className="text-[11px] font-black text-slate-400">
+                      {leadPage.toLocaleString()} / {leadTotalPages.toLocaleString()}
+                    </span>
+                    <button
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={leadPage >= leadTotalPages}
+                      onClick={() => setLeadPage((page) => Math.min(leadTotalPages, page + 1))}
+                      type="button"
+                    >
+                      다음
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 bg-slate-50/70 px-3 py-2">
                   <button
                     className="maju-button-secondary h-8 text-xs disabled:opacity-50"
                     disabled={!selectedLeads.length || Boolean(bulkActionBusy)}
@@ -1729,14 +1734,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     선택 해제
                   </button>
                 </div>
-                </div>
                 {selectedLeads.length ? (
-                  <p className="mt-1.5 text-[11px] font-bold text-slate-400">
+                  <p className="bg-slate-50/70 px-3 pb-2 text-[11px] font-bold text-slate-400">
                     선택한 리드는 현재 필터 화면 기준으로 처리됩니다. 전화·DM·견적·재연락 기록은 영업 이력에 저장됩니다.
                   </p>
                 ) : null}
               </div>
-              <div className="overflow-x-auto">
+              <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
               <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>

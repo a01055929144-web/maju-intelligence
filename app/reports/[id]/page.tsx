@@ -119,8 +119,8 @@ export default async function ReportDetailPage({
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 월 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
-      title="운영 리포트"
+      subtitle={`거래처 ${report.customers}개 · 지역 ${report.regions}개 · 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
+      title="AI 리포트"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
@@ -146,7 +146,7 @@ export default async function ReportDetailPage({
               <div className="mt-3 grid gap-2">
                 <ReportRunMetric label="회사 건강도" value={`${report.health.total}점`} />
                 <ReportRunMetric label="우선 보완 항목" value={primaryAction.label} />
-                <ReportRunMetric label="리포트 신뢰도" value={`${dataConfidence}%`} />
+                <ReportRunMetric label="데이터 신뢰도" value={`${dataConfidence}%`} />
               </div>
             </div>
           </CardContent>
@@ -243,7 +243,7 @@ export default async function ReportDetailPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
-                리포트 신뢰도
+                데이터 신뢰도
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -253,7 +253,7 @@ export default async function ReportDetailPage({
               </div>
               <Progress value={dataConfidence} />
               <p className="mt-3 text-xs font-semibold leading-5 text-muted-foreground">
-                거래처 수, 거래지역 수, 매출 데이터 존재 여부를 기준으로 산정합니다. 매출 거래원장과 사업자 자료가 늘수록 리포트 품질이 올라갑니다.
+                거래처, 지역, 매출 원장 기준입니다. 자료가 늘수록 리포트 품질이 올라갑니다.
               </p>
             </CardContent>
           </Card>
@@ -319,7 +319,7 @@ export default async function ReportDetailPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-primary" />
-              AI 상세 제안
+              실행 제안
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -358,7 +358,7 @@ function ReportBasisPanel({
     { label: "거래지역", value: `${regions.toLocaleString()}개`, helper: "White Space 기준" },
     { label: "평균 배송거리", value: `${avgDeliveryKm.toFixed(1)}km`, helper: "출발지·주소 기준" },
     { label: "잠재 매출", value: `${potentialRevenue.toLocaleString()}만원`, helper: "리드 추천 기준" },
-    { label: "리포트 신뢰도", value: `${dataConfidence}%`, helper: `건강도 ${healthScore}점` }
+    { label: "데이터 신뢰도", value: `${dataConfidence}%`, helper: `건강도 ${healthScore}점` }
   ];
   const actions = [
     { href: withCompanyQuery("/crm/timeline"), label: "거래처 원장 보완" },
@@ -370,11 +370,11 @@ function ReportBasisPanel({
     <div className="maju-section-card">
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
-          <p className="maju-section-title">운영 기준 데이터</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">운영 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>
+          <p className="maju-section-title">진단 기준</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">거래처, 지역, 배송, 매출 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
-          리포트 점수는 확정 판단이 아니라 운영 우선순위입니다. 거래처 기본정보, 매출 원장, 배송 코스가 보완될수록 진단 품질이 올라갑니다.
+          점수는 확정 판단이 아니라 운영 우선순위입니다. 기본정보, 매출 원장, 배송 코스가 보완될수록 품질이 올라갑니다.
         </p>
         <div className="flex flex-wrap gap-2">
           {actions.map((action) => (

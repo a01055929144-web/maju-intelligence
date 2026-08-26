@@ -32,7 +32,7 @@ export function WorkspaceSectionNav({ eyebrow = "탭", items }: WorkspaceSection
           <Link
             className={`flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-black transition ${
               selected
-                ? "border-slate-950 bg-slate-950 text-white shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
+                ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
                 : "border-transparent bg-white text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"
             }`}
             href={item.href}
@@ -44,7 +44,7 @@ export function WorkspaceSectionNav({ eyebrow = "탭", items }: WorkspaceSection
             {item.badge ? (
               <span
                 className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ring-1 ring-inset ${
-                  selected ? "bg-white/95 text-slate-950 ring-white/70" : "bg-slate-50 text-slate-600 ring-slate-200"
+                  selected ? "bg-white/95 text-teal-800 ring-white/70" : "bg-slate-50 text-slate-600 ring-slate-200"
                 }`}
               >
                 {item.badge}

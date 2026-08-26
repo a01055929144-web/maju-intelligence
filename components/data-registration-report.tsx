@@ -54,8 +54,8 @@ export function Report({
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <Badge className="mb-4 bg-blue-50 text-blue-700">MAJU 운영 리포트</Badge>
-              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} 회사 운영 리포트</h1>
+              <Badge className="mb-4 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">MAJU AI 리포트</Badge>
+              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} AI 리포트</h1>
               <p className="mt-2 text-sm font-semibold text-slate-500">
                 {isSalesReport ? "매출 원장 업데이트" : "거래처 등록"} 기준 · 거래처 {analysis.customers}곳 · 거래지역 {analysis.regions}개 · 분석 완료
               </p>
@@ -244,7 +244,7 @@ function ReportDataBasisCard({
     },
     {
       label: "반영 화면",
-      value: isSalesReport ? "매출 원장 · 운영 리포트" : "거래처 히스토리 · 배송 코스",
+      value: isSalesReport ? "매출 원장 · AI 리포트" : "거래처 히스토리 · 배송 코스",
       description: isSalesReport ? "저장 후 매출 원장과 대시보드 수치가 같은 기준으로 갱신됩니다." : "저장 후 거래처 상세, 지도 마커, 배송차별 코스에서 같은 기준값을 사용합니다."
     },
     {
