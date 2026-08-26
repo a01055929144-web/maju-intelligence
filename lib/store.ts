@@ -4877,7 +4877,7 @@ export type FindNearbyPermitLeadsResult = {
 const NEARBY_LEAD_GEOCODE_CONCURRENCY = 6;
 
 /** 배열을 일정 크기로 나눠 지정한 동시성 안에서 처리합니다. Tmap 지오코딩 API를 한 번에 너무 많이 호출하지 않기 위한 용도입니다. */
-async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
   async function runNext(): Promise<void> {

@@ -5725,6 +5725,30 @@ function CollapsibleSection({ children, defaultOpen = false, title }: { readonly
   );
 }
 
+type CustomerOperationsAttachmentsPayload = { attachments?: Array<LoadingPositionMediaItem & { attachmentType: string }> };
+
+// 2026-08-26 효율화: 거래처를 선택하면 퀵카드 미리보기(QuickCardAccessPhotoPreview)와 상세 패널의
+// 첨부자료 박스(LoadingPositionAttachmentBox)가 거의 동시에 마운트되어, 같은 customerId로 같은
+// /api/customer-operations를 각자 따로 호출하고 있었습니다. 아직 응답이 오지 않은 "진행 중" 요청만
+// 공유해 중복 호출을 막고, 응답이 오면 즉시 캐시를 비워 업로드 후 새로고침 같은 이후 호출은 항상
+// 최신 데이터를 다시 받아오게 합니다.
+const customerOperationsInFlight = new Map<string, Promise<CustomerOperationsAttachmentsPayload | null>>();
+
+function fetchCustomerOperationsAttachments(customerId: string): Promise<CustomerOperationsAttachmentsPayload | null> {
+  const existing = customerOperationsInFlight.get(customerId);
+  if (existing) return existing;
+
+  const promise = fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null)
+    .finally(() => {
+      customerOperationsInFlight.delete(customerId);
+    });
+
+  customerOperationsInFlight.set(customerId, promise);
+  return promise;
+}
+
 // 지도 퀵카드는 공간이 좁아 전체 업로드 박스(LoadingPositionAttachmentBox) 대신 최근 3장만 조회
 // 전용으로 가볍게 보여줍니다(2026-08-24 피드백: "출입방법은 적재위치 사진도 보여주면 사용성이
 // 높아짐"). 사진이 없으면 카드에 빈 칸을 남기지 않도록 아무것도 렌더링하지 않습니다.
@@ -5733,19 +5757,14 @@ function QuickCardAccessPhotoPreview({ customerId }: { readonly customerId: stri
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { attachments?: Array<LoadingPositionMediaItem & { attachmentType: string }> } | null) => {
-        if (cancelled) return;
-        setItems(
-          (payload?.attachments || [])
-            .filter((item) => item.attachmentType === "loading_position" && !item.mimeType?.startsWith("video"))
-            .slice(0, 3)
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      });
+    fetchCustomerOperationsAttachments(customerId).then((payload) => {
+      if (cancelled) return;
+      setItems(
+        (payload?.attachments || [])
+          .filter((item) => item.attachmentType === "loading_position" && !item.mimeType?.startsWith("video"))
+          .slice(0, 3)
+      );
+    });
     return () => {
       cancelled = true;
     };
@@ -5776,13 +5795,12 @@ function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly c
 
   async function loadItems() {
     setLoadState("loading");
-    const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
-    if (!response?.ok) {
+    const payload = await fetchCustomerOperationsAttachments(customerId);
+    if (!payload) {
       setLoadState("error");
       return;
     }
-    const payload = (await response.json().catch(() => null)) as { attachments?: Array<LoadingPositionMediaItem & { attachmentType: string }> } | null;
-    setItems((payload?.attachments || []).filter((item) => item.attachmentType === "loading_position"));
+    setItems((payload.attachments || []).filter((item) => item.attachmentType === "loading_position"));
     setLoadState("ready");
   }
 
