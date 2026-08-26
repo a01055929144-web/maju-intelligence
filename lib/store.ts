@@ -10,6 +10,8 @@ import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
 import { hashPassword } from "./password";
+import { sendEmail } from "./email";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
@@ -951,6 +953,96 @@ export async function updateCustomerPasswordHash(email: string, passwordHash: st
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ customer_password: passwordHash, updated_at: new Date().toISOString() })
   }).catch(() => null);
+}
+
+const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+
+function hashResetToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export type PasswordResetRequestResult = {
+  token: string;
+  companyName: string;
+  ownerName: string;
+} | null;
+
+/**
+ * 2026-08-26(P1 "비밀번호 찾기"): 이메일로 가입된 고객 계정을 찾아 재설정 토큰을 발급합니다.
+ * 실제 이메일 발송은 호출부(app/api/auth/forgot-password)의 역할이고, 여기서는 토큰 발급·저장까지만
+ * 담당합니다. 이메일이 가입되어 있지 않아도 호출부는 항상 같은 안내 문구를 보여줘야 하므로,
+ * 이 함수는 존재 여부를 그대로 반환합니다 — null이면 "가입된 계정 없음"이지 오류가 아닙니다.
+ */
+export async function createPasswordResetRequest(email: string): Promise<PasswordResetRequestResult> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail || !isProductionStoreConfigured()) return null;
+
+  const rows = await supabaseRequest<Array<{ id: string; customer_company_id: string | null }>>(
+    `auth_credentials?select=id,customer_company_id&customer_email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row) return null;
+
+  const company = row.customer_company_id ? await getCompanySettings(row.customer_company_id).catch(() => null) : null;
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS).toISOString();
+
+  await supabaseRequest(`auth_credentials?id=eq.${encodeURIComponent(row.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      reset_token_hash: hashResetToken(token),
+      reset_token_expires_at: expiresAt,
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  return {
+    token,
+    companyName: company?.name || "고객사",
+    ownerName: company?.ownerName || ""
+  };
+}
+
+export type PasswordResetConsumeResult = { ok: boolean; message?: string };
+
+/** 재설정 토큰을 검증하고, 유효하면 새 비밀번호를 해시로 저장한 뒤 토큰을 즉시 무효화합니다. */
+export async function consumePasswordReset(token: string, newPassword: string): Promise<PasswordResetConsumeResult> {
+  const trimmedToken = token.trim();
+  if (!trimmedToken) return { ok: false, message: "재설정 링크가 올바르지 않습니다." };
+  if (!newPassword || newPassword.length < 8) return { ok: false, message: "비밀번호는 8자 이상이어야 합니다." };
+  if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+
+  const tokenHash = hashResetToken(trimmedToken);
+  const rows = await supabaseRequest<Array<{ id: string; reset_token_hash: string | null; reset_token_expires_at: string | null }>>(
+    `auth_credentials?select=id,reset_token_hash,reset_token_expires_at&reset_token_hash=eq.${encodeURIComponent(tokenHash)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row?.reset_token_hash) return { ok: false, message: "재설정 링크가 만료되었거나 이미 사용되었습니다." };
+
+  const storedBuffer = Buffer.from(row.reset_token_hash);
+  const providedBuffer = Buffer.from(tokenHash);
+  if (storedBuffer.length !== providedBuffer.length || !timingSafeEqual(storedBuffer, providedBuffer)) {
+    return { ok: false, message: "재설정 링크가 올바르지 않습니다." };
+  }
+
+  if (!row.reset_token_expires_at || new Date(row.reset_token_expires_at).getTime() < Date.now()) {
+    return { ok: false, message: "재설정 링크가 만료되었습니다. 비밀번호 찾기를 다시 요청해주세요." };
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await supabaseRequest(`auth_credentials?id=eq.${encodeURIComponent(row.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      customer_password: passwordHash,
+      reset_token_hash: null,
+      reset_token_expires_at: null,
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  return { ok: true };
 }
 
 export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedCompanyAccount[]; source: "empty" | "supabase" }> {

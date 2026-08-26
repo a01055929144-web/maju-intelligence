@@ -78,6 +78,9 @@ export default function CustomerLoginPage() {
               {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
               로그인
             </Button>
+            <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/forgot-password">
+              비밀번호를 잊으셨나요?
+            </Link>
             <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/admin/login">
               관리자 계정으로 로그인
             </Link>
