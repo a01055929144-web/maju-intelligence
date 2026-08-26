@@ -13,20 +13,35 @@ const roleOptions: Array<{ label: string; value: StaffInvitation["role"] }> = [
   { label: "현장관리자", value: "manager" },
   { label: "일반직원", value: "member" }
 ];
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 function isErrorMessage(message: string) {
   return ["실패", "오류", "않", "필요", "맞지", "준비"].some((keyword) => message.includes(keyword));
 }
 
-export function StaffManagementPanel({ initialInvitations }: { initialInvitations: StaffInvitation[] }) {
+export function StaffManagementPanel({
+  canManageMembers,
+  initialInvitations
+}: {
+  canManageMembers: boolean;
+  initialInvitations: StaffInvitation[];
+}) {
   const [invitations, setInvitations] = useState(initialInvitations);
   const [form, setForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
   const [message, setMessage] = useState("");
   const [savingId, setSavingId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(30);
   const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length;
   const acceptedCount = invitations.filter((invitation) => invitation.status === "accepted").length;
   const activeCount = invitations.filter((invitation) => invitation.status !== "revoked").length;
+  const totalPages = Math.max(1, Math.ceil(invitations.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = invitations.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(invitations.length, currentPage * pageSize);
+  const pagedInvitations = invitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   async function createStaff() {
     if (!form.employeeName.trim() || creating) return;
@@ -91,7 +106,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
           </Badge>
           <h2 className="text-2xl font-black text-slate-950">직원 초대</h2>
           <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-            이름과 연락처를 입력하면 카카오 가입용 초대 링크가 생성됩니다. 역할은 업무 구분용이며 기능 제한은 적용하지 않습니다.
+            이름과 연락처를 입력하면 카카오 가입용 초대 링크가 생성됩니다. 직원 추가·수정은 대표/관리자만 할 수 있습니다.
           </p>
         </div>
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
@@ -120,11 +135,55 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
             <OnboardingStep
               icon={<Tags className="h-4 w-4" />}
               title="3. 업무 구분"
-              description="역할은 표시와 필터 기준이며 기능 제한값이 아닙니다."
+              description="역할은 표시와 필터 기준입니다. 초대 관리 자체는 대표/관리자만 가능합니다."
             />
           </div>
 
-          {invitations.map((invitation) => (
+          {invitations.length ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                보기
+                <select
+                  className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value) as ListPageSize);
+                    setPage(1);
+                  }}
+                  value={pageSize}
+                >
+                  {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}개
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500">
+                {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {invitations.length.toLocaleString()}명
+              </span>
+              <button
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                type="button"
+              >
+                이전
+              </button>
+              <span className="text-xs font-black text-slate-400">
+                {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+              </span>
+              <button
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                type="button"
+              >
+                다음
+              </button>
+            </div>
+          ) : null}
+
+          {pagedInvitations.map((invitation) => (
             <div key={invitation.id} className="rounded-lg border border-slate-200 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -138,8 +197,8 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
 
               <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto]">
                 <select
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                  disabled={savingId === invitation.id}
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!canManageMembers || savingId === invitation.id}
                   value={invitation.role}
                   onChange={(event) => updateStaff(invitation, { role: event.target.value as StaffInvitation["role"] })}
                 >
@@ -154,7 +213,7 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
                   링크
                 </Button>
                 <Button
-                  disabled={savingId === invitation.id}
+                  disabled={!canManageMembers || savingId === invitation.id}
                   onClick={() => updateStaff(invitation, { status: invitation.status === "revoked" ? "pending" : "revoked" })}
                   type="button"
                   variant="outline"
@@ -182,36 +241,42 @@ export function StaffManagementPanel({ initialInvitations }: { initialInvitation
               <p className="mt-1 text-xs font-bold leading-5 text-slate-500">생성된 링크를 직원에게 보내면 모바일 가입 흐름으로 이어집니다.</p>
             </div>
           </div>
-          <div className="mt-4 grid gap-3">
-            <input
-              className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-              placeholder="직원명"
-              value={form.employeeName}
-              onChange={(event) => setForm((prev) => ({ ...prev, employeeName: event.target.value }))}
-            />
-            <input
-              className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-              placeholder="연락처"
-              value={form.employeePhone}
-              onChange={(event) => setForm((prev) => ({ ...prev, employeePhone: event.target.value }))}
-            />
-            <select
-              className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-              value={form.role}
-              onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as StaffInvitation["role"] }))}
-            >
-              {roleOptions.map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
-            <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용입니다. 기능 접근 제한값으로 사용하지 않습니다.</p>
-            <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!form.employeeName.trim() || creating} onClick={createStaff} type="button">
-              {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
-              {creating ? "추가 중" : "직원 추가"}
-            </Button>
-          </div>
+          {canManageMembers ? (
+            <div className="mt-4 grid gap-3">
+              <input
+                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                placeholder="직원명"
+                value={form.employeeName}
+                onChange={(event) => setForm((prev) => ({ ...prev, employeeName: event.target.value }))}
+              />
+              <input
+                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                placeholder="연락처"
+                value={form.employeePhone}
+                onChange={(event) => setForm((prev) => ({ ...prev, employeePhone: event.target.value }))}
+              />
+              <select
+                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                value={form.role}
+                onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as StaffInvitation["role"] }))}
+              >
+                {roleOptions.map((role) => (
+                  <option key={role.value} value={role.value}>
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+              <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용입니다.</p>
+              <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!form.employeeName.trim() || creating} onClick={createStaff} type="button">
+                {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
+                {creating ? "추가 중" : "직원 추가"}
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-500">
+              직원 추가·역할 변경·비활성화는 대표 또는 관리자 권한이 있는 직원만 할 수 있습니다. 필요하면 대표/관리자에게 요청해주세요.
+            </p>
+          )}
           {message ? (
             <p className={`mt-3 rounded-md px-3 py-2 text-xs font-bold leading-5 ${isErrorMessage(message) ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
               {message}

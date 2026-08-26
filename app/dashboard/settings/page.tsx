@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { getCustomerSession } from "@/lib/auth";
+import { customerHasCapability, getCustomerSession } from "@/lib/auth";
 import { getBusinessNumberExceptions, getCompanySettings, getCompanyStaffInvitations } from "@/lib/store";
 import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-panel";
 import { CompanySettingsForm } from "./settings-form";
@@ -39,7 +39,7 @@ export default async function CompanySettingsPage() {
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <div className="space-y-5">
           <CompanySettingsForm initial={company} />
-          <StaffManagementPanel initialInvitations={staff.invitations} />
+          <StaffManagementPanel canManageMembers={customerHasCapability(session, "manage_members")} initialInvitations={staff.invitations} />
           <BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} />
         </div>
       </section>

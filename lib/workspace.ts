@@ -24,15 +24,17 @@ export const workspaceTypeLabels: Record<WorkspaceType, string> = {
   personal: "개인 워크스페이스"
 };
 
-// Roles are currently used for display, filtering, and manager-side organization only.
-// The product direction is not to block day-to-day work by role yet, so every role keeps
-// the same operational capabilities until the customer explicitly enables permission limits.
+// Roles are mostly used for display, filtering, and manager-side organization rather than
+// blocking day-to-day work. The one exception (added 2026-08-26, P1 "직원 초대 권한 세분화"):
+// manage_members — inviting, editing, or deactivating other staff — is limited to owner/manager
+// so that any employee (e.g. a delivery driver) can't add or remove other employees. All other
+// capabilities stay open to every role, matching the existing product direction.
 const roleCapabilities: Record<WorkspaceRole, WorkspaceCapability[]> = {
   owner: allWorkspaceCapabilities(),
   manager: allWorkspaceCapabilities(),
-  sales: allWorkspaceCapabilities(),
-  driver: allWorkspaceCapabilities(),
-  member: allWorkspaceCapabilities()
+  sales: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members"),
+  driver: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members"),
+  member: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members")
 };
 
 export function normalizeWorkspaceRole(role?: string | null): WorkspaceRole {
