@@ -180,13 +180,13 @@ export default function Home() {
 
   function downloadCustomerExport() {
     downloadWorkbook(`maju_거래처_마스터_내보내기_${dateStamp()}.xlsx`, [
-      { name: "거래처 마스터", rows: buildCustomerExportRows(customers) }
+      { name: "거래처 마스터", rows: buildCustomerExportRows(customers, rawRows, fieldMap) }
     ]);
   }
 
   function downloadSalesExport() {
     downloadWorkbook(`maju_매출_거래내역_내보내기_${dateStamp()}.xlsx`, [
-      { name: "매출 거래내역", rows: buildSalesExportRows(customers, uploadType === "sales-analysis" ? rawRows : []) }
+      { name: "매출 거래내역", rows: buildSalesExportRows(uploadType === "sales-analysis" ? rawRows : []) }
     ]);
   }
 
@@ -4487,44 +4487,45 @@ function buildTemplateWorkbookRows(type: UploadTemplateType) {
   return { dataRows: [dataRow], guideRows };
 }
 
-function buildCustomerExportRows(customers: CustomerRow[]): RawRow[] {
-  return customers.map((customer, index) => ({
-    회사명: customer.companyName,
-    "거래처/매장 상호명": customer.customerName,
-    사업자등록번호: `123-${String(10 + index).padStart(2, "0")}-${String(10000 + index).padStart(5, "0")}`,
-    대표자명: ["김민준", "이서연", "박지훈", "최하린"][index % 4],
-    개업일: `201${index % 10}-0${(index % 9) + 1}-0${(index % 8) + 1}`,
-    배송주소: customer.address,
-    지역: customer.region,
-    업종: customer.industry,
-    매출등급: revenueGrade(customer.monthlyRevenue),
-    월매출: customer.monthlyRevenue,
-    최근주문일수: customer.lastOrderDays,
-    월방문횟수: customer.visitCount,
-    "기존 계산거리(km)": customer.deliveryKm,
-    연락처: `010-${String(3100 + index).padStart(4, "0")}-${String(1000 + index).padStart(4, "0")}`,
-    이메일: `${customer.customerName.replace(/\s/g, "").toLowerCase()}@example.com`,
-    "네이버 플레이스 링크": customer.naverPlaceUrl || "",
-    "카카오맵 링크": customer.kakaoPlaceUrl || "",
-    "구글맵 링크": customer.googleMapUrl || ""
-  }));
+// 2026-08-26 "전체 운영중에 가짜 데이터들 있는 지 확인하고 없애" 조치: 사업자등록번호·대표자명·개업일·
+// 연락처·이메일을 인덱스 기반으로 그럴듯하게 지어내던 로직을 제거했습니다. customers(고객사 미리보기)는
+// mapMasterRowsToCustomers(rawRows, fieldMap)에서 rawRows와 1:1 순서로 생성되므로, 같은 인덱스의
+// rawRows[index]에서 getCell로 실제 원본 값을 꺼내 씁니다. 원본 업로드에 해당 컬럼이 없거나 매핑이 안 돼
+// 있으면(예: 매출분석 업로드처럼애초에 그 필드가 없는 템플릿) 가짜 값 대신 빈 칸으로 둡니다.
+function buildCustomerExportRows(customers: CustomerRow[], rawRows: RawRow[], fieldMap: FieldMap): RawRow[] {
+  const rowsAligned = rawRows.length === customers.length;
+
+  return customers.map((customer, index) => {
+    const raw = rowsAligned ? rawRows[index] : undefined;
+
+    return {
+      회사명: customer.companyName,
+      "거래처/매장 상호명": customer.customerName,
+      사업자등록번호: raw ? getCell(raw, fieldMap.businessRegistrationNumber) : "",
+      대표자명: raw ? getCell(raw, fieldMap.representativeName) : "",
+      개업일: raw ? getCell(raw, fieldMap.openingDate) : "",
+      배송주소: customer.address,
+      지역: customer.region,
+      업종: customer.industry,
+      매출등급: revenueGrade(customer.monthlyRevenue),
+      월매출: customer.monthlyRevenue,
+      최근주문일수: customer.lastOrderDays,
+      월방문횟수: customer.visitCount,
+      "기존 계산거리(km)": customer.deliveryKm,
+      연락처: raw ? getCell(raw, fieldMap.phone) : "",
+      이메일: raw ? getCell(raw, fieldMap.email) : "",
+      "네이버 플레이스 링크": customer.naverPlaceUrl || "",
+      "카카오맵 링크": customer.kakaoPlaceUrl || "",
+      "구글맵 링크": customer.googleMapUrl || ""
+    };
+  });
 }
 
-function buildSalesExportRows(customers: CustomerRow[], uploadedRows: RawRow[]): RawRow[] {
-  if (uploadedRows.length) return uploadedRows;
-
-  return customers.flatMap((customer, customerIndex) =>
-    Array.from({ length: 3 }, (_, index) => ({
-      "거래처/매장 상호명": customer.customerName,
-      사업자등록번호: `123-${String(10 + customerIndex).padStart(2, "0")}-${String(10000 + customerIndex).padStart(5, "0")}`,
-      매출일자: `2026-07-${String(index + 1).padStart(2, "0")}`,
-      품목명: ["육류", "소스", "냉동식품"][index % 3],
-      수량: 8 + index + customerIndex,
-      매출금액: Math.round((customer.monthlyRevenue * 10000) / 3),
-      지역: customer.region,
-      주소: customer.address
-    }))
-  );
+// 2026-08-26 조치: 실제 업로드된 매출 데이터(uploadedRows)가 없을 때, 매출일자·품목명·수량·사업자등록번호를
+// 지어내 "매출 거래내역"인 것처럼 내보내던 로직을 제거했습니다. 실제 매출 데이터가 없으면 빈 시트를
+// 내보냅니다(가짜 거래 내역을 진짜처럼 다운로드하지 않음).
+function buildSalesExportRows(uploadedRows: RawRow[]): RawRow[] {
+  return uploadedRows;
 }
 
 function templateSampleValue(key: string) {
