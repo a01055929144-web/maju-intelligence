@@ -1754,17 +1754,21 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     </th>
                     <th className="w-[24%] border-r border-slate-200 px-3 py-2">거래처</th>
                     <th className="w-[84px] border-r border-slate-200 px-3 py-2">업종</th>
-                    <th className="w-[64px] border-r border-slate-200 px-3 py-2">등급</th>
+                    <th
+                      className="w-[64px] border-r border-slate-200 px-3 py-2"
+                      title="인허가 신선도·업종 적합도·리뷰활동·연락처 확보 여부를 합산한 리드 우선순위 등급입니다(A 85점↑ · B 70점↑ · C 55점↑). 거래처 매출등급과는 별개 기준입니다."
+                    >
+                      등급
+                    </th>
                     <th className="w-[84px] border-r border-slate-200 px-3 py-2">안정도</th>
                     <th className="w-[110px] border-r border-slate-200 px-3 py-2">인스타</th>
                     <th className="w-[118px] border-r border-slate-200 px-3 py-2">전화</th>
-                    {leadQualityMode === "keyword" ? (
-                      <th className="w-[110px] border-r border-slate-200 px-3 py-2 text-right" title="검색량 지수(최대 15) + 평점(최대 8) + 리뷰수(최대 7)를 합친 영업 매력도 점수입니다.">
-                        영업 매력도
-                      </th>
-                    ) : (
-                      <th className="w-[96px] border-r border-slate-200 px-3 py-2">개시일</th>
-                    )}
+                    <th
+                      className="w-[110px] border-r border-slate-200 px-3 py-2 text-right"
+                      title="네이버·카카오·구글에서 확보한 평점·리뷰수입니다. '영업리드' 모드에서는 검색량 지수까지 합친 매력도 점수도 함께 봅니다."
+                    >
+                      리뷰
+                    </th>
                     <th className="w-[110px] border-r border-slate-200 px-3 py-2">다음 액션</th>
                     {showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
                     <th className="w-[140px] border-r border-slate-200 px-3 py-2">상태</th>
@@ -1859,23 +1863,21 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                             "미확인"
                           )}
                         </td>
-                        {leadQualityMode === "keyword" ? (
-                          <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right">
-                            {keywordVolumeOf(lead) > 0 || lead.rating || lead.reviewCount ? (
-                              <>
-                                <p className="font-black text-teal-700">{businessAttractivenessOf(lead).toLocaleString()}점</p>
-                                <p className="mt-0.5 text-[11px] font-bold text-slate-400">
-                                  {lead.rating ? `★${lead.rating.toFixed(1)}` : "평점 미확인"}
-                                  {lead.reviewCount ? ` · 리뷰${lead.reviewCount.toLocaleString()}` : ""}
-                                </p>
-                              </>
-                            ) : (
-                              <span className="font-bold text-slate-400">{keywordVolumeLoading ? "조회 중..." : "미확인"}</span>
-                            )}
-                          </td>
-                        ) : (
-                          <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 font-bold text-slate-500">{getPermitLeadOpenDate(lead) || "-"}</td>
-                        )}
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right">
+                          {lead.rating || lead.reviewCount ? (
+                            <>
+                              <p className="font-black text-teal-700">{lead.rating ? `★${lead.rating.toFixed(1)}` : "평점 미확인"}</p>
+                              <p className="mt-0.5 text-[11px] font-bold text-slate-400">
+                                {lead.reviewCount ? `리뷰 ${lead.reviewCount.toLocaleString()}건` : "리뷰 미확인"}
+                                {leadQualityMode === "keyword" && keywordVolumeOf(lead) > 0 ? ` · 매력도 ${businessAttractivenessOf(lead).toLocaleString()}` : ""}
+                              </p>
+                            </>
+                          ) : leadQualityMode === "keyword" && keywordVolumeOf(lead) > 0 ? (
+                            <p className="font-black text-teal-700">{businessAttractivenessOf(lead).toLocaleString()}점</p>
+                          ) : (
+                            <span className="font-bold text-slate-400">{leadQualityMode === "keyword" && keywordVolumeLoading ? "조회 중..." : "확인 필요"}</span>
+                          )}
+                        </td>
                         <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.nextAction || "-"}</td>
                         {showNearbyOnly && nearbyResult ? (
                           <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right font-black text-teal-700">

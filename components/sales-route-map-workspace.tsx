@@ -2083,6 +2083,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       {activeView === "customers" ? (
         <CustomerDirectoryView
           dataRegistrationHref={dataRegistrationHref}
+          fuelPrices={fuelPrices}
           onSelectStore={setSelectedId}
           selectedStoreId={selectedId}
           sourceReady={sourceReady}
@@ -2125,6 +2126,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           attachments={storeAttachments[selectedStore.id] || {}}
           areaOptions={deliveryDefaults.areas}
           driverOptions={deliveryDefaults.drivers}
+          fuelPrices={fuelPrices}
           history={storeHistories[selectedStore.id] || []}
           key={selectedStore.id}
           onAddDriver={addManualDriver}
@@ -3765,17 +3767,20 @@ function StoreManagementPanel({
 
 function CustomerDirectoryView({
   dataRegistrationHref,
+  fuelPrices,
   onSelectStore,
   selectedStoreId,
   sourceReady,
   stores
 }: {
   readonly dataRegistrationHref: string;
+  readonly fuelPrices: FuelPriceByType;
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
 }) {
+  const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
   const totals = getStoreTotals(stores);
   const gradeCounts = countGrades(stores);
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
@@ -3822,6 +3827,12 @@ function CustomerDirectoryView({
                     <th className="w-[150px] border-r border-slate-200 px-4 py-3">담당자</th>
                     <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">예상매출</th>
                     <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">출발지 거리</th>
+                    <th
+                      className="w-[150px] border-r border-slate-200 px-4 py-3 text-right"
+                      title="왕복 예상 유류비가 예상 월매출에서 차지하는 비중입니다(참고용 추정치). 10~15% 이내면 적정입니다."
+                    >
+                      물류비 타당성
+                    </th>
                     <th className="w-[120px] px-4 py-3">사업자 상태</th>
                   </tr>
                 </thead>
@@ -3848,6 +3859,19 @@ function CustomerDirectoryView({
                       <td className="max-w-[150px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
+                      <td className="border-r border-slate-100 px-4 py-3 text-right">
+                        {(() => {
+                          const roundTripCost = estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2;
+                          if (!roundTripCost) return <span className="text-xs font-bold text-slate-400">확인 필요</span>;
+                          const worth = deliveryWorthLabel(deliveryCostRatio(roundTripCost, store.expectedRevenue));
+                          return (
+                            <>
+                              <p className="text-xs font-bold text-slate-500">왕복 {roundTripCost.toLocaleString()}원</p>
+                              <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${worth.toneClassName}`}>{worth.label}</span>
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
                         {store.relationshipStatus === "거래종료" ? (
@@ -4882,6 +4906,7 @@ function StoreDetail({
   areaOptions,
   attachments,
   driverOptions,
+  fuelPrices,
   history,
   onAddDriver,
   onAddVehicle,
@@ -4898,6 +4923,7 @@ function StoreDetail({
   readonly areaOptions: string[];
   readonly attachments: StoreAttachment;
   readonly driverOptions: string[];
+  readonly fuelPrices: FuelPriceByType;
   readonly history: StoreHistoryItem[];
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onAddVehicle: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
@@ -5471,6 +5497,29 @@ function StoreDetail({
                   <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
                   <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
                 </div>
+                {(() => {
+                  const pricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
+                  const oneWayCost = estimateFuelCostWon(store.distanceKm || 0, pricePerLiter);
+                  const roundTripCost = oneWayCost * 2;
+                  const ratio = deliveryCostRatio(roundTripCost, store.expectedRevenue);
+                  const worth = deliveryWorthLabel(ratio);
+                  if (!oneWayCost) {
+                    return <p className="mt-2 text-xs font-bold text-slate-400">유가 정보를 불러오는 중이거나 거리 계산이 필요해 예상 물류비를 계산할 수 없습니다.</p>;
+                  }
+                  return (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-black text-slate-500">예상 물류비 (편도 {oneWayCost.toLocaleString()}원 · 왕복 {roundTripCost.toLocaleString()}원)</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${worth.toneClassName}`}>{worth.label}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] font-bold leading-4 text-slate-400">
+                        {ratio === null
+                          ? "예상매출을 등록하면 왕복 물류비가 매출의 몇 %인지 참고용으로 계산해드립니다."
+                          : `왕복 물류비가 예상 월매출의 약 ${(ratio * 100).toFixed(1)}% 수준입니다 (10~15% 이내면 적정, 참고용 추정치).`}
+                      </p>
+                    </div>
+                  );
+                })()}
               </CollapsibleSection>
 
               <CollapsibleSection title="AI 추천 근거">
@@ -6775,6 +6824,27 @@ export function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, m
   if (!Number.isFinite(mileageKmPerLiter) || mileageKmPerLiter <= 0) return 0;
 
   return Math.round((distanceKm / mileageKmPerLiter) * pricePerLiter);
+}
+
+/**
+ * "물류비가 얼마나 나와야 배송 갈 만한가"에 대한 대략적인 기준(2026-08-27 요청)입니다. 왕복
+ * 유류비가 그 거래처의 예상 월매출에서 차지하는 비중으로 계산합니다 — 한 번의 왕복 배송 비용이
+ * 월매출 전체의 몇 %인지를 보면, 매출 규모 대비 거리가 과도한 곳을 가려낼 수 있습니다(실제로는
+ * 한 달에 여러 번 배송하므로 이 비율은 보수적인 상한값입니다). 임계값은 일반적인 식자재 유통
+ * 물류비 비중(매출의 10~15% 내외)을 참고한 대략적인 기준이라 절대적인 기준은 아닙니다.
+ */
+export function deliveryCostRatio(roundTripFuelCostWon: number, monthlyRevenueManwon: number) {
+  const monthlyRevenueWon = monthlyRevenueManwon * 10000;
+  if (!Number.isFinite(monthlyRevenueWon) || monthlyRevenueWon <= 0) return null;
+  if (!Number.isFinite(roundTripFuelCostWon) || roundTripFuelCostWon <= 0) return 0;
+  return roundTripFuelCostWon / monthlyRevenueWon;
+}
+
+export function deliveryWorthLabel(ratio: number | null): { label: string; toneClassName: string } {
+  if (ratio === null) return { label: "매출 확인 필요", toneClassName: "bg-slate-100 text-slate-600" };
+  if (ratio <= 0.05) return { label: "배송 효율적", toneClassName: "bg-emerald-100 text-emerald-800" };
+  if (ratio <= 0.15) return { label: "적정 범위", toneClassName: "bg-amber-100 text-amber-800" };
+  return { label: "재검토 필요", toneClassName: "bg-rose-100 text-rose-800" };
 }
 
 function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
