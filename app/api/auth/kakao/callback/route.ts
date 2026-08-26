@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         })
       : await createPersonalKakaoWorkspace(kakaoProfile);
 
-    setCustomerSession({
+    await setCustomerSession({
       appRole: "customer_user",
       companyId: result.companyId,
       companyName: result.companyName,

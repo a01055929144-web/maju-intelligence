@@ -9,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 
 export default function CustomerLoginPage() {
-  const [email, setEmail] = useState("dyoung456@naver.com");
-  const [password, setPassword] = useState("0000");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
