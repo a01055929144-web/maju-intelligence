@@ -2603,96 +2603,10 @@ export async function summarizeCustomerReviewText(
   return { ok: true, result: { ...summarized, source } };
 }
 
-const GOOGLE_REVIEWS_REFRESH_LIMIT = 30;
-// 구글 리뷰 자동 수집은 회사당 이 개수만큼만 매 실행마다 처리합니다(오래된 순으로). Places API는
-// 호출당 과금이 있고, 한 거래처당 검색+상세조회 2번의 외부 호출이 필요해 한 번에 너무 많이 돌리면
-// cron 실행시간·비용이 늘어나기 때문에, 거래처가 많아져도 매일 조금씩 커버되도록 상한을 둡니다.
-
-export type GoogleReviewRefreshResult = {
-  configured: boolean;
-  checked: number;
-  updated: number;
-  noMatch: number;
-};
-
-/**
- * 회사 하나의 거래처 중 (1) 리뷰가 아예 없거나 (2) 이미 "구글 리뷰 자동 수집"으로 채워져 있어
- * 다시 자동으로 새로고침해도 무방한 거래처만, 가장 오래전에 갱신된 순으로 골라 구글 리뷰 자동
- * 수집을 실행합니다. 담당자가 직접 조사해서 입력한 리뷰(review_source가 "구글 리뷰 자동 수집"이
- * 아닌 다른 값)는 이 자동 새로고침이 절대 덮어쓰지 않습니다 — 사람이 공들여 조사한 값을 품질이
- * 더 낮을 수 있는 규칙 기반 자동 요약이 조용히 대체하지 않도록 하기 위함입니다. 특정 거래처를
- * 수동으로 강제 새로고침하고 싶다면 syncCustomerGoogleReviews()를 직접 호출하세요(이쪽은 출처와
- * 무관하게 항상 갱신합니다 — "리뷰 새로고침" 버튼이 이 경로를 사용합니다).
- */
-export async function refreshCustomerGoogleReviews(companyId: string, customerIds?: string[]): Promise<GoogleReviewRefreshResult> {
-  const emptyResult: GoogleReviewRefreshResult = { configured: isGoogleReviewsApiConfigured(), checked: 0, updated: 0, noMatch: 0 };
-  if (!emptyResult.configured || !isProductionStoreConfigured()) return emptyResult;
-
-  const idFilter = customerIds && customerIds.length ? `&id=in.(${customerIds.map(encodeURIComponent).join(",")})` : "";
-  const autoManagedFilter = `&or=(review_source.is.null,review_source.eq.${encodeURIComponent("구글 리뷰 자동 수집")})`;
-  const rows = await supabaseRequest<Array<{ id: string; customer_name: string; address: string | null }>>(
-    `normalized_customers?select=id,customer_name,address&company_id=eq.${encodeURIComponent(
-      companyId
-    )}${idFilter}${autoManagedFilter}&order=reviews_updated_at.asc.nullsfirst&limit=${GOOGLE_REVIEWS_REFRESH_LIMIT}`
-  ).catch(() => []);
-  if (!rows.length) return emptyResult;
-
-  const outcomes = await Promise.all(
-    rows.map(async (row) => {
-      const result = await syncGoogleReviewsForCustomer({ customerName: row.customer_name, address: row.address || undefined });
-      if (!result) return { updated: false };
-      await supabaseRequest(`normalized_customers?id=eq.${encodeURIComponent(row.id)}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({
-          review_summary: result.summary,
-          review_keywords: result.keywords,
-          review_source: result.source,
-          reviews_updated_at: new Date().toISOString()
-        })
-      }).catch(() => null);
-      return { updated: true };
-    })
-  );
-
-  return {
-    configured: true,
-    checked: rows.length,
-    updated: outcomes.filter((item) => item.updated).length,
-    noMatch: outcomes.filter((item) => !item.updated).length
-  };
-}
-
-export type GoogleReviewDailyRefreshResult = {
-  configured: boolean;
-  companiesProcessed: number;
-  totalChecked: number;
-  totalUpdated: number;
-};
-
-/** refreshCustomerGoogleReviews()를 전체 회사에 대해 실행합니다 (일일 cron에서 호출). */
-export async function refreshAllCompaniesGoogleReviews(): Promise<GoogleReviewDailyRefreshResult> {
-  const emptyResult: GoogleReviewDailyRefreshResult = {
-    configured: isGoogleReviewsApiConfigured(),
-    companiesProcessed: 0,
-    totalChecked: 0,
-    totalUpdated: 0
-  };
-  if (!emptyResult.configured || !isProductionStoreConfigured()) return emptyResult;
-
-  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  const results = await Promise.all(companies.map((company) => refreshCustomerGoogleReviews(company.id)));
-
-  return results.reduce<GoogleReviewDailyRefreshResult>(
-    (total, result) => ({
-      configured: true,
-      companiesProcessed: total.companiesProcessed + 1,
-      totalChecked: total.totalChecked + result.checked,
-      totalUpdated: total.totalUpdated + result.updated
-    }),
-    { ...emptyResult, configured: true }
-  );
-}
+// 2026-08-26 정리: 이 회사 전체 대상 자동 구글 리뷰 새로고침 배치(refreshCustomerGoogleReviews /
+// refreshAllCompaniesGoogleReviews)는 이를 호출하던 cron이 제거된 뒤 어디서도 호출되지 않는 죽은
+// 코드였습니다("전반적인 흐름을 위해 필요없는건 걷어내" 조치). 특정 거래처를 수동으로 새로고침하는
+// syncGoogleReviewsForCustomer()/syncCustomerGoogleReviews()는 "리뷰 새로고침" 버튼에서 계속 사용되므로 그대로 둡니다.
 
 export type BusinessNumberException = {
   id: string;
@@ -4027,6 +3941,8 @@ export type PermitLeadIngestResult = {
   skippedNoName: number;
 };
 
+const PERMIT_LEAD_UPDATE_CONCURRENCY = 8;
+
 /**
  * 사업자 인허가 데이터 업로드(엑셀/CSV) 결과를 일괄 적재합니다. 이미 저장된 사업자번호는
  * 최신 인허가 상태로 갱신(upsert)하고, 처음 보는 사업자번호는 새 리드로 추가합니다.
@@ -4185,12 +4101,16 @@ export async function ingestPermitLeadRows(
     });
     result.inserted = inserts.length;
   }
-  for (const update of updates) {
-    await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(update.id)}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify(update.payload)
-    });
+  // 2026-08-26 효율화: 기존 리드 갱신을 한 건씩 순차 PATCH하던 것을 mapWithConcurrency로 묶어
+  // 동시에 처리합니다(각 요청 자체는 그대로 개별 PATCH라 동작은 동일, 왕복 대기 시간만 줄어듭니다).
+  if (updates.length) {
+    await mapWithConcurrency(updates, PERMIT_LEAD_UPDATE_CONCURRENCY, (update) =>
+      supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(update.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(update.payload)
+      })
+    );
   }
   result.updated = updates.length;
 
@@ -4812,6 +4732,7 @@ export type LeadContactInfoBackfillResult = {
 };
 
 const LEAD_CONTACT_BACKFILL_BATCH_SIZE = 30;
+const LEAD_CONTACT_BACKFILL_CONCURRENCY = 5;
 
 /**
  * 연락처/주소가 비어있는 리드를 찾아 enrichPermitLeadExternalInfo()로 한 건씩 보강합니다(2026-08-24
@@ -4828,13 +4749,13 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
     `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=updated_at.asc&limit=${limit}`
   ).catch(() => []);
 
-  let phoneFilled = 0;
-  let addressFilled = 0;
-  for (const row of rows) {
-    const result = await enrichPermitLeadExternalInfo(companyId, row.id).catch(() => null);
-    if (result?.lead?.phone) phoneFilled += 1;
-    if (result?.lead?.address) addressFilled += 1;
-  }
+  // 2026-08-26 효율화: 리드를 한 건씩 순차로 보강하던 것을 findNearbyPermitLeads와 동일한
+  // mapWithConcurrency 패턴으로 묶어 동시에 처리합니다(카카오 로컬 검색 호출 자체는 그대로 유지).
+  const outcomes = await mapWithConcurrency(rows, LEAD_CONTACT_BACKFILL_CONCURRENCY, (row) =>
+    enrichPermitLeadExternalInfo(companyId, row.id).catch(() => null)
+  );
+  const phoneFilled = outcomes.filter((result) => result?.lead?.phone).length;
+  const addressFilled = outcomes.filter((result) => result?.lead?.address).length;
 
   return { addressFilled, phoneFilled, processed: rows.length };
 }
