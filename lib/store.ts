@@ -3551,11 +3551,14 @@ export async function saveAnalysis(
 
 export async function getLatestReport(companyId?: string): Promise<AnalysisResult> {
   if (!isProductionStoreConfigured()) return analyzeCompany([]);
+  // 2026-08-26 멀티테넌시 방어(P0-1): companyId가 없으면 전체 회사를 대상으로 조회하는 대신 빈
+  // 결과를 돌려줍니다. 지금은 모든 호출부가 인증된 companyId를 넘기지만, 앞으로 실수로 그 검증을
+  // 빼먹은 호출부가 생겨도 다른 회사 데이터가 새어나가지 않도록 하는 안전장치입니다.
+  if (!companyId) return analyzeCompany([]);
 
   try {
-    const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
     const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-      `ai_reports?select=report${companyFilter}&order=created_at.desc&limit=1`
+      `ai_reports?select=report&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=1`
     );
     return reports[0]?.report || analyzeCurrentCustomerMaster(companyId);
   } catch (error) {
@@ -3572,10 +3575,11 @@ async function analyzeCurrentCustomerMaster(companyId?: string): Promise<Analysi
 
 export async function getReportById(reportId: string, companyId?: string): Promise<AnalysisResult | null> {
   if (!isProductionStoreConfigured()) return analyzeCompany([]);
+  // 2026-08-26 멀티테넌시 방어(P0-1): companyId 없이는 다른 회사의 리포트를 반환하지 않습니다.
+  if (!companyId) return null;
 
-  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
   const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-    `ai_reports?select=report&id=eq.${encodeURIComponent(reportId)}${companyFilter}&limit=1`
+    `ai_reports?select=report&id=eq.${encodeURIComponent(reportId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
   );
 
   return reports[0]?.report || null;
@@ -3617,12 +3621,13 @@ function getEmptyBriefing(source: "empty" | "supabase" = "supabase") {
 
 export async function getLatestLeads(companyId?: string) {
   if (!isProductionStoreConfigured()) return { total: 0, leads: [] };
+  // 2026-08-26 멀티테넌시 방어(P0-1): companyId 없이는 전체 회사의 리드를 섞어 반환하지 않습니다.
+  if (!companyId) return { total: 0, leads: [] };
 
   try {
-    const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
     const rows = await supabaseRequest<
       Array<{ id: string; name: string; region: string; score: number; reasons: string[]; status: LeadStatus | string }>
-    >(`lead_recommendations?select=id,name,region,score,reasons,status${companyFilter}&order=score.desc&limit=50`);
+    >(`lead_recommendations?select=id,name,region,score,reasons,status&company_id=eq.${encodeURIComponent(companyId)}&order=score.desc&limit=50`);
 
     return {
       total: rows.length,
@@ -3641,12 +3646,17 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
   if (!isProductionStoreConfigured()) {
     return { persisted: false, id: leadId, status };
   }
+  // 2026-08-26 멀티테넌시 방어(P0-1): companyId 없이는 어떤 회사의 리드인지 확인할 수 없으므로
+  // 쓰기(PATCH)를 실행하지 않습니다 — 다른 회사의 리드를 잘못 수정하는 사고를 막기 위함입니다.
+  if (!companyId) return { persisted: false, id: leadId, status };
 
-  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
-  const rows = await supabaseRequest<Array<{ id: string; status: LeadStatus }>>(`lead_recommendations?id=eq.${encodeURIComponent(leadId)}${companyFilter}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status })
-  });
+  const rows = await supabaseRequest<Array<{ id: string; status: LeadStatus }>>(
+    `lead_recommendations?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    }
+  );
 
   return { persisted: true, id: rows[0]?.id || leadId, status: rows[0]?.status || status };
 }
@@ -5471,8 +5481,9 @@ export async function saveVisitResult(input: {
 
 export async function getVisitTimeline(companyId?: string): Promise<VisitTimelineItem[]> {
   if (!isProductionStoreConfigured()) return [];
+  // 2026-08-26 멀티테넌시 방어(P0-1): companyId 없이는 전체 회사의 방문 이력을 섞어 반환하지 않습니다.
+  if (!companyId) return [];
 
-  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
   const rows = await supabaseRequest<
     Array<{
       id: string;
@@ -5484,7 +5495,7 @@ export async function getVisitTimeline(companyId?: string): Promise<VisitTimelin
       lead_recommendations: { name: string; region: string } | null;
     }>
   >(
-    `visit_results?select=id,result,memo,next_action,expected_revenue,visited_at,lead_recommendations(name,region)${companyFilter}&order=visited_at.desc&limit=30`
+    `visit_results?select=id,result,memo,next_action,expected_revenue,visited_at,lead_recommendations(name,region)&company_id=eq.${encodeURIComponent(companyId)}&order=visited_at.desc&limit=30`
   );
 
   return rows.map((row) => ({
