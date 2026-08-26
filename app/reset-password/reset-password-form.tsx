@@ -70,7 +70,14 @@ export function ResetPasswordForm({ token }: { token: string }) {
         minLength={8}
         required
       />
-      {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
+      {error ? (
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">
+          <p>{error}</p>
+          <Link className="mt-1 inline-block underline underline-offset-2" href="/forgot-password">
+            재설정 링크 다시 요청하기
+          </Link>
+        </div>
+      ) : null}
       <Button className="mt-1.5 w-full" disabled={loading}>
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
         비밀번호 재설정

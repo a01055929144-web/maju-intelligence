@@ -11,6 +11,7 @@ import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
 import { hashPassword } from "./password";
 import { sendEmail } from "./email";
+import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "./business-number";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 
@@ -1349,6 +1350,7 @@ export async function createCompanySignup(input: CompanySignupInput): Promise<Co
 
   if (!companyName) throw new Error("회사명을 입력해주세요.");
   if (businessRegistrationNumber.length !== 10) throw new Error("사업자등록번호 10자리를 정확히 입력해주세요.");
+  if (!isValidBusinessRegistrationNumber(businessRegistrationNumber)) throw new Error("사업자등록번호가 올바르지 않습니다. 다시 확인해주세요.");
   if (!ownerName) throw new Error("담당자명을 입력해주세요.");
   if (!ownerEmail || !ownerEmail.includes("@")) throw new Error("올바른 이메일을 입력해주세요.");
   if (!input.ownerPassword || input.ownerPassword.length < 8) throw new Error("비밀번호는 8자 이상이어야 합니다.");
@@ -7085,9 +7087,7 @@ function getRawCell(row: RawUploadRow, key?: string) {
   return key ? String(row[key] || "").trim() : "";
 }
 
-export function normalizeBusinessNumber(value: string) {
-  return value.replace(/[^0-9]/g, "");
-}
+export { normalizeBusinessNumber };
 
 export function makeCustomerKey(customerName: string, address: string) {
   return `${customerName}-${address}`

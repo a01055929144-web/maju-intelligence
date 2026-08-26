@@ -208,7 +208,7 @@ export function StaffManagementPanel({
                     </option>
                   ))}
                 </select>
-                <Button disabled={savingId === invitation.id} onClick={() => copyInviteUrl(invitation.inviteUrl)} type="button" variant="outline">
+                <Button disabled={!canManageMembers || savingId === invitation.id} onClick={() => copyInviteUrl(invitation.inviteUrl)} type="button" variant="outline">
                   <Copy className="h-4 w-4" />
                   링크
                 </Button>

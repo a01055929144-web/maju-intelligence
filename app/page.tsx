@@ -37,6 +37,7 @@ import { ExcelHeaderMappingPreview } from "@/components/excel-mapping-preview";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
+import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
 
 // Report is only shown after analysis finishes, so load it on demand instead
@@ -4811,16 +4812,6 @@ function formatPhoneNumberInput(value: string) {
   if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
-}
-
-function isValidBusinessRegistrationNumber(value: string) {
-  const digits = value.replace(/[^0-9]/g, "");
-  if (!/^[0-9]{10}$/.test(digits)) return false;
-
-  const weights = [1, 3, 7, 1, 3, 7, 1, 3, 5];
-  const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0) + Math.floor((Number(digits[8]) * 5) / 10);
-  const checkDigit = (10 - (sum % 10)) % 10;
-  return checkDigit === Number(digits[9]);
 }
 
 function toNumber(value: unknown) {

@@ -6,6 +6,7 @@ import { Building2, Loader2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
 
 function formatBusinessNumberInput(value: string) {
   const digits = value.replace(/[^0-9]/g, "").slice(0, 10);
@@ -26,10 +27,17 @@ export default function CompanySignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const businessNumberDigits = businessRegistrationNumber.replace(/[^0-9]/g, "");
+  const businessNumberInvalid = businessNumberDigits.length === 10 && !isValidBusinessRegistrationNumber(businessRegistrationNumber);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
+    if (!isValidBusinessRegistrationNumber(businessRegistrationNumber)) {
+      setError("사업자등록번호가 올바르지 않습니다. 다시 확인해주세요.");
+      return;
+    }
     if (ownerPassword !== ownerPasswordConfirm) {
       setError("비밀번호가 서로 일치하지 않습니다.");
       return;
@@ -84,14 +92,17 @@ export default function CompanySignupPage() {
               placeholder="회사명"
               required
             />
-            <input
-              className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
-              value={businessRegistrationNumber}
-              onChange={(event) => setBusinessRegistrationNumber(formatBusinessNumberInput(event.target.value))}
-              placeholder="사업자등록번호 (예: 123-45-67890)"
-              inputMode="numeric"
-              required
-            />
+            <div>
+              <input
+                className={`h-12 w-full rounded-xl border bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring ${businessNumberInvalid ? "border-destructive" : "border-input"}`}
+                value={businessRegistrationNumber}
+                onChange={(event) => setBusinessRegistrationNumber(formatBusinessNumberInput(event.target.value))}
+                placeholder="사업자등록번호 (예: 123-45-67890)"
+                inputMode="numeric"
+                required
+              />
+              {businessNumberInvalid ? <p className="mt-1 px-1 text-xs font-bold text-destructive">사업자등록번호를 다시 확인해주세요.</p> : null}
+            </div>
             <input
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
               value={ownerName}
