@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
-import { getAuthCredentials, getCustomerLoginCredentials } from "./store";
+import { getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash } from "./store";
+import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
 export type AdminSession = {
@@ -167,7 +168,13 @@ export async function validateAdminCredentials(email: string, password: string):
   }
 
   if (email.trim().toLowerCase() !== adminEmail.toLowerCase()) return null;
-  if (password !== adminPassword) return null;
+  if (!(await verifyPassword(password, adminPassword))) return null;
+
+  // 2026-08-26 보안 수정: 평문으로 저장돼 있던 비밀번호는 로그인에 성공한 바로 이 시점에 해시로
+  // 전환해 저장합니다(레이지 마이그레이션) — 비밀번호를 다시 입력받지 않고도 자연스럽게 전환됩니다.
+  if (!isHashedPassword(adminPassword)) {
+    await updateAdminPasswordHash(await hashPassword(password)).catch(() => null);
+  }
 
   return {
     appRole: "maju_super_admin",
@@ -189,7 +196,13 @@ export async function validateCustomerCredentials(email: string, password: strin
   }
 
   if (email.trim().toLowerCase() !== customerEmail.toLowerCase()) return null;
-  if (password !== customerPassword) return null;
+  if (!(await verifyPassword(password, customerPassword))) return null;
+
+  // 2026-08-26 보안 수정: 위 관리자 로그인과 동일하게, 평문 비밀번호는 로그인 성공 시 즉시 해시로
+  // 전환해 저장합니다.
+  if (!isHashedPassword(customerPassword)) {
+    await updateCustomerPasswordHash(customerEmail, await hashPassword(password)).catch(() => null);
+  }
 
   return {
     appRole: "customer_user",

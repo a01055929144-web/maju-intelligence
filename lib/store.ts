@@ -9,6 +9,7 @@ import { summarizePastedReviewText } from "./review-summarizer";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
+import { hashPassword } from "./password";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
@@ -800,13 +801,23 @@ export async function getAuthCredentials(): Promise<AuthCredentials> {
   }
 }
 
+/**
+ * 2026-08-26 보안 수정: 관리자 계정 설정 화면은 항상 현재 값(이미 해시되어 있을 수 있음)을 폼에
+ * 채워서 그대로 다시 제출하므로, 실제로 값이 바뀐 경우에만 새 비밀번호를 해시합니다. 값이 그대로면
+ * 해시를 또 해시하는 사고를 막기 위해 기존 저장값을 그대로 유지합니다.
+ */
+async function resolvePasswordForStorage(nextValue: string | undefined, currentStoredValue: string): Promise<string> {
+  if (!nextValue || nextValue === currentStoredValue) return currentStoredValue;
+  return hashPassword(nextValue);
+}
+
 export async function upsertAuthCredentials(input: Partial<AuthCredentials>, auditContext: AuditActorContext = {}): Promise<{ credentials: AuthCredentials; persisted: boolean }> {
   const fallback = await getAuthCredentials();
   const credentials: AuthCredentials = {
     adminEmail: input.adminEmail?.trim() || fallback.adminEmail,
-    adminPassword: input.adminPassword || fallback.adminPassword,
+    adminPassword: await resolvePasswordForStorage(input.adminPassword, fallback.adminPassword),
     customerEmail: input.customerEmail?.trim() || fallback.customerEmail,
-    customerPassword: input.customerPassword || fallback.customerPassword,
+    customerPassword: await resolvePasswordForStorage(input.customerPassword, fallback.customerPassword),
     customerCompanyId: input.customerCompanyId || fallback.customerCompanyId
   };
 
@@ -916,6 +927,30 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
     console.error("Customer credential lookup fallback:", error);
     return fallbackCustomerCredentials();
   }
+}
+
+/**
+ * 2026-08-26 보안 수정: 로그인 시점에 평문으로 저장돼 있던 비밀번호를 해시로 즉시 전환(레이지
+ * 마이그레이션)하기 위한 전용 함수입니다. lib/auth.ts의 validateAdminCredentials에서만 호출합니다.
+ */
+export async function updateAdminPasswordHash(passwordHash: string): Promise<void> {
+  if (!isProductionStoreConfigured()) return;
+  await supabaseRequest(`auth_credentials?id=eq.${encodeURIComponent(AUTH_CREDENTIALS_ID)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ admin_password: passwordHash, updated_at: new Date().toISOString() })
+  }).catch(() => null);
+}
+
+/** 위와 동일한 목적으로, lib/auth.ts의 validateCustomerCredentials에서만 호출합니다. */
+export async function updateCustomerPasswordHash(email: string, passwordHash: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail || !isProductionStoreConfigured()) return;
+  await supabaseRequest(`auth_credentials?customer_email=eq.${encodeURIComponent(normalizedEmail)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ customer_password: passwordHash, updated_at: new Date().toISOString() })
+  }).catch(() => null);
 }
 
 export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedCompanyAccount[]; source: "empty" | "supabase" }> {
@@ -1096,6 +1131,16 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   const adminCredentials = await getAuthCredentials();
   const now = new Date().toISOString();
 
+  // 2026-08-26 보안 수정: 고객사 관리 화면은 항상 현재 비밀번호(해시일 수 있음)를 폼에 채워 그대로
+  // 다시 제출하므로, getManagedCompanyAccounts()와 동일하게 customer_company_id로 기존 값을 찾아
+  // 실제로 값이 바뀐 경우에만 새 비밀번호를 해시합니다.
+  const existingCredentialRows = !isNewCompany
+    ? await supabaseRequest<Array<{ customer_password: string | null }>>(
+        `auth_credentials?select=customer_password&customer_company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+      ).catch(() => [])
+    : [];
+  const customerPasswordToStore = await resolvePasswordForStorage(input.customerPassword, existingCredentialRows[0]?.customer_password || "");
+
   const companyRows = await supabaseRequest<
     Array<{
       id: string;
@@ -1136,7 +1181,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         admin_password: adminCredentials.adminPassword,
         customer_company_id: companyId,
         customer_email: customerEmail,
-        customer_password: input.customerPassword,
+        customer_password: customerPasswordToStore,
         updated_at: now
       }
     ])
