@@ -472,8 +472,17 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 목록에 보입니다(2026-08-24 발견: 이전에는 manualVehicles만 반영되어 담당자만 추가하면 목록에
   // 나타나지 않는 버그가 있었음 — 삭제 기능을 테스트하다 발견).
   const baseDeliveryVehicles = useMemo(
-    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes, manualVehicles, manualDrivers),
-    [routeSeedStores, vehicleFuelTypes, manualVehicles, manualDrivers]
+    // storeEdits(개별 거래처에서 담당자·배송차를 바꾼 편집 내역)를 그룹핑 전에 먼저 반영해야, 편집
+    // 직후 지도 필터(deliveryVehicleId)와 거래처 상세 화면이 같은 배송차를 가리킵니다. 2026-08-27
+    // 피드백("배송담당자 필터랑 거래처 상세 필터랑 데이터가 안맞아") 대응.
+    () =>
+      createDeliveryVehiclesFromStores(
+        applyStoreEditsForVehicleGrouping(routeSeedStores, storeEdits),
+        vehicleFuelTypes,
+        manualVehicles,
+        manualDrivers
+      ),
+    [routeSeedStores, storeEdits, vehicleFuelTypes, manualVehicles, manualDrivers]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   // "미배정" 자동 그룹은 실제로 저장된 배송차가 아니므로, 헤더의 "N대" 배지에는 실제 배송차 수만
@@ -3819,12 +3828,19 @@ function CustomerDirectoryView({
         {sourceReady ? (
           stores.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-sm">
+              <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
-                    <th className="w-[34%] border-r border-slate-200 px-4 py-3">거래처</th>
+                    <th className="w-[28%] border-r border-slate-200 px-4 py-3">거래처</th>
+                    <th className="w-[96px] border-r border-slate-200 px-4 py-3">업종</th>
                     <th className="w-[96px] border-r border-slate-200 px-4 py-3">매출등급</th>
-                    <th className="w-[150px] border-r border-slate-200 px-4 py-3">담당자</th>
+                    <th className="w-[130px] border-r border-slate-200 px-4 py-3">담당자</th>
+                    <th
+                      className="w-[130px] border-r border-slate-200 px-4 py-3"
+                      title="담당자와 배송차는 서로 독립적으로 지정할 수 있습니다(같은 배송차를 여러 담당자가 나눠 쓰는 경우 포함). 지도 필터가 이 값 기준으로 동작합니다."
+                    >
+                      배송차
+                    </th>
                     <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">예상매출</th>
                     <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">출발지 거리</th>
                     <th
@@ -3853,10 +3869,12 @@ function CustomerDirectoryView({
                         <p className="truncate font-black text-slate-950">{store.name}</p>
                         <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                       </td>
+                      <td className="max-w-[96px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.industry || "미분류"}</td>
                       <td className="border-r border-slate-100 px-4 py-3">
                         <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                       </td>
-                      <td className="max-w-[150px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
+                      <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
+                      <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryVehicleName || "미지정"}</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right">
@@ -6747,6 +6765,28 @@ function applyVehicleEdits(vehicles: DeliveryVehicle[], edits: Record<string, Ve
     ...vehicle,
     ...edits[vehicle.id]
   }));
+}
+
+// 2026-08-27 피드백("배송담당자 필터랑 거래처 상세 필터랑 데이터가 안맞아") 원인 수정:
+// createDeliveryVehiclesFromStores는 routeSeedStores(서버에서 막 받아온 원본 데이터)만 보고 배송차
+// 그룹을 계산합니다. 개별 거래처 편집(storeEdits)으로 담당자·배송차를 바꿔도 이 그룹핑은 재계산되지
+// 않아서, 거래처 상세에는 새 담당자·배송차 이름이 보이는데 지도 필터가 참조하는 deliveryVehicleId는
+// 여전히 편집 전 그룹에 묶여 있었습니다 — 그래서 특정 배송차로 필터링한 목록과 그 안 거래처의 상세
+// 정보가 서로 다른 담당자를 가리키는 것처럼 보였습니다. 배송차 그룹을 만들기 전에 편집된 담당자·배송차
+// 값을 먼저 원본 필드에 반영해서, 그룹핑 단계부터 최신 값을 쓰도록 합니다.
+function applyStoreEditsForVehicleGrouping(stores: StoreRow[], edits: Record<string, StoreEdit>): StoreRow[] {
+  return stores.map((store) => {
+    const edit = edits[store.id];
+    if (!edit || (edit.deliveryDriver === undefined && edit.deliveryVehicleName === undefined)) return store;
+    return {
+      ...store,
+      deliveryDriver: edit.deliveryDriver !== undefined ? edit.deliveryDriver : store.deliveryDriver,
+      // createDeliveryVehiclesFromStores는 deliveryVehicleName이 아니라 deliveryVehicle 필드로 그룹
+      // 키를 정합니다(서버 원본 필드명, 위 함수의 주석 참고). 편집값을 같은 필드에 반영해야 재그룹핑에
+      // 실제로 반영됩니다.
+      deliveryVehicle: edit.deliveryVehicleName !== undefined ? edit.deliveryVehicleName : store.deliveryVehicle
+    };
+  });
 }
 
 function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {

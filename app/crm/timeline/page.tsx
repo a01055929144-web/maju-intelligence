@@ -629,7 +629,11 @@ export default function CrmTimelinePage() {
       normalizeBusinessRegistrationNumber(draftCustomer.businessNumber || "") !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber || "")
   );
   const draftBusinessNumberValid = !draftCustomer?.businessNumber || isValidBusinessRegistrationNumber(draftCustomer.businessNumber || "");
-  const canSaveCustomer = !isSaving && (!draftBusinessNumberChanged || draftBusinessNumberValid);
+  // 2026-08-27 피드백("사업자번호를 모를 수도 있으니깐 일단 생성과 변경 저장이 가능토록해") 반영:
+  // 체크섬 검증은 참고용 안내로만 보여주고, 저장 자체는 막지 않습니다. 실제 현장에서는 등록 시점에
+  // 사업자번호를 모르거나 나중에 확인해야 하는 거래처가 많아, 번호 형식이 의심스러워도 우선 저장할
+  // 수 있어야 합니다(회사 자체 가입 화면의 엄격한 검증과는 별개 기준입니다).
+  const canSaveCustomer = !isSaving;
 
   function applyOperationFilter(nextFilter: OperationFilter) {
     const resolvedFilter = operationFilter === nextFilter ? "all" : nextFilter;
@@ -707,10 +711,6 @@ export default function CrmTimelinePage() {
 
   async function saveCustomer() {
     if (!draftCustomer) return;
-    if (draftBusinessNumberChanged && !draftBusinessNumberValid) {
-      setSaveMessage("사업자번호가 유효하지 않습니다. 10자리 번호와 체크값을 확인하세요.");
-      return;
-    }
     setIsSaving(true);
     setSaveMessage("");
 
@@ -736,7 +736,9 @@ export default function CrmTimelinePage() {
           phone: draftCustomer.phone,
           region: draftCustomer.region,
           representativeName: draftCustomer.representativeName,
-          validateBusinessNumber: draftBusinessNumberChanged && Boolean(draftCustomer.businessNumber),
+          // 사업자번호를 몰라 임시값을 넣거나 나중에 정정하는 경우가 흔해, 저장 자체는 항상 허용합니다
+          // (검증은 위 helper 텍스트로만 참고 안내).
+          validateBusinessNumber: false,
           visitCount: draftCustomer.visitCount,
           companyId: getAdminCompanyIdFromUrl()
         })
@@ -1585,10 +1587,10 @@ export default function CrmTimelinePage() {
                           draftBusinessNumberChanged
                             ? draftBusinessNumberValid
                               ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber || "")} 검증 완료`
-                              : "유효하지 않은 사업자번호입니다."
+                              : "형식이 확인되지 않았지만 저장은 가능합니다. 나중에 정확한 번호로 수정해 주세요."
                             : "기존 번호 유지"
                         }
-                        helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
+                        helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "muted" : draftBusinessNumberChanged ? "success" : "muted"}
                         label="사업자번호"
                         value={draftCustomer.businessNumber || ""}
                         inputRef={businessNumberInputRef}

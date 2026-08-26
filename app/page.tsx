@@ -4828,7 +4828,10 @@ function buildManualCustomerPayload(row: RawRow) {
     phone: String(row.phone || ""),
     region: String(row.region || extractRegion(String(row.address || "")) || "미분류"),
     representativeName: String(row.representativeName || ""),
-    validateBusinessNumber: true,
+    // 사업자번호를 모르는 채로 거래처를 우선 등록해야 하는 경우가 많아, 이 수기 등록 흐름도 다른
+    // 거래처 등록 경로(지도 작업공간, CRM 원장)와 마찬가지로 저장을 막지 않습니다(회사 자체 가입
+    // 화면의 엄격한 검증과는 별개 기준).
+    validateBusinessNumber: false,
     visitCount: 0
   };
 }
