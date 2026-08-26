@@ -2518,51 +2518,62 @@ function DeliveryAssignmentPanel({
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
                     <div className="flex items-center gap-1">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
-                        {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
-                        {fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : " (기본값)"}
-                      </span>
+                      {vehicle.isUnassigned ? null : (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
+                          {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
+                          {fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : " (기본값)"}
+                        </span>
+                      )}
                       <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
                         {vehicle.stops.length}곳
                       </span>
                     </div>
                   </div>
-                  <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-                    <UserRound className="h-3.5 w-3.5" />
-                    {vehicle.driver}
-                  </p>
+                  {vehicle.isUnassigned ? (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-400">
+                      <UserRound className="h-3.5 w-3.5" />
+                      담당자·배송차가 지정되지 않은 거래처 모음 (자동 그룹)
+                    </p>
+                  ) : (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+                      <UserRound className="h-3.5 w-3.5" />
+                      {vehicle.driver}
+                    </p>
+                  )}
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <span
-                        className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (deletingVehicleId) return;
-                          void handleDelete(vehicle);
-                        }}
-                        role="button"
-                        title={
-                          vehicle.stops.length === 0
-                            ? "배정된 거래처가 없어 바로 삭제할 수 있습니다"
-                            : `배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
-                        }
-                      >
-                        {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                        삭제
-                      </span>
-                      <span
-                        className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setEditingVehicleId(vehicle.id);
-                        }}
-                        role="button"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                        편집
-                      </span>
-                    </div>
+                    {vehicle.isUnassigned ? null : (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span
+                          className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (deletingVehicleId) return;
+                            void handleDelete(vehicle);
+                          }}
+                          role="button"
+                          title={
+                            vehicle.stops.length === 0
+                              ? "배정된 거래처가 없어 바로 삭제할 수 있습니다"
+                              : `배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
+                          }
+                        >
+                          {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          삭제
+                        </span>
+                        <span
+                          className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingVehicleId(vehicle.id);
+                          }}
+                          role="button"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          편집
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {deleteError?.vehicleId === vehicle.id ? (
                     <p className="mt-1.5 text-[11px] font-bold leading-4 text-rose-600">{deleteError.message}</p>
@@ -6228,7 +6239,12 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
         businessRegistrationNumber: details.businessNumber || "",
         businessStatus: normalizeStoreBusinessStatus(details.businessStatus),
         deliveryArea: (store as RoutePlanStop & { deliveryArea?: string }).deliveryArea || store.region,
-        deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || defaultDriverByIndex(index),
+        // 2026-08-24 피드백("삭제가 계속 안되네") 근본 원인 수정: 담당자가 없는 거래처에 순서대로
+        // "김배송 매니저" 같은 가짜 이름을 붙이던 defaultDriverByIndex 폴백을 없앴습니다. 이 폴백 때문에
+        // 담당자를 정상적으로 지워도(delivery_manager를 null로 저장해도) 새로고침하자마자 같은 순서로
+        // 같은 가짜 이름이 다시 생겨, 화면에서는 "삭제가 안 되는 것"처럼 보였습니다. 이제 담당자가 없으면
+        // 빈 값 그대로 두고, createDeliveryVehiclesFromStores에서 "미배정" 그룹 하나로 모아 보여줍니다.
+        deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || "",
         email: store.email || "",
         grade: getRevenueGrade(store.expectedRevenue),
         industry: store.industry || "미분류",
@@ -6259,7 +6275,8 @@ function createStoreRowsFromLedgerMarkers(existingMarkers: KakaoMapMarker[]): St
         businessRegistrationNumber: "",
         businessStatus: "unknown",
         deliveryArea: region,
-        deliveryDriver: defaultDriverByIndex(index),
+        // 위 createStoreRows와 동일한 이유로 가짜 담당자 이름 생성을 제거했습니다.
+        deliveryDriver: "",
         distanceKm: 0,
         durationMinutes: 0,
         email: "",
@@ -6397,15 +6414,22 @@ function createDeliveryVehiclesFromStores(
 ): DeliveryVehicle[] {
   const groups = new Map<string, StoreRow[]>();
   const explicitVehicleKeys = new Set<string>();
+  // 2026-08-24 피드백("삭제가 계속 안되네") 근본 원인 수정: 예전에는 담당자가 없는 거래처를
+  // defaultDriverByIndex(순서 기반 "김배송 매니저" 등 가짜 이름)로 채워 넣고, 그 가짜 이름을 그대로
+  // 배송차 그룹 키로 썼습니다. 그래서 실제로 담당자를 지웠어도(서버 값은 null) 새로고침하면 같은
+  // 순서의 거래처가 같은 가짜 이름을 다시 받아 똑같은 배송차가 재생성되어 "삭제가 안 되는 것"처럼
+  // 보였습니다. 이제 담당자·배송차가 둘 다 없는 거래처는 가짜 이름을 붙이지 않고 이 고정 키 하나로
+  // 모아 "미배정" 그룹 한 개로만 보여줍니다. 실제로 저장된 배송차가 아니므로 삭제·편집 대상도 아닙니다.
+  const UNASSIGNED_KEY = "__unassigned__";
 
-  stores.forEach((store, index) => {
-    const driver = store.deliveryDriver || defaultDriverByIndex(index);
+  stores.forEach((store) => {
+    const driver = store.deliveryDriver || "";
     const area = store.deliveryArea || store.region || "미분류";
     // routeSeedStores(서버 원본 데이터)에는 deliveryVehicleName이 아니라 deliveryVehicle 필드로
     // 값이 들어옵니다(RoutePlanStop.deliveryVehicle). deliveryVehicleName은 createDeliveryStoreRows가
     // 그룹핑 이후 화면 표시용으로 파생시키는 필드라 여기서는 아직 존재하지 않아, 이 값으로 확인하면
     // 항상 비어 있어 그룹핑이 담당자 기준 자동 그룹으로만 폴백해버립니다.
-    const vehicleKey = store.deliveryVehicle || driver;
+    const vehicleKey = store.deliveryVehicle || driver || UNASSIGNED_KEY;
     if (store.deliveryVehicle) explicitVehicleKeys.add(vehicleKey);
     groups.set(vehicleKey, [...(groups.get(vehicleKey) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
   });
@@ -6424,14 +6448,23 @@ function createDeliveryVehiclesFromStores(
     if (!groups.has(driverName)) groups.set(driverName, []);
   });
 
-  return Array.from(groups.entries()).map(([vehicleKey, stops], index) => {
+  // "미배정" 그룹은 항상 목록 맨 뒤에 오도록 정렬합니다 — 그래야 실제 배송차 자동 번호("배송 1호차",
+  // "배송 2호차"...)가 미배정 그룹이 어디 끼어드는지에 따라 밀리지 않습니다.
+  const sortedEntries = Array.from(groups.entries()).sort(
+    ([a], [b]) => (a === UNASSIGNED_KEY ? 1 : 0) - (b === UNASSIGNED_KEY ? 1 : 0)
+  );
+
+  let autoVehicleNumber = 0;
+  return sortedEntries.map(([vehicleKey, stops]) => {
     const orderedStops = stops.map((stop, stopIndex) => ({
       ...stop,
       order: stopIndex + 1
     }));
+    const isUnassigned = vehicleKey === UNASSIGNED_KEY;
     const isExplicitVehicle = explicitVehicleKeys.has(vehicleKey);
-    const representativeDriver = mostFrequentDriver(orderedStops) || (isExplicitVehicle ? "" : vehicleKey);
-    const vehicleName = isExplicitVehicle ? vehicleKey : `배송 ${index + 1}호차`;
+    const representativeDriver = isUnassigned ? "" : mostFrequentDriver(orderedStops) || (isExplicitVehicle ? "" : vehicleKey);
+    if (!isUnassigned) autoVehicleNumber += 1;
+    const vehicleName = isUnassigned ? "미배정" : isExplicitVehicle ? vehicleKey : `배송 ${autoVehicleNumber}호차`;
 
     return {
       addresses: orderedStops.map((stop) => stop.address || stop.region),
@@ -6439,7 +6472,8 @@ function createDeliveryVehiclesFromStores(
       driver: representativeDriver,
       expectedRevenue: orderedStops.reduce((total, stop) => total + Number(stop.expectedRevenue || 0), 0),
       fuelType: vehicleFuelTypes?.[representativeDriver] || "diesel",
-      id: `vehicle-${index + 1}`,
+      id: isUnassigned ? "vehicle-unassigned" : `vehicle-${autoVehicleNumber}`,
+      isUnassigned,
       name: vehicleName,
       stops: orderedStops,
       totalDistanceKm: roundToOneDecimal(orderedStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
@@ -6471,10 +6505,6 @@ function summarizeVehicleArea(stops: StoreRow[]) {
   const areas = Array.from(new Set(stops.map((stop) => stop.deliveryArea || stop.region).filter(Boolean))).slice(0, 3);
   if (areas.length === 0) return "미분류";
   return areas.join("·");
-}
-
-function defaultDriverByIndex(index: number) {
-  return ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저", "정배송 매니저", "한배송 매니저", "오배송 매니저", "서배송 매니저", "신배송 매니저", "문배송 매니저"][index % 10];
 }
 
 function createVehicleMarkerMeta(vehicles: DeliveryVehicle[]) {

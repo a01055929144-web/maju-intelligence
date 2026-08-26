@@ -258,6 +258,10 @@ export type DeliveryVehicle = {
   totalDurationMinutes: number;
   expectedRevenue: number;
   fuelType?: "gasoline" | "diesel";
+  // 2026-08-24 피드백("삭제가 계속 안되네") 근본 원인 수정: 담당자가 지정되지 않은 거래처를
+  // "김배송 매니저" 같은 가짜 이름으로 자동 채우던 로직을 없애고, 대신 이 플래그로 표시되는 단일
+  // "미배정" 그룹으로 모읍니다. 실제로 저장된 배송차/담당자가 아니므로 삭제·편집 대상이 될 수 없습니다.
+  isUnassigned?: boolean;
 };
 export type VisitResult = "visited" | "interested" | "quote-requested" | "pending" | "failed";
 export type VisitTimelineItem = {

@@ -367,7 +367,7 @@ export function TodayCourseView({
                 <option value="all">전체 거래처 보기</option>
                 {vehicles.map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name} · {vehicle.driver} · {vehicle.stops.length}곳
+                    {[vehicle.name, vehicle.driver].filter(Boolean).join(" · ")} · {vehicle.stops.length}곳
                   </option>
                 ))}
               </select>
@@ -415,7 +415,7 @@ export function TodayCourseView({
                     <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
                     <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">{vehicle.stops.length}곳</span>
                   </div>
-                  <p className="mt-1 text-xs font-bold text-slate-500">{vehicle.driver} · {vehicle.area}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{[vehicle.driver, vehicle.area].filter(Boolean).join(" · ")}</p>
                 </button>
               ))}
             </div>
