@@ -1297,39 +1297,38 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             {sourceReady ? `${realVehicleCount}대` : "배송차 대기"}
           </span>
         </div>
-        <div className="flex max-w-full flex-wrap items-center gap-1.5">
+        <div className="flex max-w-full flex-wrap items-center justify-start gap-2 xl:justify-end">
           {activeView === "map" ? (
-            <button
-              aria-pressed={leadRadiusOpen}
-              className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
-                leadRadiusOpen ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "border border-teal-100 bg-teal-50 text-teal-800 hover:bg-teal-100"
-              }`}
-              onClick={() => setLeadRadiusOpen((value) => !value)}
-              title="지도를 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
-              type="button"
-            >
-              <Radar className="h-4 w-4" />
-              <span>리드 반경</span>
-            </button>
+            <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+              <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">탐색</span>
+              <button
+                aria-pressed={leadRadiusOpen}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                  leadRadiusOpen ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-teal-800 hover:bg-teal-50"
+                }`}
+                onClick={() => setLeadRadiusOpen((value) => !value)}
+                title="지도를 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
+                type="button"
+              >
+                <Radar className="h-4 w-4" />
+                <span>반경</span>
+              </button>
+              <button
+                aria-pressed={showAllLeadsOnMap}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                  showAllLeadsOnMap ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+                onClick={() => setShowAllLeadsOnMap((value) => !value)}
+                title="지도에 활성 신규 리드 전체를 표시합니다."
+                type="button"
+              >
+                <Layers className="h-4 w-4" />
+                <span className="hidden sm:inline">{allLeadsLoadState === "loading" ? "로딩" : "리드"}</span>
+              </button>
+            </div>
           ) : null}
-          {activeView === "map" ? (
-            <button
-              aria-pressed={showAllLeadsOnMap}
-              className={`flex h-10 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
-                showAllLeadsOnMap
-                  ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
-                  : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white hover:text-slate-900"
-              }`}
-              onClick={() => setShowAllLeadsOnMap((value) => !value)}
-              title="지도에 활성 신규 리드 전체를 표시합니다."
-              type="button"
-            >
-              <Layers className="h-4 w-4" />
-              <span className="hidden sm:inline">{allLeadsLoadState === "loading" ? "리드 로딩" : "리드 전체"}</span>
-              <span className="sm:hidden">리드</span>
-            </button>
-          ) : null}
-          <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+          <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">표시</span>
             {[
               { label: "등급별", value: "grade" },
               { label: "차량별", value: "vehicle" }
@@ -1337,8 +1336,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               const selected = markerViewMode === item.value;
               return (
                 <button
-                  className={`h-8 rounded-md px-3 text-xs font-black transition ${
-                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  className={`h-9 rounded-md px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
@@ -1349,14 +1348,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               );
             })}
           </div>
-          <nav className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+          <nav className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무</span>
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
               return (
                 <button
-                  className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
-                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => changeWorkspaceView(item.value)}
@@ -1369,35 +1369,38 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               );
             })}
           </nav>
-          <button
-            aria-expanded={statsExpanded}
-            aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
-            className={`maju-button-secondary grid h-10 w-10 shrink-0 place-items-center rounded-md ${statsExpanded ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
-            onClick={() => setStatsExpanded((value) => !value)}
-            title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
-            type="button"
-          >
-            <Gauge className="h-4 w-4" />
-          </button>
-          <button
-            aria-label={isFullscreen ? "전체 화면 종료" : "전체 화면"}
-            aria-pressed={isFullscreen}
-            className={`maju-button-secondary grid h-10 w-10 shrink-0 place-items-center rounded-md ${isFullscreen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
-            type="button"
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-          <button
-            aria-label="필터 초기화"
-            className="maju-button-secondary grid h-10 w-10 shrink-0 place-items-center rounded-md text-slate-600"
-            onClick={resetWorkspace}
-            title="필터 초기화"
-            type="button"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
+          <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">화면</span>
+            <button
+              aria-expanded={statsExpanded}
+              aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${statsExpanded ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              onClick={() => setStatsExpanded((value) => !value)}
+              title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
+              type="button"
+            >
+              <Gauge className="h-4 w-4" />
+            </button>
+            <button
+              aria-label={isFullscreen ? "전체 화면 종료" : "전체 화면"}
+              aria-pressed={isFullscreen}
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${isFullscreen ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
+              type="button"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+            <button
+              aria-label="필터 초기화"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              onClick={resetWorkspace}
+              title="필터 초기화"
+              type="button"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1467,7 +1470,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         }`}
         ref={mapHeaderRef}
       >
-        <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
+        <div className="grid gap-2 xl:grid-cols-[minmax(360px,1fr)_minmax(420px,auto)] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -1610,47 +1613,49 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               </div>
             ) : null}
           </label>
-          <div className="flex flex-wrap items-center justify-start gap-1.5 xl:justify-end">
+          <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
             <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
-            <select
-              className={`h-10 rounded-lg border px-2.5 text-xs font-black outline-none transition ${
-                gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
-              }`}
-              onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
-              value={gradeFilter}
-            >
-              {gradeFilters.map((filter) => (
-                <option key={filter.value} value={filter.value}>
-                  {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
-                </option>
-              ))}
-            </select>
-            <button
-              aria-pressed={excludeClosedStores}
-              className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
-                excludeClosedStores
-                  ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
-                  : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
-              }`}
-              onClick={() => setExcludeClosedStores((value) => !value)}
-              type="button"
-            >
-              {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
-            </button>
-            <button
-              className="maju-button-secondary h-10 rounded-lg"
-              onClick={focusOrigin}
-              title="물류 출발지로 지도 이동"
-              type="button"
-            >
-              출발지
-            </button>
-            <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
-              {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
-            </span>
-            <span className="ml-1 text-xs font-black text-slate-500">
-              {sourceReady ? `${visibleStores.length}/${allStores.length}곳` : "거래처 등록 필요"}
-            </span>
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end">
+              <select
+                className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
+                }`}
+                onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
+                value={gradeFilter}
+              >
+                {gradeFilters.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
+                  </option>
+                ))}
+              </select>
+              <button
+                aria-pressed={excludeClosedStores}
+                className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                  excludeClosedStores
+                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                }`}
+                onClick={() => setExcludeClosedStores((value) => !value)}
+                type="button"
+              >
+                {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
+              </button>
+              <button
+                className="maju-button-secondary h-9 rounded-md px-3 text-xs"
+                onClick={focusOrigin}
+                title="물류 출발지로 지도 이동"
+                type="button"
+              >
+                출발지
+              </button>
+              <span className={`min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-white text-slate-700 ring-1 ring-inset ring-slate-200" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
+                {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
+              </span>
+              <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200">
+                {sourceReady ? `${visibleStores.length}/${allStores.length}곳` : "등록 필요"}
+              </span>
+            </div>
           </div>
         </div>
         {statsExpanded ? (
@@ -6819,7 +6824,7 @@ export function roundToSix(value: number) {
 }
 
 export function gradeBadgeClass(grade: RevenueGrade) {
-  if (grade === "A") return "rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-black text-white";
-  if (grade === "B") return "rounded-full bg-slate-700 px-2.5 py-1 text-xs font-black text-white";
-  return "rounded-full bg-slate-500 px-2.5 py-1 text-xs font-black text-white";
+  if (grade === "A") return "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800 ring-1 ring-inset ring-emerald-200";
+  if (grade === "B") return "rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800 ring-1 ring-inset ring-blue-200";
+  return "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200";
 }
