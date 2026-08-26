@@ -81,6 +81,9 @@ export default function CustomerLoginPage() {
             <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/admin/login">
               관리자 계정으로 로그인
             </Link>
+            <Link className="block text-center text-sm font-bold text-primary underline-offset-4 hover:underline" href="/signup">
+              처음이신가요? 회사 가입하기
+            </Link>
           </form>
         </CardContent>
       </Card>

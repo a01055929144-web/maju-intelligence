@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createOAuthState } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     redirect_uri: redirectUri,
     response_type: "code",
     scope: "openid email profile",
-    state: inviteCode || "personal"
+    state: await createOAuthState(inviteCode || "personal")
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);

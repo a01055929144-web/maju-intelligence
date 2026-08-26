@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setCustomerSession } from "@/lib/auth";
+import { consumeOAuthState, setCustomerSession } from "@/lib/auth";
 import { acceptStaffOAuthInvitation, createPersonalOAuthWorkspace } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
@@ -24,15 +24,19 @@ type NaverUserResponse = {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code") || "";
-  const state = request.nextUrl.searchParams.get("state") || "";
-  const inviteCode = state === "personal" ? "" : state;
+  const rawState = request.nextUrl.searchParams.get("state") || "";
+  const { ok: stateOk, payload: statePayload } = await consumeOAuthState(rawState);
+  const inviteCode = stateOk && statePayload !== "personal" ? statePayload : "";
 
+  if (!stateOk) {
+    return redirectJoin(request.url, "", "invalid_oauth_state");
+  }
   if (!code) {
     return redirectJoin(request.url, inviteCode, "missing_naver_code");
   }
 
   try {
-    const token = await exchangeNaverCode(code, state);
+    const token = await exchangeNaverCode(code, rawState);
     if (!token.access_token) {
       return redirectJoin(request.url, inviteCode, token.error || "naver_token_failed");
     }

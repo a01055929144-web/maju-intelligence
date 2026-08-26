@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setCustomerSession } from "@/lib/auth";
+import { consumeOAuthState, setCustomerSession } from "@/lib/auth";
 import { acceptStaffOAuthInvitation, createPersonalOAuthWorkspace } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
@@ -20,9 +20,13 @@ type GoogleUserResponse = {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code") || "";
-  const state = request.nextUrl.searchParams.get("state") || "";
-  const inviteCode = state === "personal" ? "" : state;
+  const rawState = request.nextUrl.searchParams.get("state") || "";
+  const { ok: stateOk, payload: statePayload } = await consumeOAuthState(rawState);
+  const inviteCode = stateOk && statePayload !== "personal" ? statePayload : "";
 
+  if (!stateOk) {
+    return redirectJoin(request.url, "", "invalid_oauth_state");
+  }
   if (!code) {
     return redirectJoin(request.url, inviteCode, "missing_google_code");
   }

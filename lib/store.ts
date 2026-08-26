@@ -1228,6 +1228,133 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   };
 }
 
+export type CompanySignupInput = {
+  companyName: string;
+  businessRegistrationNumber: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPassword: string;
+  termsAgreed: boolean;
+  privacyAgreed: boolean;
+};
+export type CompanySignupResult = {
+  companyId: string;
+  companyName: string;
+  email: string;
+  name: string;
+};
+
+// 2026-08-26: 회사가 관리자 도움 없이 스스로 가입하는 플로우(P0-3)입니다. 사업자등록번호로
+// 중복 가입을 막고(P0-4), 약관·개인정보처리방침 동의를 서버에서도 강제합니다(P0-5). 관리자용
+// upsertManagedCompanyAccount와는 의도적으로 분리했습니다 — 그쪽은 MAJU 운영자가 이미 신뢰된
+// 값을 입력하는 화면이라 사업자번호·약관 동의가 필수가 아니고, 여기서 필수 검증을 새로 걸면
+// 기존 관리자 화면에 회귀 위험이 생깁니다.
+export async function createCompanySignup(input: CompanySignupInput): Promise<CompanySignupResult> {
+  const companyName = input.companyName.trim();
+  const businessRegistrationNumber = normalizeBusinessNumber(input.businessRegistrationNumber || "");
+  const ownerName = input.ownerName.trim();
+  const ownerEmail = input.ownerEmail.trim().toLowerCase();
+
+  if (!companyName) throw new Error("회사명을 입력해주세요.");
+  if (businessRegistrationNumber.length !== 10) throw new Error("사업자등록번호 10자리를 정확히 입력해주세요.");
+  if (!ownerName) throw new Error("담당자명을 입력해주세요.");
+  if (!ownerEmail || !ownerEmail.includes("@")) throw new Error("올바른 이메일을 입력해주세요.");
+  if (!input.ownerPassword || input.ownerPassword.length < 8) throw new Error("비밀번호는 8자 이상이어야 합니다.");
+  if (!input.termsAgreed || !input.privacyAgreed) throw new Error("이용약관과 개인정보처리방침에 모두 동의해야 가입할 수 있습니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      companyId: globalThis.crypto.randomUUID(),
+      companyName,
+      email: ownerEmail,
+      name: ownerName
+    };
+  }
+
+  const existingByNumber = await supabaseRequest<Array<{ id: string }>>(
+    `companies?select=id&business_registration_number=eq.${encodeURIComponent(businessRegistrationNumber)}&limit=1`
+  ).catch(() => []);
+  if (existingByNumber.length > 0) {
+    throw new Error("이미 가입된 사업자등록번호입니다. 회사 관리자에게 직원 초대를 요청해주세요.");
+  }
+
+  const existingByEmail = await supabaseRequest<Array<{ id: string }>>(
+    `auth_credentials?select=id&customer_email=eq.${encodeURIComponent(ownerEmail)}&limit=1`
+  ).catch(() => []);
+  if (existingByEmail.length > 0) {
+    throw new Error("이미 사용 중인 이메일입니다.");
+  }
+
+  const companyId = globalThis.crypto.randomUUID();
+  const now = new Date().toISOString();
+  const adminCredentials = await getAuthCredentials();
+
+  let companyRows: Array<{ id: string; name: string }>;
+  try {
+    companyRows = await supabaseRequest<Array<{ id: string; name: string }>>("companies", {
+      method: "POST",
+      body: JSON.stringify([
+        {
+          id: companyId,
+          name: companyName,
+          business_registration_number: businessRegistrationNumber,
+          owner_name: ownerName,
+          status: "active",
+          terms_agreed_at: now,
+          privacy_agreed_at: now,
+          updated_at: now
+        }
+      ])
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("companies_business_registration_number_unique") || message.includes("duplicate key")) {
+      throw new Error("이미 가입된 사업자등록번호입니다. 회사 관리자에게 직원 초대를 요청해주세요.");
+    }
+    throw error;
+  }
+
+  const company = companyRows[0];
+  const customerPasswordHash = await hashPassword(input.ownerPassword);
+
+  await supabaseRequest("auth_credentials", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        id: companyId,
+        admin_email: adminCredentials.adminEmail,
+        admin_password: adminCredentials.adminPassword,
+        customer_company_id: companyId,
+        customer_email: ownerEmail,
+        customer_password: customerPasswordHash,
+        updated_at: now
+      }
+    ])
+  });
+
+  await writeAdminAuditLog({
+    companyId: company.id,
+    action: "company_self_signup",
+    targetType: "company",
+    targetId: company.id,
+    metadata: {
+      actorName: ownerName,
+      actorRole: "self_signup",
+      companyName: company.name
+    }
+  }).catch(() => null);
+
+  return {
+    companyId: company.id,
+    companyName: company.name,
+    email: ownerEmail,
+    name: ownerName
+  };
+}
+
 export async function createStaffInvitation(input: StaffInvitationInput, auditContext: AuditActorContext = {}): Promise<{ invitation: StaffInvitation; persisted: boolean }> {
   const companyId = input.companyId;
   const employeeName = input.employeeName?.trim() || "직원";

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ClipboardCheck, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
+import { getStaffInvitationPreview } from "@/lib/store";
 
 export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string; error?: string }> }) {
   const resolvedSearchParams = await searchParams;
@@ -18,6 +19,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
 
   const joinMode = inviteCode ? "company" : "personal";
   const errorMessage = describeOAuthError(errorCode);
+  const invitePreview = inviteCode ? await getStaffInvitationPreview(inviteCode).catch(() => null) : null;
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
@@ -53,11 +55,34 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
 
           {inviteCode ? (
             <section className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-black text-slate-500">초대 코드</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-black text-slate-500">초대 코드</p>
+                {invitePreview?.status === "pending" ? (
+                  <Badge className="bg-emerald-50 text-emerald-700">
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                    확인됨
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-50 text-amber-800">확인 필요</Badge>
+                )}
+              </div>
               <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-3">
                 <span className="min-w-0 truncate font-mono text-sm font-black text-slate-900">{inviteCode}</span>
                 <Badge className="bg-emerald-50 text-emerald-700">회사 연결</Badge>
               </div>
+              {invitePreview ? (
+                <div className="mt-3 grid gap-2 rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-sm">
+                  <p className="font-black text-slate-950">{invitePreview.companyName}</p>
+                  <p className="font-semibold text-slate-600">
+                    {invitePreview.employeeName}님 초대 · 상태 {invitePreview.status === "pending" ? "가입 가능" : "처리 확인 필요"}
+                  </p>
+                  {invitePreview.status !== "pending" ? <p className="text-xs font-bold text-amber-800">이미 사용되었거나 중지된 초대일 수 있습니다. 관리자에게 새 초대 링크를 요청하세요.</p> : null}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
+                  초대 정보를 아직 확인하지 못했습니다. 카카오 로그인 후에도 같은 오류가 나면 관리자에게 초대 링크 재발급을 요청하세요.
+                </p>
+              )}
             </section>
           ) : null}
 
@@ -128,6 +153,7 @@ function describeOAuthError(errorCode: string): string {
   if (!errorCode) return "";
 
   const knownCodes: Record<string, string> = {
+    invalid_oauth_state: "로그인 요청이 만료되었거나 유효하지 않습니다. 처음부터 다시 시도해주세요.",
     kakao_callback_failed: "카카오 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
     kakao_token_failed: "카카오 인증 토큰 발급에 실패했습니다. 카카오 디벨로퍼스에 등록한 Redirect URI가 정확한지 확인해주세요.",
     kakao_user_failed: "카카오 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",

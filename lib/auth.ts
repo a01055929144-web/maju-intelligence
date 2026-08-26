@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { createHash, timingSafeEqual } from "crypto";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import { getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
@@ -246,4 +246,47 @@ export async function clearAdminSession() {
 export async function clearCustomerSession() {
   const cookieStore = await cookies();
   cookieStore.delete(CUSTOMER_COOKIE_NAME);
+}
+
+const OAUTH_STATE_COOKIE = "maju_oauth_state";
+
+/**
+ * 2026-08-26 보안 수정(P0-6): 카카오/네이버/구글 로그인의 `state` 파라미터는 지금까지 초대 코드를
+ * 그대로 실어 보내는 용도로만 쓰이고 CSRF 방지용 검증은 없었습니다. 여기서는 실제로 검증 가능한
+ * 임의의 nonce를 발급해 짧은 수명의 httpOnly 쿠키에 저장하고, 콜백에서 그 쿠키 값과 대조합니다.
+ * 초대 코드(또는 "personal")는 `${nonce}.${payload}` 형태로 nonce 뒤에 그대로 실어 보내 기존 동작을
+ * 유지합니다.
+ */
+export async function createOAuthState(payload: string): Promise<string> {
+  const nonce = randomBytes(16).toString("hex");
+  const cookieStore = await cookies();
+  cookieStore.set(OAUTH_STATE_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 10
+  });
+  return `${nonce}.${payload}`;
+}
+
+export async function consumeOAuthState(state: string): Promise<{ ok: boolean; payload: string }> {
+  const cookieStore = await cookies();
+  const expectedNonce = cookieStore.get(OAUTH_STATE_COOKIE)?.value || "";
+  cookieStore.delete(OAUTH_STATE_COOKIE);
+
+  const separatorIndex = state.indexOf(".");
+  if (separatorIndex === -1) return { ok: false, payload: "" };
+
+  const nonce = state.slice(0, separatorIndex);
+  const payload = state.slice(separatorIndex + 1);
+  if (!expectedNonce || !nonce) return { ok: false, payload };
+
+  const nonceBuffer = Buffer.from(nonce);
+  const expectedBuffer = Buffer.from(expectedNonce);
+  if (nonceBuffer.length !== expectedBuffer.length || !timingSafeEqual(nonceBuffer, expectedBuffer)) {
+    return { ok: false, payload };
+  }
+
+  return { ok: true, payload };
 }

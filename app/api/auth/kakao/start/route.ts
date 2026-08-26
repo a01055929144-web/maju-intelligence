@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createOAuthState } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    state: inviteCode || "personal"
+    state: await createOAuthState(inviteCode || "personal")
   });
 
   return NextResponse.redirect(`https://kauth.kakao.com/oauth/authorize?${params.toString()}`);
