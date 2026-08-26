@@ -476,6 +476,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     [routeSeedStores, vehicleFuelTypes, manualVehicles, manualDrivers]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
+  // "미배정" 자동 그룹은 실제로 저장된 배송차가 아니므로, 헤더의 "N대" 배지에는 실제 배송차 수만
+  // 셉니다(2026-08-24 피드백 대응으로 미배정 그룹을 도입하며 함께 정리).
+  const realVehicleCount = useMemo(() => deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length, [deliveryVehicles]);
   const fuelTypeConfiguredByVehicleId = useMemo(() => {
     const map = new Map<string, boolean>();
     baseDeliveryVehicles.forEach((vehicle) => map.set(vehicle.id, Boolean(vehicleFuelTypes?.[vehicle.driver])));
@@ -1291,7 +1294,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             {sourceReady ? `${allStores.length}곳` : "거래처 등록 필요"}
           </span>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
-            {sourceReady ? `${deliveryVehicles.length}대` : "배송차 대기"}
+            {sourceReady ? `${realVehicleCount}대` : "배송차 대기"}
           </span>
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-1.5">
@@ -1415,10 +1418,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               value={sourceReady ? `${kpiSummary?.selectedCount ?? selectedGradeCount}곳` : "등록 필요"}
             />
             <Kpi
-              helper={selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "전체 배송차 기준"}
+              helper={selectedVehicle ? [selectedVehicle.driver, selectedVehicle.area].filter(Boolean).join(" · ") : "전체 배송차 기준"}
               label={selectedVehicle ? "선택 배송차" : "배송차량"}
               tone="blue"
-              value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
+              value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${realVehicleCount}대`) : "등록 후 배정"}
             />
             <Kpi
               helper={kpiSummary ? "선택 경유지 기준" : "현재 필터 기준"}
