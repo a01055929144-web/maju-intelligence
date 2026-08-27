@@ -3789,12 +3789,63 @@ function CustomerDirectoryView({
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
 }) {
+  const router = useRouter();
   const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
   const totals = getStoreTotals(stores);
   const gradeCounts = countGrades(stores);
   const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
   const unknownCount = stores.filter((store) => store.businessStatus === "unknown").length;
   const terminatedCount = stores.filter((store) => store.relationshipStatus === "거래종료").length;
+  // 2026-08-27 피드백("거래처가 중복되어 있는게 있어") 대응: 상호명+주소가 동일한 거래처를 화면에서
+  // 바로 찾아 병합할 수 있게 합니다. 서버에는 이미 병합 API(mergeDuplicateCustomers)가 있었지만 이를
+  // 부를 UI가 없어서 사용자가 중복을 직접 발견해도 정리할 방법이 없었습니다.
+  const duplicateGroups = useMemo(() => {
+    const groups = new Map<string, StoreRow[]>();
+    stores.forEach((store) => {
+      const key = `${store.name}`.trim().toLowerCase().replace(/\s/g, "") + "|" + `${store.address || ""}`.trim().toLowerCase().replace(/\s/g, "");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(store);
+    });
+    return Array.from(groups.values()).filter((group) => group.length > 1);
+  }, [stores]);
+  const [mergingKey, setMergingKey] = useState<string | null>(null);
+  const [mergeError, setMergeError] = useState("");
+  const [pendingMergeGroup, setPendingMergeGroup] = useState<StoreRow[] | null>(null);
+
+  function completenessScore(store: StoreRow) {
+    return [store.businessRegistrationNumber, store.deliveryDriver, store.deliveryVehicleName, store.phone, store.representativeName, store.accessMethodType, store.loadingPosition].filter(
+      Boolean
+    ).length;
+  }
+
+  async function runMerge(group: StoreRow[]) {
+    const sorted = [...group].sort((a, b) => completenessScore(b) - completenessScore(a));
+    const primary = sorted[0];
+    const duplicates = sorted.slice(1);
+    const groupKey = group.map((store) => store.id).join(",");
+    setMergingKey(groupKey);
+    setMergeError("");
+    try {
+      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+      const response = await fetch("/api/customers/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: companyId || undefined,
+          primaryCustomerId: primary.id,
+          duplicateCustomerIds: duplicates.map((store) => store.id)
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "중복 거래처 병합에 실패했습니다.");
+      setPendingMergeGroup(null);
+      router.refresh();
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : "중복 거래처 병합에 실패했습니다.");
+    } finally {
+      setMergingKey(null);
+    }
+  }
 
   return (
     <section className="flex min-h-[480px] flex-1 flex-col overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
@@ -3805,6 +3856,43 @@ function CustomerDirectoryView({
         <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
         <DirectoryStat label="거래 종료" value={`${terminatedCount}곳`} tone={terminatedCount ? "rose" : "slate"} />
       </div>
+
+      {sourceReady && duplicateGroups.length ? (
+        <div className="mt-3 flex shrink-0 flex-col gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <Copy className="h-4 w-4 shrink-0 text-rose-700" />
+            <p className="text-xs font-bold leading-5 text-rose-900">
+              상호명·주소가 같은 중복 의심 거래처가 <span className="font-black">{duplicateGroups.length}건</span> 있습니다. 매출·거래내역이 나뉘어
+              집계될 수 있어 병합을 권장합니다.
+            </p>
+          </div>
+          {mergeError ? <p className="text-xs font-bold text-rose-700">{mergeError}</p> : null}
+          <div className="flex flex-col gap-2">
+            {duplicateGroups.map((group) => {
+              const groupKey = group.map((store) => store.id).join(",");
+              const sorted = [...group].sort((a, b) => completenessScore(b) - completenessScore(a));
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-100 bg-white px-3 py-2" key={groupKey}>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black text-slate-950">{sorted[0].name}</p>
+                    <p className="truncate text-[11px] font-bold text-slate-500">
+                      {sorted[0].address || sorted[0].region} · {group.length}건 중복 · 기준 레코드는 자동으로 정보가 더 많은 쪽을 선택합니다
+                    </p>
+                  </div>
+                  <button
+                    className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
+                    disabled={mergingKey === groupKey}
+                    onClick={() => setPendingMergeGroup(group)}
+                    type="button"
+                  >
+                    {mergingKey === groupKey ? "병합 중..." : "병합"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {sourceReady && unknownCount ? (
         <div className="mt-3 flex shrink-0 items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
@@ -3828,7 +3916,7 @@ function CustomerDirectoryView({
         {sourceReady ? (
           stores.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-left text-sm">
+              <table className="w-full min-w-[1520px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
                     <th className="w-[28%] border-r border-slate-200 px-4 py-3">거래처</th>
@@ -3849,7 +3937,15 @@ function CustomerDirectoryView({
                     >
                       물류비 타당성
                     </th>
-                    <th className="w-[120px] px-4 py-3">사업자 상태</th>
+                    <th className="w-[120px] border-r border-slate-200 px-4 py-3">사업자 상태</th>
+                    <th className="w-[110px] border-r border-slate-200 px-4 py-3">출입 방법</th>
+                    <th
+                      className="w-[90px] border-r border-slate-200 px-4 py-3"
+                      title="보안을 위해 실제 비밀번호 값은 목록에 노출하지 않습니다. 거래처를 눌러 상세 패널에서 확인하세요."
+                    >
+                      비밀번호
+                    </th>
+                    <th className="w-[150px] px-4 py-3">적재 위치</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -3890,12 +3986,23 @@ function CustomerDirectoryView({
                           );
                         })()}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="border-r border-slate-100 px-4 py-3">
                         <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
                         {store.relationshipStatus === "거래종료" ? (
                           <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
                         ) : null}
                       </td>
+                      <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td>
+                      <td className="border-r border-slate-100 px-4 py-3">
+                        {store.accessPassword ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
+                            <Lock className="h-3 w-3" /> 등록됨
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400">미등록</span>
+                        )}
+                      </td>
+                      <td className="max-w-[150px] truncate px-4 py-3 font-bold text-slate-500">{store.loadingPosition || "미등록"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -3911,6 +4018,16 @@ function CustomerDirectoryView({
           )
         ) : null}
       </div>
+
+      {pendingMergeGroup ? (
+        <ConfirmDialog
+          confirmLabel="병합"
+          message={`"${pendingMergeGroup[0].name}" ${pendingMergeGroup.length}건을 하나로 병합합니다. 정보가 더 많은 레코드를 기준으로 남기고 나머지는 거래내역·메모·첨부자료를 옮긴 뒤 삭제합니다. 되돌릴 수 없습니다.`}
+          onCancel={() => setPendingMergeGroup(null)}
+          onConfirm={() => runMerge(pendingMergeGroup)}
+          title="중복 거래처 병합"
+        />
+      ) : null}
     </section>
   );
 }

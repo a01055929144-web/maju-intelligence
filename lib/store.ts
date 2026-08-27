@@ -2503,7 +2503,17 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
 
   const id = companyId || getDefaultCompanyId();
   await upsertCompany(id, "마주식자재");
-  const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
+  const rawBusinessNumber = normalizeBusinessNumber(input.businessNumber || "");
+  // 2026-08-27 피드백("거래처가 중복되어 있는게 있어") 원인 수정: 사업자번호를 몰라 "0000000000"
+  // 같은 자리채움 값을 넣는 경우가 흔한데, 이런 값도 그대로 병합 키로 쓰면 두 가지 문제가 생깁니다.
+  // (1) 같은 자리채움 값을 쓴 서로 다른 실제 거래처가 하나의 행으로 잘못 병합되어 데이터가 덮어써지고,
+  // (2) 같은 거래처를 한 번은 이 값으로, 한 번은 빈 값(상호명+주소 키)으로 저장하면 서로 다른 키가 되어
+  // 중복 행이 생깁니다(실제로 "스타벅스 더북한산점"이 이렇게 두 행으로 나뉘어 있던 것을 확인했습니다).
+  // 같은 숫자가 반복되는 값("0000000000", "1111111111" 등)은 실제 사업자번호로 보기 어려우므로,
+  // 병합 키 계산에서는 빈 값과 동일하게 취급해 항상 상호명+주소 키로 통일합니다(DB에는 원래 입력값을
+  // 그대로 저장하므로 사용자가 나중에 실제 번호로 고칠 수 있습니다).
+  const isPlaceholderBusinessNumber = /^(\d)\1{9}$/.test(rawBusinessNumber);
+  const businessNumber = isPlaceholderBusinessNumber ? "" : rawBusinessNumber;
   // import 생성과 예외 사업자번호 조회는 서로 의존하지 않으므로 병렬 실행합니다.
   const [importId, exemptBusinessNumbers] = await Promise.all([
     createManualCustomerImport(id),
@@ -2527,7 +2537,9 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
     bank_account_file_url: input.bankAccountFileUrl || null,
     birth_date: toPostgresDate(input.birthDate),
     business_license_file_url: input.businessLicenseFileUrl || null,
-    business_registration_number: businessNumber || null,
+    // 병합 키에는 자리채움 값을 빈 값으로 취급하지만(위 businessNumber 계산 참고), 실제 DB 컬럼에는
+    // 사용자가 입력한 원래 값을 그대로 저장합니다 — 나중에 진짜 번호로 고칠 수 있어야 하기 때문입니다.
+    business_registration_number: rawBusinessNumber || null,
     business_status: input.businessStatus || "확인 예정",
     business_status_checked_at: null,
     company_id: id,
