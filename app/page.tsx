@@ -147,6 +147,10 @@ export default function Home() {
   const [lastManualCustomer, setLastManualCustomer] = useState<{ id: string; name: string } | null>(null);
   const [manualSaveMessage, setManualSaveMessage] = useState("");
   const [isManualSaving, setIsManualSaving] = useState(false);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 서버가 상호명이 같은 기존 거래처를
+  // 발견하면 바로 저장하지 않고 여기 담아 사용자에게 확인을 받습니다. "그래도 등록"을 눌러야만
+  // confirmDuplicate: true로 다시 저장을 시도합니다.
+  const [duplicateNotice, setDuplicateNotice] = useState<{ name: string; matches: Array<{ customerName: string; address: string }>; row: RawRow } | null>(null);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(initialPipelineSteps);
   const [pipelineMeta, setPipelineMeta] = useState({ rows: 0, qualityScore: 0, persisted: false });
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>(initialRegistrationStatus);
@@ -278,6 +282,89 @@ export default function Home() {
     }
   }
 
+  // 실제 서버 저장 요청(및 결과 처리)만 따로 뗀 헬퍼입니다. 최초 저장 시도와, 중복 확인 후
+  // "그래도 등록"으로 재시도할 때 둘 다 이 함수를 씁니다 — 재시도할 때는 검수 목록에 행을
+  // 또 추가하면 안 되므로(saveManualEntry 쪽 로직과 분리) 여기서는 순수하게 저장 요청만 합니다.
+  async function submitCustomerRow(nextRow: RawRow, confirmDuplicate: boolean) {
+    const response = await fetch(customerMasterEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...buildManualCustomerPayload(nextRow), confirmDuplicate })
+    }).catch(() => null);
+    const payload = response ? await response.json().catch(() => null) : null;
+
+    if (response?.ok && payload?.possibleDuplicate) {
+      // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 상호명이 같은 거래처가 이미 있으면
+      // 바로 저장하지 않고 사용자 확인을 기다립니다.
+      setDuplicateNotice({
+        matches: Array.isArray(payload.duplicateMatches) ? payload.duplicateMatches : [],
+        name: String(nextRow.customerName || nextRow.name || "신규 거래처"),
+        row: nextRow
+      });
+      setManualSaveMessage("이름이 같은 거래처가 이미 있습니다. 아래에서 확인 후 등록 여부를 선택하세요.");
+      setRegistrationStatus({
+        actionLabel: "중복 확인 필요",
+        description: "이름이 같은 거래처가 이미 등록되어 있어 저장을 잠시 멈췄습니다.",
+        nextAction: "같은 거래처면 거래처 관리에서 확인하고, 다른 곳이면 '그래도 등록'을 누르세요.",
+        status: "warning",
+        title: "중복 의심 거래처를 확인하세요."
+      });
+      return;
+    }
+
+    if (response?.ok) {
+      setDuplicateNotice(null);
+      const customerId = String(payload?.customer?.id || "");
+      setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
+      setLastManualCustomer(customerId ? { id: customerId, name: String(nextRow.customerName || nextRow.name || "신규 거래처") } : null);
+      setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. 저장 상태는 관리자 시스템 점검에서 확인하세요." : "저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+      setRegistrationStatus({
+        actionLabel: payload?.persisted === false ? "저장 확인" : "저장 완료",
+        description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
+        nextAction: customerId ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "거래처 히스토리 화면에서 저장 결과를 확인하세요.",
+        status: payload?.persisted === false ? "warning" : "success",
+        title: payload?.persisted === false ? "저장 확인이 필요합니다." : "수기 등록이 완료됐습니다."
+      });
+      await refreshUploadHistory();
+    } else if (response?.status === 401) {
+      setManualSaveMessage("검수 목록에는 반영됐습니다. 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
+      setRegistrationStatus({
+        actionLabel: "로그인 필요",
+        description: "화면의 검수 목록에는 추가됐지만, 저장 API가 로그인을 요구했습니다.",
+        nextAction: "고객사 또는 관리자 계정으로 로그인한 뒤 다시 저장하세요.",
+        status: "warning",
+        title: "저장이 아직 완료되지 않았습니다."
+      });
+    } else {
+      setManualSaveMessage(payload?.message ? `검수 목록에는 반영됐습니다. 저장 확인: ${payload.message}` : "검수 목록에는 반영됐습니다. 저장은 나중에 다시 시도하세요.");
+      setRegistrationStatus({
+        actionLabel: "저장 확인 필요",
+        description: payload?.message || "저장 완료 응답을 확인하지 못했습니다.",
+        nextAction: "입력값을 확인한 뒤 다시 저장하거나 관리자 시스템 상태를 확인하세요.",
+        status: "warning",
+        title: "저장 확인이 필요합니다."
+      });
+    }
+  }
+
+  async function confirmDuplicateAndSave() {
+    if (!duplicateNotice || isManualSaving) return;
+    setIsManualSaving(true);
+    try {
+      await submitCustomerRow(duplicateNotice.row, true);
+    } catch (error) {
+      setRegistrationStatus({
+        actionLabel: "저장 실패",
+        description: error instanceof Error ? error.message : "수기 저장 중 오류가 발생했습니다.",
+        nextAction: "네트워크와 로그인 상태를 확인한 뒤 다시 시도하세요.",
+        status: "error",
+        title: "수기 등록을 완료하지 못했습니다."
+      });
+    } finally {
+      setIsManualSaving(false);
+    }
+  }
+
   async function saveManualEntry() {
     // 사업자등록번호는 입력했을 때만 형식을 검증합니다. 지도 검색으로 찾은 미등록 매장을
     // 현장에서 빠르게 등록할 때는 사업자등록증이 아직 없을 수 있으므로 번호 없이도 저장할 수 있어야 합니다.
@@ -287,6 +374,7 @@ export default function Home() {
     setIsManualSaving(true);
     setLastManualCustomerHref("");
     setLastManualCustomer(null);
+    setDuplicateNotice(null);
     const nextHeaders = currentTemplate.fields.map((field) => field.key);
     const nextRow = currentTemplate.fields.reduce<RawRow>((row, field) => {
       row[field.key] = field.key === "businessRegistrationNumber" ? formatBusinessRegistrationNumber(String(manualDraft[field.key] ?? "")) : manualDraft[field.key] ?? "";
@@ -309,45 +397,7 @@ export default function Home() {
 
     try {
       if (uploadType === "customer-master") {
-        const response = await fetch(customerMasterEndpoint(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildManualCustomerPayload(nextRow))
-        }).catch(() => null);
-        const payload = response ? await response.json().catch(() => null) : null;
-
-        if (response?.ok) {
-          const customerId = String(payload?.customer?.id || "");
-          setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
-          setLastManualCustomer(customerId ? { id: customerId, name: String(nextRow.customerName || nextRow.name || "신규 거래처") } : null);
-          setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. 저장 상태는 관리자 시스템 점검에서 확인하세요." : "저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
-          setRegistrationStatus({
-            actionLabel: payload?.persisted === false ? "저장 확인" : "저장 완료",
-            description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
-            nextAction: customerId ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "거래처 히스토리 화면에서 저장 결과를 확인하세요.",
-            status: payload?.persisted === false ? "warning" : "success",
-            title: payload?.persisted === false ? "저장 확인이 필요합니다." : "수기 등록이 완료됐습니다."
-          });
-          await refreshUploadHistory();
-        } else if (response?.status === 401) {
-          setManualSaveMessage("검수 목록에는 반영됐습니다. 저장은 고객사 또는 관리자 로그인 후 가능합니다.");
-          setRegistrationStatus({
-            actionLabel: "로그인 필요",
-            description: "화면의 검수 목록에는 추가됐지만, 저장 API가 로그인을 요구했습니다.",
-            nextAction: "고객사 또는 관리자 계정으로 로그인한 뒤 다시 저장하세요.",
-            status: "warning",
-            title: "저장이 아직 완료되지 않았습니다."
-          });
-        } else {
-          setManualSaveMessage(payload?.message ? `검수 목록에는 반영됐습니다. 저장 확인: ${payload.message}` : "검수 목록에는 반영됐습니다. 저장은 나중에 다시 시도하세요.");
-          setRegistrationStatus({
-            actionLabel: "저장 확인 필요",
-            description: payload?.message || "저장 완료 응답을 확인하지 못했습니다.",
-            nextAction: "입력값을 확인한 뒤 다시 저장하거나 관리자 시스템 상태를 확인하세요.",
-            status: "warning",
-            title: "저장 확인이 필요합니다."
-          });
-        }
+        await submitCustomerRow(nextRow, false);
       }
     } catch (error) {
       setRegistrationStatus({
@@ -496,6 +546,9 @@ export default function Home() {
             lastManualCustomerHref={lastManualCustomerHref}
             lastManualCustomer={lastManualCustomer}
             manualSaveMessage={manualSaveMessage}
+            duplicateNotice={duplicateNotice}
+            onCancelDuplicate={() => setDuplicateNotice(null)}
+            onConfirmDuplicate={confirmDuplicateAndSave}
             onFile={handleFile}
             onMap={setFieldMap}
             onUploadType={(nextType) => {
@@ -1028,6 +1081,9 @@ function Onboarding({
   lastManualCustomerHref,
   lastManualCustomer,
   manualSaveMessage,
+  duplicateNotice,
+  onCancelDuplicate,
+  onConfirmDuplicate,
   onFile,
   onMap,
   onUploadType,
@@ -1054,6 +1110,9 @@ function Onboarding({
   lastManualCustomerHref: string;
   lastManualCustomer: { id: string; name: string } | null;
   manualSaveMessage: string;
+  duplicateNotice: { name: string; matches: Array<{ customerName: string; address: string }> } | null;
+  onCancelDuplicate: () => void;
+  onConfirmDuplicate: () => void | Promise<void>;
   onFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onMap: (map: FieldMap) => void;
   onUploadType: (type: UploadTemplateType) => void;
@@ -1743,6 +1802,29 @@ function Onboarding({
                     message={manualSaveMessage}
                     persisted={Boolean(lastManualCustomerHref)}
                   />
+                ) : null}
+
+                {duplicateNotice ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-black text-amber-900">
+                      &quot;{duplicateNotice.name}&quot;과(와) 이름이 같은 거래처가 이미 있습니다.
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {duplicateNotice.matches.map((match) => (
+                        <li className="text-[11px] font-bold text-amber-800" key={match.customerName + match.address}>
+                          · {match.customerName}{match.address ? ` (${match.address})` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 flex gap-2">
+                      <Button className="h-8 bg-white px-3 text-xs font-bold text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50" onClick={onCancelDuplicate}>
+                        취소
+                      </Button>
+                      <Button className="h-8 bg-amber-700 px-3 text-xs font-black text-white hover:bg-amber-800" onClick={onConfirmDuplicate} disabled={isManualSaving}>
+                        {isManualSaving ? "등록 중" : "그래도 등록"}
+                      </Button>
+                    </div>
+                  </div>
                 ) : null}
 
                 {isMaster && lastManualCustomer ? (

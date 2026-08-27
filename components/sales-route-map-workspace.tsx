@@ -68,7 +68,18 @@ import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/l
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import { ChurnRiskCustomer, CustomerContactItem, DeliveryVehicle, PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues, RoutePlan, RoutePlanStop } from "@/lib/store";
+import {
+  ChurnRiskCustomer,
+  CustomerContactItem,
+  DeliveryVehicle,
+  PermitLeadActionItem,
+  PermitLeadItem,
+  PermitLeadPeriod,
+  PermitLeadQueues,
+  PossibleDuplicateCustomer,
+  RoutePlan,
+  RoutePlanStop
+} from "@/lib/store";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type RevenueGrade = "A" | "B" | "C";
@@ -129,6 +140,10 @@ async function registerExternalBusinessResult(result: ExternalBusinessResult): P
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.message || `${result.name} 등록에 실패했습니다.`);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 여러 곳을 한 번에 등록하는 흐름이라
+  // 검색 결과마다 확인창을 띄우기 어려우므로, 이미 같은 상호명의 거래처가 있으면 등록하지 않고
+  // 건너뛴 것으로 처리합니다(사용자가 정말 새 거래처로 등록하고 싶다면 개별 등록 패널을 쓰면 됩니다).
+  if (payload?.possibleDuplicate) throw new Error(`${result.name}은(는) 이미 등록된 거래처와 이름이 같아 건너뛰었습니다.`);
 
   const customerId = String(payload?.customer?.id || "");
   if (!customerId) throw new Error(`${result.name}은(는) 저장됐지만 ID를 확인하지 못했습니다.`);
@@ -2226,8 +2241,12 @@ function QuickRegisterDrawer({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string } | null>(null);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 서버가 상호명이 같은 기존 거래처를
+  // 발견하면 바로 저장하지 않고 이 상태에 그 목록을 담아 확인창을 띄웁니다. 사용자가 "그래도 등록"을
+  // 선택해야만 confirmDuplicate: true로 다시 요청을 보내 실제로 저장합니다.
+  const [duplicateMatches, setDuplicateMatches] = useState<PossibleDuplicateCustomer[] | null>(null);
 
-  async function saveCustomer() {
+  async function saveCustomer(confirmDuplicate = false) {
     if (!customerName.trim() || isSaving) return;
 
     setIsSaving(true);
@@ -2242,6 +2261,7 @@ function QuickRegisterDrawer({
           address,
           businessStatus: "확인 예정",
           companyId: companyId || undefined,
+          confirmDuplicate,
           customerName,
           deliveryManager: deliveryManager || undefined,
           deliveryVehicle: deliveryVehicle || undefined,
@@ -2253,6 +2273,10 @@ function QuickRegisterDrawer({
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
+      if (payload?.possibleDuplicate) {
+        setDuplicateMatches(payload.duplicateMatches || []);
+        return;
+      }
 
       const customerId = String(payload?.customer?.id || "");
       if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리에서 확인해주세요.");
@@ -2356,7 +2380,7 @@ function QuickRegisterDrawer({
               <button
                 className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm disabled:opacity-60"
                 disabled={!customerName.trim() || isSaving}
-                onClick={saveCustomer}
+                onClick={() => saveCustomer()}
                 type="button"
               >
                 {isSaving ? "저장 중" : "거래처로 등록"}
@@ -2365,6 +2389,19 @@ function QuickRegisterDrawer({
           )}
         </div>
       </aside>
+      {duplicateMatches ? (
+        <ConfirmDialog
+          cancelLabel="취소"
+          confirmLabel="그래도 등록"
+          message={`이름이 같은 거래처가 이미 있습니다.\n${duplicateMatches.map((match) => `· ${match.customerName}${match.address ? ` (${match.address})` : ""}`).join("\n")}\n\n그래도 새 거래처로 등록하시겠습니까?`}
+          onCancel={() => setDuplicateMatches(null)}
+          onConfirm={() => {
+            setDuplicateMatches(null);
+            saveCustomer(true);
+          }}
+          title="중복 의심 거래처"
+        />
+      ) : null}
     </>
   );
 }

@@ -2427,7 +2427,14 @@ export async function getCustomerMaster(
   };
 }
 
-export async function upsertCustomerMaster(input: CustomerMasterInput, companyId?: string, auditContext: CustomerMasterAuditContext = {}) {
+export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
+
+export async function upsertCustomerMaster(
+  input: CustomerMasterInput,
+  companyId?: string,
+  auditContext: CustomerMasterAuditContext = {},
+  options: { confirmDuplicate?: boolean } = {}
+) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
   const resolvedPlaceLinks = await resolvePlaceLinks(
@@ -2526,6 +2533,25 @@ export async function upsertCustomerMaster(input: CustomerMasterInput, companyId
   const existingRows = await supabaseRequest<Array<{ id: string }>>(
     `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
   ).catch(() => []);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 위 normalized_key가 정확히 일치할 때는
+  // 같은 거래처로 보고 그대로 업데이트하면 되지만, 키가 달라 "신규 등록"으로 처리될 상황에서도 상호명이
+  // 이미 등록된 다른 거래처와 완전히 같다면(주소 표기가 살짝 달라 키만 갈린 경우 등) 사용자에게 먼저
+  // 확인을 받습니다. 확인 없이 그대로 저장하면 같은 거래처가 또 하나 생겨 매출·거래내역이 나뉘어
+  // 집계되는 문제가 재발하기 때문입니다. options.confirmDuplicate가 true면(사용자가 이미 확인하고
+  // "그래도 등록" 을 선택한 경우) 이 검사를 건너뜁니다.
+  if (!existingRows.length && !options.confirmDuplicate) {
+    const possibleDuplicates = await supabaseRequest<Array<{ id: string; customer_name: string; address: string | null }>>(
+      `normalized_customers?select=id,customer_name,address&company_id=eq.${encodeURIComponent(id)}&customer_name=ilike.${encodeURIComponent(customerName)}&limit=5`
+    ).catch(() => []);
+    if (possibleDuplicates.length) {
+      return {
+        customer: fallbackItem,
+        persisted: false,
+        possibleDuplicate: true,
+        duplicateMatches: possibleDuplicates.map((row) => ({ id: row.id, customerName: row.customer_name, address: row.address || "" }))
+      };
+    }
+  }
   const placeLinks = {
     google_map_url: resolvedPlaceLinks.googleMapUrl || null,
     kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,

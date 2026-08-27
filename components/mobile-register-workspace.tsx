@@ -63,6 +63,10 @@ export function MobileRegisterWorkspace() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [createdCustomer, setCreatedCustomer] = useState<CreatedCustomer | null>(null);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 이름이 같은 거래처가 이미 있으면
+  // 바로 저장하지 않고 여기 담아 확인을 받습니다. "그래도 등록"을 눌러야 confirmDuplicate: true로
+  // 다시 저장을 시도합니다.
+  const [duplicateMatches, setDuplicateMatches] = useState<Array<{ customerName: string; address: string }> | null>(null);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -107,7 +111,7 @@ export function MobileRegisterWorkspace() {
     setShowForm(true);
   }
 
-  async function saveCustomer() {
+  async function saveCustomer(confirmDuplicate = false) {
     if (!draft.customerName.trim() || isSaving) return;
 
     setIsSaving(true);
@@ -120,6 +124,7 @@ export function MobileRegisterWorkspace() {
         body: JSON.stringify({
           address: draft.address,
           businessStatus: "확인 예정",
+          confirmDuplicate,
           customerName: draft.customerName,
           industry: draft.industry || "미분류",
           kakaoPlaceUrl: draft.kakaoPlaceUrl,
@@ -129,10 +134,15 @@ export function MobileRegisterWorkspace() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
+      if (payload?.possibleDuplicate) {
+        setDuplicateMatches(Array.isArray(payload.duplicateMatches) ? payload.duplicateMatches : []);
+        return;
+      }
 
       const customerId = String(payload?.customer?.id || "");
       if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리 화면에서 확인해주세요.");
 
+      setDuplicateMatches(null);
       setCreatedCustomer({ id: customerId, customerName: draft.customerName });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
@@ -147,6 +157,7 @@ export function MobileRegisterWorkspace() {
     setDraft(emptyDraft);
     setQuery("");
     setResults([]);
+    setDuplicateMatches(null);
   }
 
   if (createdCustomer) {
@@ -154,7 +165,22 @@ export function MobileRegisterWorkspace() {
   }
 
   if (showForm) {
-    return <MobileRegisterForm draft={draft} isSaving={isSaving} saveError={saveError} onBack={() => setShowForm(false)} onChange={setDraft} onSave={saveCustomer} />;
+    return (
+      <MobileRegisterForm
+        draft={draft}
+        duplicateMatches={duplicateMatches}
+        isSaving={isSaving}
+        saveError={saveError}
+        onBack={() => {
+          setShowForm(false);
+          setDuplicateMatches(null);
+        }}
+        onCancelDuplicate={() => setDuplicateMatches(null)}
+        onChange={setDraft}
+        onConfirmDuplicate={() => saveCustomer(true)}
+        onSave={() => saveCustomer()}
+      />
+    );
   }
 
   return (
@@ -216,17 +242,23 @@ export function MobileRegisterWorkspace() {
 
 function MobileRegisterForm({
   draft,
+  duplicateMatches,
   isSaving,
   saveError,
   onBack,
+  onCancelDuplicate,
   onChange,
+  onConfirmDuplicate,
   onSave
 }: {
   draft: Draft;
+  duplicateMatches: Array<{ customerName: string; address: string }> | null;
   isSaving: boolean;
   saveError: string;
   onBack: () => void;
+  onCancelDuplicate: () => void;
   onChange: (draft: Draft) => void;
+  onConfirmDuplicate: () => void;
   onSave: () => void;
 }) {
   return (
@@ -247,6 +279,32 @@ function MobileRegisterForm({
         </div>
 
         {saveError ? <p className="mt-3 text-xs font-bold text-rose-600">{saveError}</p> : null}
+
+        {duplicateMatches ? (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-black text-amber-900">이름이 같은 거래처가 이미 있습니다.</p>
+            <ul className="mt-1.5 space-y-0.5">
+              {duplicateMatches.map((match) => (
+                <li className="text-[11px] font-bold text-amber-800" key={match.customerName + match.address}>
+                  · {match.customerName}
+                  {match.address ? ` (${match.address})` : ""}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex gap-2">
+              <button
+                className="h-8 flex-1 rounded-md bg-white text-xs font-bold text-slate-700 ring-1 ring-inset ring-slate-200"
+                onClick={onCancelDuplicate}
+                type="button"
+              >
+                취소
+              </button>
+              <button className="h-8 flex-1 rounded-md bg-amber-700 text-xs font-black text-white" disabled={isSaving} onClick={onConfirmDuplicate} type="button">
+                {isSaving ? "등록 중" : "그래도 등록"}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <button
           className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 text-sm font-black text-white disabled:opacity-60"
