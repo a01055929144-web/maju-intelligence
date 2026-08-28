@@ -400,11 +400,11 @@ function ReportBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="p-4">
+    <Card className="min-w-0 shadow-none">
+      <CardContent className="min-w-0 p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-3xl font-black">{value}</p>
+        <p className="truncate text-xs font-bold text-muted-foreground">{label}</p>
+        <p className="mt-1 truncate text-2xl font-black">{value}</p>
       </CardContent>
     </Card>
   );

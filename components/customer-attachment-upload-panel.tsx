@@ -200,7 +200,7 @@ function AttachmentSlot({
         )}
       </div>
 
-      <label className="mt-3 flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-950">
+      <label className="mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-950">
         <input accept={accept} className="sr-only" multiple onChange={(event) => uploadFiles(event.target.files)} type="file" />
         {saveState === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
         {saveState === "saving" ? `${uploadCount.toLocaleString()}개 업로드 중` : "+ 파일 업로드"}

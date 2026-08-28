@@ -126,7 +126,7 @@ export function ExcelHeaderMappingPreview({
             ["mapped", "연결됨"]
           ].map(([value, label]) => (
             <button
-              className={`h-8 rounded-md border px-3 text-xs font-black transition ${
+              className={`h-11 rounded-md border px-3 text-xs font-black transition ${
                 cardFilter === value
                   ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_14px_rgba(37,99,235,0.18)]"
                   : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
@@ -366,7 +366,7 @@ function MappingWorkspaceModal({
                 ].map(([value, label]) => (
                   <button
                     key={value}
-                    className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                    className={`h-11 rounded-md border px-3 text-xs font-black transition ${
                       columnFilter === value
                         ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_14px_rgba(37,99,235,0.18)]"
                         : "border-transparent bg-white/50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-800"
@@ -442,7 +442,7 @@ function MappingWorkspaceModal({
                 ].map(([value, label]) => (
                   <button
                     key={value}
-                    className={`h-9 rounded-md border px-2 text-xs font-black transition ${
+                    className={`h-11 rounded-md border px-2 text-xs font-black transition ${
                       fieldFilter === value
                         ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
                         : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950"
@@ -694,7 +694,7 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
             type="button"
             disabled={currentPage <= 1}
             onClick={() => setPage((value) => Math.max(1, value - 1))}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             이전
           </button>
@@ -705,7 +705,7 @@ function FullExcelDataPreview({ headers, rows }: { headers: string[]; rows: RawR
             type="button"
             disabled={currentPage >= totalPages}
             onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             다음
           </button>

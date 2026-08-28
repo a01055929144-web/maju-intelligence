@@ -309,25 +309,25 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
       </div>
       <div className="flex justify-center gap-2">
         {upload.reportId ? (
-          <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}?${companyQuery}`}>
+          <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/reports/${upload.reportId}?${companyQuery}`}>
             리포트
           </Link>
         ) : (
-          <span className="inline-flex h-8 items-center justify-center rounded-md bg-muted px-2.5 text-xs font-bold text-muted-foreground">미생성</span>
+          <span className="inline-flex min-h-11 items-center justify-center rounded-md bg-muted px-2.5 text-xs font-bold text-muted-foreground">미생성</span>
         )}
-        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/?${companyQuery}`}>
+        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/?${companyQuery}`}>
           등록
         </Link>
-        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/crm/timeline?${companyQuery}`}>
+        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/crm/timeline?${companyQuery}`}>
           원장
         </Link>
-        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
+        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
           매출
         </Link>
-        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/dashboard?${companyQuery}`}>
+        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/dashboard?${companyQuery}`}>
           지도
         </Link>
-        <Link className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/admin/companies`}>
+        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/admin/companies`}>
           고객사
         </Link>
       </div>

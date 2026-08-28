@@ -88,7 +88,7 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
           {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           {showPasswords ? "비밀번호 숨기기" : "비밀번호 보기"}
         </Button>
-        <Link className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted" href="/admin/companies">
+        <Link className="inline-flex h-11 items-center justify-center rounded-md border border-border bg-white px-4 text-sm font-bold transition hover:bg-muted" href="/admin/companies">
           고객사 관리로 이동
         </Link>
       </div>

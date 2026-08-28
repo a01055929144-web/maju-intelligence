@@ -115,7 +115,7 @@ export function ChurnRiskAlert({
               <p className="mt-0.5 text-[11px] font-bold text-rose-700">21일 이상 매출 없음 · 방문 우선 추천</p>
             </div>
           </div>
-          <button aria-label="알림 닫기" className="shrink-0 text-rose-400 transition hover:text-rose-700" onClick={handleDismiss} type="button">
+          <button aria-label="알림 닫기" className="maju-hit-slop shrink-0 p-1 text-rose-400 transition hover:text-rose-700" onClick={handleDismiss} type="button">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>

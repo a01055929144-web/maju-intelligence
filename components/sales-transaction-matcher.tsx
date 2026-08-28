@@ -157,7 +157,7 @@ export function SalesTransactionMatcher({
                   ) : filteredCustomers.length ? (
                     filteredCustomers.map((customer) => (
                       <button
-                        className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-xs font-bold text-slate-700 hover:bg-teal-50 disabled:opacity-50"
+                        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-xs font-bold text-slate-700 hover:bg-teal-50 disabled:opacity-50"
                         disabled={submittingKey === group.customerKey}
                         key={customer.id}
                         onClick={() => void submitMatch(group.customerKey, customer.id, customer.customerName)}

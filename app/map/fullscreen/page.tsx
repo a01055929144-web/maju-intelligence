@@ -39,7 +39,7 @@ export default function FullscreenMapPage() {
           <p className="mt-0.5 truncate text-xs font-bold text-slate-400">현재 화면의 마커와 경로를 그대로 크게 표시합니다.</p>
         </div>
         <button
-          className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-900 hover:bg-slate-100"
+          className="inline-flex h-11 items-center gap-2 rounded-md bg-white px-3 text-sm font-black text-slate-900 hover:bg-slate-100"
           onClick={() => window.close()}
           type="button"
         >
