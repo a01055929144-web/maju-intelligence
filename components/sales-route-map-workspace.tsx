@@ -1480,7 +1480,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             <button
               aria-expanded={statsExpanded}
               aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${statsExpanded ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              className={`maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${statsExpanded ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
               onClick={() => setStatsExpanded((value) => !value)}
               title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
               type="button"
@@ -1490,7 +1490,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             <button
               aria-label={isFullscreen ? "전체 화면 종료" : "전체 화면"}
               aria-pressed={isFullscreen}
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${isFullscreen ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              className={`maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${isFullscreen ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
               onClick={toggleFullscreen}
               title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
               type="button"
@@ -1499,7 +1499,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             </button>
             <button
               aria-label="필터 초기화"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              className="maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
               onClick={resetWorkspace}
               title="필터 초기화"
               type="button"

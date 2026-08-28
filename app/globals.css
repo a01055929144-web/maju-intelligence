@@ -37,6 +37,30 @@ html {
   .maju-button-blue {
     min-height: 2.75rem;
   }
+
+  /* maju-button-* 클래스를 안 쓰는 개별 아이콘 버튼(예: 신규 리드 표의 숨김 처리 버튼)에
+     붙이는 클래스입니다. 데스크톱 표의 기존 밀도는 그대로 두고, 모바일에서만 44px를 확보합니다. */
+  .maju-icon-btn {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+/* 2026-08-28 피드백 대응(지도 상단 KPI·전체화면·필터초기화 아이콘 버튼이 36px로 작음): 이
+   버튼들은 h-11(44px) 고정 높이 툴바 안에 촘촘히 배치돼 있어, 버튼 자체를 키우면 툴바 밖으로
+   튀어나오거나 옆 버튼과 겹칠 위험이 있습니다. 대신 시각적 크기는 그대로 두고, 보이지 않는
+   ::after 레이어로 클릭 가능 영역만 살짝 넓힙니다(레이아웃에 영향 없음 — Radix/Reach UI 등에서
+   쓰는 "hit slop" 기법). PC/모바일 공통 적용해도 마우스 사용자에게는 해가 없습니다. */
+.maju-hit-slop {
+  position: relative;
+}
+
+.maju-hit-slop::after {
+  content: "";
+  position: absolute;
+  /* 이 클래스를 쓰는 버튼들은 보통 gap-1(4px) 간격으로 촘촘히 붙어 있어, 확장 폭을 절반인
+     -2px로 보수적으로 잡아 옆 버튼 클릭 영역과 겹치지 않게 합니다. */
+  inset: -2px;
 }
 
 :root {

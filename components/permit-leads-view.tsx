@@ -1932,7 +1932,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           <div className="flex flex-nowrap items-center justify-end gap-1">
                             <button
                               aria-label={`${lead.businessName} 관심 없음 · 숨김 처리`}
-                              className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              className="maju-icon-btn grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                               disabled={dismissingLeadId === lead.id}
                               onClick={async (event) => {
                                 event.stopPropagation();
