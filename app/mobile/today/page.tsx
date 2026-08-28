@@ -62,7 +62,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
               <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{session.name}님 모바일 업무</p>
             </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">업무 구분 · {roleLabel}</Badge>
+            <Badge className="shrink-0 whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">업무 구분 · {roleLabel}</Badge>
           </div>
           <Link
             className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-teal-700 underline decoration-teal-200 underline-offset-2"
@@ -131,34 +131,46 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           <section className="scroll-mt-24 rounded-xl border border-slate-200 bg-white" id="route-list">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
-              <div>
-                <p className="font-black text-slate-950">{driverName}</p>
-                <p className="mt-1 text-xs font-bold text-slate-500">{routeArea} · 모바일 코스</p>
+              <div className="min-w-0">
+                <p className="truncate font-black text-slate-950">{driverName}</p>
+                <p className="mt-1 truncate text-xs font-bold text-slate-500">{routeArea} · 모바일 코스</p>
               </div>
-              <Truck className="h-5 w-5 text-teal-700" />
+              <Truck className="h-5 w-5 shrink-0 text-teal-700" />
             </div>
             <div className="divide-y divide-slate-100">
               {todayStops.map((stop, index) => (
-                <Link
-                  className={`flex items-start gap-3 p-4 transition hover:bg-slate-50 ${selectedStop?.id === stop.id ? "bg-teal-50/70" : ""}`}
-                  href={`/mobile/today?customer=${encodeURIComponent(stop.id)}`}
-                  key={stop.id}
-                >
-                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black text-white ${selectedStop?.id === stop.id ? "bg-teal-700" : "bg-slate-900"}`}>{index + 1}</span>
-                  <div className="min-w-0 flex-1">
+                // 2026-08-28 피드백 대응(기사님이 "전화" 배지를 눌러도 실제로 전화가 안 걸림):
+                // 예전에는 이 배지가 전체 카드를 감싸는 <Link> 안의 장식용 <span>이라 눌러도 상세
+                // 페이지로 이동만 됐습니다. tel: 링크는 진짜 <a>라야 하는데, <Link>(=<a>) 안에
+                // <a>를 중첩하면 무효한 HTML이라, 카드 전체 클릭은 배경에 깔린 투명 오버레이
+                // <Link>로 처리하고 전화 배지만 그 위(z-10)에 별도 형제 <a href="tel:...">로 둡니다.
+                <div className={`relative flex items-start gap-3 p-4 transition hover:bg-slate-50 ${selectedStop?.id === stop.id ? "bg-teal-50/70" : ""}`} key={stop.id}>
+                  <Link aria-label={stop.name} className="absolute inset-0" href={`/mobile/today?customer=${encodeURIComponent(stop.id)}`} />
+                  <span className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black text-white ${selectedStop?.id === stop.id ? "bg-teal-700" : "bg-slate-900"}`}>{index + 1}</span>
+                  <div className="relative z-10 min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate font-black text-slate-950">{stop.name}</p>
                       <Badge className="shrink-0 bg-slate-100 text-slate-700">{stop.region}</Badge>
                     </div>
                     <p className="mt-1 truncate text-xs font-bold text-slate-500">{stop.address || "주소 확인 필요"}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="relative z-10 mt-2 flex flex-wrap gap-1.5">
                       <SmallAction icon={MapPinned} label={`${stop.distanceKm}km`} />
                       <SmallAction icon={Clock} label={`${stop.durationMinutes}분`} />
-                      <SmallAction icon={Phone} label="전화" />
+                      {stop.phone ? (
+                        <a
+                          className="relative z-10 inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-700 hover:bg-teal-100"
+                          href={`tel:${stop.phone}`}
+                        >
+                          <Phone className="h-3 w-3" />
+                          전화
+                        </a>
+                      ) : (
+                        <SmallAction icon={Phone} label="연락처 없음" />
+                      )}
                     </div>
                   </div>
-                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300" />
-                </Link>
+                  <ChevronRight className="relative z-10 mt-1 h-4 w-4 shrink-0 text-slate-300" />
+                </div>
               ))}
               {!todayStops.length ? (
                 <div className="p-4 text-sm font-bold leading-6 text-slate-500">

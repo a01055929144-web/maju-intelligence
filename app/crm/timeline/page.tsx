@@ -1368,10 +1368,10 @@ export default function CrmTimelinePage() {
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
+                  <div className="inline-flex h-11 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
                     <button
                       aria-label="이전 거래처"
-                      className="grid h-full w-8 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      className="grid h-full w-11 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                       disabled={!previousFilteredCustomer}
                       onClick={() => moveFilteredSelection("previous")}
                       type="button"
@@ -1383,7 +1383,7 @@ export default function CrmTimelinePage() {
                     </span>
                     <button
                       aria-label="다음 거래처"
-                      className="grid h-full w-8 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      className="grid h-full w-11 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                       disabled={!nextFilteredCustomer}
                       onClick={() => moveFilteredSelection("next")}
                       type="button"
@@ -1506,7 +1506,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
+            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-3">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -1806,7 +1806,7 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
+            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-4">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -2806,7 +2806,7 @@ function AttachmentPreviewModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <p className="truncate text-sm font-black text-slate-950">{attachment.title}</p>
+          <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{attachment.title}</p>
           <div className="flex shrink-0 items-center gap-2">
             <a
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
@@ -2818,7 +2818,7 @@ function AttachmentPreviewModal({
               새창에서 열기
             </a>
             <button
-              className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+              className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
               onClick={onClose}
               type="button"
             >

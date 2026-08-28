@@ -2683,8 +2683,8 @@ function DeliveryAssignmentPanel({
               ) : (
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                    <div className="flex items-center gap-1">
+                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{vehicle.name}</p>
+                    <div className="flex shrink-0 items-center gap-1">
                       {vehicle.isUnassigned ? null : (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
                           {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
@@ -3844,7 +3844,7 @@ function StoreManagementPanel({
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
-            <p className="text-sm font-black text-slate-950">{title}</p>
+            <p className="truncate text-sm font-black text-slate-950">{title}</p>
             <p className="mt-1 truncate text-xs font-bold text-slate-500">거래처를 누르면 상세 패널이 열립니다.</p>
           </div>
           <button
@@ -4902,7 +4902,7 @@ function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; reado
                       />
                     </td>
                     <td className="px-2 py-1.5 text-center">
-                      <button aria-label="삭제" className="text-slate-400 hover:text-rose-600" onClick={() => removeRow(row.id)} type="button">
+                      <button aria-label="삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => removeRow(row.id)} type="button">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </td>

@@ -293,13 +293,13 @@ function MobileRegisterForm({
             </ul>
             <div className="mt-2 flex gap-2">
               <button
-                className="h-8 flex-1 rounded-md bg-white text-xs font-bold text-slate-700 ring-1 ring-inset ring-slate-200"
+                className="h-11 flex-1 rounded-md bg-white text-xs font-bold text-slate-700 ring-1 ring-inset ring-slate-200"
                 onClick={onCancelDuplicate}
                 type="button"
               >
                 취소
               </button>
-              <button className="h-8 flex-1 rounded-md bg-amber-700 text-xs font-black text-white" disabled={isSaving} onClick={onConfirmDuplicate} type="button">
+              <button className="h-11 flex-1 rounded-md bg-amber-700 text-xs font-black text-white" disabled={isSaving} onClick={onConfirmDuplicate} type="button">
                 {isSaving ? "등록 중" : "그래도 등록"}
               </button>
             </div>

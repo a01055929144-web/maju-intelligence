@@ -490,7 +490,7 @@ export default function CrmSummaryPage() {
                 {tablePageStart.toLocaleString()}-{tablePageEnd.toLocaleString()} / {filteredRows.length.toLocaleString()}곳
               </span>
               <button
-                className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={currentTablePage <= 1}
                 onClick={() => setTablePage((page) => Math.max(1, page - 1))}
                 type="button"
@@ -501,7 +501,7 @@ export default function CrmSummaryPage() {
                 {currentTablePage.toLocaleString()} / {tableTotalPages.toLocaleString()}
               </span>
               <button
-                className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={currentTablePage >= tableTotalPages}
                 onClick={() => setTablePage((page) => Math.min(tableTotalPages, page + 1))}
                 type="button"
@@ -510,10 +510,13 @@ export default function CrmSummaryPage() {
               </button>
             </div>
           </div>
-          <div className="bg-white" id="crm-summary-print-target" ref={exportTableRef}>
+          <div className="overflow-x-auto bg-white" id="crm-summary-print-target" ref={exportTableRef}>
+            {/* 2026-08-28 피드백 대응(모바일에서 이 표가 잘려 보임): 고정 폭 컬럼 8개짜리
+               grid가 좁은 화면에서 그냥 찌그러지던 것을, min-w를 줘서 가로 스크롤이 뜨도록
+               바꿉니다. */}
           <p className="print-only hidden px-3 pb-2 pt-3 text-sm font-black text-slate-950">거래처 전체 현황 · 사업자 상태·메모·첨부 현황</p>
           {filteredRows.length ? (
-            <div className="grid grid-cols-[minmax(0,1.3fr)_100px_120px_120px_84px_minmax(0,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+            <div className="grid min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
               <span>거래처명</span>
               <span>대표자명</span>
               <span>연락처</span>
@@ -534,7 +537,7 @@ export default function CrmSummaryPage() {
               const status = customer.businessStatus || "확인 필요";
               return (
                 <Link
-                  className="grid grid-cols-[minmax(0,1.3fr)_100px_120px_120px_84px_minmax(0,1.4fr)_74px_74px] items-center gap-2 px-3 py-2.5 transition hover:bg-slate-50"
+                  className="grid min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 px-3 py-2.5 transition hover:bg-slate-50"
                   href={withCompanyQuery(customer.id ? `/crm/timeline?customerId=${encodeURIComponent(customer.id)}` : "/crm/timeline")}
                   key={customer.id || customer.customerName}
                 >

@@ -187,7 +187,7 @@ export function MobileDeliveryProofPanel({
             <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{customerName} 도착 사진과 점주 발송 문구를 저장합니다.</p>
           </div>
         </div>
-        <button aria-label="배송완료 증빙 새로고침" className="rounded-lg border border-blue-200 bg-white p-2 text-blue-700" onClick={loadProofs} type="button">
+        <button aria-label="배송완료 증빙 새로고침" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-blue-200 bg-white text-blue-700" onClick={loadProofs} type="button">
           <RefreshCw className={`h-4 w-4 ${loadingProofs ? "animate-spin" : ""}`} />
         </button>
       </div>
@@ -195,7 +195,7 @@ export function MobileDeliveryProofPanel({
       <div className="mt-4 grid grid-cols-3 gap-2">
         {deliveryStatuses.map((item) => (
           <button
-            className={`h-10 rounded-lg border px-2 text-xs font-black transition ${
+            className={`h-11 rounded-lg border px-2 text-xs font-black transition ${
               deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
@@ -229,7 +229,7 @@ export function MobileDeliveryProofPanel({
       <div className="mt-3 grid grid-cols-2 gap-2">
         {messageChannels.map((item) => (
           <button
-            className={`h-10 rounded-lg border px-2 text-xs font-black transition ${
+            className={`h-11 rounded-lg border px-2 text-xs font-black transition ${
               messageChannel === item.value ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
@@ -244,7 +244,7 @@ export function MobileDeliveryProofPanel({
       <div className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
-          <button className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={copyOwnerMessage} type="button">
+          <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={copyOwnerMessage} type="button">
             <Copy className="h-3.5 w-3.5" />
             복사
           </button>
@@ -266,7 +266,7 @@ export function MobileDeliveryProofPanel({
                 ? "이 브라우저는 위치 확인을 지원하지 않습니다"
                 : "위치 확인 대기 중"}
         {locationStatus === "denied" ? (
-          <button className="underline decoration-dotted underline-offset-2" onClick={requestLocation} type="button">
+          <button className="-m-2 p-2 underline decoration-dotted underline-offset-2" onClick={requestLocation} type="button">
             다시 시도
           </button>
         ) : null}

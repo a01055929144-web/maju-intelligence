@@ -79,7 +79,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         <div className="flex flex-wrap gap-2">
           {quickMemos.map((item) => (
             <button
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+              className="min-h-[2.75rem] rounded-full border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               key={item}
               onClick={() => setMemo(item)}
               type="button"

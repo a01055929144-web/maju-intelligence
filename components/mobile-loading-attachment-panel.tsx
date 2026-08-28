@@ -100,7 +100,7 @@ export function MobileLoadingAttachmentPanel({
             <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{loadingPosition || "적재위치 사진/영상을 현장에서 확인하고 보완합니다."}</p>
           </div>
         </div>
-        <button aria-label="적재위치 자료 새로고침" className="rounded-lg border border-slate-200 p-2 text-slate-500" onClick={loadAttachments} type="button">
+        <button aria-label="적재위치 자료 새로고침" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500" onClick={loadAttachments} type="button">
           <RefreshCw className={`h-4 w-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
         </button>
       </div>
