@@ -9,6 +9,36 @@ html {
   font-size: 90%;
 }
 
+/* 2026-08-28 피드백 대응(모바일 가독성이 떨어짐: 글자·버튼이 너무 작고 정보가 빽빽함).
+   위 90% 축소가 데스크톱 정보 밀도에는 맞았지만, 좁은 화면에서는 text-xs/text-[11px] 같은
+   이미 작은 유틸리티들과 겹치면서 글자가 너무 작아졌습니다. 모바일 폭(768px 미만)에서만
+   기준 폰트를 되돌리고, rem 스케일을 안 타는 임의값(text-[9~11px]) 글자도 함께 키우고,
+   버튼류의 최소 터치 영역을 44px(iOS 권장 기준)로 확보합니다. 데스크톱 레이아웃은 그대로 둡니다. */
+@media (max-width: 767px) {
+  html {
+    font-size: 102%;
+  }
+
+  .text-\[9px\] {
+    font-size: 11px;
+  }
+
+  .text-\[10px\] {
+    font-size: 12px;
+  }
+
+  .text-\[11px\] {
+    font-size: 13px;
+  }
+
+  .maju-button,
+  .maju-button-primary,
+  .maju-button-secondary,
+  .maju-button-blue {
+    min-height: 2.75rem;
+  }
+}
+
 :root {
   --background: 210 30% 98%;
   --foreground: 222 34% 14%;
