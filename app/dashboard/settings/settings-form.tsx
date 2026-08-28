@@ -283,7 +283,7 @@ function WorkflowItem({ icon, title, description }: { icon: ReactNode; title: st
 
 function QuickLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link className="inline-flex h-10 items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-foreground transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800" href={href}>
+    <Link className="inline-flex min-h-11 items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-foreground transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800" href={href}>
       {label}
       <Route className="h-4 w-4 text-primary" />
     </Link>

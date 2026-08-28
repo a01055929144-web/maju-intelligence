@@ -24,7 +24,7 @@ export default async function CompanySettingsPage() {
       companyName={session.companyName}
       rightAction={
           <Link
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
             href="/dashboard"
           >
             <ArrowLeft className="h-4 w-4" />
