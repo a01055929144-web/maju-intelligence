@@ -5422,7 +5422,12 @@ function StoreDetail({
       <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
       <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
         <header className="maju-card-header border-b px-4 py-4">
-          <div className="flex items-start justify-between gap-4">
+          {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):
+              오른쪽 버튼 3개(거래 종료로 표시·히스토리 열기·변경 저장)가 shrink-0라 절대 안 줄어들고,
+              제목 영역만 min-w-0로 계속 줄어들다가 좁은 화면에서 한두 글자 폭까지 눌려 한글이
+              한 글자씩 줄바꿈되던 문제입니다. sm 미만에서는 제목과 버튼 줄을 아예 위아래로
+              나누어 서로의 폭을 침범하지 않게 합니다. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
@@ -5443,7 +5448,7 @@ function StoreDetail({
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
               {relationshipStatusError ? <p className="mt-2 text-xs font-black text-rose-600">{relationshipStatusError}</p> : null}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap shrink-0 items-center gap-2">
               <button
                 className={
                   draftRelationshipStatus === "거래종료"
