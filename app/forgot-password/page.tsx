@@ -52,7 +52,9 @@ export default function ForgotPasswordPage() {
             <form className="space-y-2.5" onSubmit={handleSubmit}>
               <p className="mb-1 text-sm font-semibold leading-6 text-muted-foreground">가입하신 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.</p>
               <input
+                autoComplete="email"
                 className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+                name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"

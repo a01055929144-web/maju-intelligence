@@ -104,14 +104,18 @@ export default function CompanySignupPage() {
               {businessNumberInvalid ? <p className="mt-1 px-1 text-xs font-bold text-destructive">사업자등록번호를 다시 확인해주세요.</p> : null}
             </div>
             <input
+              autoComplete="name"
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              name="ownerName"
               value={ownerName}
               onChange={(event) => setOwnerName(event.target.value)}
               placeholder="담당자명"
               required
             />
             <input
+              autoComplete="username"
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              name="email"
               value={ownerEmail}
               onChange={(event) => setOwnerEmail(event.target.value)}
               type="email"
@@ -119,7 +123,9 @@ export default function CompanySignupPage() {
               required
             />
             <input
+              autoComplete="new-password"
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              name="password"
               value={ownerPassword}
               onChange={(event) => setOwnerPassword(event.target.value)}
               type="password"
@@ -128,7 +134,9 @@ export default function CompanySignupPage() {
               required
             />
             <input
+              autoComplete="new-password"
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              name="passwordConfirm"
               value={ownerPasswordConfirm}
               onChange={(event) => setOwnerPasswordConfirm(event.target.value)}
               type="password"

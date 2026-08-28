@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("a01055929144@gmail.com");
-  const [password, setPassword] = useState("0000");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -52,7 +52,10 @@ export default function AdminLoginPage() {
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">이메일</span>
               <input
+                autoComplete="username"
                 className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                id="admin-login-email"
+                name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
@@ -61,7 +64,10 @@ export default function AdminLoginPage() {
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">비밀번호</span>
               <input
+                autoComplete="current-password"
                 className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                id="admin-login-password"
+                name="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"

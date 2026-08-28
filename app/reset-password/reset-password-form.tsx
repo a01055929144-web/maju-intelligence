@@ -53,7 +53,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
   return (
     <form className="space-y-2.5" onSubmit={handleSubmit}>
       <input
+        autoComplete="new-password"
         className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+        name="newPassword"
         value={newPassword}
         onChange={(event) => setNewPassword(event.target.value)}
         type="password"
@@ -62,7 +64,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
         required
       />
       <input
+        autoComplete="new-password"
         className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+        name="newPasswordConfirm"
         value={newPasswordConfirm}
         onChange={(event) => setNewPasswordConfirm(event.target.value)}
         type="password"

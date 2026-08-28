@@ -60,14 +60,20 @@ export default function CustomerLoginPage() {
           </div>
           <form className="space-y-2.5" onSubmit={handleSubmit}>
             <input
+              autoComplete="username"
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              id="customer-login-email"
+              name="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               placeholder="이메일"
             />
             <input
+              autoComplete="current-password"
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              id="customer-login-password"
+              name="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
