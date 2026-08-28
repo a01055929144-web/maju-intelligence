@@ -1,5 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
-import { BusinessStatusResult, checkBusinessRegistrationStatuses, isBusinessStatusApiConfigured } from "./business-status";
+import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
@@ -2467,7 +2467,7 @@ export async function upsertCustomerMaster(
       birth_date: input.birthDate || null,
       business_license_file_url: input.businessLicenseFileUrl || null,
       business_registration_number: normalizeBusinessNumber(input.businessNumber || ""),
-      business_status: input.businessStatus || "확인 예정",
+      business_status: input.businessStatus || "확인 필요",
       business_status_checked_at: null,
       customer_name: customerName,
       delivery_km: input.deliveryKm || 0,
@@ -2566,7 +2566,7 @@ export async function upsertCustomerMaster(
     // 병합 키에는 자리채움 값을 빈 값으로 취급하지만(위 businessNumber 계산 참고), 실제 DB 컬럼에는
     // 사용자가 입력한 원래 값을 그대로 저장합니다 — 나중에 진짜 번호로 고칠 수 있어야 하기 때문입니다.
     business_registration_number: rawBusinessNumber || null,
-    business_status: input.businessStatus || "확인 예정",
+    business_status: input.businessStatus || "확인 필요",
     business_status_checked_at: null,
     company_id: id,
     customer_name: customerName,
@@ -3540,6 +3540,36 @@ export async function saveAnalysis(
     uploadType?: "customer-master" | "sales-analysis";
   } = {}
 ) {
+  // 2026-08-28 피드백 대응(엑셀 한 줄만 잘못돼도 전체 업로드 실패): 상호명이 비어 있는 행은
+  // normalized_customers.customer_name NOT NULL 제약에 걸려 배치 삽입 전체를 실패시킵니다.
+  // 저장 전에 미리 걸러내고, 몇 번째 행을 건너뛰었는지 결과에 담아 사용자에게 알려줍니다.
+  const skippedRowNumbers: number[] = [];
+  if (options.rawRows?.length) {
+    const filteredRows: CustomerRow[] = [];
+    const filteredRawRows: RawUploadRow[] = [];
+    rows.forEach((row, index) => {
+      if (!row.customerName || !row.customerName.trim()) {
+        skippedRowNumbers.push(index + 1);
+        return;
+      }
+      filteredRows.push(row);
+      const rawRow = options.rawRows?.[index];
+      if (rawRow) filteredRawRows.push(rawRow);
+    });
+    rows = filteredRows;
+    options = { ...options, rawRows: filteredRawRows };
+  } else {
+    const filteredRows: CustomerRow[] = [];
+    rows.forEach((row, index) => {
+      if (!row.customerName || !row.customerName.trim()) {
+        skippedRowNumbers.push(index + 1);
+        return;
+      }
+      filteredRows.push(row);
+    });
+    rows = filteredRows;
+  }
+
   let report = analyzeCompany(rows);
   const duplicateCount = countDuplicates(rows);
   const qualityScore = estimateQualityScore(rows);
@@ -3553,7 +3583,8 @@ export async function saveAnalysis(
         rawRows: options.rawRows?.length || 0,
         columnMappings: Object.keys(options.columnMapping || {}).length,
         duplicateCount,
-        qualityScore
+        qualityScore,
+        skippedRowNumbers
       }
     };
   }
@@ -3608,7 +3639,12 @@ export async function saveAnalysis(
   // 서로 의존하지 않는 저장 작업은 병렬로 실행해 저장 대기 시간을 줄입니다.
   // column_mappings/raw_customer_rows는 매핑 이력·원본 백업용 부가 데이터라, 저장에 실패해도
   // 아래에서 이어지는 normalized_customers/매출 거래내역 저장까지 막히면 안 되므로 개별적으로 catch합니다.
-  const [, , , exemptBusinessNumbers] = await Promise.all([
+  // 2026-08-28 피드백 대응(엑셀 대량등록이 중복방지 로직을 우회함): upsertCustomerMaster의 수기
+  // 등록 흐름에는 "이름이 같은 다른 거래처가 이미 있으면 확인을 받는다" 로직이 있지만, 엑셀 대량
+  // 저장 경로(saveAnalysis)는 이 확인 없이 normalized_key가 다르면 그냥 새 행으로 병합-삽입해
+  // 왔습니다. 기존 거래처 목록을 한 번에 가져와 이름이 겹치는 행을 사전에 걸러내기 위해 함께
+  // 조회합니다(회사당 최대 5000곳까지).
+  const [, , , exemptBusinessNumbers, existingCustomersForDuplicateCheck] = await Promise.all([
     mappingRows.length
       ? supabaseRequest("column_mappings", {
           method: "POST",
@@ -3630,42 +3666,79 @@ export async function saveAnalysis(
     options.uploadType === "sales-analysis" && options.rawRows?.length
       ? saveSalesTransactions(companyId, importId, options.rawRows, options.columnMapping || {})
       : Promise.resolve(),
-    getExemptBusinessNumberSet(companyId).catch(() => new Set<string>())
+    getExemptBusinessNumberSet(companyId).catch(() => new Set<string>()),
+    // 매출 데이터 업로드(sales-analysis)는 기존 거래처의 매출을 갱신하는 용도라 이름 중복
+    // 경고 대상이 아니므로, 신규 거래처 등록 업로드일 때만 기존 거래처 목록을 조회합니다.
+    options.uploadType !== "sales-analysis"
+      ? supabaseRequest<Array<{ id: string; customer_name: string; address: string | null; normalized_key: string }>>(
+          `normalized_customers?select=id,customer_name,address,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
+        ).catch(() => [])
+      : Promise.resolve([] as Array<{ id: string; customer_name: string; address: string | null; normalized_key: string }>)
   ]);
 
-  const normalizedRows = rows.map((row, index) => {
-    const rawRow = options.rawRows?.[index];
-    const businessRegistrationNumber = rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) : "";
-    // 중복 허용 목록에 등록된 사업자번호(종사업자번호 등)는 상호명+주소 기준 key를 사용해,
-    // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 덮어써지지 않도록 합니다.
-    const normalizedKey =
-      businessRegistrationNumber && !exemptBusinessNumbers.has(businessRegistrationNumber) ? businessRegistrationNumber : makeNormalizedKey(row);
-    const baseRow: Record<string, unknown> = {
-      company_id: companyId,
-      import_id: importId,
-      customer_name: row.customerName,
-      business_registration_number: businessRegistrationNumber || null,
-      representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
-      opening_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.openingDate || ""]) : null,
-      region: row.region,
-      address: row.address,
-      phone: rawRow ? getRawCell(rawRow, options.columnMapping?.phone) || null : null,
-      email: rawRow ? getRawCell(rawRow, options.columnMapping?.email) || null : null,
-      birth_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.birthDate || ""]) : null,
-      industry: row.industry,
-      monthly_revenue: row.monthlyRevenue,
-      last_order_days: row.lastOrderDays,
-      visit_count: row.visitCount,
-      normalized_key: normalizedKey,
-      duplicate_of: null
-    };
+  const existingByNameLower = new Map<string, Array<{ id: string; customerName: string; address: string; normalizedKey: string }>>();
+  for (const row of existingCustomersForDuplicateCheck) {
+    const nameKey = (row.customer_name || "").trim().toLowerCase();
+    if (!nameKey) continue;
+    const list = existingByNameLower.get(nameKey) || [];
+    list.push({ id: row.id, customerName: row.customer_name, address: row.address || "", normalizedKey: row.normalized_key });
+    existingByNameLower.set(nameKey, list);
+  }
+  // 2026-08-28 피드백 대응: normalized_key가 기존 거래처와 정확히 일치하면(사업자번호 동일 등)
+  // 그대로 업데이트로 처리하지만, key가 달라 "신규 등록"으로 처리될 상황에서 상호명이 이미 등록된
+  // 다른 거래처와 같다면 그대로 병합-삽입하지 않고 건너뛴 뒤 사용자에게 보고합니다. 수기 등록의
+  // upsertCustomerMaster에 있는 것과 같은 안전장치를 대량 등록 경로에도 적용하는 것입니다.
+  const duplicateWarnings: Array<{ rowNumber: number; customerName: string; address: string; matches: Array<{ customerName: string; address: string }> }> = [];
 
-    if (options.uploadType !== "sales-analysis" || row.deliveryKm > 0) {
-      baseRow.delivery_km = row.deliveryKm;
-    }
+  const normalizedRows = rows
+    .map((row, index) => {
+      const rawRow = options.rawRows?.[index];
+      const businessRegistrationNumber = rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) : "";
+      // 중복 허용 목록에 등록된 사업자번호(종사업자번호 등)는 상호명+주소 기준 key를 사용해,
+      // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 덮어써지지 않도록 합니다.
+      const normalizedKey =
+        businessRegistrationNumber && !exemptBusinessNumbers.has(businessRegistrationNumber) ? businessRegistrationNumber : makeNormalizedKey(row);
 
-    return baseRow;
-  });
+      const nameKey = row.customerName.trim().toLowerCase();
+      const existingMatches = existingByNameLower.get(nameKey) || [];
+      const isExactUpdate = existingMatches.some((match) => match.normalizedKey === normalizedKey);
+      if (!isExactUpdate && existingMatches.length) {
+        duplicateWarnings.push({
+          rowNumber: index + 1,
+          customerName: row.customerName,
+          address: row.address,
+          matches: existingMatches.map((match) => ({ customerName: match.customerName, address: match.address }))
+        });
+        return null;
+      }
+
+      const baseRow: Record<string, unknown> = {
+        company_id: companyId,
+        import_id: importId,
+        customer_name: row.customerName,
+        business_registration_number: businessRegistrationNumber || null,
+        representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
+        opening_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.openingDate || ""]) : null,
+        region: row.region,
+        address: row.address,
+        phone: rawRow ? getRawCell(rawRow, options.columnMapping?.phone) || null : null,
+        email: rawRow ? getRawCell(rawRow, options.columnMapping?.email) || null : null,
+        birth_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.birthDate || ""]) : null,
+        industry: row.industry,
+        monthly_revenue: row.monthlyRevenue,
+        last_order_days: row.lastOrderDays,
+        visit_count: row.visitCount,
+        normalized_key: normalizedKey,
+        duplicate_of: null
+      };
+
+      if (options.uploadType !== "sales-analysis" || row.deliveryKm > 0) {
+        baseRow.delivery_km = row.deliveryKm;
+      }
+
+      return baseRow;
+    })
+    .filter((row): row is Record<string, unknown> => row !== null);
 
   if (normalizedRows.length) {
     await supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
@@ -3803,7 +3876,9 @@ export async function saveAnalysis(
       rawRows: rawRows.length,
       columnMappings: mappingRows.length,
       duplicateCount,
-      qualityScore
+      qualityScore,
+      skippedRowNumbers,
+      duplicateWarnings
     }
   };
 }
@@ -4452,15 +4527,71 @@ export type GovRestaurantSyncResult = {
  * 가져와 ingestPermitLeadRows()로 흘려보냅니다. 수동 업로드와 완전히
  * 같은 파이프라인을 타며, GOV_RESTAURANT_API_KEY가 없으면 configured: false를 반환합니다.
  */
+// 2026-08-28 피드백 대응(리드 야간 동기화가 실패해도 아무 표시가 없음): 성공·실패 여부와 시각을
+// companies 테이블에 기록해, 신규 리드 화면에서 "마지막 동기화가 언제, 성공했는지"를 보여줄 수
+// 있게 합니다. 기록 자체가 실패해도(컬럼 미존재 등) 조용히 무시해 본 동기화 로직에는 영향을
+// 주지 않습니다.
+async function recordLeadSyncStatus(companyId: string, source: "gov" | "seoul", status: "success" | "error", message?: string) {
+  if (!isProductionStoreConfigured()) return;
+  const prefix = source === "gov" ? "gov_restaurant_sync" : "seoul_restaurant_sync";
+  await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      [`${prefix}_last_at`]: new Date().toISOString(),
+      [`${prefix}_last_status`]: status,
+      [`${prefix}_last_message`]: message ? message.slice(0, 500) : null
+    })
+  }).catch(() => null);
+}
+
+export type LeadSyncStatus = {
+  gov: { lastAt: string | null; status: string | null; message: string | null };
+  seoul: { lastAt: string | null; status: string | null; message: string | null };
+};
+
+export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStatus> {
+  const empty: LeadSyncStatus = {
+    gov: { lastAt: null, status: null, message: null },
+    seoul: { lastAt: null, status: null, message: null }
+  };
+  if (!isProductionStoreConfigured()) return empty;
+
+  const rows = await supabaseRequest<
+    Array<{
+      gov_restaurant_sync_last_at: string | null;
+      gov_restaurant_sync_last_status: string | null;
+      gov_restaurant_sync_last_message: string | null;
+      seoul_restaurant_sync_last_at: string | null;
+      seoul_restaurant_sync_last_status: string | null;
+      seoul_restaurant_sync_last_message: string | null;
+    }>
+  >(
+    `companies?select=gov_restaurant_sync_last_at,gov_restaurant_sync_last_status,gov_restaurant_sync_last_message,seoul_restaurant_sync_last_at,seoul_restaurant_sync_last_status,seoul_restaurant_sync_last_message&id=eq.${encodeURIComponent(companyId)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row) return empty;
+
+  return {
+    gov: { lastAt: row.gov_restaurant_sync_last_at, status: row.gov_restaurant_sync_last_status, message: row.gov_restaurant_sync_last_message },
+    seoul: { lastAt: row.seoul_restaurant_sync_last_at, status: row.seoul_restaurant_sync_last_status, message: row.seoul_restaurant_sync_last_message }
+  };
+}
+
 export async function syncGovRestaurantLeads(companyId: string, days = 3): Promise<GovRestaurantSyncResult> {
   if (!isGovRestaurantApiConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
   }
 
-  const rows = await fetchRecentGovRestaurantRows(days);
-  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
-
-  return { configured: true, fetched: rows.length, ingest };
+  try {
+    const rows = await fetchRecentGovRestaurantRows(days);
+    const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
+    await recordLeadSyncStatus(companyId, "gov", "success");
+    return { configured: true, fetched: rows.length, ingest };
+  } catch (error) {
+    await recordLeadSyncStatus(companyId, "gov", "error", error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 export type GovRestaurantDailySyncResult = {
@@ -4485,7 +4616,14 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
   // days=14(이 소스의 최대 조회 범위) — 스캔하는 구간(페이지 수)은 그대로고 그 안에서 걸러내는
   // 날짜 필터만 넓어지므로 비용 증가 없이 회수율만 올라갑니다(2026-08-23 피드백 대응).
-  const results = await Promise.all(companies.map((company) => syncGovRestaurantLeads(company.id, 14)));
+  // 2026-08-28 피드백 대응: 회사 하나가 실패해도(네트워크 오류 등) Promise.all 전체가 reject되어
+  // 나머지 회사까지 동기화를 건너뛰지 않도록 개별적으로 catch합니다(실패 상태는 recordLeadSyncStatus로
+  // 이미 기록됨).
+  const results = await Promise.all(
+    companies.map((company) =>
+      syncGovRestaurantLeads(company.id, 14).catch((): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT }))
+    )
+  );
 
   return results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({
@@ -4516,10 +4654,15 @@ export async function syncSeoulRestaurantLeads(companyId: string, days = 3): Pro
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
   }
 
-  const rows = await fetchRecentSeoulRestaurantRows(days);
-  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "seoul_opendata_api" });
-
-  return { configured: true, fetched: rows.length, ingest };
+  try {
+    const rows = await fetchRecentSeoulRestaurantRows(days);
+    const ingest = await ingestPermitLeadRows(companyId, rows, { source: "seoul_opendata_api" });
+    await recordLeadSyncStatus(companyId, "seoul", "success");
+    return { configured: true, fetched: rows.length, ingest };
+  } catch (error) {
+    await recordLeadSyncStatus(companyId, "seoul", "error", error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 export type SeoulRestaurantDailySyncResult = {
@@ -4544,7 +4687,13 @@ export async function syncAllCompaniesSeoulRestaurantLeads(): Promise<SeoulResta
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
   // days=14(이 소스의 최대 조회 범위) — 행정안전부 소스와 같은 이유로 비용 증가 없이 회수율만
   // 올라갑니다(2026-08-23 피드백 대응).
-  const results = await Promise.all(companies.map((company) => syncSeoulRestaurantLeads(company.id, 14)));
+  // 2026-08-28 피드백 대응: 회사 하나가 실패해도 나머지 회사 동기화를 건너뛰지 않도록 개별적으로
+  // catch합니다(실패 상태는 recordLeadSyncStatus로 이미 기록됨).
+  const results = await Promise.all(
+    companies.map((company) =>
+      syncSeoulRestaurantLeads(company.id, 14).catch((): SeoulRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT }))
+    )
+  );
 
   return results.reduce<SeoulRestaurantDailySyncResult>(
     (total, result) => ({
@@ -5427,15 +5576,67 @@ export async function refreshAllCompaniesRecommendationScores(): Promise<Recomme
   };
 }
 
+// 2026-08-28 피드백 대응(데스크톱에서 짠 배송 순서가 모바일에 반영 안 됨): 코스 탭에서 배송담당자
+// 별로 확정한 오늘 방문 순서(route_plan_confirmations)를 오늘 날짜 기준으로 읽어와,
+// { 담당자 이름 -> 확정된 거래처 id 순서 } 맵으로 돌려줍니다. 확정 기록이 없으면 빈 맵을 돌려주고,
+// 이 경우 아래 getTodayRoutePlan은 예전과 동일하게 원장 순서를 그대로 씁니다(동작 변화 없음).
+async function getRouteOrderConfirmationMap(companyId: string): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (!isProductionStoreConfigured()) return map;
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = await supabaseRequest<Array<{ driver_name: string; customer_ids: unknown }>>(
+    `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${today}`
+  ).catch(() => []);
+  for (const row of rows) {
+    if (Array.isArray(row.customer_ids)) map.set(row.driver_name, row.customer_ids as string[]);
+  }
+  return map;
+}
+
+export async function saveRouteOrderConfirmation(companyId: string | undefined, driverName: string, customerIds: string[], confirmedBy?: string) {
+  const resolvedCompanyId = companyId || getDefaultCompanyId();
+  if (!isProductionStoreConfigured()) return { persisted: false };
+  const today = new Date().toISOString().slice(0, 10);
+  await supabaseRequest("route_plan_confirmations?on_conflict=company_id,driver_name,route_date", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([
+      {
+        company_id: resolvedCompanyId,
+        driver_name: driverName.trim(),
+        route_date: today,
+        customer_ids: customerIds,
+        confirmed_by: confirmedBy || null,
+        updated_at: new Date().toISOString()
+      }
+    ])
+  });
+  return { persisted: true };
+}
+
 export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
-  const routeCache = await getRouteDistanceCacheMap(companyId || getDefaultCompanyId());
-  const customerMaster = await getCustomerMaster(companyId);
+  const resolvedCompanyId = companyId || getDefaultCompanyId();
+  const [routeCache, customerMaster, routeOrderConfirmations] = await Promise.all([
+    getRouteDistanceCacheMap(resolvedCompanyId),
+    getCustomerMaster(companyId),
+    getRouteOrderConfirmationMap(resolvedCompanyId)
+  ]);
   const planned = customerMaster.customers
     .map((customer, index) => {
       const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
       const cached = routeCache.get(address);
       const distanceKm = cached?.distanceKm ?? customer.deliveryKm;
       const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : "estimated";
+      // 배송담당자별로 확정된 순서가 있으면 그 위치(1부터)를 order로 쓰고, 확정 목록에 없는(예:
+      // 확정 이후 새로 배정된) 거래처는 10000+index로 밀어 항상 확정된 거래처들 뒤에 오게 합니다.
+      // 확정 기록이 아예 없는 담당자는 예전과 동일하게 원장 순서(index+1)를 그대로 씁니다.
+      const driverKey = (customer.deliveryManager || "").trim();
+      const confirmedIds = driverKey ? routeOrderConfirmations.get(driverKey) : undefined;
+      let order = index + 1;
+      if (confirmedIds) {
+        const confirmedPosition = confirmedIds.indexOf(customer.id);
+        order = confirmedPosition >= 0 ? confirmedPosition + 1 : 10000 + index;
+      }
 
       return {
         id: customer.id || `customer-${index + 1}`,
@@ -5473,7 +5674,7 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         deliveryArea: customer.deliveryZone || customer.region || "미분류",
         deliveryDriver: customer.deliveryManager,
         deliveryVehicle: customer.deliveryVehicle,
-        order: index + 1,
+        order,
         routeCalculatedAt: cached?.calculatedAt,
         routeProvider
       };
@@ -6114,6 +6315,9 @@ export type BusinessStatusRefreshResult = {
   checked: number;
   updated: number;
   skippedNoBusinessNumber: number;
+  // 2026-08-28 피드백 대응: 국세청 API 장애로 조회 자체를 못한 건수. 0보다 크면 화면에서 "일부는
+  // 장애로 확인하지 못했다"고 알려야 하며, 이 건수는 상태가 덮어써지지 않고 기존 값이 유지됩니다.
+  apiFailures: number;
   closed: Array<{ customerId: string; customerName: string; closedDate: string | null }>;
 };
 
@@ -6237,6 +6441,7 @@ export async function refreshCustomerBusinessStatuses(companyId: string, custome
     checked: 0,
     updated: 0,
     skippedNoBusinessNumber: 0,
+    apiFailures: 0,
     closed: []
   };
   if (!emptyResult.configured) return emptyResult;
@@ -6255,13 +6460,21 @@ export async function refreshCustomerBusinessStatuses(companyId: string, custome
     return { ...emptyResult, skippedNoBusinessNumber };
   }
 
-  const statusByNumber = await checkBusinessRegistrationStatuses(checkable.map((row) => row.business_registration_number || ""));
+  const { results: statusByNumber, failedNumbers } = await checkBusinessRegistrationStatusesWithHealth(
+    checkable.map((row) => row.business_registration_number || "")
+  );
   const checkedAt = new Date().toISOString();
   const closed: BusinessStatusRefreshResult["closed"] = [];
 
   const updates = await Promise.all(
     checkable.map(async (row) => {
       const number = normalizeBusinessNumber(row.business_registration_number || "");
+      // 2026-08-28 피드백 대응(국세청 API 장애 시 상태 덮어쓰기 방지): 조회 자체가 실패한 번호는
+      // "매칭 안 됨(확인 필요)"과 다르게 취급해, 기존 business_status/checked_at을 그대로 두고
+      // 건드리지 않습니다. 장애 상황에서도 "N곳 갱신"이라고 보고하면, 이미 정상 확인된 거래처가
+      // API 장애 때문에 "확인 필요"로 잘못 바뀐 것처럼 보이는 문제가 있었습니다.
+      if (failedNumbers.has(number)) return false;
+
       const status: BusinessStatusResult | undefined = statusByNumber.get(number);
       const label = status?.label || "확인 필요";
       // 이미 폐업으로 저장돼 있던 거래처가 다시 조회 대상에 걸려 재확인되는 경우까지 알림에 포함하면
@@ -6287,6 +6500,7 @@ export async function refreshCustomerBusinessStatuses(companyId: string, custome
     checked: checkable.length,
     updated: updates.filter(Boolean).length,
     skippedNoBusinessNumber,
+    apiFailures: failedNumbers.size,
     closed
   };
 }

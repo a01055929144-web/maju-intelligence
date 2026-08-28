@@ -17,27 +17,37 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
   const routePlan = await getTodayRoutePlan(session.companyId);
   const sourceReady = routePlan.source === "supabase";
-  const firstGroup = routePlan.groups[0];
   const driverName = session.name || "모바일 담당자";
   const normalizedDriverName = session.name?.trim();
   const allStops = sourceReady ? routePlan.groups.flatMap((group) => group.stops) : [];
-  const myStops = normalizedDriverName ? allStops.filter((stop) => stop.deliveryDriver?.trim() === normalizedDriverName) : [];
+  // 2026-08-28 피드백 대응: 데스크톱에서 확정한 순서(order 필드, route_plan_confirmations 반영)를
+  // 그대로 사용하도록 정렬을 명시적으로 추가합니다 — 정렬을 안 하면 원장에 저장된 순서(무작위에
+  // 가까움)로 보일 수 있습니다.
+  const myStops = normalizedDriverName
+    ? allStops.filter((stop) => stop.deliveryDriver?.trim() === normalizedDriverName).sort((a, b) => a.order - b.order)
+    : [];
   const isPersonalized = myStops.length > 0;
-  const todayStops = isPersonalized ? myStops : sourceReady ? firstGroup?.stops.slice(0, 6) || [] : [];
+  // 2026-08-28 피드백 대응(담당자 이름이 정확히 안 맞으면 엉뚱한 거래처 목록이 뜸): 예전에는
+  // 담당자 이름이 매칭되지 않으면 이 기사님과 무관한, 매출 상위 권역의 아무 거래처 6곳을 그냥
+  // 보여줘서 실제 내 코스인 것처럼 착각하기 쉬웠습니다. 이제는 매칭된 코스가 없으면 목록을
+  // 비워서 아래의 "오늘 배정된 코스가 없습니다" 안내로 명확히 차단합니다.
+  const todayStops = isPersonalized ? myStops : [];
   const myRegions = Array.from(new Set(myStops.map((stop) => stop.region)));
   const routeArea = isPersonalized
     ? myRegions.length > 1
       ? `${myRegions[0]} 외 ${myRegions.length - 1}곳`
       : myRegions[0] || "전체 권역"
     : sourceReady
-      ? firstGroup?.region || "전체 권역"
+      ? normalizedDriverName
+        ? "담당 배정 필요"
+        : "거래처 등록 필요"
       : "거래처 등록 필요";
+  // 2026-08-28 피드백 대응: 담당 코스가 없을 때 회사 전체 거리/시간(routePlan.totalDistanceKm 등)을
+  // 보여주면 "이게 내 오늘 거리구나"라고 착각할 수 있어, 매칭된 코스가 없을 때는 0으로 표시합니다.
   const routeDistanceKm = isPersonalized
     ? Math.round(myStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0) * 10) / 10
-    : routePlan.totalDistanceKm;
-  const routeDurationMinutes = isPersonalized
-    ? myStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
-    : routePlan.totalDurationMinutes;
+    : 0;
+  const routeDurationMinutes = isPersonalized ? myStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0) : 0;
   const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops[0];
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
@@ -83,7 +93,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           {sourceReady && !isPersonalized && normalizedDriverName ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800 ring-1 ring-inset ring-amber-100">
-              {driverName}님 이름으로 배정된 담당 거래처가 없어 전체 코스 중 매출 상위 권역을 표시합니다. 거래처 관리에서 담당자를 배정하면 내 코스만 표시됩니다.
+              {driverName}님 이름으로 배정된 담당 거래처가 없습니다. 거래처 관리에서 배송담당자 이름을 계정 이름과 정확히 동일하게 배정해야 코스가 표시됩니다.
             </p>
           ) : null}
 

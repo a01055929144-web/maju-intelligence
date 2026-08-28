@@ -80,6 +80,9 @@ export function TodayCourseView({
   readonly vehicles: DeliveryVehicle[];
 }) {
   const [routeSequence, setRouteSequence] = useState<RouteSequence | null>(null);
+  // 2026-08-28 피드백 대응(데스크톱에서 짠 배송 순서가 모바일에 반영 안 됨): "코스 확정" 버튼을 눌러
+  // 서버에 오늘 방문 순서를 저장하는 동안의 상태를 추적합니다.
+  const [routeConfirmState, setRouteConfirmState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message?: string }>({ status: "idle" });
   const [routeBatchIndex, setRouteBatchIndex] = useState(0);
   const [routePanelCollapsed, setRoutePanelCollapsed] = useState(false);
   const [routeLeftPanelCollapsed, setRouteLeftPanelCollapsed] = useState(false);
@@ -265,8 +268,40 @@ export function TodayCourseView({
       { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
     );
   };
+  const confirmRouteOrder = async () => {
+    const driverName = selectedVehicle?.driver?.trim();
+    if (!driverName) {
+      setRouteConfirmState({ status: "error", message: "이 배송차에는 배정된 담당자가 없어 코스를 확정할 수 없습니다. 담당자를 먼저 배정하세요." });
+      return;
+    }
+    const customerIds = sequencedRouteStores.map((store) => store.id);
+    if (!customerIds.length) {
+      setRouteConfirmState({ status: "error", message: "확정할 경유지가 없습니다. 아래 목록에서 경유지를 먼저 추가하세요." });
+      return;
+    }
+    setRouteConfirmState({ status: "saving" });
+    try {
+      const response = await fetch("/api/routes/confirm-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ driverName, customerIds })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        setRouteConfirmState({ status: "error", message: payload?.message || "코스 확정 저장에 실패했습니다. 잠시 후 다시 시도하세요." });
+        return;
+      }
+      setRouteConfirmState({ status: "saved", message: `${driverName}님의 오늘 코스 ${customerIds.length}곳 순서가 저장됐습니다. 모바일 화면에도 반영됩니다.` });
+    } catch {
+      setRouteConfirmState({ status: "error", message: "네트워크 오류로 코스 확정 저장에 실패했습니다. 연결을 확인한 뒤 다시 시도하세요." });
+    }
+  };
+
   const saveDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
     let persisted = false;
+    // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임): 실패 시 조용히 "로컬 기록"으로만
+    // 남기지 않고, 별도 오류 상태로 기록해 화면에 명확한 배너 + 재시도 버튼을 보여줍니다.
+    let failureReason = "";
     const memo = `${proof.memo}\n\n배송 상태: ${deliveryStatusLabel(proof.deliveryStatus)}\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
 
     try {
@@ -298,8 +333,10 @@ export function TodayCourseView({
       const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]);
 
       persisted = noteResponse.ok && attachmentResponse.ok;
+      if (!persisted) failureReason = "서버가 저장 요청을 거부했습니다(권한 또는 서버 상태를 확인하세요).";
     } catch {
       persisted = false;
+      failureReason = "네트워크 오류로 서버에 연결하지 못했습니다.";
     }
 
     setDeliveryProofs((current) => ({
@@ -308,12 +345,15 @@ export function TodayCourseView({
         {
           ...proof,
           persisted,
+          failureReason: persisted ? undefined : failureReason,
           recordedAt: new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }),
           storeId
         },
         ...(current[storeId] || [])
       ]
     }));
+
+    return persisted;
   };
 
   // 좌측(경유 코스 목록)·우측(경유 순서) 패널을 각각 독립적으로 접었다 펼 수 있어 4가지 조합이 나옵니다.
@@ -573,6 +613,33 @@ export function TodayCourseView({
                 ) : null}
                 {routeSequence && sequencedRouteStores.length ? (
                   <FullRouteNavigateAction originLabel={routeOriginLabel} originPoint={routeSequence.originPoint} stores={sequencedRouteStores} stopPointByAddress={routeStopPointByAddress} />
+                ) : null}
+                {isVehicleScoped && sequencedRouteStores.length ? (
+                  <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-black text-slate-900">코스 확정 · 모바일 반영</p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                      {selectedDriver === "배송차 선택 필요"
+                        ? "배송차에 담당자가 배정돼야 확정할 수 있습니다."
+                        : `여기서 확정해야 ${selectedDriver}님의 모바일 화면에도 이 순서가 그대로 반영됩니다.`}
+                    </p>
+                    <button
+                      className="maju-button-primary mt-2 w-full disabled:cursor-not-allowed disabled:bg-slate-300"
+                      disabled={routeConfirmState.status === "saving" || !selectedVehicle?.driver}
+                      onClick={confirmRouteOrder}
+                      type="button"
+                    >
+                      {routeConfirmState.status === "saving" ? "저장 중" : `오늘 코스 ${sequencedRouteStores.length}곳 순서 확정`}
+                    </button>
+                    {routeConfirmState.status === "saved" || routeConfirmState.status === "error" ? (
+                      <p
+                        className={`mt-2 rounded-md px-2 py-1.5 text-xs font-bold leading-5 ${
+                          routeConfirmState.status === "error" ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {routeConfirmState.message}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {routeSelectedStore ? (
                   <DeliveryProofPanel
@@ -838,7 +905,7 @@ function DeliveryProofPanel({
   proofs,
   store
 }: {
-  readonly onSave: (proof: DeliveryProofInput) => Promise<void>;
+  readonly onSave: (proof: DeliveryProofInput) => Promise<boolean>;
   readonly proofs: DeliveryProof[];
   readonly store: StoreRow;
 }) {
@@ -847,25 +914,34 @@ function DeliveryProofPanel({
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryProof["deliveryStatus"]>("arrived");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [saveFailed, setSaveFailed] = useState(false);
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<DeliveryProof["messageChannel"]>("kakao");
   const [copyMessage, setCopyMessage] = useState("");
   const ownerMessage = createDeliveryOwnerMessage(store, memo, deliveryStatus, fileName);
 
+  // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임): 서버 저장이 실패하면 성공 메시지 대신
+  // 빨간 오류 배너를 보여주고, 입력값(파일·메모)을 지우지 않고 그대로 남겨 바로 재시도할 수 있게 합니다.
   const saveProof = async () => {
     setIsSaving(true);
     setSaveMessage("");
-    await onSave({
+    const persisted = await onSave({
       deliveryStatus,
       file,
       fileName: fileName || "현장 사진 미첨부",
       memo: ownerMessage,
       messageChannel
     });
+    setIsSaving(false);
+    if (!persisted) {
+      setSaveFailed(true);
+      setSaveMessage("저장에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 눌러 재시도하세요. (입력하신 내용은 지워지지 않았습니다.)");
+      return;
+    }
+    setSaveFailed(false);
     setSaveMessage(file ? "배송완료 사진/영상과 메모를 저장했습니다." : "배송완료 메모를 저장했습니다. 사진은 나중에 추가할 수 있습니다.");
     setFile(null);
     setFileName("");
-    setIsSaving(false);
     setMemo("");
   };
   const copyOwnerMessage = async () => {
@@ -975,7 +1051,9 @@ function DeliveryProofPanel({
         <MessageSquareText className="h-3.5 w-3.5" />
         {isSaving ? "저장 중" : "배송완료 기록 저장"}
       </button>
-      {saveMessage ? <p className="mt-2 text-xs font-bold leading-5 text-slate-700">{saveMessage}</p> : null}
+      {saveMessage ? (
+        <p className={`mt-2 rounded-md px-2 py-1.5 text-xs font-bold leading-5 ${saveFailed ? "bg-destructive/10 text-destructive" : "text-slate-700"}`}>{saveMessage}</p>
+      ) : null}
       {proofs.length ? (
         <div className="mt-3 space-y-2">
           {proofs.slice(0, 3).map((proof) => (

@@ -473,12 +473,37 @@ export default function Home() {
         qualityScore: payload?.pipeline?.qualityScore || 0,
         persisted
       });
+      // 2026-08-28 피드백 대응: 빈 상호명 행을 건너뛰었거나(skippedRowNumbers), 이름이 같은
+      // 다른 거래처가 있어 저장을 보류한 행(duplicateWarnings)이 있으면 조용히 넘어가지 않고
+      // 결과 화면에 구체적으로 알려줍니다.
+      const skippedRowNumbers: number[] = Array.isArray(payload?.pipeline?.skippedRowNumbers) ? payload.pipeline.skippedRowNumbers : [];
+      const duplicateWarnings: Array<{ rowNumber: number; customerName: string; matches: Array<{ customerName: string; address: string }> }> = Array.isArray(
+        payload?.pipeline?.duplicateWarnings
+      )
+        ? payload.pipeline.duplicateWarnings
+        : [];
+      const warningLines: string[] = [];
+      if (skippedRowNumbers.length) {
+        warningLines.push(`상호명이 비어 있어 ${skippedRowNumbers.length}개 행(${skippedRowNumbers.slice(0, 10).join(", ")}${skippedRowNumbers.length > 10 ? " 외" : ""})을 건너뛰었습니다.`);
+      }
+      if (duplicateWarnings.length) {
+        const names = duplicateWarnings
+          .slice(0, 5)
+          .map((warning) => `${warning.rowNumber}행 "${warning.customerName}"(기존: ${warning.matches[0]?.customerName || ""} ${warning.matches[0]?.address || ""})`)
+          .join(" · ");
+        warningLines.push(
+          `이름이 같은 거래처가 이미 있어 ${duplicateWarnings.length}개 행을 저장하지 않았습니다: ${names}${duplicateWarnings.length > 5 ? " 외" : ""}. 거래처 관리에서 직접 확인 후 등록하세요.`
+        );
+      }
+      const hasWarnings = warningLines.length > 0;
       setRegistrationStatus({
-        actionLabel: persisted ? "저장 완료" : "분석 완료 · 저장 확인 필요",
-        description: persisted ? `${nextFilename} 데이터가 저장되고 AI 리포트가 갱신됐습니다.` : "분석은 완료됐지만 저장 결과가 확인되지 않았습니다.",
+        actionLabel: persisted ? (hasWarnings ? "저장 완료 · 확인 필요" : "저장 완료") : "분석 완료 · 저장 확인 필요",
+        description: persisted
+          ? [`${nextFilename} 데이터가 저장되고 AI 리포트가 갱신됐습니다.`, ...warningLines].join(" ")
+          : "분석은 완료됐지만 저장 결과가 확인되지 않았습니다.",
         nextAction: persisted ? "AI 리포트와 거래처 히스토리, 매출 원장에서 결과를 확인하세요." : "로그인/운영 환경값을 확인한 뒤 다시 저장을 시도하세요.",
-        status: persisted ? "success" : "warning",
-        title: persisted ? "데이터 등록이 완료됐습니다." : "분석은 됐지만 저장 확인이 필요합니다."
+        status: persisted ? (hasWarnings ? "warning" : "success") : "warning",
+        title: persisted ? (hasWarnings ? "데이터가 저장됐지만 확인할 항목이 있습니다." : "데이터 등록이 완료됐습니다.") : "분석은 됐지만 저장 확인이 필요합니다."
       });
       await completePipelineStep("report");
     } else {
@@ -4896,7 +4921,7 @@ function buildManualCustomerPayload(row: RawRow) {
     address: String(row.address || ""),
     birthDate: String(row.birthDate || ""),
     businessNumber: String(row.businessRegistrationNumber || ""),
-    businessStatus: "확인 예정",
+    businessStatus: "확인 필요",
     customerName: String(row.customerName || ""),
     deliveryKm: toNumber(row.deliveryKm),
     email: String(row.email || ""),

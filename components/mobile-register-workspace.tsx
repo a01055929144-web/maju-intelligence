@@ -123,7 +123,7 @@ export function MobileRegisterWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: draft.address,
-          businessStatus: "확인 예정",
+          businessStatus: "확인 필요",
           confirmDuplicate,
           customerName: draft.customerName,
           industry: draft.industry || "미분류",

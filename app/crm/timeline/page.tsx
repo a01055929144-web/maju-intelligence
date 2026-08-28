@@ -840,10 +840,14 @@ export default function CrmTimelinePage() {
       }
 
       const closedCount = Array.isArray(payload?.closed) ? payload.closed.length : 0;
+      // 2026-08-28 피드백 대응(국세청 API 장애가 "정상 조회됨"으로 보임): apiFailures가 있으면
+      // 장애로 조회를 못한 건수가 있다는 걸 명확히 알리고(해당 건은 기존 상태 그대로 유지됨),
+      // "N곳 갱신"이라는 성공 문구만 보고 전부 정상 처리된 것으로 착각하지 않게 합니다.
+      const apiFailures = Number(payload?.apiFailures || 0);
       setBulkBusinessStatusMessage(
         `${payload?.checked || 0}곳 조회, ${payload?.updated || 0}곳 갱신${closedCount ? ` · 폐업 확인 ${closedCount}곳` : ""}${
           payload?.skippedNoBusinessNumber ? ` · 사업자번호 없음 ${payload.skippedNoBusinessNumber}곳 제외` : ""
-        }`
+        }${apiFailures ? ` · ⚠ 국세청 API 장애로 ${apiFailures}곳은 조회하지 못해 기존 상태를 유지했습니다` : ""}`
       );
 
       const refreshed = await fetch(withCompanyQuery("/api/customers"), { cache: "no-store" });

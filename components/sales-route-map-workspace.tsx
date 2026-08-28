@@ -129,7 +129,7 @@ async function registerExternalBusinessResult(result: ExternalBusinessResult): P
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       address: result.roadAddress || result.address,
-      businessStatus: "확인 예정",
+      businessStatus: "확인 필요",
       companyId: companyId || undefined,
       customerName: result.name,
       industry: result.industry || "미분류",
@@ -224,6 +224,8 @@ type StoreHistoryItem = {
 export type DeliveryProof = {
   deliveryStatus: "arrived" | "partial" | "issue";
   fileName: string;
+  // 2026-08-28 피드백 대응: 저장 실패 시 그 이유를 함께 남겨 화면에 오류 배너로 보여줍니다.
+  failureReason?: string;
   messageChannel: "kakao" | "sms";
   memo: string;
   persisted?: boolean;
@@ -319,8 +321,37 @@ export const localStoreKeys = {
   manualVehicles: "maju:sales-route:manual-vehicles",
   quoteDrafts: "maju:sales-route:quote-drafts",
   storeEdits: "maju:sales-route:store-edits",
-  vehicleEdits: "maju:sales-route:vehicle-edits"
+  // 2026-08-28 피드백 대응(localStorage 편집 캐시가 서버 값과 영구히 어긋날 수 있음): 각 편집
+  // 항목이 저장된 시각을 별도로 기록해, 오래된(48시간 이상) 항목은 다음 로딩 때 자동으로 정리합니다.
+  storeEditsSavedAt: "maju:sales-route:store-edits-saved-at",
+  vehicleEdits: "maju:sales-route:vehicle-edits",
+  vehicleEditsSavedAt: "maju:sales-route:vehicle-edits-saved-at"
 };
+
+// 2026-08-28 피드백 대응: storeEdits/vehicleEdits는 이 브라우저에서만 유지되는 "서버 저장 전까지의
+// 임시 낙관적 캐시"인데, 지우는 로직이 없어 한 번 저장되면 영구히 남아 있었습니다. 실제 서버 값이
+// 나중에 다른 경로(다른 기기, 관리자 도구 등)로 바뀌어도 이 브라우저는 계속 옛 값을 보여주는
+// 문제가 있었습니다. 완전한 해결(저장 성공 시 즉시 제거)은 현재 화면이 서버 재조회 없이 이 캐시에만
+// 의존해 렌더링하는 구조상 화면이 원래 값으로 되돌아가 보이는 부작용이 있어, 대신 TTL(48시간)을 둬서
+// "최소한 며칠 넘게 어긋난 채로 남아있지는 않게" 합니다.
+const EDIT_CACHE_TTL_MS = 48 * 60 * 60 * 1000;
+
+function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values: Record<string, T>; savedAt: Record<string, number> } {
+  const values = readLocalJson<Record<string, T>>(valueKey, {});
+  const savedAt = readLocalJson<Record<string, number>>(savedAtKey, {});
+  const now = Date.now();
+  const freshValues: Record<string, T> = {};
+  const freshSavedAt: Record<string, number> = {};
+  for (const [id, value] of Object.entries(values)) {
+    const timestamp = savedAt[id];
+    // 이 기능 배포 이전에 저장돼 저장 시각 기록이 없는 값은 일단 유지하되, 지금 시각으로 새로
+    // 기록해 이후부터는 TTL이 정상 적용되게 합니다.
+    if (timestamp && now - timestamp > EDIT_CACHE_TTL_MS) continue;
+    freshValues[id] = value;
+    freshSavedAt[id] = timestamp || now;
+  }
+  return { values: freshValues, savedAt: freshSavedAt };
+}
 
 export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
@@ -395,9 +426,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
-  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
+  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(
+    () => loadEditCacheWithTtl<StoreEdit>(localStoreKeys.storeEdits, localStoreKeys.storeEditsSavedAt).values
+  );
+  const [storeEditsSavedAt, setStoreEditsSavedAt] = useState<Record<string, number>>(
+    () => loadEditCacheWithTtl<StoreEdit>(localStoreKeys.storeEdits, localStoreKeys.storeEditsSavedAt).savedAt
+  );
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
-  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
+  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(
+    () => loadEditCacheWithTtl<VehicleEdit>(localStoreKeys.vehicleEdits, localStoreKeys.vehicleEditsSavedAt).values
+  );
+  const [vehicleEditsSavedAt, setVehicleEditsSavedAt] = useState<Record<string, number>>(
+    () => loadEditCacheWithTtl<VehicleEdit>(localStoreKeys.vehicleEdits, localStoreKeys.vehicleEditsSavedAt).savedAt
+  );
   const [manualDrivers, setManualDrivers] = useState<string[]>(() => readLocalJson(localStoreKeys.manualDrivers, []));
   // 배송차는 담당자와 별개로 지정될 수 있어(같은 트럭을 여러 담당자가 나눠 쓰거나, 한 담당자가
   // 상황에 따라 다른 차량을 몰 수 있음), 아직 어떤 거래처에도 배정되지 않은 배송차 이름을 미리
@@ -964,7 +1005,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
+  useEffect(() => saveLocalJson(localStoreKeys.storeEditsSavedAt, storeEditsSavedAt), [storeEditsSavedAt]);
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
+  useEffect(() => saveLocalJson(localStoreKeys.vehicleEditsSavedAt, vehicleEditsSavedAt), [vehicleEditsSavedAt]);
   useEffect(() => saveLocalJson(localStoreKeys.manualDrivers, manualDrivers), [manualDrivers]);
   useEffect(() => saveLocalJson(localStoreKeys.manualVehicles, manualVehicles), [manualVehicles]);
 
@@ -1012,16 +1055,37 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     if (!currentStore) return { persisted: false };
 
     const nextStore = { ...currentStore, ...edit };
+    // 2026-08-28 피드백 대응(저장 실패해도 화면엔 저장된 것처럼 남음): PATCH가 실패하면 낙관적으로
+    // 반영해둔 이 값을 되돌려야 하므로, 덮어쓰기 전 이전 값을 스냅샷으로 남겨둡니다.
+    const previousEdit = storeEdits[storeId];
     setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], ...edit } }));
+    setStoreEditsSavedAt((current) => ({ ...current, [storeId]: Date.now() }));
 
-    const response = await fetch("/api/customers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(toCustomerPayload(nextStore))
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
-    return { persisted: payload?.persisted !== false };
+    try {
+      const response = await fetch("/api/customers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toCustomerPayload(nextStore))
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
+      return { persisted: payload?.persisted !== false };
+    } catch (error) {
+      // 저장이 실패했으니(네트워크 오류 포함) 낙관적으로 반영했던 값을 이전 상태로 되돌립니다 —
+      // 그래야 화면이 "저장된 것처럼" 계속 남아 있지 않습니다.
+      setStoreEdits((current) => {
+        const next = { ...current };
+        if (previousEdit === undefined) delete next[storeId];
+        else next[storeId] = previousEdit;
+        return next;
+      });
+      setStoreEditsSavedAt((current) => {
+        const next = { ...current };
+        if (previousEdit === undefined) delete next[storeId];
+        return next;
+      });
+      throw error;
+    }
   }
 
   // 구글 리뷰 자동 수집(Google Places API)은 호출당 비용이 발생합니다. 카드를 열 때마다 백그라운드로
@@ -1084,7 +1148,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       }
     }
 
+    // 2026-08-28 피드백 대응: 아래 연료 타입 PATCH가 실패할 경우 낙관적으로 반영해둔 값을 되돌릴 수
+    // 있도록, 덮어쓰기 전 이전 값을 스냅샷으로 남겨둡니다.
+    const previousVehicleEdit = vehicleEdits[vehicleId];
     setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }));
+    setVehicleEditsSavedAt((current) => ({ ...current, [vehicleId]: Date.now() }));
 
     if (edit.fuelType === undefined) return { ok: true };
     if (!baseVehicle) return { ok: true };
@@ -1100,9 +1168,23 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         })
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) return { ok: false, message: payload?.message || "연료 타입 저장에 실패했습니다." };
+      if (!response.ok) {
+        setVehicleEdits((current) => {
+          const next = { ...current };
+          if (previousVehicleEdit === undefined) delete next[vehicleId];
+          else next[vehicleId] = previousVehicleEdit;
+          return next;
+        });
+        return { ok: false, message: payload?.message || "연료 타입 저장에 실패했습니다." };
+      }
       return { ok: true };
     } catch {
+      setVehicleEdits((current) => {
+        const next = { ...current };
+        if (previousVehicleEdit === undefined) delete next[vehicleId];
+        else next[vehicleId] = previousVehicleEdit;
+        return next;
+      });
       return { ok: false, message: "연료 타입 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
     }
   }
@@ -1987,6 +2069,35 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                     showList={false}
                   />
                 </div>
+                {/* 2026-08-28 피드백 대응(지도 필터 조합 결과가 0건이어도 별다른 안내 없이 빈 지도만
+                    보임): 배송차량·등급 필터 등으로 거래처가 전부 걸러졌을 때 빈 지도만 덩그러니
+                    보이지 않도록, 필터를 초기화할 수 있는 안내 배너를 보여줍니다. 거래처가 아예
+                    0곳인 경우(등록 자체가 안 된 상태)는 RouteWorkspaceGuide가 별도로 안내하므로
+                    allStores.length > 0을 조건에 포함해 중복 안내를 피합니다. */}
+                {visibleStores.length === 0 && allStores.length > 0 && allLeadsMapMarkers.length === 0 ? (
+                  <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex -translate-y-1/2 justify-center px-4">
+                    <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-5 py-4 text-center shadow-lg">
+                      <p className="text-sm font-black text-slate-800">현재 필터 조건에 맞는 거래처가 없습니다</p>
+                      <p className="text-xs font-bold text-slate-500">
+                        {selectedVehicle ? `${selectedVehicle.name} · ` : ""}
+                        {gradeFilter !== "all" ? `${gradeFilter}등급 · ` : ""}
+                        전체 {allStores.length.toLocaleString()}곳 중 조건에 맞는 거래처가 0곳입니다.
+                      </p>
+                      {isVehicleFiltered || gradeFilter !== "all" ? (
+                        <button
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-black text-white hover:bg-slate-700"
+                          onClick={() => {
+                            selectVehicle("all");
+                            setGradeFilter("all");
+                          }}
+                          type="button"
+                        >
+                          필터 초기화
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {previewStore ? (
                   <StoreQuickCard
                     driverOptions={deliveryDefaults.drivers}
@@ -2259,7 +2370,7 @@ function QuickRegisterDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address,
-          businessStatus: "확인 예정",
+          businessStatus: "확인 필요",
           companyId: companyId || undefined,
           confirmDuplicate,
           customerName,
@@ -4467,7 +4578,7 @@ function PermitLeadMapQuickCard({
         <div className="min-w-0 flex-1">
           <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{lead.businessName}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade || "-"}</Badge>
+            <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
             {typeof lead.distanceKm === "number" ? (
               <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
@@ -4866,10 +4977,18 @@ export const PERMIT_PERIOD_BADGE_LABEL: Record<PermitLeadPeriod, string> = {
 };
 export const PERMIT_ACTION_OPTIONS = ["오늘 바로 전화", "오늘 DM 발송", "전화·DM 검토", "정보 보강", "제외 검토"];
 
-export function permitGradeToneClassName(grade: PermitLeadItem["grade"]) {
+// 2026-08-28 피드백 대응(아직 점수 계산 안 된 리드가 그냥 낮은 등급으로 보임): 리뷰수·평점·검색량
+// 보강이 한 번도 실행되지 않은 리드는 grade가 null이라도 "실제로 낮은 등급"이 아니라 "아직 채점
+// 전"입니다. 세 값이 모두 없으면(0도 아니고 아예 미기록) 보강 전으로 간주합니다.
+export function isPermitLeadUnscored(lead: Pick<PermitLeadItem, "reviewCount" | "rating" | "keywordVolume">) {
+  return lead.reviewCount == null && lead.rating == null && lead.keywordVolume == null;
+}
+
+export function permitGradeToneClassName(grade: PermitLeadItem["grade"], unscored?: boolean) {
   if (grade === "A") return "bg-emerald-100 text-emerald-800";
   if (grade === "B") return "bg-blue-100 text-blue-800";
   if (grade === "C") return "bg-slate-100 text-slate-700";
+  if (unscored) return "bg-amber-50 text-amber-600";
   return "bg-slate-50 text-slate-400";
 }
 
@@ -5005,6 +5124,11 @@ export type PermitLeadSourceStatus = {
     govRestaurant?: boolean;
     seoulRestaurant?: boolean;
   };
+  // 2026-08-28 피드백 대응(리드 야간 동기화가 실패해도 화면에 표시가 없음)
+  syncStatus?: {
+    gov: { lastAt: string | null; status: string | null; message: string | null };
+    seoul: { lastAt: string | null; status: string | null; message: string | null };
+  } | null;
 };
 
 export type NearbyPermitLeadResult = {

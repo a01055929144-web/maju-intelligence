@@ -67,6 +67,7 @@ import {
   getPermitLeadQuoteSubject,
   getPermitLeadTableAction,
   isPermitLeadInOpenDateFilter,
+  isPermitLeadUnscored,
   localStoreKeys,
   normalizeInstagramHandleValue,
   normalizeLeadSearchToken,
@@ -1102,6 +1103,26 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 {uploadResult.skippedNoName ? <span className="text-rose-600">상호명 없음 건너뜀 {uploadResult.skippedNoName.toLocaleString()}</span> : null}
               </div>
             ) : null}
+            {sourceStatus?.syncStatus ? (
+              <div className="space-y-1 rounded-md border border-slate-200 bg-white p-3 text-xs font-bold leading-5">
+                <p className="text-slate-500">야간 자동 동기화 상태 (새로고침해도 유지됨)</p>
+                {(
+                  [
+                    { key: "gov", label: "전국 공공데이터", entry: sourceStatus.syncStatus.gov },
+                    { key: "seoul", label: "서울시 공공데이터", entry: sourceStatus.syncStatus.seoul }
+                  ] as const
+                ).map(({ key, label, entry }) => (
+                  <p key={key} className={entry.status === "error" ? "text-rose-600" : entry.lastAt ? "text-slate-700" : "text-slate-400"}>
+                    {label} ·{" "}
+                    {entry.lastAt
+                      ? `${new Date(entry.lastAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" })} ${
+                          entry.status === "error" ? "실패" : "성공"
+                        }${entry.status === "error" && entry.message ? ` (${entry.message.slice(0, 60)})` : ""}`
+                      : "아직 자동 동기화 기록이 없습니다."}
+                  </p>
+                ))}
+              </div>
+            ) : null}
             {govSyncResult || seoulSyncResult || govSyncWarning || seoulSyncWarning ? (
               <div className="space-y-1.5 rounded-md bg-slate-50 p-3">
                 {govSyncResult ? (
@@ -1827,7 +1848,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                         </td>
                         <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
-                          <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade || "-"}</Badge>
+                          <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
                         </td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           {(() => {
@@ -2292,7 +2313,7 @@ function PermitLeadDetailPanel({
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="min-w-0">
             <span className="flex items-center gap-1.5">
-              <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade)}`}>{lead.grade ? `${lead.grade}등급` : "등급 미산정"}</Badge>
+              <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade ? `${lead.grade}등급` : isPermitLeadUnscored(lead) ? "채점 전" : "등급 미달"}</Badge>
               <span className="text-[11px] font-black text-slate-400">{PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}</span>
             </span>
             <h3 className="mt-1 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
