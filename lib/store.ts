@@ -1,6 +1,7 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
+import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
@@ -80,6 +81,7 @@ export type CompanySettings = {
   status: string;
   telegramChatId?: string;
   updatedAt: string;
+  workspaceType?: "personal" | "company";
 };
 export type CompanySettingsInput = {
   businessType?: string;
@@ -394,7 +396,12 @@ export type ManagedCompanyAccountInput = {
 };
 export type CustomerLoginCredentials = AuthCredentials & {
   companyName: string;
+  companyStatus?: string;
   ownerName?: string;
+  userId?: string;
+  userStatus?: string;
+  workspaceRole?: StaffInvitation["role"] | "owner" | "member";
+  credentialSource?: "app_users" | "auth_credentials" | "fallback";
 };
 export type StaffInvitation = {
   id: string;
@@ -439,6 +446,7 @@ export type StaffKakaoAcceptResult = {
   email: string;
   name: string;
   persisted: boolean;
+  userId?: string;
   workspaceRole: StaffInvitation["role"];
 };
 export type PersonalKakaoWorkspaceResult = {
@@ -447,9 +455,11 @@ export type PersonalKakaoWorkspaceResult = {
   email: string;
   name: string;
   persisted: boolean;
+  userId?: string;
   workspaceRole: StaffInvitation["role"] | "owner";
 };
 export type OAuthProvider = "naver" | "google";
+export type LinkedOAuthProvider = OAuthProvider | "kakao";
 export type StaffOAuthAcceptInput = {
   avatarUrl?: string;
   email?: string;
@@ -472,6 +482,120 @@ export type StaffInvitationPreview = {
   role: StaffInvitation["role"];
   status: StaffInvitation["status"];
 };
+export type DirectStaffAccountInput = {
+  companyId: string;
+  employeeName: string;
+  employeeEmail?: string;
+  employeePhone?: string;
+  role?: StaffInvitation["role"];
+};
+export type DirectStaffAccountResult = {
+  persisted: boolean;
+  userId?: string;
+  companyId: string;
+  companyName: string;
+  name: string;
+  email: string;
+  temporaryPassword: string;
+  role: StaffInvitation["role"];
+};
+
+async function upsertAuthIdentity(input: { email?: string | null; provider: LinkedOAuthProvider; providerUserId: string; userId: string }) {
+  if (!isProductionStoreConfigured()) return;
+  if (!input.providerUserId || !input.userId) return;
+  await supabaseRequest("auth_identities?on_conflict=provider,provider_user_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([
+      {
+        email: input.email || null,
+        last_used_at: new Date().toISOString(),
+        provider: input.provider,
+        provider_user_id: input.providerUserId,
+        user_id: input.userId
+      }
+    ])
+  }).catch(() => null);
+}
+
+export type CustomerAuthConnection = {
+  connected: boolean;
+  email?: string;
+  lastUsedAt?: string;
+  provider: "email" | LinkedOAuthProvider;
+};
+
+export async function linkOAuthIdentityToUser(input: {
+  avatarUrl?: string | null;
+  email?: string | null;
+  name?: string | null;
+  provider: LinkedOAuthProvider;
+  providerUserId: string;
+  userId: string;
+}) {
+  if (!isProductionStoreConfigured()) return { persisted: false };
+  const providerColumn = `${input.provider}_user_id`;
+  const now = new Date().toISOString();
+
+  await upsertAuthIdentity({
+    email: input.email,
+    provider: input.provider,
+    providerUserId: input.providerUserId,
+    userId: input.userId
+  });
+
+  await appUsersRequest(`app_users?id=eq.${encodeURIComponent(input.userId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      avatar_url: input.avatarUrl || null,
+      last_auth_provider: input.provider,
+      last_login_at: now,
+      name: input.name || undefined,
+      [providerColumn]: input.providerUserId
+    })
+  }).catch(() => null);
+
+  return { persisted: true };
+}
+
+export async function getCustomerAuthConnections(input: { email?: string; userId?: string }): Promise<CustomerAuthConnection[]> {
+  const base: CustomerAuthConnection[] = [
+    { connected: Boolean(input.email), email: input.email, provider: "email" },
+    { connected: false, provider: "kakao" },
+    { connected: false, provider: "naver" },
+    { connected: false, provider: "google" }
+  ];
+  if (!isProductionStoreConfigured()) return base;
+
+  let userId = input.userId || "";
+  const email = input.email?.trim().toLowerCase() || "";
+  if (!userId && email) {
+    const users = await supabaseRequest<Array<{ id: string }>>(`app_users?select=id&email=eq.${encodeURIComponent(email)}&limit=1`).catch(() => []);
+    userId = users[0]?.id || "";
+  }
+  if (!userId) return base;
+
+  const identities = await supabaseRequest<
+    Array<{
+      email: string | null;
+      last_used_at: string | null;
+      provider: LinkedOAuthProvider;
+    }>
+  >(`auth_identities?select=provider,email,last_used_at&user_id=eq.${encodeURIComponent(userId)}`).catch(() => []);
+  const identityByProvider = new Map(identities.map((identity) => [identity.provider, identity]));
+
+  return base.map((connection) => {
+    if (connection.provider === "email") return connection;
+    const identity = identityByProvider.get(connection.provider);
+    return {
+      ...connection,
+      connected: Boolean(identity),
+      email: identity?.email || undefined,
+      lastUsedAt: identity?.last_used_at || undefined
+    };
+  });
+}
 export type DatabaseCheck = {
   name: string;
   status: "ready" | "fallback" | "missing";
@@ -589,6 +713,61 @@ function isMissingCustomerRelationshipStatusColumnError(error: unknown) {
 function isMissingColumnError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("42703") || message.includes("does not exist") || message.includes("PGRST204") || message.includes("schema cache");
+}
+
+function removePasswordHashFromBody(body: BodyInit | null | undefined) {
+  if (!body || typeof body !== "string" || !body.includes("password_hash")) return body;
+  try {
+    const parsed = JSON.parse(body);
+    const strip = (row: Record<string, unknown>) => {
+      const next = { ...row };
+      delete next.password_hash;
+      return next;
+    };
+    if (Array.isArray(parsed)) return JSON.stringify(parsed.map((row) => (row && typeof row === "object" ? strip(row as Record<string, unknown>) : row)));
+    if (parsed && typeof parsed === "object") return JSON.stringify(strip(parsed as Record<string, unknown>));
+  } catch {
+    return body;
+  }
+  return body;
+}
+
+function removeCompanyWorkspaceFieldsFromBody(body: BodyInit | null | undefined) {
+  if (!body || typeof body !== "string" || (!body.includes("workspace_type") && !body.includes("owner_user_id"))) return body;
+  try {
+    const parsed = JSON.parse(body);
+    const strip = (row: Record<string, unknown>) => {
+      const next = { ...row };
+      delete next.workspace_type;
+      delete next.owner_user_id;
+      return next;
+    };
+    if (Array.isArray(parsed)) return JSON.stringify(parsed.map((row) => (row && typeof row === "object" ? strip(row as Record<string, unknown>) : row)));
+    if (parsed && typeof parsed === "object") return JSON.stringify(strip(parsed as Record<string, unknown>));
+  } catch {
+    return body;
+  }
+  return body;
+}
+
+async function appUsersRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await supabaseRequest<T>(path, init);
+  } catch (error) {
+    const bodyWithoutPasswordHash = removePasswordHashFromBody(init.body);
+    if (!isMissingColumnError(error) || bodyWithoutPasswordHash === init.body) throw error;
+    return supabaseRequest<T>(path, { ...init, body: bodyWithoutPasswordHash });
+  }
+}
+
+async function companiesRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  try {
+    return await supabaseRequest<T>(path, init);
+  } catch (error) {
+    const bodyWithoutWorkspaceFields = removeCompanyWorkspaceFieldsFromBody(init.body);
+    if (!isMissingColumnError(error) || bodyWithoutWorkspaceFields === init.body) throw error;
+    return supabaseRequest<T>(path, { ...init, body: bodyWithoutWorkspaceFields });
+  }
 }
 
 function isMissingTelegramChatIdColumnError(error: unknown) {
@@ -890,7 +1069,9 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
     if (fallback.customerEmail.toLowerCase() !== normalizedEmail) return null;
     return {
       ...fallback,
+      companyStatus: "fallback",
       companyName: "마주식자재",
+      credentialSource: "fallback",
       ownerName: "정두영"
     };
   }
@@ -900,6 +1081,50 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
   }
 
   try {
+    const userRows = await supabaseRequest<
+      Array<{
+        email: string | null;
+        id: string;
+        name: string | null;
+        password_hash: string | null;
+        status: string | null;
+      }>
+    >(`app_users?select=id,email,name,password_hash,status&email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`).catch((error) => {
+      if (isMissingColumnError(error)) return [];
+      throw error;
+    });
+
+    const user = userRows[0];
+    if (user?.password_hash && user.status !== "inactive") {
+      const memberRows = await supabaseRequest<
+        Array<{
+          company_id: string;
+          role: StaffInvitation["role"] | "owner" | "member";
+          status: string | null;
+        }>
+      >(
+        `company_members?select=company_id,role,status&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`
+      ).catch(() => []);
+      const member = memberRows[0];
+      if (member?.company_id) {
+        const company = await getCompanySettings(member.company_id, "고객사").catch(() => null);
+        return {
+          adminEmail: fallback.adminEmail,
+          adminPassword: fallback.adminPassword,
+          customerEmail: user.email || normalizedEmail,
+          customerPassword: user.password_hash,
+          customerCompanyId: member.company_id,
+          companyStatus: company?.status,
+          companyName: company?.name || "고객사",
+          credentialSource: "app_users",
+          ownerName: user.name || company?.ownerName,
+          userId: user.id,
+          userStatus: user.status || "active",
+          workspaceRole: member.role || "member"
+        };
+      }
+    }
+
     const rows = await supabaseRequest<
       Array<{
         admin_email: string | null;
@@ -923,13 +1148,75 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
       customerPassword: row.customer_password || fallback.customerPassword,
       customerCompanyId: row.customer_company_id,
       updatedAt: row.updated_at || undefined,
+      companyStatus: company?.status,
       companyName: company?.name || "고객사",
+      credentialSource: "auth_credentials",
       ownerName: company?.ownerName
     };
   } catch (error) {
     console.error("Customer credential lookup fallback:", error);
     return fallbackCustomerCredentials();
   }
+}
+
+export async function updateCustomerUserLastLogin(userId: string, provider = "password"): Promise<void> {
+  if (!userId || !isProductionStoreConfigured()) return;
+  await supabaseRequest(`app_users?id=eq.${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      last_auth_provider: provider,
+      last_login_at: new Date().toISOString()
+    })
+  }).catch(() => null);
+}
+
+export type CustomerWorkspaceSummary = {
+  companyId: string;
+  companyName: string;
+  memberId: string;
+  role: StaffInvitation["role"] | "owner" | "member";
+  status: string;
+  workspaceType: "personal" | "company";
+};
+
+export async function getCustomerWorkspaces(input: { email?: string; userId?: string }): Promise<CustomerWorkspaceSummary[]> {
+  if (!isProductionStoreConfigured()) return [];
+
+  let userId = input.userId || "";
+  const email = input.email?.trim().toLowerCase() || "";
+  if (!userId && email) {
+    const userRows = await supabaseRequest<Array<{ id: string }>>(
+      `app_users?select=id&email=eq.${encodeURIComponent(email)}&limit=1`
+    ).catch(() => []);
+    userId = userRows[0]?.id || "";
+  }
+  if (!userId) return [];
+
+  const memberRows = await supabaseRequest<
+    Array<{
+      company_id: string;
+      id: string;
+      role: StaffInvitation["role"] | "owner" | "member";
+      status: string | null;
+    }>
+  >(`company_members?select=id,company_id,role,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&order=created_at.asc`).catch(() => []);
+
+  const workspaces = await Promise.all(
+    memberRows.map(async (member) => {
+      const company = await getCompanySettings(member.company_id, "워크스페이스").catch(() => null);
+      return {
+        companyId: member.company_id,
+        companyName: company?.name || "워크스페이스",
+        memberId: member.id,
+        role: member.role || "member",
+        status: member.status || "active",
+        workspaceType: company?.workspaceType || (company?.businessType === "personal" ? ("personal" as const) : ("company" as const))
+      };
+    })
+  );
+
+  return workspaces.filter((workspace) => workspace.status === "active");
 }
 
 /**
@@ -1224,6 +1511,13 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   const adminCredentials = await getAuthCredentials();
   const now = new Date().toISOString();
 
+  const duplicateCredentialRows = await supabaseRequest<Array<{ customer_company_id: string | null }>>(
+    `auth_credentials?select=customer_company_id&customer_email=eq.${encodeURIComponent(customerEmail)}`
+  ).catch(() => []);
+  if (duplicateCredentialRows.some((row) => row.customer_company_id && row.customer_company_id !== companyId)) {
+    throw new Error("이미 다른 고객사에서 사용 중인 이메일입니다.");
+  }
+
   // 2026-08-26 보안 수정: 고객사 관리 화면은 항상 현재 비밀번호(해시일 수 있음)를 폼에 채워 그대로
   // 다시 제출하므로, getManagedCompanyAccounts()와 동일하게 customer_company_id로 기존 값을 찾아
   // 실제로 값이 바뀐 경우에만 새 비밀번호를 해시합니다.
@@ -1234,7 +1528,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
     : [];
   const customerPasswordToStore = await resolvePasswordForStorage(input.customerPassword, existingCredentialRows[0]?.customer_password || "");
 
-  const companyRows = await supabaseRequest<
+  const companyRows = await companiesRequest<
     Array<{
       id: string;
       name: string;
@@ -1257,6 +1551,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         owner_name: input.ownerName?.trim() || null,
         origin_address: input.originAddress?.trim() || null,
         status: input.status || "active",
+        workspace_type: "company",
         updated_at: now
       }
     ])
@@ -1279,6 +1574,71 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       }
     ])
   });
+
+  const existingUserRows = await supabaseRequest<Array<{ id: string }>>(
+    `app_users?select=id&email=eq.${encodeURIComponent(customerEmail)}&limit=1`
+  ).catch(() => []);
+  const ownerUserId = existingUserRows[0]?.id || globalThis.crypto.randomUUID();
+  if (existingUserRows[0]?.id) {
+    await appUsersRequest(`app_users?id=eq.${encodeURIComponent(ownerUserId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        name: input.ownerName?.trim() || companyName,
+        password_hash: customerPasswordToStore,
+        role: "customer_owner",
+        auth_provider: "password",
+        status: input.status || "active"
+      })
+    });
+  } else {
+    await appUsersRequest("app_users", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify([
+        {
+          id: ownerUserId,
+          email: customerEmail,
+          name: input.ownerName?.trim() || companyName,
+          password_hash: customerPasswordToStore,
+          role: "customer_owner",
+          auth_provider: "password",
+          status: input.status || "active"
+        }
+      ])
+    });
+  }
+
+  const existingMemberRows = await supabaseRequest<Array<{ id: string }>>(
+    `company_members?select=id&company_id=eq.${encodeURIComponent(companyId)}&user_id=eq.${encodeURIComponent(ownerUserId)}&limit=1`
+  ).catch(() => []);
+  if (existingMemberRows[0]?.id) {
+    await supabaseRequest(`company_members?id=eq.${encodeURIComponent(existingMemberRows[0].id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        role: "owner",
+        status: "active",
+        invited_email: customerEmail,
+        updated_at: now
+      })
+    });
+  } else {
+    await supabaseRequest("company_members", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify([
+        {
+          company_id: companyId,
+          user_id: ownerUserId,
+          role: "owner",
+          status: "active",
+          invited_email: customerEmail,
+          updated_at: now
+        }
+      ])
+    });
+  }
 
   const company = companyRows[0];
   await writeAdminAuditLog({
@@ -1335,6 +1695,7 @@ export type CompanySignupResult = {
   companyName: string;
   email: string;
   name: string;
+  userId?: string;
 };
 
 // 2026-08-26: 회사가 관리자 도움 없이 스스로 가입하는 플로우(P0-3)입니다. 사업자등록번호로
@@ -1361,7 +1722,8 @@ export async function createCompanySignup(input: CompanySignupInput): Promise<Co
       companyId: globalThis.crypto.randomUUID(),
       companyName,
       email: ownerEmail,
-      name: ownerName
+      name: ownerName,
+      userId: undefined
     };
   }
 
@@ -1378,14 +1740,21 @@ export async function createCompanySignup(input: CompanySignupInput): Promise<Co
   if (existingByEmail.length > 0) {
     throw new Error("이미 사용 중인 이메일입니다.");
   }
+  const existingUserByEmail = await supabaseRequest<Array<{ id: string }>>(
+    `app_users?select=id&email=eq.${encodeURIComponent(ownerEmail)}&limit=1`
+  ).catch(() => []);
+  if (existingUserByEmail.length > 0) {
+    throw new Error("이미 사용 중인 이메일입니다.");
+  }
 
   const companyId = globalThis.crypto.randomUUID();
+  const ownerUserId = globalThis.crypto.randomUUID();
   const now = new Date().toISOString();
   const adminCredentials = await getAuthCredentials();
 
   let companyRows: Array<{ id: string; name: string }>;
   try {
-    companyRows = await supabaseRequest<Array<{ id: string; name: string }>>("companies", {
+    companyRows = await companiesRequest<Array<{ id: string; name: string }>>("companies", {
       method: "POST",
       body: JSON.stringify([
         {
@@ -1396,6 +1765,7 @@ export async function createCompanySignup(input: CompanySignupInput): Promise<Co
           status: "active",
           terms_agreed_at: now,
           privacy_agreed_at: now,
+          workspace_type: "company",
           updated_at: now
         }
       ])
@@ -1429,6 +1799,42 @@ export async function createCompanySignup(input: CompanySignupInput): Promise<Co
     ])
   });
 
+  await appUsersRequest("app_users", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        id: ownerUserId,
+        email: ownerEmail,
+        name: ownerName,
+        password_hash: customerPasswordHash,
+        role: "customer_owner",
+        auth_provider: "password",
+        status: "active",
+        last_login_at: now
+      }
+    ])
+  });
+
+  await supabaseRequest("company_members", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify([
+      {
+        company_id: company.id,
+        user_id: ownerUserId,
+        role: "owner",
+        status: "active",
+        invited_email: ownerEmail,
+        updated_at: now
+      }
+    ])
+  });
+
   await writeAdminAuditLog({
     companyId: company.id,
     action: "company_self_signup",
@@ -1445,7 +1851,8 @@ export async function createCompanySignup(input: CompanySignupInput): Promise<Co
     companyId: company.id,
     companyName: company.name,
     email: ownerEmail,
-    name: ownerName
+    name: ownerName,
+    userId: ownerUserId
   };
 }
 
@@ -1528,6 +1935,122 @@ export async function createStaffInvitation(input: StaffInvitationInput, auditCo
   return {
     persisted: true,
     invitation
+  };
+}
+
+/** 초대 코드 없이도 바로 로그인 가능한 임시 비밀번호를 생성합니다(사람이 옮겨 적기 쉬운 문자만 사용). */
+function generateTemporaryPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = randomBytes(10);
+  let password = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    password += alphabet[bytes[i] % alphabet.length];
+  }
+  return password;
+}
+
+/**
+ * 2026-08-30: MAJU 대표(관리자)가 고객사 직원의 카카오 가입 완료를 기다리지 않고, 그 자리에서
+ * 바로 로그인 가능한 이메일+임시 비밀번호 계정을 만들어줄 수 있도록 합니다. createStaffInvitation과
+ * 달리 app_users/company_members 행을 즉시 생성하며, 반환된 temporaryPassword는 이 응답에만
+ * 평문으로 담기고 저장소에는 해시로만 남습니다 — 관리자가 화면에서 복사해 직원에게 안전하게
+ * 전달해야 합니다.
+ */
+export async function createStaffAccountDirect(input: DirectStaffAccountInput, auditContext: AuditActorContext = {}): Promise<DirectStaffAccountResult> {
+  const companyId = input.companyId;
+  const employeeName = input.employeeName?.trim();
+  const employeePhone = input.employeePhone?.trim() || "";
+  const role = input.role || "driver";
+  const temporaryPassword = generateTemporaryPassword();
+
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!employeeName) throw new Error("직원 이름을 입력해주세요.");
+
+  const requestedEmail = input.employeeEmail?.trim().toLowerCase();
+  if (requestedEmail && !requestedEmail.includes("@")) throw new Error("올바른 이메일을 입력해주세요.");
+  const email = requestedEmail || `staff-${randomBytes(4).toString("hex")}@maju.local`;
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      persisted: false,
+      companyId,
+      companyName: "고객사",
+      name: employeeName,
+      email,
+      temporaryPassword,
+      role
+    };
+  }
+
+  const existingByEmail = await supabaseRequest<Array<{ id: string }>>(
+    `app_users?select=id&email=eq.${encodeURIComponent(email)}&limit=1`
+  ).catch(() => []);
+  if (existingByEmail.length > 0) {
+    throw new Error("이미 사용 중인 이메일입니다. 다른 이메일을 입력해주세요.");
+  }
+
+  const company = await getCompanySettings(companyId, "고객사").catch(() => null);
+  const passwordHash = await hashPassword(temporaryPassword);
+  const userId = globalThis.crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await appUsersRequest("app_users", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify([
+      {
+        id: userId,
+        email,
+        name: employeeName,
+        phone: employeePhone || null,
+        password_hash: passwordHash,
+        role: "customer_member",
+        auth_provider: "password",
+        status: "active",
+        last_login_at: null
+      }
+    ])
+  });
+
+  await supabaseRequest("company_members", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify([
+      {
+        company_id: companyId,
+        user_id: userId,
+        role,
+        status: "active",
+        invited_email: email,
+        updated_at: now
+      }
+    ])
+  });
+
+  await writeAdminAuditLog({
+    companyId,
+    action: "staff_account_created_direct",
+    targetType: "staff_account",
+    targetId: userId,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      employeeName,
+      hasEmployeePhone: Boolean(employeePhone),
+      role,
+      usedProvidedEmail: Boolean(requestedEmail)
+    }
+  }).catch(() => null);
+
+  return {
+    persisted: true,
+    userId,
+    companyId,
+    companyName: company?.name || "고객사",
+    name: employeeName,
+    email,
+    temporaryPassword,
+    role
   };
 }
 
@@ -1671,6 +2194,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       email: input.email || `kakao-${kakaoUserId}@maju.local`,
       name: input.name || "모바일 직원",
       persisted: false,
+      userId: undefined,
       workspaceRole: "driver"
     };
   }
@@ -1716,6 +2240,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   });
 
   const user = userRows[0];
+  await upsertAuthIdentity({ email: user.email || loginEmail, provider: "kakao", providerUserId: kakaoUserId, userId: user.id });
   await supabaseRequest("company_members", {
     method: "POST",
     headers: {
@@ -1750,6 +2275,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     email: user.email || loginEmail,
     name: user.name || displayName,
     persisted: true,
+    userId: user.id,
     workspaceRole: invitation.role || "member"
   };
 }
@@ -1806,6 +2332,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       email: loginEmail,
       name: displayName,
       persisted: false,
+      userId: undefined,
       workspaceRole: "owner"
     };
   }
@@ -1831,6 +2358,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
   });
 
   const user = userRows[0];
+  await upsertAuthIdentity({ email: user.email || loginEmail, provider: "kakao", providerUserId: kakaoUserId, userId: user.id });
   const existingMemberships = await supabaseRequest<
     Array<{
       company_id: string;
@@ -1850,11 +2378,12 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       email: user.email || loginEmail,
       name: user.name || displayName,
       persisted: true,
+      userId: user.id,
       workspaceRole: existing.role || "owner"
     };
   }
 
-  const companyRows = await supabaseRequest<Array<{ id: string; name: string }>>("companies", {
+  const companyRows = await companiesRequest<Array<{ id: string; name: string }>>("companies", {
     method: "POST",
     body: JSON.stringify([
       {
@@ -1862,6 +2391,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
         name: `${displayName} 워크스페이스`,
         owner_name: displayName,
         status: "active",
+        workspace_type: "personal",
         updated_at: now
       }
     ])
@@ -1890,6 +2420,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     email: user.email || loginEmail,
     name: user.name || displayName,
     persisted: true,
+    userId: user.id,
     workspaceRole: "owner"
   };
 }
@@ -1913,6 +2444,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
       email: input.email || `${input.provider}-${providerUserId}@maju.local`,
       name: input.name || "모바일 직원",
       persisted: false,
+      userId: undefined,
       workspaceRole: "driver"
     };
   }
@@ -1958,6 +2490,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
   });
 
   const user = userRows[0];
+  await upsertAuthIdentity({ email: user.email || loginEmail, provider: input.provider, providerUserId, userId: user.id });
   await supabaseRequest("company_members", {
     method: "POST",
     headers: {
@@ -1992,6 +2525,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
     email: user.email || loginEmail,
     name: user.name || displayName,
     persisted: true,
+    userId: user.id,
     workspaceRole: invitation.role || "member"
   };
 }
@@ -2012,6 +2546,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       email: loginEmail,
       name: displayName,
       persisted: false,
+      userId: undefined,
       workspaceRole: "owner"
     };
   }
@@ -2037,6 +2572,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
   });
 
   const user = userRows[0];
+  await upsertAuthIdentity({ email: user.email || loginEmail, provider: input.provider, providerUserId, userId: user.id });
   const existingMemberships = await supabaseRequest<
     Array<{
       company_id: string;
@@ -2053,11 +2589,12 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       email: user.email || loginEmail,
       name: user.name || displayName,
       persisted: true,
+      userId: user.id,
       workspaceRole: existing.role || "owner"
     };
   }
 
-  const companyRows = await supabaseRequest<Array<{ id: string; name: string }>>("companies", {
+  const companyRows = await companiesRequest<Array<{ id: string; name: string }>>("companies", {
     method: "POST",
     body: JSON.stringify([
       {
@@ -2065,6 +2602,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
         name: `${displayName} 워크스페이스`,
         owner_name: displayName,
         status: "active",
+        workspace_type: "personal",
         updated_at: now
       }
     ])
@@ -2093,6 +2631,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
     email: user.email || loginEmail,
     name: user.name || displayName,
     persisted: true,
+    userId: user.id,
     workspaceRole: "owner"
   };
 }
@@ -4516,6 +5055,71 @@ const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   skippedNoName: 0
 };
 
+export type LocalDataPermitSyncResult = {
+  configured: boolean;
+  fetched: number;
+  ingest: PermitLeadIngestResult;
+  sources: Array<{ opnSvcId: string; fetched: number }>;
+};
+
+/**
+ * 지방행정 인허가 데이터개방(localdata.go.kr)에서 최근 변경분을 가져와
+ * 수동 업로드와 동일한 신규 리드 적재 파이프라인으로 흘려보냅니다.
+ */
+export async function syncLocalDataPermitLeads(companyId: string, days = 3): Promise<LocalDataPermitSyncResult> {
+  if (!isLocalDataApiConfigured()) {
+    return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT, sources: [] };
+  }
+
+  const sources: LocalDataPermitSyncResult["sources"] = [];
+  const rows = (
+    await Promise.all(
+      getConfiguredOpnSvcIds().map(async (opnSvcId) => {
+        const sourceRows = await fetchLocalDataPermitRows(opnSvcId, days);
+        sources.push({ opnSvcId, fetched: sourceRows.length });
+        return sourceRows;
+      })
+    )
+  ).flat();
+  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "localdata_api" });
+
+  return { configured: true, fetched: rows.length, ingest, sources };
+}
+
+export type LocalDataPermitDailySyncResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalFetched: number;
+  totalInserted: number;
+  totalUpdated: number;
+};
+
+/** 일일 cron에서 모든 회사에 대해 지방행정 인허가 데이터 자동 수집을 실행합니다. */
+export async function syncAllCompaniesLocalDataPermitLeads(): Promise<LocalDataPermitDailySyncResult> {
+  const empty: LocalDataPermitDailySyncResult = {
+    configured: isLocalDataApiConfigured(),
+    companiesProcessed: 0,
+    totalFetched: 0,
+    totalInserted: 0,
+    totalUpdated: 0
+  };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id, 14)));
+
+  return results.reduce<LocalDataPermitDailySyncResult>(
+    (total, result) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalFetched: total.totalFetched + result.fetched,
+      totalInserted: total.totalInserted + result.ingest.inserted,
+      totalUpdated: total.totalUpdated + result.ingest.updated
+    }),
+    { ...empty, configured: true }
+  );
+}
+
 export type GovRestaurantSyncResult = {
   configured: boolean;
   fetched: number;
@@ -6898,7 +7502,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     ownerName: "정두영",
     originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
     status: "fallback",
-    updatedAt: "기준 데이터"
+    updatedAt: "기준 데이터",
+    workspaceType: "company" as const
   };
 
   if (!isProductionStoreConfigured()) {
@@ -6914,15 +7519,16 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     status: string;
     telegram_chat_id?: string | null;
     updated_at: string;
+    workspace_type?: string | null;
   };
   let rows: CompanyRow[];
 
   try {
     rows = await supabaseRequest<Array<CompanyRow>>(
-      `companies?select=id,name,business_type,owner_name,origin_address,status,telegram_chat_id,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+      `companies?select=id,name,business_type,owner_name,origin_address,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     );
   } catch (error) {
-    if (!isMissingTelegramChatIdColumnError(error)) throw error;
+    if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
     rows = await supabaseRequest<Array<CompanyRow>>(
       `companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     ).catch(() => []);
@@ -6945,7 +7551,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     originAddress: row.origin_address || "",
     status: row.status,
     telegramChatId: row.telegram_chat_id || undefined,
-    updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+    updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+    workspaceType: row.workspace_type === "personal" ? "personal" : "company"
   };
 }
 

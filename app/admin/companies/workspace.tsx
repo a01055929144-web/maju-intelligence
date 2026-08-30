@@ -2,10 +2,10 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, ClipboardList, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation } from "@/lib/store";
+import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation } from "@/lib/store";
 
 type Props = {
   initialCompanies: ManagedCompanyAccount[];
@@ -39,6 +39,11 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [inviteMessage, setInviteMessage] = useState("");
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [updatingStaffId, setUpdatingStaffId] = useState("");
+  const [directForm, setDirectForm] = useState({ employeeName: "", employeeEmail: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
+  const [directMessage, setDirectMessage] = useState("");
+  const [creatingDirect, setCreatingDirect] = useState(false);
+  const [directResult, setDirectResult] = useState<DirectStaffAccountResult | null>(null);
+  const [copiedField, setCopiedField] = useState<"email" | "password" | "">("");
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -164,6 +169,52 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
     );
     setInviteForm({ employeeName: "", employeePhone: "", role: "driver" });
     setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크 저장이 완료되었습니다." : "초대 링크가 화면에 생성되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function createDirectAccount() {
+    if (!selectedCompany) return;
+    if (!directForm.employeeName.trim()) {
+      setDirectMessage("직원 이름을 입력해주세요.");
+      return;
+    }
+
+    setCreatingDirect(true);
+    setDirectMessage("");
+    setDirectResult(null);
+
+    const response = await fetch("/api/admin/staff-accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: selectedCompany.id,
+        employeeName: directForm.employeeName,
+        employeeEmail: directForm.employeeEmail,
+        employeePhone: directForm.employeePhone,
+        role: directForm.role
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    setCreatingDirect(false);
+
+    if (!response.ok) {
+      setDirectMessage(payload?.message || "직원 계정 생성에 실패했습니다.");
+      return;
+    }
+
+    const result = payload as DirectStaffAccountResult;
+    setDirectResult(result);
+    setDirectForm({ employeeName: "", employeeEmail: "", employeePhone: "", role: "driver" });
+    setDirectMessage(result.persisted ? "" : "계정이 화면에 생성되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function copyDirectResultField(field: "email" | "password", value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField((current) => (current === field ? "" : current)), 1500);
+    } catch {
+      setDirectMessage("클립보드 복사에 실패했습니다. 직접 선택해 복사해주세요.");
+    }
   }
 
   async function updateStaffInvitation(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -457,6 +508,77 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 </div>
               </div>
             </div>
+          ) : null}
+
+          {selectedCompany ? (
+            <section className="rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-4">
+                <div>
+                  <p className="flex items-center gap-2 font-black text-slate-950">
+                    <UserPlus className="h-4 w-4 text-primary" />
+                    직원 계정 즉시 생성
+                  </p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">
+                    직원의 카카오 가입을 기다리지 않고, 대표님이 그 자리에서 로그인 계정(이메일 + 임시 비밀번호)을 바로 만들어 전달할 수 있습니다.
+                  </p>
+                </div>
+                <Badge className="bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">즉시 발급</Badge>
+              </div>
+              <div className="grid gap-3 p-4 md:grid-cols-[1fr_1fr_140px_150px_auto] md:items-end">
+                <Field label="직원명" required value={directForm.employeeName} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeName: value }))} />
+                <Field label="로그인 이메일 (미입력 시 자동 생성)" type="email" value={directForm.employeeEmail} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeEmail: value }))} />
+                <Field label="연락처" value={directForm.employeePhone} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeePhone: value }))} />
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-bold text-muted-foreground">역할</span>
+                  <select
+                    className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    value={directForm.role}
+                    onChange={(event) => setDirectForm((prev) => ({ ...prev, role: event.target.value as StaffInvitation["role"] }))}
+                  >
+                    <option value="driver">배송기사</option>
+                    <option value="sales">영업직원</option>
+                    <option value="manager">현장관리자</option>
+                    <option value="member">일반직원</option>
+                  </select>
+                </label>
+                <Button className="h-11" disabled={creatingDirect} onClick={createDirectAccount} type="button">
+                  <UserPlus className="h-4 w-4" />
+                  {creatingDirect ? "생성 중" : "계정 생성"}
+                </Button>
+              </div>
+              {directMessage ? (
+                <p className={directMessage.includes("실패") ? "mx-4 mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" : "mx-4 mb-4 rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary"}>
+                  {directMessage}
+                </p>
+              ) : null}
+              {directResult ? (
+                <div className="mx-4 mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-black text-emerald-900">
+                    {directResult.name}님 계정이 생성되었습니다. 아래 정보를 안전한 방법으로 전달해주세요 — 이 화면을 벗어나면 비밀번호는 다시 볼 수 없습니다.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black text-muted-foreground">로그인 이메일</p>
+                        <p className="truncate font-mono text-sm font-bold text-slate-900">{directResult.email}</p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={() => copyDirectResultField("email", directResult.email)}>
+                        {copiedField === "email" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black text-muted-foreground">임시 비밀번호</p>
+                        <p className="truncate font-mono text-sm font-bold text-slate-900">{directResult.temporaryPassword}</p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={() => copyDirectResultField("password", directResult.temporaryPassword)}>
+                        {copiedField === "password" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           ) : null}
 
           {selectedCompany ? (
