@@ -58,6 +58,33 @@ function useAdminCompanyId() {
   return companyId;
 }
 
+// 2026-08-30 피드백("다수 고객들 사용할 수 있도록 개선된거야?") 대응: 이 페이지는 클라이언트
+// 컴포넌트라 서버 세션을 직접 읽지 못해, 지금까지는 모든 일반 고객 로그인에 회사명/이름을
+// "마주식자재"/"정두영"으로 고정 표시하고 있었습니다(다른 고객사가 로그인해도 항상 이렇게 보임 —
+// 실제 데이터 자체는 세션 쿠키로 서버에서 이미 회사별로 분리돼 있지만 헤더 표시만 틀렸던 것).
+// /api/customer/me로 실제 로그인한 회사명·이름을 가져와 어떤 고객사든 자기 정보를 보게 합니다.
+function useCustomerIdentity(isAdminPreview: boolean) {
+  const [companyName, setCompanyName] = useState("");
+  const [userName, setUserName] = useState("");
+  useEffect(() => {
+    if (isAdminPreview) return;
+    let ignore = false;
+    fetch("/api/customer/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (ignore || !payload?.session) return;
+        setCompanyName(payload.session.companyName || "");
+        setUserName(payload.session.name || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [isAdminPreview]);
+  return { companyName, userName };
+}
+
+
 function formatBusinessRegistrationNumber(value: string) {
   const digits = value.replace(/[^0-9]/g, "").slice(0, 10);
   if (digits.length !== 10) return value;
@@ -95,6 +122,7 @@ function customerOperationalIssueCount(customer: CustomerSummaryRow) {
 export default function CrmSummaryPage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
+  const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [dbError, setDbError] = useState("");
   const [customers, setCustomers] = useState<CustomerSummaryRow[]>([]);
@@ -320,12 +348,12 @@ export default function CrmSummaryPage() {
   return (
     <CustomerAppShell
       active="customers-summary"
-      companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
+      companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
       subtitle="거래처, 사업자 상태, 메모·첨부 현황"
       title="전체 현황"
-      userName={isAdminPreview ? "관리자" : "정두영"}
+      userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
       <section className="mx-auto max-w-[1560px] space-y-3">
         <div className="maju-section-card">

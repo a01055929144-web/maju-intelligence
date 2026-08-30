@@ -133,6 +133,7 @@ function getUploadTypeFromUrl(): UploadTemplateType {
 export default function Home() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
+  const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
   const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("onboarding");
   const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
@@ -543,12 +544,12 @@ export default function Home() {
   return (
     <CustomerAppShell
       active="data"
-      companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
+      companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
       subtitle="아직 없는 거래처 또는 매출 데이터를 새로 등록합니다."
       title="거래처 관리 · 등록"
-      userName={isAdminPreview ? "관리자" : "정두영"}
+      userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
       <div className="mx-auto max-w-[1880px] space-y-3">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
@@ -614,6 +615,32 @@ function useAdminCompanyId() {
   }, []);
 
   return companyId;
+}
+
+// 2026-08-30 피드백("다수 고객들 사용할 수 있도록 개선된거야?") 대응: 이 페이지는 클라이언트
+// 컴포넌트라 서버 세션을 직접 읽지 못해, 지금까지는 모든 일반 고객 로그인에 회사명/이름을
+// "마주식자재"/"정두영"으로 고정 표시하고 있었습니다(다른 고객사가 로그인해도 항상 이렇게 보임 —
+// 실제 데이터 자체는 세션 쿠키로 서버에서 이미 회사별로 분리돼 있지만 헤더 표시만 틀렸던 것).
+// /api/customer/me로 실제 로그인한 회사명·이름을 가져와 어떤 고객사든 자기 정보를 보게 합니다.
+function useCustomerIdentity(isAdminPreview: boolean) {
+  const [companyName, setCompanyName] = useState("");
+  const [userName, setUserName] = useState("");
+  useEffect(() => {
+    if (isAdminPreview) return;
+    let ignore = false;
+    fetch("/api/customer/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (ignore || !payload?.session) return;
+        setCompanyName(payload.session.companyName || "");
+        setUserName(payload.session.name || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [isAdminPreview]);
+  return { companyName, userName };
 }
 
 function WorkspaceModeTabs({

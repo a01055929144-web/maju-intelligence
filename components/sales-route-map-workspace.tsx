@@ -2167,6 +2167,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 ) : null}
                 {previewLeadId ? (
                   <PermitLeadMapQuickCard
+                    allStores={allStores}
                     headerOffsetPx={mapHeaderHeightPx}
                     lead={
                       leadRadiusResult?.leads.find((lead) => lead.id === previewLeadId) ||
@@ -3221,6 +3222,19 @@ export function StoreQuickCard({
     businessHours: store.businessHours || "",
     menuSummary: store.menuSummary || ""
   });
+  const [addressCopied, setAddressCopied] = useState(false);
+
+  async function copyAddress() {
+    const address = store.address || store.region;
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1500);
+    } catch {
+      // 클립보드 권한이 없으면 조용히 무시합니다 — 이 카드에는 별도 오류 메시지 영역이 없습니다.
+    }
+  }
 
   useEffect(() => {
     setDraft({
@@ -3335,10 +3349,23 @@ export function StoreQuickCard({
         </button>
       </div>
       <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2.5">
-        <p className="flex gap-2 text-[13px] font-bold leading-5 text-slate-600">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
-          <span className="line-clamp-2">{store.address || store.region}</span>
-        </p>
+        <div className="flex items-start gap-1">
+          <p className="flex min-w-0 flex-1 gap-2 text-[13px] font-bold leading-5 text-slate-600">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+            <span className="line-clamp-2">{store.address || store.region}</span>
+          </p>
+          {store.address || store.region ? (
+            <button
+              aria-label="주소 복사"
+              className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
+              onClick={() => void copyAddress()}
+              title="주소 복사"
+              type="button"
+            >
+              {addressCopied ? <Check className="h-3.5 w-3.5 text-teal-600" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+        </div>
         {!isEditing ? (
           // 영업·배송 현장에서 실제로 바로 필요한 정보(담당자·배송차, 연락처)를 최상단에 배치합니다.
           // 대표자/사업자번호/개업일 같은 등록 정보는 하루하루 영업엔 급하지 않은 행정 데이터라 아래로 내렸습니다.
@@ -4662,7 +4689,45 @@ export function getPermitLeadQuoteSubject(lead: PermitLeadItem): QuoteSubject {
 }
 
 /** 지도 위 리드 반경 검색 결과 마커를 클릭했을 때 뜨는 간단 카드입니다. StoreQuickCard보다 가볍습니다. */
+// 2026-08-30 피드백("배송차, 매니저 추천도 같이 뜨면 좋을 듯") 대응: 새 가짜 거리 계산을 만들지
+// 않고, 이미 있는 신호만 써서 추천합니다. 1순위는 서버가 실제 좌표 거리로 계산해준
+// lead.nearestAnchor(반경 검색 결과에만 존재)의 담당자, 2순위는 주소 끝 괄호 안 "동" 이름이 같은
+// 등록 거래처들 중 가장 많이 배정된 담당자입니다. 둘 다 없으면 추천을 만들어내지 않고 비웁니다
+// (단가를 자동으로 채우지 않는 것과 같은 원칙 — 근거 없는 추천은 하지 않습니다).
+function extractDistrictToken(address?: string): string {
+  if (!address) return "";
+  const parenMatch = address.match(/\(([^)]+)\)\s*$/);
+  if (parenMatch) return parenMatch[1].trim();
+  const dongMatch = address.match(/([가-힣0-9]+(?:동|읍|면))/);
+  return dongMatch ? dongMatch[1] : "";
+}
+
+function getRecommendedDelivery(
+  lead: { address?: string; nearestAnchor?: { id: string; name: string } | null },
+  stores: StoreRow[]
+): { basis: string; driver: string; vehicle: string } | null {
+  const anchorStore = lead.nearestAnchor ? stores.find((store) => store.id === lead.nearestAnchor!.id) : undefined;
+  if (anchorStore?.deliveryDriver) {
+    return { basis: `근접 거래처 "${anchorStore.name}" 기준`, driver: anchorStore.deliveryDriver, vehicle: anchorStore.deliveryVehicleName || "" };
+  }
+
+  const district = extractDistrictToken(lead.address);
+  if (!district) return null;
+  const sameDistrictStores = stores.filter((store) => store.deliveryDriver && extractDistrictToken(store.address) === district);
+  if (!sameDistrictStores.length) return null;
+
+  const driverCounts = new Map<string, { count: number; vehicle: string }>();
+  sameDistrictStores.forEach((store) => {
+    const key = store.deliveryDriver!;
+    const current = driverCounts.get(key);
+    driverCounts.set(key, { count: (current?.count || 0) + 1, vehicle: store.deliveryVehicleName || current?.vehicle || "" });
+  });
+  const [topDriver, topInfo] = Array.from(driverCounts.entries()).sort((a, b) => b[1].count - a[1].count)[0];
+  return { basis: `같은 "${district}" 거래처 ${topInfo.count}곳 기준`, driver: topDriver, vehicle: topInfo.vehicle };
+}
+
 function PermitLeadMapQuickCard({
+  allStores,
   headerOffsetPx,
   lead,
   leftPanelCollapsed,
@@ -4672,6 +4737,8 @@ function PermitLeadMapQuickCard({
   onOpenQuote,
   onRestore
 }: {
+  /** 배송담당자·배송차 추천(getRecommendedDelivery)에 씁니다. */
+  readonly allStores: StoreRow[];
   /** StoreQuickCard와 동일한 목적 — 검색 헤더 높이에 맞춰 카드가 가려지지 않게 합니다. */
   readonly headerOffsetPx?: number;
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
@@ -4686,6 +4753,7 @@ function PermitLeadMapQuickCard({
   const [isDismissing, setIsDismissing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [message, setMessage] = useState("");
+  const [addressCopied, setAddressCopied] = useState(false);
   // 카드를 사용자가 자유롭게 끌어서 옮길 수 있게 합니다(2026-08-24 피드백: "리드 카드를 사용자가
   // 자유롭게 움직일 수 있도록 만들어"). 기존 절대 위치(positionClassName) 위에 transform으로만
   // 오프셋을 얹어, 리드가 바뀌어도 기본 위치 로직은 그대로 유지합니다.
@@ -4704,6 +4772,18 @@ function PermitLeadMapQuickCard({
   const instagramUrl = getLeadInstagramSearchUrl(lead);
   const instagramHandle = getLeadInstagramHandle(lead);
   const confidence = getLeadConfidence(lead);
+  const recommendedDelivery = getRecommendedDelivery(lead, allStores);
+
+  async function copyAddress() {
+    if (!lead?.address) return;
+    try {
+      await navigator.clipboard.writeText(lead.address);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1500);
+    } catch {
+      setMessage("복사 권한이 없어 직접 선택해서 복사해주세요.");
+    }
+  }
 
   function onDragHandleMouseDown(event: MouseEvent) {
     event.preventDefault();
@@ -4831,10 +4911,23 @@ function PermitLeadMapQuickCard({
         </div>
       </div>
       <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2.5">
-        <p className="flex gap-2 text-[13px] font-bold leading-5 text-slate-600">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
-          <span className="line-clamp-2">{lead.address || "주소 확인 필요"}</span>
-        </p>
+        <div className="flex items-start gap-1">
+          <p className="flex min-w-0 flex-1 gap-2 text-[13px] font-bold leading-5 text-slate-600">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+            <span className="line-clamp-2">{lead.address || "주소 확인 필요"}</span>
+          </p>
+          {lead.address ? (
+            <button
+              aria-label="주소 복사"
+              className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
+              onClick={() => void copyAddress()}
+              title="주소 복사"
+              type="button"
+            >
+              {addressCopied ? <Check className="h-3.5 w-3.5 text-teal-600" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+        </div>
         <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-bold text-slate-500">
           <span className="flex min-w-0 items-center gap-1">
             <Phone className="h-3 w-3 shrink-0 text-slate-400" />
@@ -4852,9 +4945,9 @@ function PermitLeadMapQuickCard({
             <Gauge className="h-3 w-3 shrink-0 text-slate-400" />
             <span className="min-w-0 flex-1 truncate">{lead.status || "상태 미확인"}</span>
           </span>
-          <span className="flex min-w-0 items-center gap-1 font-black text-teal-700">
+          <span className="col-span-2 flex min-w-0 items-center gap-1 font-black text-teal-700">
             <Target className="h-3 w-3 shrink-0 text-teal-600" />
-            <span className="min-w-0 flex-1 truncate">우선순위 {confidence.score}점 · 안정도 {confidence.label}</span>
+            <span className="min-w-0 flex-1 truncate">우선순위 {confidence.score}점 · {confidence.label}</span>
           </span>
           {typeof lead.rating === "number" ? (
             <span className="flex min-w-0 items-center gap-1">
@@ -4874,6 +4967,16 @@ function PermitLeadMapQuickCard({
         </div>
         {lead.nearestAnchor ? (
           <p className="mt-1.5 text-[11px] font-bold text-slate-400">기준 거래처: {lead.nearestAnchor.name}</p>
+        ) : null}
+        {recommendedDelivery ? (
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-teal-700">
+            <Truck className="h-3 w-3 shrink-0" />
+            <span className="min-w-0 truncate">
+              추천 배송: {recommendedDelivery.driver}
+              {recommendedDelivery.vehicle ? ` · ${recommendedDelivery.vehicle}` : ""}
+              <span className="font-semibold text-slate-400"> ({recommendedDelivery.basis})</span>
+            </span>
+          </p>
         ) : null}
         {lead.naverPlaceUrl || lead.kakaoPlaceUrl || lead.googlePlaceUrl || instagramHandle ? (
           <div className="mt-2 flex flex-wrap gap-1">

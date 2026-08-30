@@ -143,6 +143,13 @@ export function KakaoAddressMap({
   // 지도를 확대(level 낮음)했을 때는 화면에 보이는 개수가 자연히 줄어드니 이름표를 다시 보여주도록
   // 절충). CustomOverlay.setContent()로 좌표 재지오코딩 없이 내용만 바꿔 가볍게 유지합니다.
   const leadOverlayEntriesRef = useRef<Array<{ element: HTMLElement; marker: KakaoMapMarker; overlay: any }>>([]);
+  // marker.id -> 현재 화면에 붙어 있는 마커 DOM(button) 엘리먼트. 선택된 거래처/리드가 지도에서도
+  // 눈에 띄도록(2026-08-30 피드백: "선택한 거래처 지도에서도 하이라이트 되면 좋을듯") focusedMarkerId가
+  // 바뀔 때 이 엘리먼트에 직접 outline/scale을 입혔다 지웠다 합니다 — 재지오코딩 없이 가벼운 DOM 조작만.
+  const markerElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  // 방금까지 하이라이트해 둔 엘리먼트를 기억해뒀다가, focusedMarkerId가 바뀌면 그 엘리먼트에서만
+  // 하이라이트 스타일을 지웁니다(전체를 순회할 필요 없이 O(1)).
+  const highlightedElementRef = useRef<HTMLElement | null>(null);
   // onMarkerClick은 부모(sales-route-map-workspace.tsx)에서 매 렌더마다 새로 만들어지는 인라인
   // 함수일 수 있습니다. 이 값을 boot effect의 의존성 배열에 그대로 두면 부모가 리렌더될 때마다
   // (마커 클릭과 무관하게) 지도가 통째로 재생성됩니다. ref로 최신 콜백만 따로 추적해 boot effect가
@@ -251,6 +258,8 @@ export function KakaoAddressMap({
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
         markerPositionsRef.current = new Map();
+        markerElementsRef.current = new Map();
+        highlightedElementRef.current = null;
         leadOverlayEntriesRef.current = [];
         let focusedPosition: any = null;
         let found = 0;
@@ -293,7 +302,10 @@ export function KakaoAddressMap({
 
           bounds.extend(position);
           found += 1;
-          if (marker.id) markerPositionsRef.current.set(marker.id, position);
+          if (marker.id) {
+            markerPositionsRef.current.set(marker.id, position);
+            markerElementsRef.current.set(marker.id, overlayContent);
+          }
           if (focusedMarkerId && marker.id === focusedMarkerId) {
             focusedPosition = position;
           }
@@ -344,6 +356,7 @@ export function KakaoAddressMap({
             const nextElement = createMarkerOverlay(entry.marker, compactLeadMarkers);
             nextElement.addEventListener("click", () => onMarkerClickRef.current?.(entry.marker));
             entry.overlay.setContent(nextElement);
+            if (entry.marker.id) markerElementsRef.current.set(entry.marker.id, nextElement);
             return { ...entry, element: nextElement };
           });
         });
@@ -403,12 +416,29 @@ export function KakaoAddressMap({
   // 캐시해둔 좌표로 지도만 살짝 이동시킵니다 — 이게 없으면 마커 클릭마다 위 boot effect 전체가
   // 다시 돌면서 모든 마커를 재지오코딩해 브라우저가 멈추는 원인이 됩니다.
   useEffect(() => {
-    if (status !== "ready" || !focusedMarkerId) return;
+    if (status !== "ready") return;
+    if (highlightedElementRef.current) {
+      highlightedElementRef.current.style.outline = "";
+      highlightedElementRef.current.style.outlineOffset = "";
+      highlightedElementRef.current.style.transform = "";
+      highlightedElementRef.current.style.zIndex = "";
+      highlightedElementRef.current = null;
+    }
+    if (!focusedMarkerId) return;
     const map = mapInstanceRef.current;
     const position = markerPositionsRef.current.get(focusedMarkerId);
-    if (!map || !position) return;
-    map.setCenter(position);
-    map.setLevel(5);
+    if (map && position) {
+      map.setCenter(position);
+      map.setLevel(5);
+    }
+    const focusedElement = markerElementsRef.current.get(focusedMarkerId);
+    if (focusedElement) {
+      focusedElement.style.outline = "3px solid #f43f5e";
+      focusedElement.style.outlineOffset = "2px";
+      focusedElement.style.transform = "scale(1.15)";
+      focusedElement.style.zIndex = "30";
+      highlightedElementRef.current = focusedElement;
+    }
   }, [focusedMarkerId, status]);
 
   useEffect(() => {
