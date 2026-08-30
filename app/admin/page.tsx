@@ -213,7 +213,7 @@ export default async function AdminPage() {
                 업로드/분석 이력
               </CardTitle>
               <Link
-                className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
+                className="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
                 href="/admin/uploads"
               >
                 전체 이력 보기
@@ -243,7 +243,7 @@ export default async function AdminPage() {
                   <p className="text-lg font-black text-primary">{item.healthScore}</p>
                 </div>
                 <Link
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
                   href={`/reports/${item.reportId || "latest"}`}
                 >
                   리포트 보기

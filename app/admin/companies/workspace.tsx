@@ -336,7 +336,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               {companyPageStart.toLocaleString()}-{companyPageEnd.toLocaleString()} / {filteredCompanies.length.toLocaleString()}곳
             </span>
             <button
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               disabled={currentCompanyPage <= 1}
               onClick={() => setCompanyPage((page) => Math.max(1, page - 1))}
               type="button"
@@ -347,7 +347,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               {currentCompanyPage.toLocaleString()} / {companyTotalPages.toLocaleString()}
             </span>
             <button
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               disabled={currentCompanyPage >= companyTotalPages}
               onClick={() => setCompanyPage((page) => Math.min(companyTotalPages, page + 1))}
               type="button"
@@ -676,25 +676,25 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 회사 ID: <span className="font-mono font-bold text-slate-700">{form.id}</span>
               </span>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/dashboard?companyId=${encodeURIComponent(form.id)}`}
               >
                 고객사 대시보드
               </Link>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/crm/timeline?companyId=${encodeURIComponent(form.id)}`}
               >
                 이 고객사 거래처 보기
               </Link>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/?companyId=${encodeURIComponent(form.id)}`}
               >
                 매출/거래처 업로드
               </Link>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/revenue/transactions?companyId=${encodeURIComponent(form.id)}`}
               >
                 매출 원장 보기
