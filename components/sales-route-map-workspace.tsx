@@ -2030,7 +2030,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   <KakaoAddressMap
                     controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
-                    focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
+                    focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
                     markers={mapDisplayMarkers}
                     onMarkerClick={(marker) => {
