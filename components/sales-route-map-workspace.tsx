@@ -597,6 +597,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         return;
       }
       setLeadRadiusResult(payload);
+      if (payload?.leads?.length) setRightPanelTab("leads");
     } catch {
       setLeadRadiusError("네트워크 오류로 리드 탐색을 완료하지 못했습니다.");
     } finally {
@@ -1440,7 +1441,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
                   showAllLeadsOnMap ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
-                onClick={() => setShowAllLeadsOnMap((value) => !value)}
+                onClick={() =>
+                  setShowAllLeadsOnMap((value) => {
+                    const next = !value;
+                    setRightPanelTab(next ? "leads" : "stores");
+                    return next;
+                  })
+                }
                 title="지도에 활성 신규 리드 전체를 표시합니다."
                 type="button"
               >
