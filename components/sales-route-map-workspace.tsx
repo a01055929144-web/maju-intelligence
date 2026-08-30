@@ -49,6 +49,7 @@ import {
   Search,
   Star,
   Store,
+  Target,
   Trash2,
   Truck,
   Upload,
@@ -375,6 +376,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 거래처 목록은 오른쪽 패널(StoreManagementPanel)이라 rightCollapsed 기본값이 문제였음).
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  // 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함"): 지도에 신규 리드가
+  // 함께 표시 중일 때(반경 검색 또는 "리드" 전체 표시 토글), 오른쪽 패널에서 거래처 목록과 리드
+  // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
+  const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -905,6 +910,17 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         y: 0
       }));
   }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
+  // 2026-08-30 피드백: 오른쪽 패널 "신규 리드" 탭에 쓸 목록입니다 — 실제로 지도에 마커로 떠 있는
+  // 리드와 같은 소스(반경 검색 결과 우선, 없으면 "전체 리드 보기")를 그대로 사용해 목록과 지도가
+  // 항상 같은 리드를 가리키게 합니다.
+  const leadsForRightPanel = useMemo(() => {
+    if (leadRadiusResult?.leads.length) return leadRadiusResult.leads;
+    if (showAllLeadsOnMap) return filteredAllLeadsForMap;
+    return [];
+  }, [leadRadiusResult, showAllLeadsOnMap, filteredAllLeadsForMap]);
+  // 리드가 지도에서 사라지면(반경 검색 종료·전체 리드 보기 끔) 탭이 빈 리드 목록에 멈춰있지
+  // 않도록, 실제로 리드가 있을 때만 "leads" 탭을 유지합니다.
+  const activeRightPanelTab: "stores" | "leads" = rightPanelTab === "leads" && leadsForRightPanel.length ? "leads" : "stores";
   const mapDisplayMarkers = useMemo(
     () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers],
     [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers]
@@ -1599,6 +1615,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
                         key={store.id}
                         onClick={() => {
+                          setPreviewLeadId("");
                           setPreviewStoreId(store.id || "");
                           setShowExternalResults(false);
                         }}
@@ -1624,6 +1641,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
                         key={lead.id}
                         onClick={() => {
+                          setPreviewStoreId("");
                           setPreviewLeadId(lead.id);
                           setShowExternalResults(false);
                         }}
@@ -1685,6 +1703,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         <button
                           className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
                           onClick={() => {
+                            setPreviewStoreId("");
+                            setPreviewLeadId("");
                             setQuickRegisterTarget(result);
                             setShowExternalResults(false);
                           }}
@@ -2101,6 +2121,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 {previewStore ? (
                   <StoreQuickCard
                     driverOptions={deliveryDefaults.drivers}
+                    headerOffsetPx={mapHeaderHeightPx}
                     leftPanelCollapsed={leftCollapsed}
                     onAddDriver={addManualDriver}
                     onAddVehicle={addManualVehicle}
@@ -2137,6 +2158,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 ) : null}
                 {previewLeadId ? (
                   <PermitLeadMapQuickCard
+                    headerOffsetPx={mapHeaderHeightPx}
                     lead={
                       leadRadiusResult?.leads.find((lead) => lead.id === previewLeadId) ||
                       allLeadsForMap.find((lead) => lead.id === previewLeadId) ||
@@ -2198,19 +2220,55 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
-            <StoreManagementPanel
-              collapsed={rightCollapsed}
-              dataRegistrationHref={dataRegistrationHref}
-              distanceRecalcError={distanceRecalcError}
-              onRecalculateDistances={recalculateStoreDistances}
-              onSelectStore={setSelectedId}
-              onToggleCollapsed={() => setRightCollapsed((value) => !value)}
-              recalculatingDistances={recalculatingDistances}
-              selectedStoreId={selectedId}
-              sourceReady={sourceReady}
-              title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
-              stores={visibleStores}
-            />
+            {!rightCollapsed && leadsForRightPanel.length ? (
+              <div className="flex items-center gap-1 border-b border-slate-200/80 bg-slate-50 p-1.5">
+                <button
+                  className={`flex-1 rounded-md px-2 py-1.5 text-xs font-black transition ${
+                    activeRightPanelTab === "stores" ? "bg-white text-slate-950 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  onClick={() => setRightPanelTab("stores")}
+                  type="button"
+                >
+                  거래처 {visibleStores.length.toLocaleString()}
+                </button>
+                <button
+                  className={`flex-1 rounded-md px-2 py-1.5 text-xs font-black transition ${
+                    activeRightPanelTab === "leads" ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  onClick={() => setRightPanelTab("leads")}
+                  type="button"
+                >
+                  신규 리드 {leadsForRightPanel.length.toLocaleString()}
+                </button>
+              </div>
+            ) : null}
+            {activeRightPanelTab === "leads" ? (
+              <LeadListPanel
+                collapsed={rightCollapsed}
+                leads={leadsForRightPanel}
+                onSelectLead={(leadId) => {
+                  setPreviewStoreId("");
+                  setPreviewLeadId(leadId);
+                }}
+                onToggleCollapsed={() => setRightCollapsed((value) => !value)}
+                selectedLeadId={previewLeadId}
+                title={showDismissedLeadsOnMap ? "숨김 리드" : "신규 리드"}
+              />
+            ) : (
+              <StoreManagementPanel
+                collapsed={rightCollapsed}
+                dataRegistrationHref={dataRegistrationHref}
+                distanceRecalcError={distanceRecalcError}
+                onRecalculateDistances={recalculateStoreDistances}
+                onSelectStore={setSelectedId}
+                onToggleCollapsed={() => setRightCollapsed((value) => !value)}
+                recalculatingDistances={recalculatingDistances}
+                selectedStoreId={selectedId}
+                sourceReady={sourceReady}
+                title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
+                stores={visibleStores}
+              />
+            )}
           </div>
         </div>
       ) : null}
@@ -3085,6 +3143,7 @@ export function FullRouteNavigateAction({
 
 export function StoreQuickCard({
   driverOptions,
+  headerOffsetPx,
   isInRoute,
   leftPanelCollapsed,
   onAddDriver,
@@ -3100,6 +3159,9 @@ export function StoreQuickCard({
   vehicleOptions
 }: {
   readonly driverOptions?: string[];
+  /** 지도 위에 떠 있는 검색 헤더의 현재 높이(px). 헤더가 필터 줄 추가 등으로 커질 때 카드가
+   * 헤더 아래로 가려지지 않도록 top 위치를 함께 늘립니다(미전달 시 기존 고정값 사용). */
+  readonly headerOffsetPx?: number;
   /** 경유 코스 탭에서만 전달됩니다 — 오늘 경유 선택에 이미 포함돼 있는지 여부. */
   readonly isInRoute?: boolean;
   readonly leftPanelCollapsed?: boolean;
@@ -3215,12 +3277,15 @@ export function StoreQuickCard({
       : `left-4 w-[min(300px,calc(100%-32px))] ${
           leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(300px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(300px,calc(100%-352px))]"
         }`;
-  const topClassName = variant === "grid" ? "top-4" : "top-4 xl:top-20";
+  const topClassName = variant === "grid" ? "top-4" : "top-4 xl:top-[var(--quick-card-top,5rem)]";
 
   return (
     <div
       className={`absolute ${topClassName} z-30 h-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
-      style={{ transform: dragOffset.x || dragOffset.y ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined }}
+      style={{
+        ["--quick-card-top" as string]: headerOffsetPx ? `${headerOffsetPx + 12}px` : undefined,
+        transform: dragOffset.x || dragOffset.y ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined
+      } as React.CSSProperties}
     >
       <div className="flex items-start gap-1 px-1.5 pt-1.5">
         <span
@@ -3922,6 +3987,111 @@ function StoreManagementPanel({
   );
 }
 
+/** 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함") 대응: StoreManagementPanel과
+ * 같은 레이아웃으로 신규 리드 목록을 보여줍니다. 클릭하면 previewLeadId가 바뀌어 지도 카드가 열리고
+ * (신규 리드 클릭 시 지도 포커스 버그 수정과 같은 focusedMarkerId 경로를 그대로 씁니다), 우선순위·안정도는
+ * 이미 카드에도 쓰는 getLeadConfidence 점수를 그대로 재사용합니다(새 산정 로직 없음). */
+function LeadListPanel({
+  collapsed,
+  leads,
+  onSelectLead,
+  onToggleCollapsed,
+  selectedLeadId,
+  title
+}: {
+  readonly collapsed: boolean;
+  readonly leads: Array<PermitLeadItem & { distanceKm?: number }>;
+  readonly onSelectLead: (leadId: string) => void;
+  readonly onToggleCollapsed: () => void;
+  readonly selectedLeadId: string;
+  readonly title: string;
+}) {
+  if (collapsed) {
+    return (
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
+        <button
+          aria-label="리드 목록 패널 펼치기"
+          className="maju-button-secondary h-8 w-8 shrink-0 px-0"
+          onClick={onToggleCollapsed}
+          type="button"
+        >
+          <PanelRightOpen className="h-3.5 w-3.5" />
+        </button>
+        <span className="relative inline-flex shrink-0" title={title}>
+          <Radar className="h-4 w-4 text-teal-700" />
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+            {leads.length}
+          </span>
+        </span>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-slate-950">{title}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">리드를 누르면 지도 카드가 열립니다.</p>
+          </div>
+          <button
+            aria-label="리드 목록 패널 접기"
+            className="maju-button-secondary h-8 w-8 shrink-0 px-0"
+            onClick={onToggleCollapsed}
+            type="button"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
+          <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-black text-teal-700">{leads.length}곳</span>
+        </div>
+        <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
+          {leads.length ? (
+            leads.map((lead) => {
+              const confidence = getLeadConfidence(lead);
+              const openDate = getPermitLeadOpenDate(lead);
+              return (
+                <button
+                  className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-teal-50 ${
+                    lead.id === selectedLeadId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
+                  }`}
+                  key={lead.id}
+                  onClick={() => onSelectLead(lead.id)}
+                  type="button"
+                >
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                    <Badge className={`shrink-0 px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>
+                      {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
+                    <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
+                    <span className="truncate">{openDate || "개시일 미확인"}</span>
+                    <span className="truncate">{lead.phone || "전화 미확인"}</span>
+                    <span className="truncate font-black text-teal-700">우선순위 {confidence.score}점</span>
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
+              <div>
+                <p className="text-sm font-black text-slate-700">조건에 맞는 리드가 없습니다.</p>
+                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">업종, 지역, 개시일 필터를 조정해 주세요.</p>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-bold leading-5 text-slate-500">우선순위는 사업자 상태·연락처·주소·등급·신선도·리뷰를 합산합니다.</p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function CustomerDirectoryView({
   dataRegistrationHref,
   fuelPrices,
@@ -4464,6 +4634,7 @@ export function getPermitLeadQuoteSubject(lead: PermitLeadItem): QuoteSubject {
 
 /** 지도 위 리드 반경 검색 결과 마커를 클릭했을 때 뜨는 간단 카드입니다. StoreQuickCard보다 가볍습니다. */
 function PermitLeadMapQuickCard({
+  headerOffsetPx,
   lead,
   leftPanelCollapsed,
   onClose,
@@ -4472,6 +4643,8 @@ function PermitLeadMapQuickCard({
   onOpenQuote,
   onRestore
 }: {
+  /** StoreQuickCard와 동일한 목적 — 검색 헤더 높이에 맞춰 카드가 가려지지 않게 합니다. */
+  readonly headerOffsetPx?: number;
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
   readonly leftPanelCollapsed?: boolean;
   readonly onClose: () => void;
@@ -4501,6 +4674,7 @@ function PermitLeadMapQuickCard({
   const isOpeningSoon = lead.leadPeriod === "today" || lead.leadPeriod === "week";
   const instagramUrl = getLeadInstagramSearchUrl(lead);
   const instagramHandle = getLeadInstagramHandle(lead);
+  const confidence = getLeadConfidence(lead);
 
   function onDragHandleMouseDown(event: MouseEvent) {
     event.preventDefault();
@@ -4563,8 +4737,11 @@ function PermitLeadMapQuickCard({
 
   return (
     <div
-      className={`absolute top-4 xl:top-20 z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
-      style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
+      className={`absolute top-4 xl:top-[var(--quick-card-top,5rem)] z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
+      style={{
+        ["--quick-card-top" as string]: headerOffsetPx ? `${headerOffsetPx + 12}px` : undefined,
+        transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`
+      } as React.CSSProperties}
     >
       <button
         className="flex w-full cursor-grab items-center justify-center gap-1 border-b border-slate-100 bg-slate-50 py-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
@@ -4645,6 +4822,10 @@ function PermitLeadMapQuickCard({
           <span className="flex items-center gap-1 truncate">
             <Gauge className="h-3 w-3 shrink-0 text-slate-400" />
             {lead.status || "상태 미확인"}
+          </span>
+          <span className="flex items-center gap-1 truncate font-black text-teal-700">
+            <Target className="h-3 w-3 shrink-0 text-teal-600" />
+            우선순위 {confidence.score}점 · 안정도 {confidence.label}
           </span>
           {typeof lead.rating === "number" ? (
             <span className="flex items-center gap-1 truncate">
