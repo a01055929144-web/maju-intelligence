@@ -2268,11 +2268,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 collapsed={rightCollapsed}
                 dataRegistrationHref={dataRegistrationHref}
                 distanceRecalcError={distanceRecalcError}
+                onEditStore={setSelectedId}
                 onRecalculateDistances={recalculateStoreDistances}
-                onSelectStore={setSelectedId}
+                onSelectStore={(storeId) => {
+                  setPreviewLeadId("");
+                  setPreviewStoreId(storeId);
+                }}
                 onToggleCollapsed={() => setRightCollapsed((value) => !value)}
                 recalculatingDistances={recalculatingDistances}
-                selectedStoreId={selectedId}
+                selectedStoreId={previewStoreId || selectedId}
                 sourceReady={sourceReady}
                 title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
                 stores={visibleStores}
@@ -2779,7 +2783,8 @@ function DeliveryAssignmentPanel({
                     {vehicle.isUnassigned ? null : (
                       <div className="flex shrink-0 items-center gap-1">
                         <span
-                          className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label="담당자·배송차 삭제"
+                          className="maju-button-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center px-0 text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={(event) => {
                             event.stopPropagation();
                             if (deletingVehicleId) return;
@@ -2788,23 +2793,23 @@ function DeliveryAssignmentPanel({
                           role="button"
                           title={
                             vehicle.stops.length === 0
-                              ? "배정된 거래처가 없어 바로 삭제할 수 있습니다"
-                              : `배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
+                              ? "삭제 · 배정된 거래처가 없어 바로 삭제할 수 있습니다"
+                              : `삭제 · 배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
                           }
                         >
                           {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          삭제
                         </span>
                         <span
-                          className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
+                          aria-label="담당자·배송차 편집"
+                          className="maju-button-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center px-0"
                           onClick={(event) => {
                             event.stopPropagation();
                             setEditingVehicleId(vehicle.id);
                           }}
                           role="button"
+                          title="편집"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
-                          편집
                         </span>
                       </div>
                     )}
@@ -3870,6 +3875,7 @@ function StoreManagementPanel({
   collapsed,
   dataRegistrationHref,
   distanceRecalcError,
+  onEditStore,
   onRecalculateDistances,
   onSelectStore,
   onToggleCollapsed,
@@ -3882,6 +3888,7 @@ function StoreManagementPanel({
   readonly collapsed: boolean;
   readonly dataRegistrationHref: string;
   readonly distanceRecalcError: string;
+  readonly onEditStore: (storeId: string) => void;
   readonly onRecalculateDistances: (missingStores: StoreRow[]) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectStore: (storeId: string) => void;
   readonly onToggleCollapsed: () => void;
@@ -3919,7 +3926,7 @@ function StoreManagementPanel({
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-black text-slate-950">{title}</p>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">거래처를 누르면 상세 패널이 열립니다.</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">거래처를 누르면 지도 위치를 보여줍니다.</p>
           </div>
           <button
             aria-label="거래처 목록 패널 접기"
@@ -3951,26 +3958,35 @@ function StoreManagementPanel({
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {stores.length ? (
             stores.map((store) => (
-              <button
-                className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 ${
+              <div
+                className={`flex items-stretch border-b border-slate-100 transition hover:bg-slate-50 ${
                   store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
                 }`}
                 key={store.id}
-                onClick={() => onSelectStore(store.id)}
-                type="button"
               >
-                <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
-                  <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                </div>
-                <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
-                  <p className="text-xs font-bold text-slate-400">
-                    {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
-                  </p>
-                  <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-                </div>
-              </button>
+                <button className="min-w-0 flex-1 px-4 py-3 text-left" onClick={() => onSelectStore(store.id)} type="button">
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
+                    <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                  </div>
+                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
+                  <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
+                    <p className="text-xs font-bold text-slate-400">
+                      {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
+                    </p>
+                    <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                  </div>
+                </button>
+                <button
+                  aria-label={`${store.name} 상세 편집`}
+                  className="my-3 mr-3 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-teal-50 hover:text-teal-700"
+                  onClick={() => onEditStore(store.id)}
+                  title="상세 편집"
+                  type="button"
+                >
+                  <Edit3 className="h-4 w-4" />
+                </button>
+              </div>
             ))
           ) : (
             <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
@@ -3989,7 +4005,7 @@ function StoreManagementPanel({
           )}
         </div>
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-bold leading-5 text-slate-500">거래처 선택 후 우측 패널에서 관리합니다.</p>
+          <p className="text-xs font-bold leading-5 text-slate-500">연필 아이콘을 누르면 상세 정보를 편집할 수 있습니다.</p>
         </div>
       </div>
     </aside>
