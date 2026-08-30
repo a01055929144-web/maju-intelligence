@@ -246,7 +246,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   title={settingsLabel}
                 >
                   <MapPinned className="h-4 w-4" />
-                  <span className={fullBleed ? "hidden 2xl:inline" : ""}>{settingsLabel}</span>
+                  <span className="hidden 2xl:inline">{settingsLabel}</span>
                 </Link>
                 <Link
                   className="maju-button-primary h-8 shrink-0 px-2.5 text-xs shadow-none"
@@ -254,12 +254,12 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   title="AI 영업"
                 >
                   <MessageSquareText className="h-4 w-4" />
-                  <span className={fullBleed ? "hidden 2xl:inline" : ""}>AI</span>
+                  <span className="hidden 2xl:inline">AI</span>
                 </Link>
                 {mode === "customer" ? (
                   <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="모바일로 보기">
                     <Smartphone className="h-4 w-4" />
-                    <span className={fullBleed ? "hidden 2xl:inline" : ""}>모바일</span>
+                    <span className="hidden 2xl:inline">모바일</span>
                   </Link>
                 ) : null}
                 {rightAction}

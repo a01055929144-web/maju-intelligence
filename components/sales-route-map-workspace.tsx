@@ -1433,7 +1433,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 type="button"
               >
                 <Radar className="h-4 w-4" />
-                <span>반경</span>
+                <span className="hidden sm:inline">반경</span>
               </button>
               <button
                 aria-pressed={showAllLeadsOnMap}

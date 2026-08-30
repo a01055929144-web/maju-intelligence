@@ -1363,29 +1363,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 ))}
               </select>
             ) : null}
-            <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
-              <option value="">업종 전체</option>
-              {industryOptions.map((industry) => (
-                <option key={industry} value={industry}>
-                  {industry}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => {
-                setActionFilter(event.target.value);
-                if (event.target.value) setStatusFilter("");
-              }}
-              value={actionFilter}
-            >
-              <option value="">액션 전체</option>
-              {PERMIT_ACTION_OPTIONS.map((action) => (
-                <option key={action} value={action}>
-                  {action}
-                </option>
-              ))}
-            </select>
             <select
               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => {
@@ -1417,6 +1394,29 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           </div>
           {showAdvancedFilters ? (
             <div className="flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-2">
+              <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
+                <option value="">업종 전체(상세)</option>
+                {industryOptions.map((industry) => (
+                  <option key={industry} value={industry}>
+                    {industry}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                onChange={(event) => {
+                  setActionFilter(event.target.value);
+                  if (event.target.value) setStatusFilter("");
+                }}
+                value={actionFilter}
+              >
+                <option value="">액션 전체</option>
+                {PERMIT_ACTION_OPTIONS.map((action) => (
+                  <option key={action} value={action}>
+                    {action}
+                  </option>
+                ))}
+              </select>
               <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setGradeFilter(event.target.value)} value={gradeFilter}>
                 <option value="">추천 등급 전체</option>
                 <option value="A">A등급</option>

@@ -129,7 +129,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         </div>
       )}
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_260px_auto_auto] xl:items-center">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,260px)_auto_auto] xl:items-center">
         <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-white px-3">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
