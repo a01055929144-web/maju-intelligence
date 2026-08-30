@@ -54,6 +54,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         <SalesRouteMapWorkspace
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
           churnRiskCustomers={churnRiskCustomers}
+          companyName={customerSession?.companyName || company.name}
           mapMarkers={mapMarkers}
           routePlan={routePlan}
           timelineHref={timelineHref}

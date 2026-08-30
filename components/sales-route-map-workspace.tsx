@@ -263,6 +263,8 @@ type BusinessOcrSuggestion = {
 
 type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
+  /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
+  readonly companyName?: string;
   /** 2026-08-24 피드백: "전반적으로 속도가 더뎌" — 서버 컴포넌트가 이미 계산한 이탈 위험 거래처
    * 목록을 그대로 내려받아, ChurnRiskAlert가 마운트되자마자 같은 데이터를 다시 fetch하는 중복
    * 네트워크 왕복을 없앱니다. */
@@ -354,7 +356,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -2383,7 +2385,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           vehicleOptions={vehicleNameOptions}
         />
       ) : null}
-      {quoteSubject ? <QuoteDrawer onClose={() => setQuoteSubject(null)} subject={quoteSubject} /> : null}
+      {quoteSubject ? <QuoteDrawer companyName={companyName} onClose={() => setQuoteSubject(null)} subject={quoteSubject} /> : null}
     </div>
   );
 }
@@ -3336,15 +3338,15 @@ export function StoreQuickCard({
           // 영업·배송 현장에서 실제로 바로 필요한 정보(담당자·배송차, 연락처)를 최상단에 배치합니다.
           // 대표자/사업자번호/개업일 같은 등록 정보는 하루하루 영업엔 급하지 않은 행정 데이터라 아래로 내렸습니다.
           <div className="mt-2 space-y-1">
-            <p className="flex items-center gap-1.5 truncate text-[12.5px] font-bold text-slate-700">
+            <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-slate-700">
               <Truck className="h-3.5 w-3.5 shrink-0 text-teal-600" />
-              <span className="truncate">
+              <span className="min-w-0 flex-1 truncate">
                 {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
               </span>
             </p>
-            <p className="flex items-center gap-1.5 truncate text-[12.5px] font-bold text-slate-700">
+            <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-slate-700">
               <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="truncate">{store.phone || "연락처 미등록"}</span>
+              <span className="min-w-0 flex-1 truncate">{store.phone || "연락처 미등록"}</span>
             </p>
           </div>
         ) : null}
@@ -4369,7 +4371,7 @@ export type QuoteSubject = {
   reviewCount?: number;
   instagramUrl?: string;
 };
-type QuoteRow = { id: string; item: string; qty: number; spec: string; unitPrice: number };
+type QuoteRow = { id: string; item: string; qty: number; unitPrice: number };
 export type QuoteDraft = {
   menuNotes: string;
   rows: QuoteRow[];
@@ -4432,7 +4434,7 @@ function resolveDisplayIndustry(store: {
 
 function buildQuoteDraftRows(industry?: string): QuoteRow[] {
   const items = (industry && INDUSTRY_QUOTE_TEMPLATES[industry]) || [];
-  return items.map((item, index) => ({ id: `draft-${index}`, item, qty: 1, spec: "", unitPrice: 0 }));
+  return items.map((item, index) => ({ id: `draft-${index}`, item, qty: 1, unitPrice: 0 }));
 }
 
 export function quoteDraftId(subject: QuoteSubject) {
@@ -4593,25 +4595,29 @@ export function buildLeadDmScript(lead: PermitLeadItem) {
   return `안녕하세요, ${lead.businessName} 대표님. 식자재 납품/단가 비교 제안드리고 싶어 연락드립니다. ${lead.industryPrimary} 업종 기준으로 ${items} 품목을 먼저 맞춰보고, 현재 사용 중인 품목과 비교 견적을 간단히 정리해드릴 수 있습니다. 괜찮으시면 메뉴판이나 주력 메뉴 기준으로 1차 제안서 보내드리겠습니다.`;
 }
 
-function buildQuoteShareText(subject: QuoteSubject, rows: QuoteRow[], menuNotes: string, total: number) {
+function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteRow[], menuNotes: string, total: number) {
   const items = rows
     .filter((row) => row.item.trim())
     .slice(0, 8)
-    .map((row, index) => `${index + 1}. ${row.item}${row.spec ? ` / ${row.spec}` : ""}${row.unitPrice ? ` / ${row.unitPrice.toLocaleString()}원` : ""}`)
+    .map((row, index) => {
+      const qtyText = row.qty > 1 ? ` ${row.qty}개` : "";
+      const priceText = row.unitPrice ? ` · ${row.unitPrice.toLocaleString()}원` : "";
+      return `${index + 1}. ${row.item}${qtyText}${priceText}`;
+    })
     .join("\n");
   return [
-    `[MAJU 제안서] ${subject.name}`,
+    `[${companyName}] ${subject.name} 납품 제안`,
     subject.industry ? `업종: ${subject.industry}` : "",
     subject.address ? `주소: ${subject.address}` : "",
     subject.phone ? `연락처: ${subject.phone}` : "",
-    menuNotes ? `메뉴/리뷰 메모: ${menuNotes}` : "",
+    menuNotes ? `메모: ${menuNotes}` : "",
     "",
     "추천 품목",
-    items || "- 품목을 추가하세요.",
+    items || "- 품목을 추가해주세요.",
     "",
-    total ? `합계: ${total.toLocaleString()}원` : "단가는 현장 확인 후 입력",
+    total ? `합계 약 ${total.toLocaleString()}원` : "단가는 상담 후 안내드립니다.",
     "",
-    "다음 액션: 메뉴판/사용 품목 확인 후 비교 견적 전달"
+    "확인해보시고 편하게 연락 주세요."
   ]
     .filter((line) => line !== "")
     .join("\n");
@@ -4814,37 +4820,39 @@ function PermitLeadMapQuickCard({
           <span className="line-clamp-2">{lead.address || "주소 확인 필요"}</span>
         </p>
         <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-bold text-slate-500">
-          <span className="flex items-center gap-1 truncate">
+          <span className="flex min-w-0 items-center gap-1">
             <Phone className="h-3 w-3 shrink-0 text-slate-400" />
-            {lead.phone || "연락처 미확인"}
+            <span className="min-w-0 flex-1 truncate">{lead.phone || "연락처 미확인"}</span>
           </span>
-          <span className="flex items-center gap-1 truncate">
+          <span className="flex min-w-0 items-center gap-1">
             <CalendarDays className="h-3 w-3 shrink-0 text-slate-400" />
-            {getPermitLeadOpenDate(lead) || "개시일 미확인"}
+            <span className="min-w-0 flex-1 truncate">{getPermitLeadOpenDate(lead) || "개시일 미확인"}</span>
           </span>
-          <span className="flex items-center gap-1 truncate">
+          <span className="flex min-w-0 items-center gap-1">
             <UserRound className="h-3 w-3 shrink-0 text-slate-400" />
-            {lead.representativeName || "대표자 미확인"}
+            <span className="min-w-0 flex-1 truncate">{lead.representativeName || "대표자 미확인"}</span>
           </span>
-          <span className="flex items-center gap-1 truncate">
+          <span className="flex min-w-0 items-center gap-1">
             <Gauge className="h-3 w-3 shrink-0 text-slate-400" />
-            {lead.status || "상태 미확인"}
+            <span className="min-w-0 flex-1 truncate">{lead.status || "상태 미확인"}</span>
           </span>
-          <span className="flex items-center gap-1 truncate font-black text-teal-700">
+          <span className="flex min-w-0 items-center gap-1 font-black text-teal-700">
             <Target className="h-3 w-3 shrink-0 text-teal-600" />
-            우선순위 {confidence.score}점 · 안정도 {confidence.label}
+            <span className="min-w-0 flex-1 truncate">우선순위 {confidence.score}점 · 안정도 {confidence.label}</span>
           </span>
           {typeof lead.rating === "number" ? (
-            <span className="flex items-center gap-1 truncate">
+            <span className="flex min-w-0 items-center gap-1">
               <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
-              {lead.rating.toFixed(1)}
-              {typeof lead.reviewCount === "number" ? ` (${lead.reviewCount.toLocaleString()})` : ""}
+              <span className="min-w-0 flex-1 truncate">
+                {lead.rating.toFixed(1)}
+                {typeof lead.reviewCount === "number" ? ` (${lead.reviewCount.toLocaleString()})` : ""}
+              </span>
             </span>
           ) : null}
           {typeof lead.keywordVolume === "number" ? (
-            <span className="flex items-center gap-1 truncate">
+            <span className="flex min-w-0 items-center gap-1">
               <Search className="h-3 w-3 shrink-0 text-slate-400" />
-              검색량 {lead.keywordVolume.toLocaleString()}
+              <span className="min-w-0 flex-1 truncate">검색량 {lead.keywordVolume.toLocaleString()}</span>
             </span>
           ) : null}
         </div>
@@ -4891,7 +4899,7 @@ function PermitLeadMapQuickCard({
 
 /** 업종/메뉴 정보를 바탕으로 견적서 초안을 만드는 공용 드로어입니다. 신규 리드 카드·거래처 카드
  * 어디서나 열 수 있고, 저장은 하지 않고 화면에서 편집 후 엑셀로 내려받는 v1입니다. */
-function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; readonly subject: QuoteSubject }) {
+function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly companyName?: string; readonly onClose: () => void; readonly subject: QuoteSubject }) {
   const draftKey = quoteDraftId(subject);
   const initialDraft = readQuoteDraft(subject);
   const [rows, setRows] = useState<QuoteRow[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry));
@@ -4911,26 +4919,25 @@ function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; reado
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
   function addRow() {
-    setRows((current) => [...current, { id: `row-${Date.now()}`, item: "", qty: 1, spec: "", unitPrice: 0 }]);
+    setRows((current) => [...current, { id: `row-${Date.now()}`, item: "", qty: 1, unitPrice: 0 }]);
   }
   function removeRow(id: string) {
     setRows((current) => current.filter((row) => row.id !== id));
   }
 
   const total = rows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0);
-  const shareText = buildQuoteShareText(subject, rows, menuNotes, total);
+  const shareText = buildQuoteShareText(companyName, subject, rows, menuNotes, total);
 
   async function downloadQuoteExcel() {
     const writeXlsxFileModule = await import("write-excel-file/browser");
-    const headerRow = ["품목", "규격", "수량", "단가", "공급가액"].map((value) => ({ fontWeight: "bold" as const, value }));
+    const headerRow = ["품목명·규격", "수량", "단가", "공급가액"].map((value) => ({ fontWeight: "bold" as const, value }));
     const dataRows = rows.map((row) => [
       { value: row.item },
-      { value: row.spec },
       { value: row.qty },
       { value: row.unitPrice },
       { value: row.qty * row.unitPrice }
     ]);
-    const totalRow = [{ value: "합계" }, { value: "" }, { value: "" }, { value: "" }, { value: total }];
+    const totalRow = [{ value: "합계" }, { value: "" }, { value: "" }, { value: total }];
     await writeXlsxFileModule
       .default([headerRow, ...dataRows, totalRow], { sheet: "견적서" })
       .toFile(`${subject.name}_견적서.xlsx`);
@@ -4970,7 +4977,7 @@ function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; reado
       .filter((row) => row.item.trim())
       .map(
         (row) =>
-          `<tr><td>${escapeHtml(row.item)}</td><td>${escapeHtml(row.spec || "-")}</td><td>${row.qty}</td><td>${row.unitPrice ? row.unitPrice.toLocaleString() : "-"}</td><td>${(row.qty * row.unitPrice).toLocaleString()}</td></tr>`
+          `<tr><td>${escapeHtml(row.item)}</td><td>${row.qty}</td><td>${row.unitPrice ? row.unitPrice.toLocaleString() : "-"}</td><td>${(row.qty * row.unitPrice).toLocaleString()}</td></tr>`
       )
       .join("");
     const printWindow = window.open("", "_blank", "width=860,height=1000");
@@ -4989,7 +4996,7 @@ function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; reado
       <h1>${escapeHtml(subject.name)} 제안서</h1>
       <div class="meta">${subject.industry ? `업종: ${escapeHtml(subject.industry)}<br/>` : ""}${subject.address ? `주소: ${escapeHtml(subject.address)}<br/>` : ""}${subject.phone ? `연락처: ${escapeHtml(subject.phone)}<br/>` : ""}</div>
       <div class="box"><strong>메뉴/리뷰 메모</strong><br/>${escapeHtml(menuNotes || "현장 확인 후 업데이트")}</div>
-      <table><thead><tr><th>품목</th><th>규격</th><th>수량</th><th>단가</th><th>공급가액</th></tr></thead><tbody>${printableRows || "<tr><td colspan='5'>추천 품목을 추가하세요.</td></tr>"}</tbody></table>
+      <table><thead><tr><th>품목명·규격</th><th>수량</th><th>단가</th><th>공급가액</th></tr></thead><tbody>${printableRows || "<tr><td colspan='4'>추천 품목을 추가하세요.</td></tr>"}</tbody></table>
       <p class="total">합계 ${total.toLocaleString()}원</p>
       <p class="footer">MAJU Intelligence · 현장 상담용 초안입니다. 실제 단가와 납품 조건은 협의 후 확정합니다.</p>
     </body></html>`);
@@ -5049,8 +5056,7 @@ function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; reado
             <table className="w-full border-separate border-spacing-0 text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
                 <tr>
-                  <th className="border-b border-slate-200 px-2 py-2">품목</th>
-                  <th className="border-b border-slate-200 px-2 py-2">규격</th>
+                  <th className="border-b border-slate-200 px-2 py-2">품목명·규격</th>
                   <th className="w-14 border-b border-slate-200 px-2 py-2">수량</th>
                   <th className="w-24 border-b border-slate-200 px-2 py-2">단가</th>
                   <th className="w-10 border-b border-slate-200 px-2 py-2" />
@@ -5063,14 +5069,8 @@ function QuoteDrawer({ onClose, subject }: { readonly onClose: () => void; reado
                       <input
                         className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs font-bold outline-none focus:border-teal-300"
                         onChange={(event) => updateRow(row.id, { item: event.target.value })}
+                        placeholder="예: 쌀 20kg"
                         value={row.item}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs font-bold outline-none focus:border-teal-300"
-                        onChange={(event) => updateRow(row.id, { spec: event.target.value })}
-                        value={row.spec}
                       />
                     </td>
                     <td className="px-2 py-1.5">

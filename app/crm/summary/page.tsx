@@ -542,9 +542,9 @@ export default function CrmSummaryPage() {
                   key={customer.id || customer.customerName}
                 >
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 truncate text-sm font-black text-slate-950">
+                    <span className="flex min-w-0 items-center gap-1.5 text-sm font-black text-slate-950">
                       <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span className="truncate">{customer.customerName}</span>
+                      <span className="min-w-0 flex-1 truncate">{customer.customerName}</span>
                     </span>
                     <span className="mt-0.5 flex items-center gap-1">
                       <Badge className={`px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
