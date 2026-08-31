@@ -2108,12 +2108,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                       if (marker.tone === "lead") {
                         setPreviewStoreId("");
                         setPreviewLeadId(marker.id || "");
+                        // 2026-08-31 피드백 대응: 우측 패널이 "거래처" 탭에 머물러 있으면 리드
+                        // 마커를 클릭해도 그 항목이 아예 목록에 없어 우측 패널이 안 바뀝니다.
+                        setRightPanelTab("leads");
                         return;
                       }
                       if (!marker.id || marker.tone === "origin") return;
                       setMapFocusId("");
                       setPreviewLeadId("");
                       setPreviewStoreId(marker.id);
+                      // 위와 대칭으로, 리드 탭에 머물러 있는 상태에서 기거래처 마커를 클릭해도
+                      // 우측 패널이 그 거래처를 보여주도록 거래처 탭으로 전환합니다.
+                      setRightPanelTab("stores");
                     }}
                     leadSearch={{
                       active: leadRadiusOpen && leadRadiusAnchorMode === "point" && !leadRadiusPoint,
@@ -4020,6 +4026,15 @@ function StoreManagementPanel({
   readonly title: string;
 }) {
   const storesMissingDistance = stores.filter((store) => !store.distanceKm && store.address);
+  // 2026-08-31 피드백("지도 마커를 클릭하면 우측 패널도 동일한 상호명이 나오도록") 대응: 마커를
+  // 클릭하면 selectedStoreId는 바뀌어 강조 스타일(bg-teal-50)은 적용되지만, 그 항목이 이미 스크롤
+  // 밖에 있으면 화면에는 안 보여서 "우측 패널이 안 맞다"고 느껴집니다. 선택된 항목의 DOM을 ref로
+  // 잡아두고 selectedStoreId가 바뀔 때마다 목록 스크롤을 그 항목으로 자동 이동시킵니다.
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    if (!selectedStoreId) return;
+    itemRefs.current[selectedStoreId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedStoreId]);
   if (collapsed) {
     return (
       <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
@@ -4084,6 +4099,9 @@ function StoreManagementPanel({
                   store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
                 }`}
                 key={store.id}
+                ref={(el) => {
+                  itemRefs.current[store.id] = el;
+                }}
               >
                 <button className="min-w-0 flex-1 px-4 py-3 text-left" onClick={() => onSelectStore(store.id)} type="button">
                   <div className="flex items-center gap-2">
@@ -4152,6 +4170,13 @@ function LeadListPanel({
   readonly selectedLeadId: string;
   readonly title: string;
 }) {
+  // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
+  // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  useEffect(() => {
+    if (!selectedLeadId) return;
+    itemRefs.current[selectedLeadId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedLeadId]);
   if (collapsed) {
     return (
       <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
@@ -4203,6 +4228,9 @@ function LeadListPanel({
                   }`}
                   key={lead.id}
                   onClick={() => onSelectLead(lead.id)}
+                  ref={(el) => {
+                    itemRefs.current[lead.id] = el;
+                  }}
                   type="button"
                 >
                   <div className="flex items-center gap-2">
