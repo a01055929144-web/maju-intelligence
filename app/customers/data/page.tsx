@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
@@ -114,7 +114,10 @@ export default function CustomerDataManagementPage() {
           </div>
           <div className="overflow-x-auto">
             {!uploadsLoaded ? (
-              <p className="p-4 text-sm font-bold text-slate-400">불러오는 중…</p>
+              <p className="flex items-center gap-1.5 p-4 text-sm font-bold text-slate-400">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                업로드 이력을 불러오는 중입니다...
+              </p>
             ) : loadError ? (
               <p className="p-4 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
             ) : uploads.length === 0 ? (

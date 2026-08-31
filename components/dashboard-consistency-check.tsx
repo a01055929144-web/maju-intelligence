@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 type ConsistencyCheck = {
@@ -246,7 +246,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
               </div>
             ))}
             {!checks.length ? (
-              <div className="maju-empty-state p-3 text-sm font-bold text-slate-500">
+              <div className="maju-empty-state flex items-center justify-center gap-1.5 p-3 text-sm font-bold text-slate-500">
+                {loading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
                 {loading ? "데이터 점검 결과를 불러오는 중입니다." : "표시할 점검 결과가 없습니다."}
               </div>
             ) : null}

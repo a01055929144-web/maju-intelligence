@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
+import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -1762,7 +1763,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
         <div className="p-3">
           {loadState === "loading" ? (
-            <p className="rounded-md border border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-500">신규 리드를 불러오는 중입니다.</p>
+            <p className="flex items-center justify-center gap-2 rounded-md border border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-500">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              신규 리드를 불러오는 중입니다.
+            </p>
           ) : loadState === "error" ? (
             <p className="rounded-md border border-dashed border-rose-200 bg-rose-50 p-8 text-center text-sm font-bold text-rose-700">
               신규 리드를 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.
@@ -2816,7 +2820,10 @@ function PermitLeadDetailPanel({
             {historyOpen ? (
               <div className="mt-3 space-y-2">
                 {historyState === "loading" ? (
-                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">이력을 불러오는 중입니다.</p>
+                  <p className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                    이력을 불러오는 중입니다.
+                  </p>
                 ) : actionHistory.length ? (
                   actionHistory.slice(0, 5).map((action) => (
                     <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2" key={action.id}>

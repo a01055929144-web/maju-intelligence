@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Search } from "lucide-react";
+import { Link2, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 type UnmatchedGroup = {
@@ -153,7 +153,10 @@ export function SalesTransactionMatcher({
                 </div>
                 <div className="mt-2 max-h-52 space-y-1 overflow-auto">
                   {loadingCustomers ? (
-                    <p className="px-2 py-3 text-xs font-bold text-slate-400">거래처 목록을 불러오는 중입니다.</p>
+                    <p className="flex items-center gap-1.5 px-2 py-3 text-xs font-bold text-slate-400">
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                      거래처 목록을 불러오는 중입니다.
+                    </p>
                   ) : filteredCustomers.length ? (
                     filteredCustomers.map((customer) => (
                       <button

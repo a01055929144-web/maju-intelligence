@@ -1304,7 +1304,7 @@ export default function CrmTimelinePage() {
                 );
               })}
               {!filteredCustomers.length ? (
-                <div className="maju-empty-state m-3">
+                <div className="maju-empty-state m-4">
                   <p className="text-sm font-black text-slate-700">{hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}</p>
                   <p className="mt-1 text-xs font-bold text-slate-400">
                     {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
@@ -1893,7 +1893,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="maju-empty-state m-4 p-4">
+                    <div className="maju-empty-state m-4">
                       <p className="text-sm font-black text-slate-700">아직 저장된 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
@@ -1930,7 +1930,7 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="maju-empty-state m-4 p-4">
+                    <div className="maju-empty-state m-4">
                       <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 저장된 데이터만 표시합니다.
@@ -2862,7 +2862,7 @@ function AttachmentPreviewModal({
           ) : isPdf ? (
             <iframe className="h-[75vh] w-full rounded-md border border-slate-200 bg-white" src={attachment.url} title={attachment.title} />
           ) : (
-            <div className="maju-empty-state p-6 text-center">
+            <div className="maju-empty-state p-6">
               <p className="text-sm font-black text-slate-800">이 형식은 화면 미리보기를 지원하지 않습니다.</p>
               <p className="mt-1 text-xs font-bold text-slate-500">위의 "새창에서 열기"를 눌러 확인하세요.</p>
             </div>

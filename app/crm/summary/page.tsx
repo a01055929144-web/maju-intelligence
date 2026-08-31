@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, MapPin, Plus, Printer, Search } from "lucide-react";
+import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, Loader2, MapPin, Plus, Printer, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -378,7 +378,8 @@ export default function CrmSummaryPage() {
             {dbError ? <p className="mt-2 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">원장 확인 메시지: {dbError}</p> : null}
             {!hasCustomers ? (
               <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-black text-amber-900">
+                <p className="flex items-center gap-1.5 text-sm font-black text-amber-900">
+                  {customerSource === "loading" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
                   {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
                 </p>
                 <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
@@ -555,7 +556,8 @@ export default function CrmSummaryPage() {
               <span className="text-center">적재위치</span>
             </div>
           ) : (
-            <div className="m-3 rounded-md border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500">
+            <div className="m-3 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500">
+              {customerSource === "loading" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
               {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "조건에 맞는 거래처가 없습니다."}
             </div>
           )}

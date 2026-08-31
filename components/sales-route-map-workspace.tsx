@@ -64,6 +64,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
@@ -5515,14 +5516,20 @@ export type NearbyPermitLeadResult = {
  */
 const PermitLeadsView = dynamic(() => import("./permit-leads-view").then((module) => module.PermitLeadsView), {
   loading: () => (
-    <div className="maju-empty-state flex min-h-[320px] items-center justify-center p-8 text-center text-sm font-bold text-slate-500">리드 화면을 불러오는 중입니다…</div>
+    <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      리드 화면을 불러오는 중입니다…
+    </div>
   ),
   ssr: false
 });
 
 const TodayCourseView = dynamic(() => import("./today-course-view").then((module) => module.TodayCourseView), {
   loading: () => (
-    <div className="maju-empty-state flex min-h-[320px] items-center justify-center p-8 text-center text-sm font-bold text-slate-500">코스 화면을 불러오는 중입니다…</div>
+    <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      코스 화면을 불러오는 중입니다…
+    </div>
   ),
   ssr: false
 });
@@ -6352,7 +6359,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
       ) : null}
 
       {isLoading ? (
-        <p className="maju-empty-state p-3 text-sm font-bold text-slate-400">불러오는 중...</p>
+        <InlineLoading label="담당자 목록을 불러오는 중입니다..." />
       ) : contacts.length ? (
         <div className="space-y-2">
           {contacts.map((contact) => (

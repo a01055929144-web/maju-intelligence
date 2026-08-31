@@ -295,7 +295,12 @@ export function MobileDeliveryProofPanel({
           <p className="text-xs font-black text-slate-500">최근 배송완료 증빙</p>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryProofAttachments.length}건</span>
         </div>
-        {loadingProofs ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">증빙자료를 불러오는 중입니다.</p> : null}
+        {loadingProofs ? (
+          <p className="flex items-center gap-1.5 rounded-lg bg-white p-3 text-sm font-bold text-slate-500">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            증빙자료를 불러오는 중입니다.
+          </p>
+        ) : null}
         {!loadingProofs && !deliveryProofAttachments.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송완료 증빙이 없습니다.</p> : null}
         {deliveryProofAttachments.slice(0, 4).map((item) => (
           <a

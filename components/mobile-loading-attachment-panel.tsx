@@ -121,7 +121,12 @@ export function MobileLoadingAttachmentPanel({
       {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveErrorMessage || "업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요."}</p> : null}
 
       <div className="mt-4">
-        {loadState === "loading" ? <p className="rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">첨부자료를 불러오는 중입니다.</p> : null}
+        {loadState === "loading" ? (
+          <p className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            첨부자료를 불러오는 중입니다.
+          </p>
+        ) : null}
         {loadState === "error" ? <p className="rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700">첨부자료를 불러오지 못했습니다.</p> : null}
         {loadState === "ready" ? (
           <LoadingPositionGallery emptyMessage="아직 등록된 적재위치 사진/영상이 없습니다." items={loadingAttachments} />
