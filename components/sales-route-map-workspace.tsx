@@ -7,6 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CalendarDays,
   Camera,
   Check,
@@ -4252,11 +4255,87 @@ function CustomerDirectoryView({
 }) {
   const router = useRouter();
   const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
-  const totals = getStoreTotals(stores);
   const gradeCounts = countGrades(stores);
-  const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
   const unknownCount = stores.filter((store) => store.businessStatus === "unknown").length;
-  const terminatedCount = stores.filter((store) => store.relationshipStatus === "거래종료").length;
+  // 2026-08-31 피드백 대응: "물류비 합계" KPI. 거래처 하나하나가 출발지에서 각자 왕복한다고
+  // 가정해 전부 더하면(=지금 표의 "예산 물류비" 열을 단순 합산) 실제 배송보다 훨씬 부풀려집니다 —
+  // 실제로는 배송차 한 대가 담당 거래처를 한 번의 경로로 순회합니다. 배송차별 실제 순회 경로를
+  // 매번 계산하려면 배송차마다 티맵 API를 호출해야 해 비용·속도 부담이 크므로, 그 배송차가 맡은
+  // 거래처 중 가장 먼 거리를 "이 배송차가 한 번 나가서 도는 왕복 거리"의 근사치로 삼습니다(가장 먼
+  // 곳까지 갔다 오는 길에 나머지 거래처를 들른다고 가정 — 실제 순회 경로보다는 다소 넉넉한 편이지만,
+  // 거래처별 왕복을 전부 더하는 것보다는 훨씬 현실에 가깝습니다).
+  const totalLogisticsCostWon = useMemo(() => {
+    const farthestDistanceByVehicle = new Map<string, number>();
+    stores.forEach((store) => {
+      const vehicleKey = store.deliveryVehicleName || store.deliveryDriver || `__unassigned_${store.id}`;
+      const distanceKm = store.distanceKm || 0;
+      const current = farthestDistanceByVehicle.get(vehicleKey) ?? 0;
+      if (distanceKm > current) farthestDistanceByVehicle.set(vehicleKey, distanceKm);
+    });
+    let total = 0;
+    farthestDistanceByVehicle.forEach((distanceKm) => {
+      total += estimateFuelCostWon(distanceKm, deliveryPricePerLiter) * 2;
+    });
+    return total;
+  }, [stores, deliveryPricePerLiter]);
+  type DirectorySortKey = "businessStatus" | "deliveryDriver" | "deliveryVehicleName" | "distanceKm" | "expectedRevenue" | "grade" | "industry" | "logisticsCost" | "name";
+  const [sortKey, setSortKey] = useState<DirectorySortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  function toggleSort(key: DirectorySortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  }
+  const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
+  const sortedStores = useMemo(() => {
+    if (!sortKey) return stores;
+    const decorated = stores.map((store) => ({
+      logisticsCost: estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2,
+      store
+    }));
+    decorated.sort((a, b) => {
+      let diff = 0;
+      if (sortKey === "name") diff = a.store.name.localeCompare(b.store.name, "ko");
+      else if (sortKey === "industry") diff = (a.store.industry || "").localeCompare(b.store.industry || "", "ko");
+      else if (sortKey === "grade") diff = (gradeSortWeight[a.store.grade] || 0) - (gradeSortWeight[b.store.grade] || 0);
+      else if (sortKey === "deliveryDriver") diff = (a.store.deliveryDriver || "").localeCompare(b.store.deliveryDriver || "", "ko");
+      else if (sortKey === "deliveryVehicleName") diff = (a.store.deliveryVehicleName || "").localeCompare(b.store.deliveryVehicleName || "", "ko");
+      else if (sortKey === "expectedRevenue") diff = a.store.expectedRevenue - b.store.expectedRevenue;
+      else if (sortKey === "distanceKm") diff = (a.store.distanceKm || 0) - (b.store.distanceKm || 0);
+      else if (sortKey === "logisticsCost") diff = a.logisticsCost - b.logisticsCost;
+      else if (sortKey === "businessStatus") diff = getBusinessStatusLabel(a.store.businessStatus).localeCompare(getBusinessStatusLabel(b.store.businessStatus), "ko");
+      return sortDirection === "asc" ? diff : -diff;
+    });
+    return decorated.map((item) => item.store);
+  }, [stores, sortKey, sortDirection, deliveryPricePerLiter]);
+  function SortableHeader({
+    className = "",
+    label,
+    sortKeyValue,
+    title
+  }: {
+    className?: string;
+    label: string;
+    sortKeyValue: DirectorySortKey;
+    title?: string;
+  }) {
+    const isActive = sortKey === sortKeyValue;
+    return (
+      <th className={`border-r border-slate-200 px-4 py-3 ${className}`} title={title}>
+        <button
+          className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`}
+          onClick={() => toggleSort(sortKeyValue)}
+          type="button"
+        >
+          {label}
+          {isActive ? sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
+        </button>
+      </th>
+    );
+  }
   // 2026-08-27 피드백("거래처가 중복되어 있는게 있어") 대응: 상호명+주소가 동일한 거래처를 화면에서
   // 바로 찾아 병합할 수 있게 합니다. 서버에는 이미 병합 API(mergeDuplicateCustomers)가 있었지만 이를
   // 부를 UI가 없어서 사용자가 중복을 직접 발견해도 정리할 방법이 없었습니다.
@@ -4310,12 +4389,14 @@ function CustomerDirectoryView({
 
   return (
     <section className="flex min-h-[480px] flex-1 flex-col overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
-      <div className="grid shrink-0 gap-3 lg:grid-cols-5">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-3">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
-        <DirectoryStat label="예상매출" value={`${totals.expectedRevenue.toLocaleString()}만원`} />
-        <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
-        <DirectoryStat label="거래 종료" value={`${terminatedCount}곳`} tone={terminatedCount ? "rose" : "slate"} />
+        <DirectoryStat
+          label="물류비 합계"
+          title="배송차별로, 그 배송차가 맡은 거래처 중 가장 먼 곳까지의 왕복 유류비를 더한 값입니다(참고용 추정치). 거래처 각각의 왕복을 단순 합산하지 않고 배송차 한 대가 한 번에 순회한다고 가정합니다."
+          value={`${Math.round(totalLogisticsCostWon / 10000).toLocaleString()}만원`}
+        />
       </div>
 
       {sourceReady && duplicateGroups.length ? (
@@ -4380,25 +4461,25 @@ function CustomerDirectoryView({
               <table className="w-full min-w-[1520px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
-                    <th className="w-[28%] border-r border-slate-200 px-4 py-3">거래처</th>
-                    <th className="w-[96px] border-r border-slate-200 px-4 py-3">업종</th>
-                    <th className="w-[96px] border-r border-slate-200 px-4 py-3">매출등급</th>
-                    <th className="w-[130px] border-r border-slate-200 px-4 py-3">담당자</th>
-                    <th
-                      className="w-[130px] border-r border-slate-200 px-4 py-3"
+                    <SortableHeader className="w-[28%]" label="거래처" sortKeyValue="name" />
+                    <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" />
+                    <SortableHeader className="w-[96px]" label="매출등급" sortKeyValue="grade" />
+                    <SortableHeader className="w-[130px]" label="담당자" sortKeyValue="deliveryDriver" />
+                    <SortableHeader
+                      className="w-[130px]"
+                      label="배송차"
+                      sortKeyValue="deliveryVehicleName"
                       title="담당자와 배송차는 서로 독립적으로 지정할 수 있습니다(같은 배송차를 여러 담당자가 나눠 쓰는 경우 포함). 지도 필터가 이 값 기준으로 동작합니다."
-                    >
-                      배송차
-                    </th>
-                    <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">예상매출</th>
-                    <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">출발지 거리</th>
-                    <th
-                      className="w-[150px] border-r border-slate-200 px-4 py-3 text-right"
-                      title="왕복 예상 유류비가 예상 월매출에서 차지하는 비중입니다(참고용 추정치). 10~15% 이내면 적정입니다."
-                    >
-                      물류비 타당성
-                    </th>
-                    <th className="w-[120px] border-r border-slate-200 px-4 py-3">사업자 상태</th>
+                    />
+                    <SortableHeader className="w-[120px] text-right" label="예상매출" sortKeyValue="expectedRevenue" />
+                    <SortableHeader className="w-[120px] text-right" label="출발지 거리" sortKeyValue="distanceKm" />
+                    <SortableHeader
+                      className="w-[150px] text-right"
+                      label="예산 물류비"
+                      sortKeyValue="logisticsCost"
+                      title="출발지에서 이 거래처까지 왕복했을 때 예상 유류비입니다(참고용 추정치)."
+                    />
+                    <SortableHeader className="w-[120px]" label="사업자 상태" sortKeyValue="businessStatus" />
                     <th className="w-[110px] border-r border-slate-200 px-4 py-3">출입 방법</th>
                     <th
                       className="w-[90px] border-r border-slate-200 px-4 py-3"
@@ -4410,7 +4491,7 @@ function CustomerDirectoryView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {stores.map((store) => (
+                  {sortedStores.map((store) => (
                     <tr
                       aria-selected={store.id === selectedStoreId}
                       className={`cursor-pointer transition hover:bg-slate-50 ${store.id === selectedStoreId ? "bg-teal-50/70 shadow-[inset_3px_0_0_#0f766e]" : "bg-white"}`}
@@ -4434,17 +4515,10 @@ function CustomerDirectoryView({
                       <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryVehicleName || "미지정"}</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
-                      <td className="border-r border-slate-100 px-4 py-3 text-right">
+                      <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">
                         {(() => {
                           const roundTripCost = estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2;
-                          if (!roundTripCost) return <span className="text-xs font-bold text-slate-400">확인 필요</span>;
-                          const worth = deliveryWorthLabel(deliveryCostRatio(roundTripCost, store.expectedRevenue));
-                          return (
-                            <>
-                              <p className="text-xs font-bold text-slate-500">왕복 {roundTripCost.toLocaleString()}원</p>
-                              <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${worth.toneClassName}`}>{worth.label}</span>
-                            </>
-                          );
+                          return roundTripCost ? `왕복 ${roundTripCost.toLocaleString()}원` : <span className="text-slate-400">확인 필요</span>;
                         })()}
                       </td>
                       <td className="border-r border-slate-100 px-4 py-3">
@@ -5584,9 +5658,19 @@ const TodayCourseView = dynamic(() => import("./today-course-view").then((module
   ssr: false
 });
 
-export function DirectoryStat({ label, tone = "slate", value }: { readonly label: string; readonly tone?: "rose" | "slate"; readonly value: string }) {
+export function DirectoryStat({
+  label,
+  title,
+  tone = "slate",
+  value
+}: {
+  readonly label: string;
+  readonly title?: string;
+  readonly tone?: "rose" | "slate";
+  readonly value: string;
+}) {
   return (
-    <div className="maju-stat-card px-4 py-3">
+    <div className="maju-stat-card px-4 py-3" title={title}>
       <p className="maju-muted-label">{label}</p>
       <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
     </div>
