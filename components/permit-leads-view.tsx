@@ -256,9 +256,20 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   async function handleRemoveKeywordSearchRegion(regionId: string) {
     setRegionBusy(true);
+    setRegionMessage("");
     try {
-      await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(regionId)}`), { method: "DELETE" });
+      // 2026-08-31 에러 처리 감사 대응: 응답 상태를 확인하지 않고 바로 화면 목록에서 지웠던
+      // 탓에, 서버가 삭제에 실패해도 화면은 이미 삭제된 것처럼 보였습니다.
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(regionId)}`), {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        setRegionMessage("지역 삭제에 실패했습니다. 다시 시도해주세요.");
+        return;
+      }
       setKeywordSearchRegions((current) => current.filter((region) => region.id !== regionId));
+    } catch {
+      setRegionMessage("네트워크 오류로 지역을 삭제하지 못했습니다.");
     } finally {
       setRegionBusy(false);
     }

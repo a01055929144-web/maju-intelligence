@@ -18,20 +18,26 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError("");
 
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
+    // 2026-08-31 에러 처리 감사 대응: fetch가 실패(네트워크 끊김 등)해도 setLoading(false)가
+    // 실행되도록 try/finally로 감싸, 버튼이 영구히 잠기지 않게 합니다.
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
 
-    setLoading(false);
+      if (!response.ok) {
+        setError("관리자 계정 정보를 확인해주세요.");
+        return;
+      }
 
-    if (!response.ok) {
-      setError("관리자 계정 정보를 확인해주세요.");
-      return;
+      window.location.href = "/admin";
+    } catch {
+      setError("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
     }
-
-    window.location.href = "/admin";
   }
 
   return (

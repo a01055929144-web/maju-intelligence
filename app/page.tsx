@@ -4991,18 +4991,29 @@ function loadMappingPreset(type: UploadTemplateType) {
   }
 }
 
+// 2026-08-31 에러 처리 감사 대응: 읽기 함수(loadMappingPreset/readMappingPresets)는 try/catch로
+// 보호돼 있는데 쓰기 함수는 그렇지 않아, 시크릿 모드나 저장공간 초과 상태에서 setItem이 throw하면
+// 호출부의 나머지 로직(서버 저장 등)까지 실행되지 않고 조용히 멈췄습니다.
 function saveMappingPreset(type: UploadTemplateType, fieldMap: FieldMap) {
   if (typeof window === "undefined") return;
-  const presets = readMappingPresets();
-  presets[type] = fieldMap;
-  window.localStorage.setItem(mappingPresetStorageKey, JSON.stringify(presets));
+  try {
+    const presets = readMappingPresets();
+    presets[type] = fieldMap;
+    window.localStorage.setItem(mappingPresetStorageKey, JSON.stringify(presets));
+  } catch {
+    // 프리셋 저장은 편의 기능이라 실패해도 나머지 흐름(서버 저장 등)은 계속 진행되어야 합니다.
+  }
 }
 
 function deleteMappingPreset(type: UploadTemplateType) {
   if (typeof window === "undefined") return;
-  const presets = readMappingPresets();
-  delete presets[type];
-  window.localStorage.setItem(mappingPresetStorageKey, JSON.stringify(presets));
+  try {
+    const presets = readMappingPresets();
+    delete presets[type];
+    window.localStorage.setItem(mappingPresetStorageKey, JSON.stringify(presets));
+  } catch {
+    // 위와 동일한 이유로 무시합니다.
+  }
 }
 
 function readMappingPresets() {
