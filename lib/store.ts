@@ -3,6 +3,7 @@ import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBu
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
+import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
 import { enrichLeadRecommendations } from "./leads";
@@ -4590,6 +4591,7 @@ export type PermitLeadItem = {
   reviewCount?: number;
   rating?: number;
   keywordVolume?: number;
+  source?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -4647,6 +4649,7 @@ type PermitLeadRow = {
   review_count: number | null;
   rating: number | null;
   keyword_volume: number | null;
+  source: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -4659,7 +4662,7 @@ const PERMIT_EXCLUDED_INDUSTRY_KEYWORDS = [
 ];
 
 // 업종 원문/상호명에서 대표 업종을 분류하는 규칙입니다. 필요에 따라 계속 추가할 수 있습니다.
-const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: string[] }> = [
+export const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: string[] }> = [
   { primary: "한식", keywords: ["한식", "국밥", "해장국", "백반", "찌개", "곰탕", "설렁탕", "분식"] },
   { primary: "카페/디저트", keywords: ["카페", "커피", "디저트", "베이커리", "제과", "빵집"] },
   { primary: "일식", keywords: ["일식", "이자카야", "스시", "라멘", "돈카츠", "우동"] },
@@ -4854,6 +4857,7 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     reviewCount: row.review_count ?? undefined,
     rating: row.rating ?? undefined,
     keywordVolume: row.keyword_volume ?? undefined,
+    source: row.source || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -5135,9 +5139,9 @@ export type GovRestaurantSyncResult = {
 // companies 테이블에 기록해, 신규 리드 화면에서 "마지막 동기화가 언제, 성공했는지"를 보여줄 수
 // 있게 합니다. 기록 자체가 실패해도(컬럼 미존재 등) 조용히 무시해 본 동기화 로직에는 영향을
 // 주지 않습니다.
-async function recordLeadSyncStatus(companyId: string, source: "gov" | "seoul", status: "success" | "error", message?: string) {
+async function recordLeadSyncStatus(companyId: string, source: "gov" | "seoul" | "kakao_keyword", status: "success" | "error", message?: string) {
   if (!isProductionStoreConfigured()) return;
-  const prefix = source === "gov" ? "gov_restaurant_sync" : "seoul_restaurant_sync";
+  const prefix = source === "gov" ? "gov_restaurant_sync" : source === "seoul" ? "seoul_restaurant_sync" : "kakao_keyword_lead_sync";
   await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
@@ -5152,12 +5156,14 @@ async function recordLeadSyncStatus(companyId: string, source: "gov" | "seoul", 
 export type LeadSyncStatus = {
   gov: { lastAt: string | null; status: string | null; message: string | null };
   seoul: { lastAt: string | null; status: string | null; message: string | null };
+  kakaoKeyword: { lastAt: string | null; status: string | null; message: string | null };
 };
 
 export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStatus> {
   const empty: LeadSyncStatus = {
     gov: { lastAt: null, status: null, message: null },
-    seoul: { lastAt: null, status: null, message: null }
+    seoul: { lastAt: null, status: null, message: null },
+    kakaoKeyword: { lastAt: null, status: null, message: null }
   };
   if (!isProductionStoreConfigured()) return empty;
 
@@ -5169,16 +5175,24 @@ export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStat
       seoul_restaurant_sync_last_at: string | null;
       seoul_restaurant_sync_last_status: string | null;
       seoul_restaurant_sync_last_message: string | null;
+      kakao_keyword_lead_sync_last_at: string | null;
+      kakao_keyword_lead_sync_last_status: string | null;
+      kakao_keyword_lead_sync_last_message: string | null;
     }>
   >(
-    `companies?select=gov_restaurant_sync_last_at,gov_restaurant_sync_last_status,gov_restaurant_sync_last_message,seoul_restaurant_sync_last_at,seoul_restaurant_sync_last_status,seoul_restaurant_sync_last_message&id=eq.${encodeURIComponent(companyId)}&limit=1`
+    `companies?select=gov_restaurant_sync_last_at,gov_restaurant_sync_last_status,gov_restaurant_sync_last_message,seoul_restaurant_sync_last_at,seoul_restaurant_sync_last_status,seoul_restaurant_sync_last_message,kakao_keyword_lead_sync_last_at,kakao_keyword_lead_sync_last_status,kakao_keyword_lead_sync_last_message&id=eq.${encodeURIComponent(companyId)}&limit=1`
   ).catch(() => []);
   const row = rows[0];
   if (!row) return empty;
 
   return {
     gov: { lastAt: row.gov_restaurant_sync_last_at, status: row.gov_restaurant_sync_last_status, message: row.gov_restaurant_sync_last_message },
-    seoul: { lastAt: row.seoul_restaurant_sync_last_at, status: row.seoul_restaurant_sync_last_status, message: row.seoul_restaurant_sync_last_message }
+    seoul: { lastAt: row.seoul_restaurant_sync_last_at, status: row.seoul_restaurant_sync_last_status, message: row.seoul_restaurant_sync_last_message },
+    kakaoKeyword: {
+      lastAt: row.kakao_keyword_lead_sync_last_at,
+      status: row.kakao_keyword_lead_sync_last_status,
+      message: row.kakao_keyword_lead_sync_last_message
+    }
   };
 }
 
@@ -5306,6 +5320,282 @@ export async function syncAllCompaniesSeoulRestaurantLeads(): Promise<SeoulResta
       totalFetched: total.totalFetched + result.fetched,
       totalInserted: total.totalInserted + result.ingest.inserted,
       totalUpdated: total.totalUpdated + result.ingest.updated
+    }),
+    { ...empty, configured: true }
+  );
+}
+
+export type CompanyLeadSearchRegion = {
+  id: string;
+  companyId: string;
+  label: string;
+  latitude?: number;
+  longitude?: number;
+  createdAt: string;
+};
+
+export async function getCompanyLeadSearchRegions(companyId: string): Promise<CompanyLeadSearchRegion[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<
+    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
+  >(`company_lead_search_regions?select=*&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc`).catch(() => []);
+  return rows.map((row) => ({
+    id: row.id,
+    companyId: row.company_id,
+    label: row.label,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+    createdAt: row.created_at
+  }));
+}
+
+/**
+ * 고객사가 직접 입력한 확장 탐색 지역(예: "서울 마포구 합정동")을 저장합니다. 좌표는 저장 시점에
+ * 한 번만 geocodeRegionLabel로 확정해두고(재탐색마다 다시 지오코딩하지 않음), 좌표를 못 찾아도
+ * 지역명은 저장합니다 — 화면에서 "좌표 확인 필요"로 표시하고, 탐색 시에는 좌표 없는 지역은 건너뜁니다.
+ */
+export async function addCompanyLeadSearchRegion(companyId: string, label: string): Promise<CompanyLeadSearchRegion> {
+  const trimmed = label.trim();
+  if (!trimmed) throw new Error("지역명을 입력해주세요.");
+  if (!isProductionStoreConfigured()) {
+    return { id: globalThis.crypto.randomUUID(), companyId, label: trimmed, createdAt: new Date().toISOString() };
+  }
+
+  const point = await geocodeRegionLabel(trimmed).catch(() => null);
+  const rows = await supabaseRequest<
+    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
+  >("company_lead_search_regions", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify([
+      {
+        company_id: companyId,
+        label: trimmed,
+        latitude: point?.lat ?? null,
+        longitude: point?.lng ?? null
+      }
+    ])
+  });
+  const row = rows[0];
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    label: row.label,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+    createdAt: row.created_at
+  };
+}
+
+export async function removeCompanyLeadSearchRegion(companyId: string, regionId: string): Promise<void> {
+  if (!isProductionStoreConfigured()) return;
+  await supabaseRequest(`company_lead_search_regions?id=eq.${encodeURIComponent(regionId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  }).catch(() => null);
+}
+
+export type KakaoKeywordLeadSweepResult = {
+  configured: boolean;
+  anchorsUsed: number;
+  callsMade: number;
+  candidatesFound: number;
+  ingest: PermitLeadIngestResult;
+};
+
+const EMPTY_KEYWORD_SWEEP_INGEST: PermitLeadIngestResult = {
+  total: 0,
+  inserted: 0,
+  updated: 0,
+  duplicates: 0,
+  excludedInactive: 0,
+  excludedNonTarget: 0,
+  skippedNoName: 0
+};
+
+function normalizeLeadNameForDedupe(value: string) {
+  return value.toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
+}
+
+/**
+ * "영업리드(신규리드, 개업일자 아님)" — 2026-08-31 피드백: 개업일자와 무관하게 이미 운영 중인
+ * 매장까지 카카오 로컬 키워드 검색으로 찾아 business_permit_leads에 채워 넣습니다.
+ *
+ * 기준점(anchor)은 (1) 반경 자동 — 등록된 거래처 좌표, (2) 고객사가 직접 등록한 확장 탐색 지역
+ * 두 종류를 합쳐서 씁니다("둘 다 지원" 피드백). 다만 (1)은 매번 TMAP 지오코딩이 필요해 비용이
+ * 드는데, 기존 코드도 같은 이유로 "추천 점수 갱신"(전체 거래처 반경 지오코딩)을 자동 실행하지
+ * 않고 버튼으로만 제공합니다 — 같은 원칙으로:
+ *   - mode="manual"(화면의 "영업리드 추가 탐색" 버튼): 거래처 반경 지오코딩 + 저장된 지역을 모두 씁니다.
+ *   - mode="auto"(야간 cron): 이미 좌표가 확정된 저장 지역만 씁니다(추가 지오코딩 비용 없음).
+ *     저장된 지역이 없으면 그날은 조용히 건너뜁니다 — 고객사가 지역을 등록해두면 그때부터
+ *     야간 자동 탐색이 시작됩니다.
+ *
+ * 카카오 키워드 검색은 사업자등록번호를 주지 않아 기존 ingestPermitLeadRows의 사업자번호 기준
+ * 중복 방지를 탈 수 없으므로, 이름 정규화 기준으로(기존 거래처, 기존 리드 전체, 이번 탐색 배치
+ * 내부) 3중 중복 제거를 이 함수에서 직접 합니다.
+ */
+export async function runKakaoKeywordLeadSweep(
+  companyId: string,
+  options: { mode: "manual" | "auto"; radiusMeters?: number } = { mode: "manual" }
+): Promise<KakaoKeywordLeadSweepResult> {
+  const empty: KakaoKeywordLeadSweepResult = {
+    configured: isKakaoKeywordLeadSearchConfigured(),
+    anchorsUsed: 0,
+    callsMade: 0,
+    candidatesFound: 0,
+    ingest: EMPTY_KEYWORD_SWEEP_INGEST
+  };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  try {
+    // 1) 기준점 후보를 모읍니다.
+    const savedRegions = await getCompanyLeadSearchRegions(companyId);
+    const regionAnchors: Array<{ label: string; point: GeoPoint }> = savedRegions
+      .filter((region) => typeof region.latitude === "number" && typeof region.longitude === "number")
+      .map((region) => ({ label: region.label, point: { lat: region.latitude as number, lng: region.longitude as number } }));
+
+    const customerAnchors: Array<{ label: string; point: GeoPoint }> = [];
+    if (options.mode === "manual") {
+      // 반경 자동(등록 거래처)은 수동 버튼에서만 지오코딩합니다(TMAP 호출 비용 때문에 야간 자동
+      // 실행에서는 제외 — handleRecommendationRefresh와 같은 원칙).
+      const customerMaster = await getCustomerMaster(companyId);
+      const activeCustomers = customerMaster.customers.filter(
+        (customer) => customer.address?.trim() && customer.businessStatus !== "closed" && customer.relationshipStatus !== "거래종료"
+      );
+      const customerAnchorCandidates = activeCustomers.slice(0, 30);
+      const customerPoints = await mapWithConcurrency(customerAnchorCandidates, NEARBY_LEAD_GEOCODE_CONCURRENCY, (customer) =>
+        resolveAddressPoint(customer.address!)
+      );
+      customerAnchorCandidates.forEach((customer, index) => {
+        const point = customerPoints[index];
+        if (point) customerAnchors.push({ label: customer.customerName, point });
+      });
+    }
+
+    const allAnchors = [...customerAnchors, ...regionAnchors];
+    if (!allAnchors.length) return { ...empty, configured: true };
+
+    // 2) 기준점 개수를 상한선 안으로 자릅니다. 자동(야간 cron) 모드는 회전 커서로 매일 다른
+    // 저장 지역 묶음을 훑어(gov-restaurant/seoul-restaurant와 같은 회전 패턴) 하루 호출량을 억제합니다.
+    const MANUAL_MAX_ANCHORS = 20;
+    const AUTO_ANCHORS_PER_RUN = 3;
+    let anchorsToUse: Array<{ label: string; point: GeoPoint }>;
+    let nextCursor = 0;
+
+    if (options.mode === "manual") {
+      anchorsToUse = allAnchors.slice(0, MANUAL_MAX_ANCHORS);
+    } else {
+      const cursorRows = await supabaseRequest<Array<{ kakao_keyword_lead_sweep_cursor: number | null }>>(
+        `companies?select=kakao_keyword_lead_sweep_cursor&id=eq.${encodeURIComponent(companyId)}&limit=1`
+      ).catch(() => []);
+      const cursor = cursorRows[0]?.kakao_keyword_lead_sweep_cursor || 0;
+      const start = cursor % allAnchors.length;
+      anchorsToUse = [];
+      for (let i = 0; i < Math.min(AUTO_ANCHORS_PER_RUN, allAnchors.length); i += 1) {
+        anchorsToUse.push(allAnchors[(start + i) % allAnchors.length]);
+      }
+      nextCursor = (start + AUTO_ANCHORS_PER_RUN) % allAnchors.length;
+    }
+
+    // 3) 기존 거래처/기존 리드 이름을 미리 조회해 중복 후보를 걸러낼 준비를 합니다.
+    const [existingCustomerRows, existingLeadRows] = await Promise.all([
+      supabaseRequest<Array<{ customer_name: string }>>(
+        `normalized_customers?select=customer_name&company_id=eq.${encodeURIComponent(companyId)}`
+      ).catch(() => []),
+      supabaseRequest<Array<{ business_name: string }>>(
+        `business_permit_leads?select=business_name&company_id=eq.${encodeURIComponent(companyId)}`
+      ).catch(() => [])
+    ]);
+    const knownNames = new Set<string>([
+      ...existingCustomerRows.map((row) => normalizeLeadNameForDedupe(row.customer_name)),
+      ...existingLeadRows.map((row) => normalizeLeadNameForDedupe(row.business_name))
+    ]);
+
+    // 4) 기준점 × 업종 키워드로 카카오 로컬 키워드 검색을 돌립니다.
+    const radiusMeters = options.radiusMeters || 2000;
+    let callsMade = 0;
+    const candidateRows: PermitLeadIngestRow[] = [];
+    const seenInBatch = new Set<string>();
+
+    for (const anchor of anchorsToUse) {
+      for (const rule of PERMIT_INDUSTRY_RULES) {
+        callsMade += 1;
+        // eslint-disable-next-line no-await-in-loop
+        const results = await searchKakaoKeywordLeads(anchor.point, rule.primary, radiusMeters);
+        for (const candidate of results) {
+          const normalizedName = normalizeLeadNameForDedupe(candidate.businessName);
+          if (!normalizedName || knownNames.has(normalizedName) || seenInBatch.has(normalizedName)) continue;
+          seenInBatch.add(normalizedName);
+          candidateRows.push({
+            businessName: candidate.businessName,
+            address: candidate.address,
+            phone: candidate.phone || undefined,
+            industry: rule.primary,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            jurisdiction: anchor.label
+          });
+        }
+      }
+    }
+
+    const ingest = await ingestPermitLeadRows(companyId, candidateRows, { source: "kakao_keyword_search" });
+
+    if (options.mode === "auto") {
+      await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ kakao_keyword_lead_sweep_cursor: nextCursor })
+      }).catch(() => null);
+    }
+
+    await recordLeadSyncStatus(companyId, "kakao_keyword", "success");
+
+    return {
+      configured: true,
+      anchorsUsed: anchorsToUse.length,
+      callsMade,
+      candidatesFound: candidateRows.length,
+      ingest
+    };
+  } catch (error) {
+    await recordLeadSyncStatus(companyId, "kakao_keyword", "error", error instanceof Error ? error.message : String(error));
+    throw error;
+  }
+}
+
+export type KakaoKeywordLeadDailySyncResult = {
+  configured: boolean;
+  companiesProcessed: number;
+  totalCandidates: number;
+  totalInserted: number;
+};
+
+/** 일일 cron에서 모든 회사에 대해 영업리드(카카오 키워드 탐색) 자동 수집을 실행합니다(회전 방식, 회사당 소량). */
+export async function syncAllCompaniesKakaoKeywordLeads(): Promise<KakaoKeywordLeadDailySyncResult> {
+  const empty: KakaoKeywordLeadDailySyncResult = {
+    configured: isKakaoKeywordLeadSearchConfigured(),
+    companiesProcessed: 0,
+    totalCandidates: 0,
+    totalInserted: 0
+  };
+  if (!empty.configured || !isProductionStoreConfigured()) return empty;
+
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(
+    companies.map((company) =>
+      runKakaoKeywordLeadSweep(company.id, { mode: "auto" }).catch(
+        (): KakaoKeywordLeadSweepResult => ({ configured: true, anchorsUsed: 0, callsMade: 0, candidatesFound: 0, ingest: EMPTY_KEYWORD_SWEEP_INGEST })
+      )
+    )
+  );
+
+  return results.reduce<KakaoKeywordLeadDailySyncResult>(
+    (total, result) => ({
+      configured: true,
+      companiesProcessed: total.companiesProcessed + 1,
+      totalCandidates: total.totalCandidates + result.candidatesFound,
+      totalInserted: total.totalInserted + result.ingest.inserted
     }),
     { ...empty, configured: true }
   );

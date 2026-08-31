@@ -19,12 +19,14 @@ import {
   ListFilter,
   Loader2,
   MapPin,
+  MapPinPlus,
   MessageCircle,
   MessageSquareText,
   Phone,
   Radar,
   RefreshCw,
   Search,
+  Trash2,
   Upload,
   UserCheck,
   X
@@ -35,8 +37,10 @@ import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map"
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
   BulkLeadActionBusy,
+  CompanyLeadSearchRegion,
   DirectoryStat,
   GovSyncResult,
+  KakaoKeywordLeadSweepResult,
   LIST_PAGE_SIZE_OPTIONS,
   LeadOpenDateFilterMode,
   ListPageSize,
@@ -126,6 +130,18 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [seoulSyncWarning, setSeoulSyncWarning] = useState("");
   const [showSourceDetails, setShowSourceDetails] = useState(false);
   const [sourceStatus, setSourceStatus] = useState<PermitLeadSourceStatus | null>(null);
+
+  // "영업리드(신규리드, 개업일자 아님)" 확장 탐색 — 2026-08-31 피드백: 개업일자와 무관하게 이미
+  // 운영 중인 매장까지 카카오 로컬 키워드 검색으로 찾아온다. 반경 자동(등록 거래처) + 고객사
+  // 지정 지역을 함께 기준점으로 쓴다.
+  const [keywordSearchRegions, setKeywordSearchRegions] = useState<CompanyLeadSearchRegion[]>([]);
+  const [newRegionLabel, setNewRegionLabel] = useState("");
+  const [regionBusy, setRegionBusy] = useState(false);
+  const [regionMessage, setRegionMessage] = useState("");
+  const [keywordSweepBusy, setKeywordSweepBusy] = useState(false);
+  const [keywordSweepResult, setKeywordSweepResult] = useState<KakaoKeywordLeadSweepResult | null>(null);
+  const [keywordSweepWarning, setKeywordSweepWarning] = useState("");
+
   const anySyncBusy = govSyncBusy || seoulSyncBusy;
   const [recommendBusy, setRecommendBusy] = useState(false);
   const [recommendMessage, setRecommendMessage] = useState("");
@@ -199,6 +215,78 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       })
       .catch(() => null);
   }, []);
+
+  const loadKeywordSearchRegions = useCallback(() => {
+    fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload?.regions) setKeywordSearchRegions(payload.regions);
+      })
+      .catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    loadKeywordSearchRegions();
+  }, [loadKeywordSearchRegions]);
+
+  async function handleAddKeywordSearchRegion() {
+    if (!newRegionLabel.trim()) return;
+    setRegionBusy(true);
+    setRegionMessage("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: newRegionLabel })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setRegionMessage(payload?.message || "지역 추가에 실패했습니다.");
+        return;
+      }
+      setNewRegionLabel("");
+      loadKeywordSearchRegions();
+    } catch (error) {
+      setRegionMessage(error instanceof Error ? error.message : "네트워크 오류로 지역을 추가하지 못했습니다.");
+    } finally {
+      setRegionBusy(false);
+    }
+  }
+
+  async function handleRemoveKeywordSearchRegion(regionId: string) {
+    setRegionBusy(true);
+    try {
+      await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(regionId)}`), { method: "DELETE" });
+      setKeywordSearchRegions((current) => current.filter((region) => region.id !== regionId));
+    } finally {
+      setRegionBusy(false);
+    }
+  }
+
+  // "영업리드 추가 탐색" 수동 버튼 — 등록 거래처 반경 + 위 지정 지역을 기준점으로 카카오 로컬
+  // 키워드 검색을 돌려, 개업일자와 무관하게 이미 운영 중인 매장을 리드로 채워 넣습니다.
+  async function handleKeywordLeadSweep() {
+    setKeywordSweepBusy(true);
+    setKeywordSweepResult(null);
+    setKeywordSweepWarning("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setKeywordSweepWarning(payload?.message || "영업리드 탐색에 실패했습니다.");
+        return;
+      }
+      setKeywordSweepResult(payload);
+      loadLeads();
+    } catch (error) {
+      setKeywordSweepWarning(error instanceof Error ? error.message : "네트워크 오류로 영업리드 탐색을 실행하지 못했습니다.");
+    } finally {
+      setKeywordSweepBusy(false);
+    }
+  }
 
   const industryCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -899,6 +987,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const summary = queues?.summary;
   const govRestaurantConfigured = Boolean(sourceStatus?.sources?.govRestaurant);
   const seoulRestaurantConfigured = Boolean(sourceStatus?.sources?.seoulRestaurant);
+  const kakaoKeywordSearchConfigured = Boolean(sourceStatus?.sources?.kakaoKeywordSearch);
   const keywordVolumeSourceConfigured = Boolean(sourceStatus?.enrichment?.keywordVolume);
   const googleReviewsSourceConfigured = Boolean(sourceStatus?.enrichment?.googleReviews);
   const leadSourceCards = [
@@ -923,6 +1012,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       status: seoulSyncBusy ? "수집 중" : seoulSyncResult || seoulRestaurantConfigured ? "연결됨" : seoulSyncWarning ? "확인 필요" : "설정 필요",
       tone: seoulSyncWarning || (!seoulRestaurantConfigured && sourceStatus) ? "warning" : seoulSyncResult || seoulRestaurantConfigured ? "ready" : "idle",
       title: "서울시 공공데이터"
+    },
+    {
+      description: keywordSweepResult
+        ? `기준점 ${keywordSweepResult.anchorsUsed.toLocaleString()} · 신규 ${keywordSweepResult.ingest.inserted.toLocaleString()}`
+        : keywordSweepWarning || "운영중 매장(개업일 무관)",
+      status: keywordSweepBusy ? "탐색 중" : keywordSweepResult || kakaoKeywordSearchConfigured ? "연결됨" : keywordSweepWarning ? "확인 필요" : "설정 필요",
+      tone: keywordSweepWarning || (!kakaoKeywordSearchConfigured && sourceStatus) ? "warning" : keywordSweepResult || kakaoKeywordSearchConfigured ? "ready" : "idle",
+      title: "영업리드 탐색"
     }
   ];
   const externalSourceSummary = [
@@ -1040,6 +1137,71 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         </div>
       </div>
 
+      <div className="maju-section-card p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="flex items-center gap-1.5 text-sm font-black text-slate-950">
+              <MapPinPlus className="h-4 w-4 text-primary" />
+              영업리드 확장 탐색
+            </p>
+            <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-500">
+              개업일자와 무관하게 이미 운영 중인 매장까지 찾아옵니다. 등록 거래처 반경을 자동으로 훑고, 아래 지역을 추가하면 그 지역도 함께
+              탐색합니다. 야간에 기준점 일부를 자동으로 회전 탐색하고, 지금 바로 넓게 훑고 싶으면 버튼을 누르세요.
+            </p>
+          </div>
+          <button className="maju-button-secondary h-8 shrink-0 text-xs" disabled={keywordSweepBusy || !kakaoKeywordSearchConfigured} onClick={() => void handleKeywordLeadSweep()} type="button">
+            <Radar className="h-3.5 w-3.5" />
+            {keywordSweepBusy ? "탐색 중" : "영업리드 추가 탐색"}
+          </button>
+        </div>
+        {!kakaoKeywordSearchConfigured && sourceStatus ? (
+          <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">KAKAO_REST_KEY가 설정되지 않아 영업리드 확장 탐색을 쓸 수 없습니다.</p>
+        ) : null}
+        {keywordSweepWarning ? <p className="mt-2 rounded-md bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">{keywordSweepWarning}</p> : null}
+        {keywordSweepResult ? (
+          <div className="mt-2 flex flex-wrap gap-2 rounded-md bg-slate-50 p-3 text-xs font-bold text-slate-600">
+            <span>기준점 {keywordSweepResult.anchorsUsed.toLocaleString()}곳</span>
+            <span>검색 {keywordSweepResult.callsMade.toLocaleString()}회</span>
+            <span className="text-slate-700">후보 {keywordSweepResult.candidatesFound.toLocaleString()}곳</span>
+            <span className="text-emerald-700">신규 {keywordSweepResult.ingest.inserted.toLocaleString()}</span>
+          </div>
+        ) : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-ring"
+            onChange={(event) => setNewRegionLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void handleAddKeywordSearchRegion();
+            }}
+            placeholder="탐색 지역 추가 (예: 서울 마포구 합정동)"
+            value={newRegionLabel}
+          />
+          <button className="maju-button-secondary h-9 text-xs" disabled={regionBusy || !newRegionLabel.trim()} onClick={() => void handleAddKeywordSearchRegion()} type="button">
+            추가
+          </button>
+        </div>
+        {regionMessage ? <p className="mt-1.5 text-xs font-bold text-destructive">{regionMessage}</p> : null}
+        {keywordSearchRegions.length ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {keywordSearchRegions.map((region) => (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 py-1 pl-3 pr-1.5 text-xs font-bold text-slate-700" key={region.id}>
+                {region.label}
+                {typeof region.latitude !== "number" ? <span className="text-amber-600">(좌표 확인 필요)</span> : null}
+                <button
+                  aria-label={`${region.label} 삭제`}
+                  className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                  disabled={regionBusy}
+                  onClick={() => void handleRemoveKeywordSearchRegion(region.id)}
+                  type="button"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       <div className="maju-section-card">
         <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setUploadOpen((value) => !value)} type="button">
           <span className="flex items-center gap-2">
@@ -1109,7 +1271,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 {(
                   [
                     { key: "gov", label: "전국 공공데이터", entry: sourceStatus.syncStatus.gov },
-                    { key: "seoul", label: "서울시 공공데이터", entry: sourceStatus.syncStatus.seoul }
+                    { key: "seoul", label: "서울시 공공데이터", entry: sourceStatus.syncStatus.seoul },
+                    { key: "kakaoKeyword", label: "영업리드 탐색", entry: sourceStatus.syncStatus.kakaoKeyword }
                   ] as const
                 ).map(({ key, label, entry }) => (
                   <p key={key} className={entry.status === "error" ? "text-rose-600" : entry.lastAt ? "text-slate-700" : "text-slate-400"}>
@@ -2611,11 +2774,12 @@ function PermitLeadDetailPanel({
           </div>
 
           <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
+            <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />
             <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
             <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
             <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
             <PermitDetailRow label="개시일" value={getPermitLeadOpenDate(lead) || "확인 필요"} />
-            <PermitDetailRow label="관할기관" value={lead.jurisdiction || "확인 필요"} />
+            <PermitDetailRow label={lead.source === "kakao_keyword_search" ? "탐색 기준점" : "관할기관"} value={lead.jurisdiction || "확인 필요"} />
             <PermitDetailRow label="인스타" value={instagramHandle || "검색 필요"} />
           </div>
 
@@ -2722,6 +2886,26 @@ function PermitLeadDetailPanel({
       </div>
     </div>
   );
+}
+
+// 리드가 어디서 왔는지(공공 인허가 신규 개업 vs 카카오 키워드 탐색으로 찾은 기존 운영 매장)를
+// 사람이 읽을 수 있는 라벨로 바꿉니다. 2026-08-31 피드백으로 추가된 영업리드 확장 탐색 소스는
+// 개업일자 신뢰도가 낮아(개업일 자체가 없음) 담당자가 헷갈리지 않도록 명시적으로 구분합니다.
+function permitLeadSourceLabel(source?: string): string {
+  switch (source) {
+    case "kakao_keyword_search":
+      return "영업리드 탐색(카카오, 운영중 매장)";
+    case "gov_restaurant_api":
+      return "전국 공공데이터(자동)";
+    case "seoul_opendata_api":
+      return "서울시 공공데이터(자동)";
+    case "localdata_api":
+      return "지방행정 인허가(자동)";
+    case "manual_upload":
+      return "수동 업로드";
+    default:
+      return "확인 필요";
+  }
 }
 
 function PermitDetailRow({ label, value }: { readonly label: string; readonly value: string }) {

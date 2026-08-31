@@ -5430,12 +5430,34 @@ export type PermitLeadSourceStatus = {
   sources?: {
     govRestaurant?: boolean;
     seoulRestaurant?: boolean;
+    kakaoKeywordSearch?: boolean;
   };
   // 2026-08-28 피드백 대응(리드 야간 동기화가 실패해도 화면에 표시가 없음)
   syncStatus?: {
     gov: { lastAt: string | null; status: string | null; message: string | null };
     seoul: { lastAt: string | null; status: string | null; message: string | null };
+    kakaoKeyword: { lastAt: string | null; status: string | null; message: string | null };
   } | null;
+};
+
+// 2026-08-31 피드백: "영업리드(신규리드, 개업일자 아님)도 키워드 검색량으로 영업순위를 알아야
+// 한다" — 개업일자와 무관하게 이미 운영 중인 매장까지 카카오 로컬 키워드 검색으로 찾아오는
+// "영업리드 탐색" 기능의 타입입니다.
+export type CompanyLeadSearchRegion = {
+  id: string;
+  companyId: string;
+  label: string;
+  latitude?: number;
+  longitude?: number;
+  createdAt: string;
+};
+
+export type KakaoKeywordLeadSweepResult = {
+  configured: boolean;
+  anchorsUsed: number;
+  callsMade: number;
+  candidatesFound: number;
+  ingest: PermitUploadResult;
 };
 
 export type NearbyPermitLeadResult = {

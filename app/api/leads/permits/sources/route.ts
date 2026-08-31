@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { isGoogleReviewsApiConfigured } from "@/lib/google-reviews";
 import { isGovRestaurantApiConfigured } from "@/lib/gov-restaurant";
+import { isKakaoKeywordLeadSearchConfigured } from "@/lib/kakao-keyword-leads";
 import { isNaverDatalabConfigured } from "@/lib/naver-datalab";
 import { isSeoulOpenDataConfigured } from "@/lib/seoul-restaurant";
 import { getLeadSyncStatus } from "@/lib/store";
@@ -29,7 +30,8 @@ export async function GET(request: NextRequest) {
     },
     sources: {
       govRestaurant: isGovRestaurantApiConfigured(),
-      seoulRestaurant: isSeoulOpenDataConfigured()
+      seoulRestaurant: isSeoulOpenDataConfigured(),
+      kakaoKeywordSearch: isKakaoKeywordLeadSearchConfigured()
     },
     syncStatus
   });
