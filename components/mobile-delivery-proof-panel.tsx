@@ -73,6 +73,9 @@ export function MobileDeliveryProofPanel({
     }
     setFileError("");
     setFile(selected);
+    // 2026-08-31 피드백 대응: 저장 완료 직후 다시 배송완료를 기록하려는(같은 거래처를 하루에 두 번
+    // 방문하는 등) 의도적인 재입력만 버튼을 다시 눌리게 합니다 — 아래 memo onChange와 동일한 이유.
+    if (status === "saved") setStatus("idle");
   }
 
   // 배송완료를 저장하는 순간 좌표를 한 번만(단발성) 확인합니다. watchPosition처럼 계속 추적하지 않고
@@ -221,7 +224,12 @@ export function MobileDeliveryProofPanel({
 
       <textarea
         className="mt-3 min-h-[92px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        onChange={(event) => setMemo(event.target.value)}
+        onChange={(event) => {
+          setMemo(event.target.value);
+          // 저장 성공 직후 버튼이 잠겨 있는 상태에서, 메모를 다시 쓰기 시작하면 새로운 기록임을
+          // 의미하므로 버튼을 다시 활성화합니다(아래 handleFileSelect와 동일한 이유).
+          if (status === "saved") setStatus("idle");
+        }}
         placeholder="예: 후문 냉장창고 앞에 적재 완료했습니다."
         value={memo}
       />
@@ -272,7 +280,7 @@ export function MobileDeliveryProofPanel({
         ) : null}
       </p>
 
-      <Button className="mt-3 h-11 w-full bg-blue-700 font-black hover:bg-blue-800" disabled={saving} onClick={submit}>
+      <Button className="mt-3 h-11 w-full bg-blue-700 font-black hover:bg-blue-800" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
         {saving ? "저장 중" : status === "saved" ? "저장 완료" : "배송완료 저장"}
       </Button>

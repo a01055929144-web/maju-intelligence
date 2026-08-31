@@ -271,6 +271,9 @@ type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCustomers?: ChurnRiskCustomer[];
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
+  /** 2026-08-31 피드백 대응: 물류 출발지 주소가 아직 설정되지 않아 거리 계산이 기본값으로
+   * 이뤄지고 있음을 알리는 배너를 띄울지 여부(고객사 계정에서만, 관리자 미리보기에서는 숨김). */
+  readonly showOriginAddressBanner?: boolean;
   readonly timelineHref?: string;
   readonly vehicleFuelTypes?: Record<string, "gasoline" | "diesel">;
 };
@@ -356,7 +359,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -1536,6 +1539,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       </header>
 
       <div className={`relative flex flex-1 flex-col ${activeView === "map" ? "xl:min-h-0" : ""}`}>
+        {showOriginAddressBanner ? (
+          <div className="shrink-0 px-4 pt-3">
+            <Link
+              className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"
+              href="/dashboard/settings"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>물류 출발지 주소가 아직 설정되지 않아, 배송·영업 거리가 기본 주소 기준으로 계산되고 있습니다. 회사 설정에서 출발지 주소를 등록해주세요.</span>
+              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0" />
+            </Link>
+          </div>
+        ) : null}
         {timelineHref ? (
           <div className="shrink-0 px-4 pt-3 empty:hidden">
             <ChurnRiskAlert companyId={churnRiskCompanyId} initialCustomers={churnRiskCustomers} timelineHref={timelineHref} />
@@ -2475,7 +2490,7 @@ function QuickRegisterDrawer({
 
   return (
     <>
-      <button aria-label="빠른 등록 닫기" className="fixed inset-0 z-40 bg-slate-950/20" onClick={onClose} type="button" />
+      <button aria-label="빠른 등록 닫기" className="fixed inset-0 z-40 bg-slate-950/45" onClick={onClose} type="button" />
       <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl">
         <header className="maju-card-header border-b px-4 py-4">
           <div className="flex items-start justify-between gap-4">
@@ -2583,6 +2598,7 @@ function QuickRegisterDrawer({
             saveCustomer(true);
           }}
           title="중복 의심 거래처"
+          tone="default"
         />
       ) : null}
     </>
@@ -2601,7 +2617,8 @@ function ConfirmDialog({
   message,
   onCancel,
   onConfirm,
-  title
+  title,
+  tone = "destructive"
 }: {
   readonly cancelLabel?: string;
   readonly confirmLabel?: string;
@@ -2609,9 +2626,13 @@ function ConfirmDialog({
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
   readonly title?: string;
+  /** 2026-08-31 UX 감사 대응: 되돌릴 수 없는 파괴적 액션(삭제·병합)만 빨간 버튼(rose)을 쓰고,
+   * 단순 확인(예: 중복 이름이어도 계속 등록)은 브랜드색(teal)을 쓰도록 구분합니다 — 이전에는
+   * 모든 확인 버튼이 빨간색이라, 파괴적이지 않은 작업에도 위험 신호를 줬습니다. */
+  readonly tone?: "destructive" | "default";
 }) {
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4" onClick={onCancel}>
       <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         {title ? <p className="text-sm font-black text-slate-950">{title}</p> : null}
         <p className={`whitespace-pre-line text-sm font-bold leading-6 text-slate-700 ${title ? "mt-2" : ""}`}>{message}</p>
@@ -2619,7 +2640,11 @@ function ConfirmDialog({
           <button className="maju-button-secondary h-9 px-4 text-xs" onClick={onCancel} type="button">
             {cancelLabel}
           </button>
-          <button className="maju-button-primary h-9 bg-rose-600 px-4 text-xs hover:bg-rose-700" onClick={onConfirm} type="button">
+          <button
+            className={`maju-button-primary h-9 px-4 text-xs ${tone === "destructive" ? "bg-rose-600 hover:bg-rose-700" : ""}`}
+            onClick={onConfirm}
+            type="button"
+          >
             {confirmLabel}
           </button>
         </div>
@@ -2791,7 +2816,15 @@ function DeliveryAssignmentPanel({
                             if (deletingVehicleId) return;
                             void handleDelete(vehicle);
                           }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (deletingVehicleId) return;
+                            void handleDelete(vehicle);
+                          }}
                           role="button"
+                          tabIndex={0}
                           title={
                             vehicle.stops.length === 0
                               ? "삭제 · 배정된 거래처가 없어 바로 삭제할 수 있습니다"
@@ -2807,7 +2840,14 @@ function DeliveryAssignmentPanel({
                             event.stopPropagation();
                             setEditingVehicleId(vehicle.id);
                           }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setEditingVehicleId(vehicle.id);
+                          }}
                           role="button"
+                          tabIndex={0}
                           title="편집"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
@@ -5126,7 +5166,7 @@ function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly co
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/30" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
       <div className="h-full w-full max-w-lg overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="min-w-0">
@@ -5748,7 +5788,7 @@ function StoreDetail({
 
   return (
     <>
-      <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
+      <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/45" onClick={onClose} type="button" />
       <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
         <header className="maju-card-header border-b px-4 py-4">
           {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):

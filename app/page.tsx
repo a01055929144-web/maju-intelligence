@@ -2727,7 +2727,7 @@ function DeploymentReadinessChecklist({
           <Badge className="bg-teal-700 text-white">저장 후 체크</Badge>
           <h2 className="mt-3 text-lg font-black text-slate-950">등록 후 확인할 화면</h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-            저장 이력, 거래처 원장, 지도·코스가 같은 고객사 기준으로 이어지는지 확인합니다.
+            등록 이력 조회, 거래처 원장, 지도·코스가 같은 고객사 기준으로 이어지는지 확인합니다.
           </p>
         </div>
         <div className="rounded-md border border-slate-200 bg-white px-4 py-3">

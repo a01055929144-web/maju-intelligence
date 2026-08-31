@@ -2471,7 +2471,7 @@ function PermitLeadDetailPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/30" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
       <div className="h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="min-w-0">

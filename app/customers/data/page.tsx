@@ -98,7 +98,7 @@ export default function CustomerDataManagementPage() {
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
       subtitle="등록 이력, 누락, 미매칭 확인"
-      title="저장 이력"
+      title="등록 이력 조회"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
       <div className="mx-auto max-w-[1560px] space-y-4">

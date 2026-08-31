@@ -83,7 +83,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
         description: "업로드, 저장, 누락 확인",
         href: "/customers/data",
         icon: Database,
-        label: "저장 이력"
+        label: "등록 이력 조회"
       }
     ]
   },

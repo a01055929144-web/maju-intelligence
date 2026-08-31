@@ -2828,7 +2828,7 @@ function AttachmentPreviewModal({
   const isPdf = attachment.mimeType === "application/pdf";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" onClick={onClose}>
       <div
         className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}

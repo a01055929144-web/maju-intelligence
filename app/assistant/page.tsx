@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, ClipboardEdit, FileText, MessageSquareText, Route, Sparkles, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesAssistantDrafts } from "@/lib/store";
@@ -109,7 +110,10 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                   <p className="mt-1 text-xs font-bold text-slate-400">영업 후속 대상</p>
                 </div>
                 <div className="min-w-0">
-                  <p className="font-black text-slate-950">{draft.title}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-black text-slate-950">{draft.title}</p>
+                    <CopyTextButton text={draft.body} />
+                  </div>
                   <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">{draft.body}</p>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-3">

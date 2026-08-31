@@ -69,7 +69,7 @@ export function LoadingPositionGallery({ emptyMessage, items }: { emptyMessage?:
 
       {previewItem ? (
         <div
-          className="fixed inset-0 z-[80] grid place-items-center bg-black/75 p-4"
+          className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/75 p-4"
           onClick={() => setPreviewItem(null)}
         >
           <div className="relative w-full max-w-2xl" onClick={(event) => event.stopPropagation()}>

@@ -177,9 +177,15 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                   {telegramTesting ? "발송 중..." : "테스트 발송"}
                 </Button>
               </div>
-              <p className="text-xs font-semibold leading-5 text-slate-400">
-                21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다. 봇을 그룹에 초대한 뒤 chat_id를 저장하고 테스트 발송으로 확인하세요.
-              </p>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
+                <p>21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다. 설정 방법:</p>
+                <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+                  <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
+                  <li>그룹 chat_id를 확인합니다 — 그룹에 아무 메시지나 보낸 뒤, 브라우저에서 <code className="rounded bg-white px-1 py-0.5">https://api.telegram.org/bot(봇 토큰)/getUpdates</code>에 접속하면 <code className="rounded bg-white px-1 py-0.5">chat.id</code> 값(그룹은 보통 -로 시작하는 숫자)을 확인할 수 있습니다. 봇 토큰은 MAJU 담당자에게 문의하세요.</li>
+                  <li>위 입력칸에 chat_id를 저장한 뒤 "테스트 발송"으로 실제 도착을 확인합니다.</li>
+                </ol>
+                <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 chat_id가 바뀌면 알림이 조용히 끊깁니다 — 주기적으로 테스트 발송으로 확인해주세요.</p>
+              </div>
               {telegramTestMessage ? (
                 <p className={`text-xs font-bold ${telegramTestMessage.includes("실패") || telegramTestMessage.includes("먼저") ? "text-rose-600" : "text-emerald-700"}`}>
                   {telegramTestMessage}

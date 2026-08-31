@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
+  Building2,
   LogOut,
   MapPinned,
   MessageSquareText,
@@ -199,18 +200,36 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             <div className={`border-t border-slate-200/80 bg-white ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
               {collapsed ? (
-                <Link aria-label={settingsLabel} className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
-                  <Settings className="h-4 w-4" />
-                </Link>
+                <>
+                  {mode === "customer" ? (
+                    <Link aria-label="작업공간 전환" className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href="/workspaces" title="작업공간 전환">
+                      <Building2 className="h-4 w-4" />
+                    </Link>
+                  ) : null}
+                  <Link aria-label={settingsLabel} className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                    <Settings className="h-4 w-4" />
+                  </Link>
+                </>
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-black text-slate-950">{companyName}</p>
                     {userName ? <p className="truncate text-xs font-bold text-slate-500">{userName}님</p> : null}
                   </div>
-                  <Link aria-label={settingsLabel} className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
-                    <Settings className="h-4 w-4" />
-                  </Link>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {mode === "customer" ? (
+                      // 2026-08-31 완성도 감사 대응: 다중 워크스페이스 계정이 로그인 직후가 아니면
+                      // 다른 회사/개인 공간으로 전환할 방법이 없어(로그아웃 후 재로그인해야 함) 추가.
+                      // /workspaces는 워크스페이스가 1개뿐이면 자동으로 지도 홈으로 돌려보내므로,
+                      // 항상 노출해도 안전합니다.
+                      <Link aria-label="작업공간 전환" className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href="/workspaces" title="작업공간 전환">
+                        <Building2 className="h-4 w-4" />
+                      </Link>
+                    ) : null}
+                    <Link aria-label={settingsLabel} className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                      <Settings className="h-4 w-4" />
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>

@@ -312,7 +312,7 @@ function MappingWorkspaceModal({
   const unmappedColumnCount = headers.filter((header) => !mappedByHeader[header]).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/55 p-3 backdrop-blur-sm md:p-4">
+    <div className="fixed inset-0 z-50 bg-slate-950/45 p-3 md:p-4">
       <div className="maju-section-card mx-auto flex h-full max-w-[1760px] flex-col overflow-hidden shadow-2xl">
         <div className="maju-card-header grid gap-4 bg-white px-4 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,auto)] xl:items-center">
           <div className="min-w-0">

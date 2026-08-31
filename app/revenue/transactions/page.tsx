@@ -221,7 +221,7 @@ export default async function RevenueTransactionsPage({
               <div className="grid gap-2 p-4">
                 <InsightRow icon={UploadCloud} label="업로드 방식" value="ERP 거래원장 반복 업데이트" />
                 <InsightRow icon={CalendarDays} label="분석 기준" value={sales.latestSalesDate ? `${sales.latestSalesDate} 최신 매출일` : "업로드 후 자동 갱신"} />
-                <InsightRow icon={TrendingUp} label="다음 개선" value="월별 증감, 품목 이탈, 거래처 등급 변동 추적" />
+                <InsightRow icon={TrendingUp} label="개발 예정(아직 미제공)" value="월별 증감, 품목 이탈, 거래처 등급 변동 추적" />
               </div>
             </section>
           </div>

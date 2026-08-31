@@ -26,6 +26,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     getDeliveryVehicleFuelTypes(companyId).catch(() => ({}))
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
+  // 2026-08-31 피드백 대응: 회원가입 단계는 물류 출발지 주소를 받지 않아, 고객사가 회사 설정에서
+  // 직접 채우기 전까지는 모든 배송/영업 거리 계산이 조용히 기본값(마주식자재 창고 주소)으로
+  // 이뤄집니다. 고객사 화면에서는 이를 알아챌 방법이 없었으므로 배너로 알립니다.
+  const showOriginAddressBanner = Boolean(customerSession) && !company.originAddress?.trim();
   const churnRiskCustomerIds = new Set(churnRiskCustomers.map((customer) => customer.customerId));
   const baseMapMarkers = hasOperationalCustomerMaster
     ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
@@ -57,6 +61,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           companyName={customerSession?.companyName || company.name}
           mapMarkers={mapMarkers}
           routePlan={routePlan}
+          showOriginAddressBanner={showOriginAddressBanner}
           timelineHref={timelineHref}
           vehicleFuelTypes={vehicleFuelTypes}
         />
