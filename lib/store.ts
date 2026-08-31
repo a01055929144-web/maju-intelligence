@@ -6393,47 +6393,61 @@ export async function refreshPermitLeadRecommendationScores(companyId: string, r
     .slice(0, 3)
     .map(([industry]) => industry);
 
-  let updated = 0;
-  await Promise.all(
-    nearbyResult.leads.map(async (lead) => {
-      const industryKnown = lead.industryPrimary !== "미분류";
-      const industryMatchesTop = topIndustries.includes(lead.industryPrimary);
-      const baseIndustryFit = !lead.isTargetIndustry ? 0 : industryKnown ? 20 : 10;
-      // 상위 업종과 일치하면 20점 만점을 보장하고(이미 최고점이면 그대로), 아니면 기존 계산을 씁니다 —
-      // "성사 확률이 높은 곳"을 상위 업종 일치 리드로 자연스럽게 끌어올리기 위함입니다.
-      const industryFit = industryMatchesTop && lead.isTargetIndustry ? 20 : baseIndustryFit;
+  const nowIso = new Date().toISOString();
+  const updateRows = nearbyResult.leads.map((lead) => {
+    const industryKnown = lead.industryPrimary !== "미분류";
+    const industryMatchesTop = topIndustries.includes(lead.industryPrimary);
+    const baseIndustryFit = !lead.isTargetIndustry ? 0 : industryKnown ? 20 : 10;
+    // 상위 업종과 일치하면 20점 만점을 보장하고(이미 최고점이면 그대로), 아니면 기존 계산을 씁니다 —
+    // "성사 확률이 높은 곳"을 상위 업종 일치 리드로 자연스럽게 끌어올리기 위함입니다.
+    const industryFit = industryMatchesTop && lead.isTargetIndustry ? 20 : baseIndustryFit;
 
-      const scoreBreakdown = computePermitLeadScoreBreakdown({
-        leadPeriod: lead.leadPeriod,
-        isTarget: lead.isTargetIndustry,
-        industryKnown,
-        hasPhone: Boolean(lead.phone),
-        hasAddress: Boolean(lead.address),
-        keywordVolume: lead.keywordVolume,
-        reviewCount: lead.reviewCount,
-        rating: lead.rating
-      });
-      scoreBreakdown.industry_fit_score = industryFit;
-      scoreBreakdown.route_fit_score = routeFitScoreFromDistanceKm(lead.distanceKm);
-      const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
+    const scoreBreakdown = computePermitLeadScoreBreakdown({
+      leadPeriod: lead.leadPeriod,
+      isTarget: lead.isTargetIndustry,
+      industryKnown,
+      hasPhone: Boolean(lead.phone),
+      hasAddress: Boolean(lead.address),
+      keywordVolume: lead.keywordVolume,
+      reviewCount: lead.reviewCount,
+      rating: lead.rating
+    });
+    scoreBreakdown.industry_fit_score = industryFit;
+    scoreBreakdown.route_fit_score = routeFitScoreFromDistanceKm(lead.distanceKm);
+    const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
 
-      await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(lead.id)}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({
-          score_total: scoreTotal,
-          score_breakdown: scoreBreakdown,
-          grade: permitLeadGradeFromScore(scoreTotal),
-          updated_at: new Date().toISOString()
-        })
-      }).catch(() => null);
-      updated += 1;
-    })
-  );
+    return {
+      id: lead.id,
+      // upsert는 내부적으로 "충돌 시 이 값으로 갱신"이지만 시도하는 INSERT 자체가 NOT NULL
+      // 제약(company_id, business_name)을 만족해야 해서(PostgreSQL이 ON CONFLICT 판단 전에
+      // 삽입 행을 먼저 구성함) 갱신하지 않는 값이라도 반드시 같이 보내야 합니다.
+      company_id: companyId,
+      business_name: lead.businessName,
+      score_total: scoreTotal,
+      score_breakdown: scoreBreakdown,
+      grade: permitLeadGradeFromScore(scoreTotal),
+      updated_at: nowIso
+    };
+  });
+
+  // 2026-08-31 성능 감사 대응: 반경 안 리드가 수백 건이면 예전 코드는 리드마다 개별 PATCH를
+  // 병렬로(그래도 수백 번의 개별 HTTP 왕복) 보냈습니다. id 충돌 시 병합하는 벌크 upsert(다른 곳의
+  // on_conflict=id 패턴과 동일)로 한 번의 요청에 전부 담아 보냅니다. 500건 단위로만 나눠 보내
+  // 요청 본문이 과도하게 커지는 것을 막습니다.
+  const BULK_UPDATE_CHUNK_SIZE = 500;
+  for (let i = 0; i < updateRows.length; i += BULK_UPDATE_CHUNK_SIZE) {
+    const rowsChunk = updateRows.slice(i, i + BULK_UPDATE_CHUNK_SIZE);
+    // eslint-disable-next-line no-await-in-loop
+    await supabaseRequest("business_permit_leads?on_conflict=id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(rowsChunk)
+    }).catch(() => null);
+  }
 
   return {
     ok: true,
-    updated,
+    updated: updateRows.length,
     topIndustries,
     unresolvedAnchorCount: nearbyResult.unresolvedAnchorCount,
     unresolvedLeadCount: nearbyResult.unresolvedLeadCount

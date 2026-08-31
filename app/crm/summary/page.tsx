@@ -215,13 +215,20 @@ export default function CrmSummaryPage() {
     }
 
     async function loadSummary() {
+      // 2026-08-31 성능 감사 대응: 배치별 ID 목록이 이미 다 정해져 있어(이전 배치 응답에 의존하지
+      // 않음) 순차로 기다릴 이유가 없습니다. 예전엔 for...await로 배치 수만큼 왕복을 직렬로
+      // 쌓았는데, Promise.all로 한 번에 병렬 요청하도록 바꿨습니다.
       const merged: Record<string, OperationsSummaryEntry> = {};
-      for (const batch of chunk(ids, 150)) {
-        const response = await fetch(withCompanyQuery(`/api/customer-operations/summary?customerIds=${batch.map(encodeURIComponent).join(",")}`), {
-          cache: "no-store"
-        });
-        if (!response.ok) continue;
-        const payload = await response.json().catch(() => null);
+      const results = await Promise.all(
+        chunk(ids, 150).map(async (batch) => {
+          const response = await fetch(withCompanyQuery(`/api/customer-operations/summary?customerIds=${batch.map(encodeURIComponent).join(",")}`), {
+            cache: "no-store"
+          });
+          if (!response.ok) return null;
+          return response.json().catch(() => null);
+        })
+      );
+      for (const payload of results) {
         Object.assign(merged, payload?.summary || {});
       }
       return merged;

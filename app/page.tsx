@@ -133,7 +133,7 @@ function getUploadTypeFromUrl(): UploadTemplateType {
 export default function Home() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
-  const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
+  const { companyName: sessionCompanyName, userName: sessionUserName, workspaceRole: sessionWorkspaceRole } = useCustomerIdentity(isAdminPreview);
   const [screen, setScreen] = useState<"briefing" | "onboarding" | "report">("onboarding");
   const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
@@ -550,6 +550,7 @@ export default function Home() {
       subtitle="아직 없는 거래처 또는 매출 데이터를 새로 등록합니다."
       title="거래처 관리 · 등록"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
+      workspaceRole={isAdminPreview ? undefined : sessionWorkspaceRole || undefined}
     >
       <div className="mx-auto max-w-[1880px] space-y-3">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
@@ -625,6 +626,13 @@ function useAdminCompanyId() {
 function useCustomerIdentity(isAdminPreview: boolean) {
   const [companyName, setCompanyName] = useState("");
   const [userName, setUserName] = useState("");
+  // 2026-08-31 성능 감사 대응: 이 훅이 이미 /api/customer/me를 호출하는데, CustomerAppShell도
+  // workspaceRole을 못 받으면 같은 엔드포인트를 또 호출합니다. 여기서 workspaceRole까지 함께
+  // 받아 CustomerAppShell에 prop으로 내려주면, 최초 마운트 시 두 효과가 거의 동시에 실행돼
+  // 첫 요청 자체는 여전히 두 번 나가지만(이 페이지가 서버 컴포넌트가 아니라 세션을 클라이언트에서
+  // 가져오는 구조라 완전히 없애려면 더 큰 리팩터가 필요합니다), 이후 이 값이 바뀌는 리렌더에서는
+  // CustomerAppShell의 기존 가드(workspaceRole prop이 있으면 fetch 안 함)가 재요청을 막아줍니다.
+  const [workspaceRole, setWorkspaceRole] = useState("");
   useEffect(() => {
     if (isAdminPreview) return;
     let ignore = false;
@@ -634,13 +642,14 @@ function useCustomerIdentity(isAdminPreview: boolean) {
         if (ignore || !payload?.session) return;
         setCompanyName(payload.session.companyName || "");
         setUserName(payload.session.name || "");
+        setWorkspaceRole(payload.session.workspaceRole || "");
       })
       .catch(() => undefined);
     return () => {
       ignore = true;
     };
   }, [isAdminPreview]);
-  return { companyName, userName };
+  return { companyName, userName, workspaceRole };
 }
 
 function WorkspaceModeTabs({
