@@ -6,6 +6,7 @@ import { Lock, LogIn, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -19,9 +20,10 @@ export default function AdminLoginPage() {
     setError("");
 
     // 2026-08-31 에러 처리 감사 대응: fetch가 실패(네트워크 끊김 등)해도 setLoading(false)가
-    // 실행되도록 try/finally로 감싸, 버튼이 영구히 잠기지 않게 합니다.
+    // 실행되도록 try/finally로 감싸, 버튼이 영구히 잠기지 않게 합니다. fetchWithTimeout을 써서
+    // 서버가 응답 없이 연결만 붙들고 있는 경우(방화벽 드롭 등)에도 무한 대기하지 않습니다.
     try {
-      const response = await fetch("/api/admin/login", {
+      const response = await fetchWithTimeout("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
@@ -33,8 +35,8 @@ export default function AdminLoginPage() {
       }
 
       window.location.href = "/admin";
-    } catch {
-      setError("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+    } catch (error) {
+      setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
     } finally {
       setLoading(false);
     }

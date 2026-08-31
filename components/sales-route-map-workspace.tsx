@@ -83,6 +83,8 @@ import {
   RoutePlanStop
 } from "@/lib/store";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
@@ -213,6 +215,7 @@ type StoreEdit = Partial<
     | "reviewKeywords"
     | "reviewSource"
     | "status"
+    | "updatedAt"
   >
 >;
 type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver" | "fuelType" | "name">>;
@@ -1085,13 +1088,28 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     setStoreEditsSavedAt((current) => ({ ...current, [storeId]: Date.now() }));
 
     try {
-      const response = await fetch("/api/customers", {
+      const response = await fetchWithTimeout("/api/customers", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toCustomerPayload(nextStore))
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
+      // 2026-08-31 개선: 동시 편집 감지(낙관적 동시성 제어). 서버가 이 화면이 마지막으로 읽은
+      // updated_at과 현재 값이 다르다고 판단하면(그 사이 다른 사람이 먼저 저장) conflict: true를
+      // 돌려주고 실제로는 저장하지 않습니다 — 여기서 명확한 에러로 바꿔 아래 catch의 롤백 경로를
+      // 그대로 타게 합니다(방금 낙관적으로 반영한 값을 되돌려야 하므로).
+      if (payload?.conflict) {
+        throw new Error("다른 사용자가 방금 이 정보를 수정했습니다. 새로고침 후 다시 시도해주세요.");
+      }
+      // 다음 저장에서도 동시 편집 감지가 계속 동작하도록, 서버가 이번에 실제로 반영한 updated_at을
+      // 로컬 편집 상태에 함께 남겨둡니다.
+      if (payload?.customer?.updatedAt) {
+        setStoreEdits((current) => ({
+          ...current,
+          [storeId]: { ...current[storeId], updatedAt: payload.customer.updatedAt }
+        }));
+      }
       return { persisted: payload?.persisted !== false };
     } catch (error) {
       // 저장이 실패했으니(네트워크 오류 포함) 낙관적으로 반영했던 값을 이전 상태로 되돌립니다 —
@@ -2444,6 +2462,18 @@ function QuickRegisterDrawer({
   // 발견하면 바로 저장하지 않고 이 상태에 그 목록을 담아 확인창을 띄웁니다. 사용자가 "그래도 등록"을
   // 선택해야만 confirmDuplicate: true로 다시 요청을 보내 실제로 저장합니다.
   const [duplicateMatches, setDuplicateMatches] = useState<PossibleDuplicateCustomer[] | null>(null);
+  // 2026-08-31 에러 처리/복원력 감사 후속: 카카오 검색 결과로 채워진 값을 그대로 두거나(=아직
+  // 손대지 않음) 이미 등록을 마쳤다면 이탈 경고를 띄우지 않고, 사용자가 실제로 뭔가 고치거나
+  // 담당자/배송차를 지정했을 때만(=저장 안 하고 나가면 다시 입력해야 함) 경고합니다.
+  const isDraftDirty =
+    !createdCustomer &&
+    (customerName !== (result.name || "") ||
+      address !== (result.roadAddress || result.address || "") ||
+      phone !== (result.phone || "") ||
+      industry !== (result.industry || "") ||
+      Boolean(deliveryManager) ||
+      Boolean(deliveryVehicle));
+  useUnsavedChangesWarning(isDraftDirty);
 
   async function saveCustomer(confirmDuplicate = false) {
     if (!customerName.trim() || isSaving) return;
@@ -2453,7 +2483,7 @@ function QuickRegisterDrawer({
 
     try {
       const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-      const response = await fetch("/api/customers", {
+      const response = await fetchWithTimeout("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3247,6 +3277,9 @@ export function StoreQuickCard({
   const [isMemoEditing, setIsMemoEditing] = useState(false);
   const [memoDraft, setMemoDraft] = useState("");
   const [isSavingMemo, setIsSavingMemo] = useState(false);
+  // 2026-08-31 에러 처리 감사 후속: 이 카드의 저장(메모/전체 편집)은 실패해도 화면에 아무 표시가
+  // 없어 사용자가 저장이 안 됐다는 것을 알 방법이 없었습니다(네트워크 오류·동시 편집 충돌 포함).
+  const [saveError, setSaveError] = useState("");
   // 출입방법 비밀번호는 카드가 열려 있는 동안 실수로 어깨너머로 노출되지 않도록 기본은 가려두고,
   // 필요할 때만 눌러서 확인합니다.
   const [showAccessPassword, setShowAccessPassword] = useState(false);
@@ -3291,6 +3324,7 @@ export function StoreQuickCard({
     setIsMemoEditing(false);
     setShowAccessPassword(false);
     setDragOffset({ x: 0, y: 0 });
+    setSaveError("");
   }, [store.id]);
 
   function onDragHandleMouseDown(event: MouseEvent) {
@@ -3313,14 +3347,18 @@ export function StoreQuickCard({
   function startMemoEdit() {
     setMemoDraft(store.memo || "");
     setIsMemoEditing(true);
+    setSaveError("");
   }
 
   async function saveMemo() {
     if (!onSave || isSavingMemo) return;
     setIsSavingMemo(true);
+    setSaveError("");
     try {
       await onSave({ memo: memoDraft });
       setIsMemoEditing(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "메모 저장에 실패했습니다.");
     } finally {
       setIsSavingMemo(false);
     }
@@ -3329,9 +3367,12 @@ export function StoreQuickCard({
   async function handleSave() {
     if (!onSave) return;
     setIsSaving(true);
+    setSaveError("");
     try {
       await onSave(draft);
       setIsEditing(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "거래처 정보 저장에 실패했습니다.");
     } finally {
       setIsSaving(false);
     }
@@ -3502,6 +3543,7 @@ export function StoreQuickCard({
                   {isSavingMemo ? "저장 중" : "저장"}
                 </button>
               </div>
+              {saveError ? <p className="mt-1 text-right text-[10.5px] font-bold text-rose-600">{saveError}</p> : null}
             </div>
           </div>
         ) : !isEditing && onSave ? (
@@ -3586,6 +3628,7 @@ export function StoreQuickCard({
               placeholder="메모"
               value={draft.memo}
             />
+            {saveError ? <p className="text-right text-[10.5px] font-bold text-rose-600">{saveError}</p> : null}
             <div className="flex items-center justify-end gap-1.5">
               <button className="maju-button-secondary h-8 px-3 text-xs" disabled={isSaving} onClick={() => setIsEditing(false)} type="button">
                 취소
@@ -3612,7 +3655,14 @@ export function StoreQuickCard({
             )}
             <div className="mt-1.5 flex items-center justify-end gap-2">
               {onSave ? (
-                <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
+                <button
+                  className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
+                  onClick={() => {
+                    setSaveError("");
+                    setIsEditing(true);
+                  }}
+                  type="button"
+                >
                   <Edit3 className="h-3.5 w-3.5" />
                 </button>
               ) : null}
@@ -6539,16 +6589,25 @@ function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly c
     const files = Array.from(fileList || []);
     if (!files.length || saveState === "saving") return;
 
-    const oversizedFile = files.find((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
-    if (oversizedFile) {
+    const oversizedFiles = files.filter((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
+    if (oversizedFiles.length) {
       setSaveState("error");
-      setSaveError(`${oversizedFile.name} 용량이 ${formatUploadSizeMb(oversizedFile.size)}로 최대 50MB를 초과합니다.`);
+      setSaveError(
+        oversizedFiles.length === 1
+          ? `${oversizedFiles[0].name} 용량이 ${formatUploadSizeMb(oversizedFiles[0].size)}로 최대 50MB를 초과합니다.`
+          : `${oversizedFiles.length}개 파일이 최대 50MB를 초과해 업로드할 수 없습니다: ${oversizedFiles.map((file) => file.name).join(", ")}`
+      );
       return;
     }
 
     setSaveError("");
     setSaveState("saving");
 
+    // 2026-08-31 에러 처리/복원력 감사 후속: 예전에는 파일 하나가 실패하면 그 자리에서 멈춰
+    // 나머지 파일은 시도조차 하지 않고 조용히 버려졌습니다. 이제 모든 파일을 끝까지 시도하고,
+    // 실패한 파일이 있으면 몇 개가 성공했는지와 실패한 파일 이름을 함께 보여줍니다.
+    const failedFileNames: string[] = [];
+    let successCount = 0;
     for (const file of files) {
       const formData = new FormData();
       formData.append("file", file);
@@ -6558,13 +6617,22 @@ function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly c
 
       const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
       if (!response?.ok) {
-        setSaveState("error");
-        setSaveError(`${file.name} 업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.`);
-        return;
+        failedFileNames.push(file.name);
+        continue;
       }
+      successCount += 1;
     }
 
-    setSaveState("idle");
+    if (failedFileNames.length) {
+      setSaveState("error");
+      setSaveError(
+        successCount
+          ? `${successCount}/${files.length}개 업로드 완료, 실패: ${failedFileNames.join(", ")} (다시 시도해주세요)`
+          : `업로드에 실패했습니다: ${failedFileNames.join(", ")}`
+      );
+    } else {
+      setSaveState("idle");
+    }
     await loadItems();
   }
 
@@ -7147,7 +7215,11 @@ function toCustomerPayload(store: StoreRow) {
     reviewSummary: store.reviewSummary,
     reviewKeywords: store.reviewKeywords,
     reviewSource: store.reviewSource,
-    visitCount: Number(store.order || 0)
+    visitCount: Number(store.order || 0),
+    // 동시 편집 감지(낙관적 동시성 제어)용: 이 화면이 마지막으로 읽은 updated_at을 그대로 실어
+    // 보내, 그 사이 다른 사람이 먼저 저장했는지 서버가 확인할 수 있게 합니다. updateStore()가
+    // 저장 성공/실패에 따라 항상 최신 값으로 갱신해둡니다.
+    expectedUpdatedAt: store.updatedAt
   };
 }
 

@@ -122,10 +122,14 @@ function AttachmentSlot({
     const files = Array.from(fileList || []);
     if (!files.length || saveState === "saving") return;
 
-    const oversizedFile = files.find((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
-    if (oversizedFile) {
+    const oversizedFiles = files.filter((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
+    if (oversizedFiles.length) {
       setSaveState("error");
-      setErrorMessage(`${oversizedFile.name} 용량이 ${formatUploadSizeMb(oversizedFile.size)}로 최대 50MB를 초과합니다.`);
+      setErrorMessage(
+        oversizedFiles.length === 1
+          ? `${oversizedFiles[0].name} 용량이 ${formatUploadSizeMb(oversizedFiles[0].size)}로 최대 50MB를 초과합니다.`
+          : `${oversizedFiles.length}개 파일이 최대 50MB를 초과해 업로드할 수 없습니다: ${oversizedFiles.map((file) => file.name).join(", ")}`
+      );
       return;
     }
 
@@ -133,6 +137,12 @@ function AttachmentSlot({
     setUploadCount(files.length);
     setSaveState("saving");
 
+    // 2026-08-31 에러 처리/복원력 감사 후속: 예전에는 파일 하나가 실패하면 그 자리에서 멈춰
+    // 나머지 파일은 시도조차 하지 않고 조용히 버려졌고, 오류 메시지도 실패한 파일 하나만
+    // 언급해 몇 개가 실제로 성공했는지 알 수 없었습니다. 이제 모든 파일을 끝까지 시도하고,
+    // 성공/실패 개수와 실패한 파일 이름을 함께 보여줍니다.
+    const failedFileNames: string[] = [];
+    let successCount = 0;
     for (const file of files) {
       const formData = new FormData();
       formData.append("file", file);
@@ -145,14 +155,27 @@ function AttachmentSlot({
       const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
 
       if (!response?.ok) {
-        const payload = (await response?.json().catch(() => null)) as { message?: string } | null;
-        setSaveState("error");
-        setErrorMessage(payload?.message || `${file.name} 업로드에 실패했습니다. 다시 시도해주세요.`);
-        return;
+        failedFileNames.push(file.name);
+        continue;
       }
 
       const payload = (await response.json().catch(() => null)) as { attachment?: AttachmentItem } | null;
-      if (payload?.attachment) onUploaded(payload.attachment);
+      if (payload?.attachment) {
+        onUploaded(payload.attachment);
+        successCount += 1;
+      } else {
+        failedFileNames.push(file.name);
+      }
+    }
+
+    if (failedFileNames.length) {
+      setSaveState("error");
+      setErrorMessage(
+        successCount
+          ? `${successCount}/${files.length}개 업로드 완료, 실패: ${failedFileNames.join(", ")} (다시 시도해주세요)`
+          : `업로드에 실패했습니다: ${failedFileNames.join(", ")}`
+      );
+      return;
     }
 
     setSaveState("saved");

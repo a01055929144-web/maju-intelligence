@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 const RECENT_LOGIN_STORAGE_KEY = "maju_recent_customer_login";
 
@@ -21,7 +22,7 @@ function readRecentLoginEmail() {
 }
 
 async function resolvePostLoginPath() {
-  const response = await fetch("/api/customer/workspaces").catch(() => null);
+  const response = await fetchWithTimeout("/api/customer/workspaces").catch(() => null);
   if (!response?.ok) return "/dashboard";
   const data = (await response.json().catch(() => null)) as { workspaces?: unknown[] } | null;
   return data?.workspaces && data.workspaces.length > 1 ? "/workspaces" : "/dashboard";
@@ -42,9 +43,10 @@ export default function CustomerLoginPage() {
     // 2026-08-31 에러 처리 감사 대응: fetch에 catch가 없어 네트워크가 끊긴 채로 로그인을
     // 시도하면 setLoading(false)가 실행되지 않고 버튼이 영구히 잠긴 채 아무 안내도 없이
     // 멈춰 있었습니다(unhandled rejection). try/finally로 감싸 항상 로딩 상태를 풀고,
-    // 네트워크 자체가 실패한 경우에는 별도 안내 문구를 보여줍니다.
+    // 네트워크 자체가 실패한 경우에는 별도 안내 문구를 보여줍니다. fetchWithTimeout을 써서
+    // 서버가 응답 없이 연결만 붙들고 있는 경우(방화벽 드롭 등)에도 무한 대기하지 않습니다.
     try {
-      const response = await fetch("/api/customer/login", {
+      const response = await fetchWithTimeout("/api/customer/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: nextEmail, password: nextPassword, remember })
@@ -62,8 +64,8 @@ export default function CustomerLoginPage() {
       }
       setRecentLoginEmail(nextEmail);
       window.location.href = await resolvePostLoginPath();
-    } catch {
-      setError("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+    } catch (error) {
+      setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
     } finally {
       setLoading(false);
     }

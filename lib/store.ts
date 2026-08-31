@@ -134,6 +134,10 @@ export type CustomerMasterItem = {
   reviewSource?: string;
   reviewsUpdatedAt?: string;
   visitCount: number;
+  // 동시 편집 감지(낙관적 동시성 제어)용 마지막 수정 시각. 편집 화면이 이 값을 저장해뒀다가
+  // 다음 저장 요청에 expectedUpdatedAt으로 그대로 실어 보내면, 그 사이 다른 사람이 먼저 저장했는지
+  // 서버가 확인할 수 있습니다.
+  updatedAt?: string;
 };
 export type CustomerMasterInput = {
   address?: string;
@@ -169,6 +173,9 @@ export type CustomerMasterInput = {
   reviewKeywords?: string[];
   reviewSource?: string;
   visitCount?: number;
+  // 편집 화면이 마지막으로 읽은 updated_at(동시 편집 감지용). 기존 거래처를 수정하는 요청에서만
+  // 의미가 있고, 값이 없으면(레거시 호출부 등) 동시성 검사를 건너뛰고 기존처럼 동작합니다.
+  expectedUpdatedAt?: string;
 };
 export type CustomerMasterAuditContext = {
   actorName?: string;
@@ -238,6 +245,9 @@ export type RoutePlanStop = LeadItem & {
   reviewsUpdatedAt?: string;
   routeCalculatedAt?: string;
   routeProvider?: "tmap" | "estimated" | "cached";
+  // 동시 편집 감지(낙관적 동시성 제어)용. 편집 화면이 이 값을 저장해뒀다가 다음 저장 요청에
+  // expectedUpdatedAt으로 실어 보냅니다. lib/store.ts의 CustomerMasterItem.updatedAt 참고.
+  updatedAt?: string;
 };
 export type RoutePlanGroup = {
   region: string;
@@ -630,6 +640,9 @@ const CUSTOMER_MASTER_SELECT_WITH_REVIEWS = `${CUSTOMER_MASTER_SELECT_WITH_DELIV
 // "거래처의 출입방법과 비밀번호를 저장해야해. 놓친 것 같아"). supabase/migrations/20260824_customer_access_method.sql을
 // 아직 실행하지 않은 환경에서도 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
 const CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD = `${CUSTOMER_MASTER_SELECT_WITH_REVIEWS},access_method_type,access_note,access_password`;
+// 동시 편집 감지(낙관적 동시성 제어)용 updated_at입니다. supabase/migrations/20260831c_normalized_customers_updated_at.sql을
+// 아직 실행하지 않은 환경에서도 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
+const CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY = `${CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD},updated_at`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -2927,6 +2940,7 @@ export async function getCustomerMaster(
     review_keywords?: string[] | null;
     review_source?: string | null;
     reviews_updated_at?: string | null;
+    updated_at?: string | null;
   };
   let rows: CustomerMasterRow[];
 
@@ -2936,6 +2950,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
     CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD,
     CUSTOMER_MASTER_SELECT_WITH_REVIEWS,
     CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE,
@@ -3070,9 +3085,15 @@ export async function upsertCustomerMaster(
   // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 병합되지 않도록 합니다.
   const normalizedKey =
     businessNumber && !exemptBusinessNumbers.has(businessNumber) ? businessNumber : makeCustomerKey(customerName, input.address || "");
-  const existingRows = await supabaseRequest<Array<{ id: string }>>(
-    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
-  ).catch(() => []);
+  // updated_at도 함께 읽어 아래 동시 편집 감지(낙관적 동시성 제어)에 사용합니다. 이 컬럼이 아직
+  // 없는 환경(마이그레이션 미적용)에서도 나머지 저장 로직이 깨지지 않도록 실패 시 컬럼 없이 재시도합니다.
+  const existingRows = await supabaseRequest<Array<{ id: string; updated_at?: string | null }>>(
+    `normalized_customers?select=id,updated_at&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+  ).catch(() =>
+    supabaseRequest<Array<{ id: string; updated_at?: string | null }>>(
+      `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+    ).catch(() => [])
+  );
   // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 위 normalized_key가 정확히 일치할 때는
   // 같은 거래처로 보고 그대로 업데이트하면 되지만, 키가 달라 "신규 등록"으로 처리될 상황에서도 상호명이
   // 이미 등록된 다른 거래처와 완전히 같다면(주소 표기가 살짝 달라 키만 갈린 경우 등) 사용자에게 먼저
@@ -3147,10 +3168,32 @@ export async function upsertCustomerMaster(
   if (input.accessMethodType !== undefined) accessMethodFields.access_method_type = input.accessMethodType || null;
   if (input.accessNote !== undefined) accessMethodFields.access_note = input.accessNote || null;
   if (input.accessPassword !== undefined) accessMethodFields.access_password = input.accessPassword || null;
+  // 2026-08-31 에러 처리/복원력 감사 후속(동시 편집 감지): 저장할 때마다 updated_at을 현재
+  // 시각으로 갱신합니다. updated_at 컬럼이 아직 없는 환경(마이그레이션 미적용)에서도 나머지 저장이
+  // 깨지지 않도록, 다른 선택 컬럼들과 마찬가지로 가장 넓은 티어에만 포함시켜 컬럼 없음 에러를
+  // 만나면 자동으로 빠지도록 합니다.
+  const concurrencyFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  // 편집 화면이 마지막으로 읽은 updated_at을 함께 보냈고(input.expectedUpdatedAt), 서버가 방금
+  // 조회한 기존 행에도 updated_at이 있다면(= 컬럼이 존재하는 환경) 그 사이 다른 사람이 먼저
+  // 저장했는지 확인합니다. 둘 중 하나라도 없으면(신규 등록, 레거시 호출부, 마이그레이션 미적용
+  // 환경) 검사를 건너뛰고 기존처럼 동작합니다.
+  const concurrencyCheck =
+    existingRows.length && input.expectedUpdatedAt && existingRows[0].updated_at
+      ? { id: existingRows[0].id, expectedUpdatedAt: input.expectedUpdatedAt }
+      : undefined;
   // 가장 넓은 페이로드(모든 선택 컬럼 포함)부터 시도하고, "컬럼 없음" 에러를 만나면 그 선택 컬럼
   // 묶음만 제외한 다음 티어로 재시도합니다. 위 getCustomerMaster()의 select 캐스케이드와 동일한
   // 원칙(특정 컬럼 이름을 매칭하지 않고 generic한 42703/does not exist 판별만 사용)을 씁니다.
   const UPSERT_PAYLOAD_TIERS = [
+    {
+      ...customerPayload,
+      ...placeLinks,
+      ...hoursMenuFields,
+      ...deliveryVehicleField,
+      ...reviewFields,
+      ...accessMethodFields,
+      ...concurrencyFields
+    },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields, ...accessMethodFields },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields },
     { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField },
@@ -3162,7 +3205,7 @@ export async function upsertCustomerMaster(
   let rows: Array<Record<string, unknown>> | null = null;
   for (const payload of UPSERT_PAYLOAD_TIERS) {
     try {
-      rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload);
+      rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload, concurrencyCheck);
       break;
     } catch (error) {
       if (!isMissingColumnError(error)) throw error;
@@ -3170,6 +3213,16 @@ export async function upsertCustomerMaster(
     }
   }
   if (!rows) throw lastUpsertError instanceof Error ? lastUpsertError : new Error(String(lastUpsertError));
+  // PATCH가 조건(updated_at=eq.expected)에 맞는 행을 찾지 못했다면(=그 사이 다른 사람이 먼저
+  // 저장했다면) rows가 빈 배열로 돌아옵니다. 예외가 아니라 정상 응답이므로 위 컬럼-없음 재시도
+  // 루프는 그대로 통과하지만, 저장은 실제로 반영되지 않았으므로 충돌로 보고합니다.
+  if (concurrencyCheck && rows.length === 0) {
+    return {
+      customer: fallbackItem,
+      persisted: false,
+      conflict: true as const
+    };
+  }
   const savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
 
   await writeAdminAuditLog({
@@ -3202,7 +3255,27 @@ export async function upsertCustomerMaster(
   };
 }
 
-async function upsertNormalizedCustomerWithOptionalPlaceLinks(payload: Record<string, unknown>) {
+async function upsertNormalizedCustomerWithOptionalPlaceLinks(
+  payload: Record<string, unknown>,
+  concurrency?: { id: string; expectedUpdatedAt: string }
+) {
+  // 동시 편집 감지가 걸려 있으면(기존 행을 수정하는 요청이고, 클라이언트가 마지막으로 읽은
+  // updated_at을 보냈다면) on_conflict 업서트 대신 조건부 PATCH로 바꿔, WHERE 절의
+  // updated_at=eq.<expected>가 그 사이 바뀌었으면 아무 행도 갱신되지 않도록 합니다(0행 응답 =
+  // 충돌, 위 호출부에서 판별). on_conflict 업서트는 PostgREST 특성상 이런 조건부 갱신을 표현할
+  // 수 없어 이 경우에만 별도 경로를 씁니다.
+  if (concurrency) {
+    return supabaseRequest<Array<Record<string, unknown>>>(
+      `normalized_customers?id=eq.${encodeURIComponent(concurrency.id)}&updated_at=eq.${encodeURIComponent(concurrency.expectedUpdatedAt)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+  }
   return supabaseRequest<Array<Record<string, unknown>>>("normalized_customers?on_conflict=company_id,normalized_key", {
     method: "POST",
     headers: {
@@ -6584,7 +6657,8 @@ export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> 
         deliveryVehicle: customer.deliveryVehicle,
         order,
         routeCalculatedAt: cached?.calculatedAt,
-        routeProvider
+        routeProvider,
+        updatedAt: customer.updatedAt
       };
     });
 
@@ -8415,7 +8489,8 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     menu_summary: asNullableString(row.menu_summary),
     relationship_status: asNullableString(row.relationship_status),
     relationship_status_updated_at: asNullableString(row.relationship_status_updated_at),
-    relationship_status_note: asNullableString(row.relationship_status_note)
+    relationship_status_note: asNullableString(row.relationship_status_note),
+    updated_at: asNullableString(row.updated_at)
   };
 }
 
@@ -8461,6 +8536,7 @@ function toCustomerMasterItem(
     review_keywords?: string[] | null;
     review_source?: string | null;
     reviews_updated_at?: string | null;
+    updated_at?: string | null;
   },
   index: number
 ): CustomerMasterItem {
@@ -8508,7 +8584,8 @@ function toCustomerMasterItem(
     reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,
     reviewSource: row.review_source || undefined,
     reviewsUpdatedAt: row.reviews_updated_at || undefined,
-    visitCount: Number(row.visit_count || 0)
+    visitCount: Number(row.visit_count || 0),
+    updatedAt: row.updated_at || undefined
   };
 }
 

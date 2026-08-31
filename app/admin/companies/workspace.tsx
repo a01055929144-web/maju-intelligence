@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardLis
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation } from "@/lib/store";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type Props = {
   initialCompanies: ManagedCompanyAccount[];
@@ -32,6 +33,11 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [companyPage, setCompanyPage] = useState(1);
   const [companyPageSize, setCompanyPageSize] = useState<ListPageSize>(30);
   const [form, setForm] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
+  // 2026-08-27 에러 처리/복원력 감사 후속: 고객사 생성/수정 폼은 로그인 이메일·비밀번호까지 포함해
+  // 필드가 많고, 저장 전까지는 서버에 반영되지 않습니다. 마지막으로 불러온(또는 저장된) 값과 현재
+  // 값을 비교해 실제로 뭔가 고쳤을 때만 이탈 경고를 띄웁니다.
+  const [formBaseline, setFormBaseline] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
+  useUnsavedChangesWarning(JSON.stringify(form) !== JSON.stringify(formBaseline));
   const [showPassword, setShowPassword] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -72,7 +78,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   function selectCompany(company: ManagedCompanyAccount) {
     setSelectedId(company.id);
     setMessage("");
-    setForm({
+    const next = {
       id: company.id,
       name: company.name,
       businessType: company.businessType,
@@ -81,13 +87,16 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       status: company.status,
       customerEmail: company.customerEmail,
       customerPassword: company.customerPassword
-    });
+    };
+    setForm(next);
+    setFormBaseline(next);
   }
 
   function startNewCompany() {
     setSelectedId("new");
     setMessage("");
     setForm(emptyCompany);
+    setFormBaseline(emptyCompany);
   }
 
   function update<K extends keyof ManagedCompanyAccountInput>(key: K, value: ManagedCompanyAccountInput[K]) {
@@ -118,7 +127,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       return exists ? prev.map((company) => (company.id === saved.id ? { ...company, ...saved } : company)) : [saved, ...prev];
     });
     setSelectedId(saved.id);
-    setForm({
+    const savedForm = {
       id: saved.id,
       name: saved.name,
       businessType: saved.businessType,
@@ -127,7 +136,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       status: saved.status,
       customerEmail: saved.customerEmail,
       customerPassword: saved.customerPassword
-    });
+    };
+    setForm(savedForm);
+    setFormBaseline(savedForm);
     setMessage(payload.persisted ? "고객사와 로그인 계정 저장이 완료되었습니다." : "고객사 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 

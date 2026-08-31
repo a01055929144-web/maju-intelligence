@@ -19,7 +19,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
-    | (CustomerMasterInput & { companyId?: string; validateBusinessNumber?: boolean; confirmDuplicate?: boolean })
+    | (CustomerMasterInput & {
+        companyId?: string;
+        validateBusinessNumber?: boolean;
+        confirmDuplicate?: boolean;
+      })
     | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 

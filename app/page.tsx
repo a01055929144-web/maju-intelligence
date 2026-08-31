@@ -39,6 +39,7 @@ import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // Report is only shown after analysis finishes, so load it on demand instead
 // of shipping it in the data registration page's initial JS bundle.
@@ -138,6 +139,10 @@ export default function Home() {
   const [uploadType, setUploadType] = useState<UploadTemplateType>("customer-master");
   const [rawRows, setRawRows] = useState<RawRow[]>([]);
   const [manualDraft, setManualDraft] = useState<RawRow>({});
+  // 2026-08-31 에러 처리/복원력 감사 후속: 수기 등록 폼(최대 14개 필드)은 "매장 저장"을 누르기
+  // 전까지 서버에 반영되지 않습니다. 값을 입력해둔 채 실수로 새로고침/다른 화면으로 이동하면
+  // 전부 사라지므로, 값이 하나라도 있으면 브라우저 이탈 경고를 띄웁니다.
+  useUnsavedChangesWarning(Object.values(manualDraft).some((value) => String(value ?? "").trim()));
   const [headers, setHeaders] = useState<string[]>([]);
   const [fieldMap, setFieldMap] = useState<FieldMap>(emptyMap);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
