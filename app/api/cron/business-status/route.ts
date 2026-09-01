@@ -5,7 +5,6 @@ import {
   sendDailyChurnRiskDigests,
   syncAllCompaniesGovRestaurantLeads,
   syncAllCompaniesKakaoKeywordLeads,
-  syncAllCompaniesLocalDataPermitLeads,
   syncAllCompaniesSeoulRestaurantLeads
 } from "@/lib/store";
 
@@ -26,10 +25,9 @@ export const maxDuration = 60;
  * 오래된 경우) 그 자리에서 수집합니다 — /api/customers/[id]/sync-reviews, lib/store.ts의
  * syncCustomerGoogleReviews() 참고.
  *
- * (4) 지방행정 인허가 데이터개방(localdata.go.kr) 신규 리드 자동 수집 — 기존에는 사용자가
- * 엑셀을 직접 내려받아 업로드해야 했는데(2026-08-19 자동화 추가), LOCALDATA_API_KEY가 설정된
- * 회사에 한해 매일 최근 3일 변경분을 자동으로 가져와 신규 리드로 적재합니다. 키가 없으면
- * syncAllCompaniesLocalDataPermitLeads()가 즉시 빈 결과를 반환하므로(1)~(3)에는 영향이 없습니다.
+ * (4) 지방행정 인허가 데이터개방(localdata.go.kr) 자동 수집은 그 API 자체가 2026-04-16 폐쇄되어
+ * 2026-08-24 lib/localdata.ts와 함께 제거했습니다 — (5) 행정안전부_식품_일반음식점 조회서비스로
+ * 대체됐습니다.
  *
  * (5) 행정안전부_식품_일반음식점 조회서비스(공공데이터포털, 전국 약 229만 건) 신규 리드 자동
  * 수집 — GOV_RESTAURANT_API_KEY가 설정된 회사에 한해 매일 최근 3일 변경분을 가져와 적재합니다.
@@ -65,10 +63,9 @@ export async function GET(request: NextRequest) {
   }
 
   const businessStatus = await refreshAllCompaniesBusinessStatuses();
-  const [closureAlerts, churnRiskDigest, permitLeadSync, govRestaurantLeadSync, seoulRestaurantLeadSync, kakaoKeywordLeadSync] = await Promise.all([
+  const [closureAlerts, churnRiskDigest, govRestaurantLeadSync, seoulRestaurantLeadSync, kakaoKeywordLeadSync] = await Promise.all([
     sendBusinessClosureAlerts(businessStatus.closed),
     sendDailyChurnRiskDigests(),
-    syncAllCompaniesLocalDataPermitLeads(),
     syncAllCompaniesGovRestaurantLeads(),
     syncAllCompaniesSeoulRestaurantLeads(),
     syncAllCompaniesKakaoKeywordLeads()
@@ -77,7 +74,6 @@ export async function GET(request: NextRequest) {
     businessStatus,
     closureAlerts,
     churnRiskDigest,
-    permitLeadSync,
     govRestaurantLeadSync,
     seoulRestaurantLeadSync,
     kakaoKeywordLeadSync

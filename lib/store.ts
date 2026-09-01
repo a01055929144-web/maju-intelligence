@@ -1,7 +1,6 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
-import { fetchLocalDataPermitRows, getConfiguredOpnSvcIds, isLocalDataApiConfigured } from "./localdata";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
@@ -5131,71 +5130,6 @@ const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   excludedNonTarget: 0,
   skippedNoName: 0
 };
-
-export type LocalDataPermitSyncResult = {
-  configured: boolean;
-  fetched: number;
-  ingest: PermitLeadIngestResult;
-  sources: Array<{ opnSvcId: string; fetched: number }>;
-};
-
-/**
- * 지방행정 인허가 데이터개방(localdata.go.kr)에서 최근 변경분을 가져와
- * 수동 업로드와 동일한 신규 리드 적재 파이프라인으로 흘려보냅니다.
- */
-export async function syncLocalDataPermitLeads(companyId: string, days = 3): Promise<LocalDataPermitSyncResult> {
-  if (!isLocalDataApiConfigured()) {
-    return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT, sources: [] };
-  }
-
-  const sources: LocalDataPermitSyncResult["sources"] = [];
-  const rows = (
-    await Promise.all(
-      getConfiguredOpnSvcIds().map(async (opnSvcId) => {
-        const sourceRows = await fetchLocalDataPermitRows(opnSvcId, days);
-        sources.push({ opnSvcId, fetched: sourceRows.length });
-        return sourceRows;
-      })
-    )
-  ).flat();
-  const ingest = await ingestPermitLeadRows(companyId, rows, { source: "localdata_api" });
-
-  return { configured: true, fetched: rows.length, ingest, sources };
-}
-
-export type LocalDataPermitDailySyncResult = {
-  configured: boolean;
-  companiesProcessed: number;
-  totalFetched: number;
-  totalInserted: number;
-  totalUpdated: number;
-};
-
-/** 일일 cron에서 모든 회사에 대해 지방행정 인허가 데이터 자동 수집을 실행합니다. */
-export async function syncAllCompaniesLocalDataPermitLeads(): Promise<LocalDataPermitDailySyncResult> {
-  const empty: LocalDataPermitDailySyncResult = {
-    configured: isLocalDataApiConfigured(),
-    companiesProcessed: 0,
-    totalFetched: 0,
-    totalInserted: 0,
-    totalUpdated: 0
-  };
-  if (!empty.configured || !isProductionStoreConfigured()) return empty;
-
-  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  const results = await Promise.all(companies.map((company) => syncLocalDataPermitLeads(company.id, 14)));
-
-  return results.reduce<LocalDataPermitDailySyncResult>(
-    (total, result) => ({
-      configured: true,
-      companiesProcessed: total.companiesProcessed + 1,
-      totalFetched: total.totalFetched + result.fetched,
-      totalInserted: total.totalInserted + result.ingest.inserted,
-      totalUpdated: total.totalUpdated + result.ingest.updated
-    }),
-    { ...empty, configured: true }
-  );
-}
 
 export type GovRestaurantSyncResult = {
   configured: boolean;

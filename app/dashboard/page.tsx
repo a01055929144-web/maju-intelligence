@@ -1,27 +1,9 @@
-import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getTodayRoutePlan } from "@/lib/store";
-
-// 2026-08-31 성능 감사 대응: 이 컴포넌트는 지도/코스/리드 로직을 전부 담은 매우 큰 클라이언트
-// 번들입니다(내부 PermitLeadsView·TodayCourseView는 이미 dynamic()으로 지연 로드하면서, 정작
-// 최상위 자신은 정적 import라 로그인 직후 첫 화면에서 전체가 한 번에 로드되고 있었습니다).
-// 같은 파일 안에서 이미 쓰는 패턴(로딩 스피너 + 안내 문구)을 그대로 적용해 지연 로드합니다.
-const SalesRouteMapWorkspace = dynamic(
-  () => import("@/components/sales-route-map-workspace").then((module) => module.SalesRouteMapWorkspace),
-  {
-    loading: () => (
-      <div className="flex min-h-[60vh] items-center justify-center gap-2 text-sm font-bold text-slate-500">
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-        지도 홈을 불러오는 중입니다…
-      </div>
-    ),
-    ssr: false
-  }
-);
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
