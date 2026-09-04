@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  chargeDueSubscriptions,
   refreshAllCompaniesBusinessStatuses,
   sendBusinessClosureAlerts,
   sendDailyChurnRiskDigests,
@@ -49,6 +50,12 @@ export const maxDuration = 60;
  * 2개로 제한돼 있어(vercel.json 참고) 새 cron을 추가하지 않고 이 라우트에 합쳤습니다 — 호출량
  * 통제를 위해 회사당 기준점 일부만 매일 회전하며 훑습니다(runKakaoKeywordLeadSweep의 auto 모드).
  *
+ * (8) 2026-09-01 피드백: "결제프로그램도 추가해서 넣고 싶어" — 고객사 이용료 자동결제(토스페이먼츠
+ * 빌링 API)도 매일 여기서 함께 처리합니다(마찬가지로 Vercel Hobby 2-cron 슬롯 제한 때문에 별도
+ * cron을 새로 만들지 않았습니다). chargeDueSubscriptions()가 status=active, billingKey 발급 완료,
+ * next_billing_date가 오늘까지인 구독만 골라 청구하고, 실패해도 next_billing_date를 그대로 둬서
+ * 다음날 자동으로 재시도합니다.
+ *
  * Vercel signs cron requests with an Authorization: Bearer header matching CRON_SECRET — see
  * https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs. Without CRON_SECRET
  * configured, the endpoint refuses all requests rather than running unauthenticated.
@@ -63,12 +70,13 @@ export async function GET(request: NextRequest) {
   }
 
   const businessStatus = await refreshAllCompaniesBusinessStatuses();
-  const [closureAlerts, churnRiskDigest, govRestaurantLeadSync, seoulRestaurantLeadSync, kakaoKeywordLeadSync] = await Promise.all([
+  const [closureAlerts, churnRiskDigest, govRestaurantLeadSync, seoulRestaurantLeadSync, kakaoKeywordLeadSync, subscriptionBilling] = await Promise.all([
     sendBusinessClosureAlerts(businessStatus.closed),
     sendDailyChurnRiskDigests(),
     syncAllCompaniesGovRestaurantLeads(),
     syncAllCompaniesSeoulRestaurantLeads(),
-    syncAllCompaniesKakaoKeywordLeads()
+    syncAllCompaniesKakaoKeywordLeads(),
+    chargeDueSubscriptions()
   ]);
   return NextResponse.json({
     businessStatus,
@@ -76,6 +84,7 @@ export async function GET(request: NextRequest) {
     churnRiskDigest,
     govRestaurantLeadSync,
     seoulRestaurantLeadSync,
-    kakaoKeywordLeadSync
+    kakaoKeywordLeadSync,
+    subscriptionBilling
   });
 }

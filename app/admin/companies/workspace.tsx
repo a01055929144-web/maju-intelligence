@@ -5,7 +5,9 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation } from "@/lib/store";
+import { SortableTh } from "@/components/sortable-th";
+import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
+import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type Props = {
@@ -713,43 +715,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   최근 {selectedCompany.recentUploads.length}건
                 </span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
-                  <thead>
-                    <tr className="text-left text-xs font-black text-slate-500">
-                      <th className="border-b border-slate-100 px-4 py-3">파일명</th>
-                      <th className="border-b border-slate-100 px-4 py-3">상태</th>
-                      <th className="border-b border-slate-100 px-4 py-3 text-right">처리 행</th>
-                      <th className="border-b border-slate-100 px-4 py-3 text-right">품질</th>
-                      <th className="border-b border-slate-100 px-4 py-3 text-right">중복</th>
-                      <th className="border-b border-slate-100 px-4 py-3">업로드 시점</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedCompany.recentUploads.map((upload) => (
-                      <tr key={upload.id} className="font-bold text-slate-800">
-                        <td className="border-b border-slate-100 px-4 py-3">{upload.filename}</td>
-                        <td className="border-b border-slate-100 px-4 py-3">
-                          <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
-                            {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
-                          </span>
-                        </td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.rows.toLocaleString()}</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.qualityScore}%</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.duplicateCount.toLocaleString()}</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{upload.createdAt}</td>
-                      </tr>
-                    ))}
-                    {!selectedCompany.recentUploads.length ? (
-                      <tr>
-                        <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={6}>
-                          아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
+              <RecentCompanyUploadsTable uploads={selectedCompany.recentUploads} />
             </div>
           ) : null}
 
@@ -1032,6 +998,78 @@ function DataMetric({
       <Icon className="mb-3 h-4 w-4 text-primary" />
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className={`${compact ? "text-sm leading-5" : "text-2xl"} mt-1 font-black text-slate-950`}>{value}</p>
+    </div>
+  );
+}
+
+// 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어" —
+// 정렬 상태(useState)를 이 표에만 두려고 별도 컴포넌트로 뽑았습니다.
+function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistoryItem[] }) {
+  type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
+  const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<UploadHistoryItem, UploadSortKey>(uploads, {
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    duplicateCount: (a, b) => a.duplicateCount - b.duplicateCount,
+    filename: (a, b) => a.filename.localeCompare(b.filename, "ko"),
+    qualityScore: (a, b) => a.qualityScore - b.qualityScore,
+    rows: (a, b) => a.rows - b.rows,
+    status: (a, b) => a.status.localeCompare(b.status)
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
+        <thead>
+          <tr className="text-left text-xs font-black text-slate-500">
+            <SortableTh active={sortKey === "filename"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="파일명" onClick={() => toggleSort("filename")} />
+            <SortableTh active={sortKey === "status"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="상태" onClick={() => toggleSort("status")} />
+            <SortableTh
+              active={sortKey === "rows"}
+              className="border-b border-slate-100 px-4 py-3 text-right"
+              direction={sortDirection}
+              label="처리 행"
+              onClick={() => toggleSort("rows")}
+            />
+            <SortableTh
+              active={sortKey === "qualityScore"}
+              className="border-b border-slate-100 px-4 py-3 text-right"
+              direction={sortDirection}
+              label="품질"
+              onClick={() => toggleSort("qualityScore")}
+            />
+            <SortableTh
+              active={sortKey === "duplicateCount"}
+              className="border-b border-slate-100 px-4 py-3 text-right"
+              direction={sortDirection}
+              label="중복"
+              onClick={() => toggleSort("duplicateCount")}
+            />
+            <SortableTh active={sortKey === "createdAt"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="업로드 시점" onClick={() => toggleSort("createdAt")} />
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.map((upload) => (
+            <tr key={upload.id} className="font-bold text-slate-800">
+              <td className="border-b border-slate-100 px-4 py-3">{upload.filename}</td>
+              <td className="border-b border-slate-100 px-4 py-3">
+                <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
+                  {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
+                </span>
+              </td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.rows.toLocaleString()}</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.qualityScore}%</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.duplicateCount.toLocaleString()}</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{upload.createdAt}</td>
+            </tr>
+          ))}
+          {!uploads.length ? (
+            <tr>
+              <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={6}>
+                아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
     </div>
   );
 }

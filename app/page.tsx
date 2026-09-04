@@ -39,6 +39,8 @@ import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // Report is only shown after analysis finishes, so load it on demand instead
@@ -3887,12 +3889,22 @@ function DataQualityCard({
       type: "사업자번호 오류"
     }))
   ].sort((a, b) => a.rowNumber - b.rowNumber);
-  const issueTotalPages = Math.max(1, Math.ceil(issuePreview.length / issuePageSize));
+  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
+  type IssueSortKey = "detail" | "rowNumber" | "type";
+  const { sortDirection: issueSortDirection, sortKey: issueSortKey, sortedRows: sortedIssuePreview, toggleSort: toggleIssueSort } = useTableSort<
+    (typeof issuePreview)[number],
+    IssueSortKey
+  >(issuePreview, {
+    detail: (a, b) => a.detail.localeCompare(b.detail, "ko"),
+    rowNumber: (a, b) => a.rowNumber - b.rowNumber,
+    type: (a, b) => a.type.localeCompare(b.type, "ko")
+  });
+  const issueTotalPages = Math.max(1, Math.ceil(sortedIssuePreview.length / issuePageSize));
   const currentIssuePage = Math.min(issuePage, issueTotalPages);
   const issueStart = (currentIssuePage - 1) * issuePageSize;
-  const visibleIssues = issuePreview.slice(issueStart, issueStart + issuePageSize);
-  const issuePageStart = issuePreview.length ? issueStart + 1 : 0;
-  const issuePageEnd = Math.min(issuePreview.length, issueStart + issuePageSize);
+  const visibleIssues = sortedIssuePreview.slice(issueStart, issueStart + issuePageSize);
+  const issuePageStart = sortedIssuePreview.length ? issueStart + 1 : 0;
+  const issuePageEnd = Math.min(sortedIssuePreview.length, issueStart + issuePageSize);
 
   return (
     <div className={`maju-section-card mb-4 overflow-hidden ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
@@ -3984,9 +3996,27 @@ function DataQualityCard({
                 <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-xs">
                   <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 shadow-[0_1px_0_#e2e8f0]">
                     <tr>
-                      <th className="w-[92px] border-r border-slate-200 px-3 py-2.5 font-black">행</th>
-                      <th className="w-[150px] border-r border-slate-200 px-3 py-2.5 font-black">유형</th>
-                      <th className="border-r border-slate-200 px-3 py-2.5 font-black">보완 내용</th>
+                      <SortableTh
+                        active={issueSortKey === "rowNumber"}
+                        className="w-[92px] border-r border-slate-200 px-3 py-2.5 font-black"
+                        direction={issueSortDirection}
+                        label="행"
+                        onClick={() => toggleIssueSort("rowNumber")}
+                      />
+                      <SortableTh
+                        active={issueSortKey === "type"}
+                        className="w-[150px] border-r border-slate-200 px-3 py-2.5 font-black"
+                        direction={issueSortDirection}
+                        label="유형"
+                        onClick={() => toggleIssueSort("type")}
+                      />
+                      <SortableTh
+                        active={issueSortKey === "detail"}
+                        className="border-r border-slate-200 px-3 py-2.5 font-black"
+                        direction={issueSortDirection}
+                        label="보완 내용"
+                        onClick={() => toggleIssueSort("detail")}
+                      />
                       <th className="w-[120px] px-3 py-2.5 font-black">조치</th>
                     </tr>
                   </thead>
@@ -4290,12 +4320,26 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
   const completedCount = uploads.filter((upload) => upload.status === "completed").length;
   const failedCount = uploads.filter((upload) => upload.status === "failed").length;
   const averageQuality = uploads.length ? Math.round(uploads.reduce((sum, upload) => sum + upload.qualityScore, 0) / uploads.length) : 0;
-  const totalPages = Math.max(1, Math.ceil(uploads.length / pageSize));
+  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
+  type UploadHistorySortKey = "createdAt" | "duplicateCount" | "filename" | "healthScore" | "qualityScore" | "rows" | "status";
+  const { sortDirection: uploadSortDirection, sortKey: uploadSortKey, sortedRows: sortedUploads, toggleSort: toggleUploadSort } = useTableSort<
+    UploadHistoryRow,
+    UploadHistorySortKey
+  >(uploads, {
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    duplicateCount: (a, b) => a.duplicateCount - b.duplicateCount,
+    filename: (a, b) => a.filename.localeCompare(b.filename, "ko"),
+    healthScore: (a, b) => a.healthScore - b.healthScore,
+    qualityScore: (a, b) => a.qualityScore - b.qualityScore,
+    rows: (a, b) => a.rows - b.rows,
+    status: (a, b) => a.status.localeCompare(b.status)
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedUploads.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * pageSize;
-  const latestUploads = uploads.slice(start, start + pageSize);
-  const pageStart = uploads.length ? start + 1 : 0;
-  const pageEnd = Math.min(uploads.length, start + pageSize);
+  const latestUploads = sortedUploads.slice(start, start + pageSize);
+  const pageStart = sortedUploads.length ? start + 1 : 0;
+  const pageEnd = Math.min(sortedUploads.length, start + pageSize);
 
   return (
     <div className="maju-section-card mb-4 overflow-hidden">
@@ -4359,12 +4403,48 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
           <table className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 shadow-[0_1px_0_#e2e8f0]">
               <tr>
-                <th className="w-[34%] border-r border-slate-200 px-4 py-3 font-black">파일명</th>
-                <th className="w-[116px] border-r border-slate-200 px-3 py-3 font-black">상태</th>
-                <th className="w-[100px] border-r border-slate-200 px-3 py-3 text-right font-black">행</th>
-                <th className="w-[100px] border-r border-slate-200 px-3 py-3 text-right font-black">중복</th>
-                <th className="w-[120px] border-r border-slate-200 px-3 py-3 text-right font-black">건강도</th>
-                <th className="w-[150px] border-r border-slate-200 px-3 py-3 font-black">품질</th>
+                <SortableTh
+                  active={uploadSortKey === "filename"}
+                  className="w-[34%] border-r border-slate-200 px-4 py-3 font-black"
+                  direction={uploadSortDirection}
+                  label="파일명"
+                  onClick={() => toggleUploadSort("filename")}
+                />
+                <SortableTh
+                  active={uploadSortKey === "status"}
+                  className="w-[116px] border-r border-slate-200 px-3 py-3 font-black"
+                  direction={uploadSortDirection}
+                  label="상태"
+                  onClick={() => toggleUploadSort("status")}
+                />
+                <SortableTh
+                  active={uploadSortKey === "rows"}
+                  className="w-[100px] border-r border-slate-200 px-3 py-3 text-right font-black"
+                  direction={uploadSortDirection}
+                  label="행"
+                  onClick={() => toggleUploadSort("rows")}
+                />
+                <SortableTh
+                  active={uploadSortKey === "duplicateCount"}
+                  className="w-[100px] border-r border-slate-200 px-3 py-3 text-right font-black"
+                  direction={uploadSortDirection}
+                  label="중복"
+                  onClick={() => toggleUploadSort("duplicateCount")}
+                />
+                <SortableTh
+                  active={uploadSortKey === "healthScore"}
+                  className="w-[120px] border-r border-slate-200 px-3 py-3 text-right font-black"
+                  direction={uploadSortDirection}
+                  label="건강도"
+                  onClick={() => toggleUploadSort("healthScore")}
+                />
+                <SortableTh
+                  active={uploadSortKey === "qualityScore"}
+                  className="w-[150px] border-r border-slate-200 px-3 py-3 font-black"
+                  direction={uploadSortDirection}
+                  label="품질"
+                  onClick={() => toggleUploadSort("qualityScore")}
+                />
                 <th className="w-[130px] px-3 py-3 font-black">리포트</th>
               </tr>
             </thead>

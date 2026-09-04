@@ -6,6 +6,8 @@ import { Loader2, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSort } from "@/lib/use-table-sort";
 
 type UploadHistoryItem = {
   id: string;
@@ -91,6 +93,17 @@ export default function CustomerDataManagementPage() {
 
   const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
 
+  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
+  type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
+  const { sortDirection, sortKey, sortedRows: sortedUploads, toggleSort } = useTableSort<UploadHistoryItem, UploadSortKey>(uploads, {
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    duplicateCount: (a, b) => a.duplicateCount - b.duplicateCount,
+    filename: (a, b) => (a.filename || "").localeCompare(b.filename || "", "ko"),
+    qualityScore: (a, b) => a.qualityScore - b.qualityScore,
+    rows: (a, b) => a.rows - b.rows,
+    status: (a, b) => a.status.localeCompare(b.status)
+  });
+
   return (
     <CustomerAppShell
       active="data-management"
@@ -126,17 +139,17 @@ export default function CustomerDataManagementPage() {
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-black uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-2.5">파일명</th>
-                    <th className="px-4 py-2.5">건수</th>
-                    <th className="px-4 py-2.5">품질점수</th>
-                    <th className="px-4 py-2.5">중복</th>
-                    <th className="px-4 py-2.5">상태</th>
-                    <th className="px-4 py-2.5">등록일시</th>
+                    <SortableTh active={sortKey === "filename"} className="px-4 py-2.5" direction={sortDirection} label="파일명" onClick={() => toggleSort("filename")} />
+                    <SortableTh active={sortKey === "rows"} className="px-4 py-2.5" direction={sortDirection} label="건수" onClick={() => toggleSort("rows")} />
+                    <SortableTh active={sortKey === "qualityScore"} className="px-4 py-2.5" direction={sortDirection} label="품질점수" onClick={() => toggleSort("qualityScore")} />
+                    <SortableTh active={sortKey === "duplicateCount"} className="px-4 py-2.5" direction={sortDirection} label="중복" onClick={() => toggleSort("duplicateCount")} />
+                    <SortableTh active={sortKey === "status"} className="px-4 py-2.5" direction={sortDirection} label="상태" onClick={() => toggleSort("status")} />
+                    <SortableTh active={sortKey === "createdAt"} className="px-4 py-2.5" direction={sortDirection} label="등록일시" onClick={() => toggleSort("createdAt")} />
                     <th className="px-4 py-2.5">작업</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {uploads.map((upload) => (
+                  {sortedUploads.map((upload) => (
                     <tr className="border-b border-slate-100 last:border-0" key={upload.id}>
                       <td className="px-4 py-2.5 font-bold text-slate-800">{upload.filename || "파일명 없음"}</td>
                       <td className="px-4 py-2.5 text-slate-600">{upload.rows.toLocaleString()}행</td>

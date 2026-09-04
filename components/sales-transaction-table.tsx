@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { SortableTh } from "@/components/sortable-th";
 import type { SalesTransactionItem } from "@/lib/store";
+import { useTableSort } from "@/lib/use-table-sort";
 
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
@@ -26,14 +28,25 @@ export function SalesTransactionTable({
   const [loadMoreError, setLoadMoreError] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
+  type TransactionSortKey = "businessRegistrationNumber" | "createdAt" | "customerName" | "productName" | "quantity" | "salesAmount" | "salesDate";
+  const { sortDirection, sortKey, sortedRows: sortedItems, toggleSort } = useTableSort<SalesTransactionItem, TransactionSortKey>(items, {
+    businessRegistrationNumber: (a, b) => (a.businessRegistrationNumber || "").localeCompare(b.businessRegistrationNumber || ""),
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    customerName: (a, b) => a.customerName.localeCompare(b.customerName, "ko"),
+    productName: (a, b) => (a.productName || "").localeCompare(b.productName || "", "ko"),
+    quantity: (a, b) => a.quantity - b.quantity,
+    salesAmount: (a, b) => a.salesAmount - b.salesAmount,
+    salesDate: (a, b) => (a.salesDate || "").localeCompare(b.salesDate || "")
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedItems = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return items.slice(start, start + pageSize);
-  }, [currentPage, items, pageSize]);
-  const pageStart = items.length ? (currentPage - 1) * pageSize + 1 : 0;
-  const pageEnd = Math.min(items.length, currentPage * pageSize);
+    return sortedItems.slice(start, start + pageSize);
+  }, [currentPage, sortedItems, pageSize]);
+  const pageStart = sortedItems.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(sortedItems.length, currentPage * pageSize);
 
   async function loadMore() {
     if (isLoadingMore || !truncated) return;
@@ -117,13 +130,31 @@ export function SalesTransactionTable({
           <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_#e2e8f0]">
             <tr className="text-left text-xs font-black text-slate-500">
               <th className="border-b border-slate-200 px-3 py-3 text-center">No</th>
-              <th className="border-b border-slate-200 px-3 py-3">매출일</th>
-              <th className="border-b border-slate-200 px-3 py-3">거래처</th>
-              <th className="border-b border-slate-200 px-3 py-3">사업자번호</th>
-              <th className="border-b border-slate-200 px-3 py-3">품목</th>
-              <th className="border-b border-slate-200 px-3 py-3 text-right">수량</th>
-              <th className="border-b border-slate-200 px-3 py-3 text-right">매출금액</th>
-              <th className="border-b border-slate-200 px-3 py-3">적재시각</th>
+              <SortableTh active={sortKey === "salesDate"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="매출일" onClick={() => toggleSort("salesDate")} />
+              <SortableTh active={sortKey === "customerName"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="거래처" onClick={() => toggleSort("customerName")} />
+              <SortableTh
+                active={sortKey === "businessRegistrationNumber"}
+                className="border-b border-slate-200 px-3 py-3"
+                direction={sortDirection}
+                label="사업자번호"
+                onClick={() => toggleSort("businessRegistrationNumber")}
+              />
+              <SortableTh active={sortKey === "productName"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="품목" onClick={() => toggleSort("productName")} />
+              <SortableTh
+                active={sortKey === "quantity"}
+                className="border-b border-slate-200 px-3 py-3 text-right"
+                direction={sortDirection}
+                label="수량"
+                onClick={() => toggleSort("quantity")}
+              />
+              <SortableTh
+                active={sortKey === "salesAmount"}
+                className="border-b border-slate-200 px-3 py-3 text-right"
+                direction={sortDirection}
+                label="매출금액"
+                onClick={() => toggleSort("salesAmount")}
+              />
+              <SortableTh active={sortKey === "createdAt"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="적재시각" onClick={() => toggleSort("createdAt")} />
             </tr>
           </thead>
           <tbody>

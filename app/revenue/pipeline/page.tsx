@@ -3,17 +3,11 @@ import { redirect } from "next/navigation";
 import { ArrowRight, Banknote, CircleDollarSign, FileText, Percent, ReceiptText, Route, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { PipelineCandidatesTable } from "@/components/pipeline-candidates-table";
 import { Progress } from "@/components/ui/progress";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getRevenuePipeline, type RevenuePipeline } from "@/lib/store";
-
-const resultLabels: Record<string, string> = {
-  interested: "관심 있음",
-  "quote-requested": "견적 요청",
-  pending: "보류",
-  failed: "실패"
-};
 
 const emptyPipeline: RevenuePipeline = {
   conversionRate: 0,
@@ -142,54 +136,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             </div>
           </section>
 
-          <section className="maju-section-card scroll-mt-28" id="pipeline-table">
-            <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-black text-slate-950">후보 목록</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">견적·관심 거래처 우선순위</p>
-              </div>
-              <Badge className="bg-teal-700 text-white">가중 {pipeline.weightedRevenue.toLocaleString()}만원</Badge>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] border-separate border-spacing-0 text-sm">
-                <thead className="sticky top-0 z-10 bg-white">
-                  <tr className="text-left text-xs font-black text-slate-500">
-                    <th className="border-b border-slate-200 px-4 py-3 text-center">No</th>
-                    <th className="border-b border-slate-200 px-4 py-3">거래처 후보</th>
-                    <th className="border-b border-slate-200 px-4 py-3">상태</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">계약 확률</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">가중 매출</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pipeline.items.map((item, index) => (
-                    <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/60">
-                      <td className="border-b border-slate-100 px-4 py-3 text-center text-xs text-slate-400">{index + 1}</td>
-                      <td className="border-b border-slate-100 px-4 py-3">
-                        <p className="font-black text-slate-950">{item.leadName}</p>
-                        <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">{item.memo || "메모 없음"}</p>
-                      </td>
-                      <td className="border-b border-slate-100 px-4 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          <Badge className="bg-slate-100 text-slate-700">{item.region}</Badge>
-                          <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{resultLabels[item.result] || item.result}</Badge>
-                        </div>
-                      </td>
-                      <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black">{Math.round(item.probability * 100)}%</td>
-                      <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black text-teal-700">{item.weightedRevenue.toLocaleString()}만원</td>
-                    </tr>
-                  ))}
-                  {!pipeline.items.length ? (
-                    <tr>
-                      <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={5}>
-                        아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <PipelineCandidatesTable items={pipeline.items} weightedRevenue={pipeline.weightedRevenue} />
         </div>
         </div>
       </section>

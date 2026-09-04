@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -169,6 +172,18 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [keywordVolumeScores, setKeywordVolumeScores] = useState<Record<string, number>>({});
   const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
   const [keywordVolumeConfigured, setKeywordVolumeConfigured] = useState(true);
+
+  type LeadTableSortKey = "businessName" | "confidence" | "grade" | "industryPrimary" | "instagram" | "nextAction" | "phone" | "review" | "status";
+  const [tableSortKey, setTableSortKey] = useState<LeadTableSortKey | null>(null);
+  const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
+  function toggleTableSort(key: LeadTableSortKey) {
+    if (tableSortKey === key) {
+      setTableSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setTableSortKey(key);
+      setTableSortDirection("asc");
+    }
+  }
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
   const quoteDrafts = useMemo(() => readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {}), [quoteDraftRevision]);
@@ -428,11 +443,35 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     return keywordPoints + ratingPoints + reviewCountPoints;
   }
 
+  // 2026-09-01 피드백: "거래처 업종 등급 안정도 인스타 전화 리뷰 다음 액션 상태의 헤더들을 누르면
+  // 내림차순,오름차순으로 표시하도록해" — 표 헤더를 눌러 직접 정렬할 수 있게 합니다. 사용자가 헤더를
+  // 누르면(tableSortKey가 채워지면) 그 정렬이 "영업리드(검색량순)" 기본 정렬보다 우선합니다.
+  const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
+  const tableSortedLeads = useMemo(() => {
+    if (!tableSortKey) return null;
+    const decorated = filteredLeads.map((lead) => ({ confidence: getLeadConfidence(lead).score, lead }));
+    decorated.sort((a, b) => {
+      let diff = 0;
+      if (tableSortKey === "businessName") diff = a.lead.businessName.localeCompare(b.lead.businessName, "ko");
+      else if (tableSortKey === "industryPrimary") diff = (a.lead.industryPrimary || "").localeCompare(b.lead.industryPrimary || "", "ko");
+      else if (tableSortKey === "grade") diff = (gradeSortWeight[a.lead.grade || ""] || 0) - (gradeSortWeight[b.lead.grade || ""] || 0);
+      else if (tableSortKey === "confidence") diff = a.confidence - b.confidence;
+      else if (tableSortKey === "instagram") diff = (getLeadInstagramHandle(a.lead) ? 1 : 0) - (getLeadInstagramHandle(b.lead) ? 1 : 0);
+      else if (tableSortKey === "phone") diff = (a.lead.phone ? 1 : 0) - (b.lead.phone ? 1 : 0);
+      else if (tableSortKey === "review") diff = (a.lead.rating || 0) - (b.lead.rating || 0) || (a.lead.reviewCount || 0) - (b.lead.reviewCount || 0);
+      else if (tableSortKey === "nextAction") diff = (a.lead.nextAction || "").localeCompare(b.lead.nextAction || "", "ko");
+      else if (tableSortKey === "status") diff = (a.lead.status || "").localeCompare(b.lead.status || "", "ko");
+      return tableSortDirection === "asc" ? diff : -diff;
+    });
+    return decorated.map((item) => item.lead);
+  }, [filteredLeads, tableSortKey, tableSortDirection]);
+
   const sortedLeads = useMemo(() => {
+    if (tableSortedLeads) return tableSortedLeads;
     if (leadQualityMode !== "keyword") return filteredLeads;
     return [...filteredLeads].sort((a, b) => businessAttractivenessOf(b) - businessAttractivenessOf(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredLeads, leadQualityMode, keywordVolumeScores]);
+  }, [filteredLeads, leadQualityMode, keywordVolumeScores, tableSortedLeads]);
   const leadTotalPages = Math.max(1, Math.ceil(sortedLeads.length / leadPageSize));
   const pagedLeads = useMemo(() => {
     const start = (leadPage - 1) * leadPageSize;
@@ -733,6 +772,39 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       setSelectedLeadIntent("followup");
       setSelectedLead(queueLeads[0]);
     }
+  }
+
+  // 2026-09-01 피드백: "해당 카드를 누르면, 아래 거래처들이 필터가 되면 좋을 것 같아" — 맨 위 KPI
+  // 카드(신규 리드/오늘 신규/A등급/전화 가능)도 카드 아래 큐 카드들과 같은 방식으로 목록을 필터합니다.
+  function focusAllLeads() {
+    clearLeadFilters();
+  }
+  function focusTodayNewLeads() {
+    setShowNearbyOnly(false);
+    setTableSearch("");
+    setActionFilter("");
+    setStatusFilter("");
+    setGradeFilter("");
+    setHasPhoneOnly(false);
+    setPeriodFilter("today");
+  }
+  function focusGradeALeads() {
+    setShowNearbyOnly(false);
+    setTableSearch("");
+    setActionFilter("");
+    setStatusFilter("");
+    setPeriodFilter("all");
+    setHasPhoneOnly(false);
+    setGradeFilter("A");
+  }
+  function focusPhoneReadyLeads() {
+    setShowNearbyOnly(false);
+    setTableSearch("");
+    setActionFilter("");
+    setStatusFilter("");
+    setPeriodFilter("all");
+    setGradeFilter("");
+    setHasPhoneOnly(true);
   }
 
   async function handleFileUpload(file: File) {
@@ -1039,15 +1111,73 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     googleReviewsSourceConfigured ? "리뷰 연결" : "리뷰 설정 필요"
   ].join(" · ");
 
+  function LeadSortableHeader({
+    className = "",
+    label,
+    sortKeyValue,
+    title
+  }: {
+    className?: string;
+    label: string;
+    sortKeyValue: LeadTableSortKey;
+    title?: string;
+  }) {
+    const isActive = tableSortKey === sortKeyValue;
+    return (
+      <th className={`border-r border-slate-200 px-3 py-2 ${className}`} title={title}>
+        <button className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`} onClick={() => toggleTableSort(sortKeyValue)} type="button">
+          {label}
+          {isActive ? tableSortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
+        </button>
+      </th>
+    );
+  }
+
   return (
     <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-        <DirectoryStat label="신규 리드" value={summary ? `${summary.active.toLocaleString()}곳` : "—"} />
-        <DirectoryStat label="오늘 신규" value={summary ? `${summary.todayNew.toLocaleString()}곳` : "—"} />
-        <DirectoryStat label="A등급" value={summary ? `${summary.gradeA.toLocaleString()}곳` : "—"} />
-        <DirectoryStat label="전화 가능" value={summary ? `${summary.hasPhone.toLocaleString()}곳` : "—"} />
-        <DirectoryStat label="견적 요청" value={summary ? `${summary.quoteRequests.toLocaleString()}곳` : "—"} />
-        <DirectoryStat label="견적 후속" value={summary ? `${summary.quoteFollowUps.toLocaleString()}곳` : "—"} />
+        <DirectoryStat
+          active={!hasActiveLeadFilters}
+          label="신규 리드"
+          onClick={focusAllLeads}
+          title="전체 활성 리드를 봅니다."
+          value={summary ? `${summary.active.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={periodFilter === "today"}
+          label="오늘 신규"
+          onClick={focusTodayNewLeads}
+          title="오늘 개시된 신규 리드만 봅니다."
+          value={summary ? `${summary.todayNew.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={gradeFilter === "A"}
+          label="A등급"
+          onClick={focusGradeALeads}
+          title="A등급 리드만 봅니다."
+          value={summary ? `${summary.gradeA.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={hasPhoneOnly}
+          label="전화 가능"
+          onClick={focusPhoneReadyLeads}
+          title="전화번호가 확인된 리드만 봅니다."
+          value={summary ? `${summary.hasPhone.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={statusFilter === "견적 요청"}
+          label="견적 요청"
+          onClick={() => focusLeadStatus("견적 요청", queues?.quoteRequests || [])}
+          title="견적 요청 상태인 리드만 봅니다."
+          value={summary ? `${summary.quoteRequests.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER}
+          label="견적 후속"
+          onClick={() => focusQuoteFollowUps(queues?.quoteFollowUps || [])}
+          title="견적 발송 후 후속 연락이 필요한 리드만 봅니다."
+          value={summary ? `${summary.quoteFollowUps.toLocaleString()}곳` : "—"}
+        />
       </div>
 
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
@@ -1103,50 +1233,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           tone="pink"
           title="견적 후속"
         />
-      </div>
-
-      <div className="maju-section-card p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-black text-slate-950">리드 공급원</p>
-            <p className="mt-0.5 text-xs font-semibold text-slate-500">신규리드는 공공 인허가와 업로드 파일에서 들어오고, 영업리드는 외부 정보 보강 후 우선순위를 정합니다.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset ${
-              keywordVolumeSourceConfigured && googleReviewsSourceConfigured
-                ? "bg-teal-50 text-teal-700 ring-teal-100"
-                : "bg-amber-50 text-amber-800 ring-amber-100"
-            }`}>
-              {externalSourceSummary}
-            </span>
-            <button className="maju-button-secondary h-8 text-xs" disabled={anySyncBusy} onClick={() => void handleAllSourcesSync()} type="button">
-              <Radar className="h-3.5 w-3.5" />
-              {anySyncBusy ? "수집 중" : "전체 소스 갱신"}
-            </button>
-            <button
-              className="maju-button-secondary h-8 text-xs"
-              disabled={recommendBusy}
-              onClick={() => void handleRecommendationRefresh()}
-              title="기거래처 반경 안 리드에 근접도 점수를, 주력 업종과 같은 리드에 업종 가산점을 매깁니다."
-              type="button"
-            >
-              <Radar className="h-3.5 w-3.5" />
-              {recommendBusy ? "계산 중" : "추천 점수 갱신"}
-            </button>
-          </div>
-        </div>
-        {recommendMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{recommendMessage}</p> : null}
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {leadSourceCards.map((source) => (
-            <LeadSourceStatusCard
-              description={source.description}
-              key={source.title}
-              status={source.status}
-              title={source.title}
-              tone={source.tone as "idle" | "ready" | "warning"}
-            />
-          ))}
-        </div>
       </div>
 
       <div className="maju-section-card p-3">
@@ -1215,15 +1301,55 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       </div>
 
       <div className="maju-section-card">
+        {/* 2026-09-01 피드백: "리드 공급원은 굳이 안보여줘도돼" — 항상 보이던 리드 공급원 카드를
+            이 접힌 상세 섹션 안으로 옮겨, 기본 화면에서는 숨기고 필요할 때만 펼쳐 보게 합니다. */}
         <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setUploadOpen((value) => !value)} type="button">
           <span className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-slate-400" />
-            <span className="text-sm font-black text-slate-950">파일 업로드·소스 상세</span>
+            <span className="text-sm font-black text-slate-950">리드 공급원·파일 업로드 상세</span>
           </span>
           <ChevronDown className={`h-4 w-4 text-slate-400 transition ${uploadOpen ? "rotate-180" : ""}`} />
         </button>
         {uploadOpen ? (
-          <div className="space-y-2 p-3">
+          <div className="space-y-3 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-500">신규리드는 공공 인허가와 업로드 파일에서 들어오고, 영업리드는 외부 정보 보강 후 우선순위를 정합니다.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset ${
+                  keywordVolumeSourceConfigured && googleReviewsSourceConfigured
+                    ? "bg-teal-50 text-teal-700 ring-teal-100"
+                    : "bg-amber-50 text-amber-800 ring-amber-100"
+                }`}>
+                  {externalSourceSummary}
+                </span>
+                <button className="maju-button-secondary h-8 text-xs" disabled={anySyncBusy} onClick={() => void handleAllSourcesSync()} type="button">
+                  <Radar className="h-3.5 w-3.5" />
+                  {anySyncBusy ? "수집 중" : "전체 소스 갱신"}
+                </button>
+                <button
+                  className="maju-button-secondary h-8 text-xs"
+                  disabled={recommendBusy}
+                  onClick={() => void handleRecommendationRefresh()}
+                  title="기거래처 반경 안 리드에 근접도 점수를, 주력 업종과 같은 리드에 업종 가산점을 매깁니다."
+                  type="button"
+                >
+                  <Radar className="h-3.5 w-3.5" />
+                  {recommendBusy ? "계산 중" : "추천 점수 갱신"}
+                </button>
+              </div>
+            </div>
+            {recommendMessage ? <p className="text-xs font-bold text-teal-700">{recommendMessage}</p> : null}
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {leadSourceCards.map((source) => (
+                <LeadSourceStatusCard
+                  description={source.description}
+                  key={source.title}
+                  status={source.status}
+                  title={source.title}
+                  tone={source.tone as "idle" | "ready" | "warning"}
+                />
+              ))}
+            </div>
             <p className="text-xs font-semibold leading-5 text-slate-500">
               연결된 데이터 소스(지방행정 인허가·전국/서울시 공공데이터)는 <span className="text-slate-700">매일 새벽 자동으로 수집</span>됩니다. 직접
               모은 엑셀/CSV 파일을 올리거나, 지금 바로 최신 데이터를 확인하고 싶을 때만 아래 버튼을 누르면 됩니다. 같은 사업자번호는 최신 인허가
@@ -1951,26 +2077,26 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                         type="checkbox"
                       />
                     </th>
-                    <th className="w-[24%] border-r border-slate-200 px-3 py-2">거래처</th>
-                    <th className="w-[84px] border-r border-slate-200 px-3 py-2">업종</th>
-                    <th
-                      className="w-[64px] border-r border-slate-200 px-3 py-2"
+                    <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
+                    <LeadSortableHeader className="w-[84px]" label="업종" sortKeyValue="industryPrimary" />
+                    <LeadSortableHeader
+                      className="w-[64px]"
+                      label="등급"
+                      sortKeyValue="grade"
                       title="인허가 신선도·업종 적합도·리뷰활동·연락처 확보 여부를 합산한 리드 우선순위 등급입니다(A 85점↑ · B 70점↑ · C 55점↑). 거래처 매출등급과는 별개 기준입니다."
-                    >
-                      등급
-                    </th>
-                    <th className="w-[84px] border-r border-slate-200 px-3 py-2">안정도</th>
-                    <th className="w-[110px] border-r border-slate-200 px-3 py-2">인스타</th>
-                    <th className="w-[118px] border-r border-slate-200 px-3 py-2">전화</th>
-                    <th
-                      className="w-[110px] border-r border-slate-200 px-3 py-2 text-right"
+                    />
+                    <LeadSortableHeader className="w-[84px]" label="안정도" sortKeyValue="confidence" />
+                    <LeadSortableHeader className="w-[110px]" label="인스타" sortKeyValue="instagram" />
+                    <LeadSortableHeader className="w-[118px]" label="전화" sortKeyValue="phone" />
+                    <LeadSortableHeader
+                      className="w-[110px] text-right"
+                      label="리뷰"
+                      sortKeyValue="review"
                       title="네이버·카카오·구글에서 확보한 평점·리뷰수입니다. '영업리드' 모드에서는 검색량 지수까지 합친 매력도 점수도 함께 봅니다."
-                    >
-                      리뷰
-                    </th>
-                    <th className="w-[110px] border-r border-slate-200 px-3 py-2">다음 액션</th>
+                    />
+                    <LeadSortableHeader className="w-[110px]" label="다음 액션" sortKeyValue="nextAction" />
                     {showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
-                    <th className="w-[140px] border-r border-slate-200 px-3 py-2">상태</th>
+                    <LeadSortableHeader className="w-[140px]" label="상태" sortKeyValue="status" />
                     <th className="w-[164px] px-3 py-2">작업</th>
                   </tr>
                 </thead>

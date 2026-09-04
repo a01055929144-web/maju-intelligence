@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Building2,
+  CreditCard,
   Database,
   FileSpreadsheet,
   HeartPulse,
@@ -20,6 +21,7 @@ export type CustomerWorkspaceKey =
   | "routes"
   | "revenue"
   | "revenue-ledger"
+  | "billing"
   | "assistant"
   | "report"
   | "settings"
@@ -103,6 +105,13 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
         href: "/revenue/transactions",
         icon: ReceiptText,
         label: "거래내역"
+      },
+      {
+        active: "billing",
+        description: "카드 자동결제, 이용료 청구 이력",
+        href: "/revenue/billing",
+        icon: CreditCard,
+        label: "결제 관리"
       },
       {
         active: "assistant",

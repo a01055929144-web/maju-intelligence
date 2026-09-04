@@ -4966,6 +4966,14 @@ function PermitLeadMapQuickCard({
   const instagramHandle = getLeadInstagramHandle(lead);
   const confidence = getLeadConfidence(lead);
   const recommendedDelivery = getRecommendedDelivery(lead, allStores);
+  // 2026-09-01 피드백: "리드들의 카드내에 지도 이모티콘이 없네" — 저장된 naverPlaceUrl/kakaoPlaceUrl/
+  // googlePlaceUrl은 추천 점수 갱신을 돌리기 전까지 비어 있어, 그때까지는 링크가 아예 안 보였습니다.
+  // 거래처 카드(PlaceLinkRow)와 동일하게 값이 없거나 일반 검색 링크면 상호명+주소 검색 링크로
+  // 폴백해 항상 3개 링크가 뜨도록 합니다.
+  const leadPlaceSearchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
+  const leadNaverPlaceUrl = isGenericNaverSearchLink(lead.naverPlaceUrl) ? leadPlaceSearchLinks.naverPlaceUrl : lead.naverPlaceUrl!.trim();
+  const leadKakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || leadPlaceSearchLinks.kakaoPlaceUrl;
+  const leadGooglePlaceUrl = lead.googlePlaceUrl?.trim() || leadPlaceSearchLinks.googleMapUrl;
 
   async function copyAddress() {
     if (!lead?.address) return;
@@ -5171,30 +5179,22 @@ function PermitLeadMapQuickCard({
             </span>
           </p>
         ) : null}
-        {lead.naverPlaceUrl || lead.kakaoPlaceUrl || lead.googlePlaceUrl || instagramHandle ? (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {lead.naverPlaceUrl ? (
-              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={lead.naverPlaceUrl} rel="noreferrer" target="_blank">
-                네이버
-              </a>
-            ) : null}
-            {lead.kakaoPlaceUrl ? (
-              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={lead.kakaoPlaceUrl} rel="noreferrer" target="_blank">
-                카카오맵
-              </a>
-            ) : null}
-            {lead.googlePlaceUrl ? (
-              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={lead.googlePlaceUrl} rel="noreferrer" target="_blank">
-                구글
-              </a>
-            ) : null}
-            {instagramHandle ? (
-              <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
-                인스타그램
-              </a>
-            ) : null}
-          </div>
-        ) : null}
+        <div className="mt-2 flex flex-wrap gap-1">
+          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadNaverPlaceUrl} rel="noreferrer" target="_blank">
+            네이버
+          </a>
+          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadKakaoPlaceUrl} rel="noreferrer" target="_blank">
+            카카오맵
+          </a>
+          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadGooglePlaceUrl} rel="noreferrer" target="_blank">
+            구글
+          </a>
+          {instagramHandle ? (
+            <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
+              인스타그램
+            </a>
+          ) : null}
+        </div>
         {message ? <p className="mt-1.5 text-[11px] font-bold text-rose-600">{message}</p> : null}
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
@@ -5687,20 +5687,45 @@ const TodayCourseView = dynamic(() => import("./today-course-view").then((module
 });
 
 export function DirectoryStat({
+  active = false,
   label,
+  onClick,
   title,
   tone = "slate",
   value
 }: {
+  readonly active?: boolean;
   readonly label: string;
+  readonly onClick?: () => void;
   readonly title?: string;
   readonly tone?: "rose" | "slate";
   readonly value: string;
 }) {
-  return (
-    <div className="maju-stat-card px-4 py-3" title={title}>
+  const content = (
+    <>
       <p className="maju-muted-label">{label}</p>
       <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    </>
+  );
+  // 2026-09-01 피드백: "해당 카드를 누르면, 아래 거래처들이 필터가 되면 좋을 것 같아" — KPI 카드를
+  // 눌러 바로 아래 목록을 그 조건으로 필터링할 수 있게 클릭 가능한 버튼 형태를 추가로 지원합니다.
+  if (onClick) {
+    return (
+      <button
+        className={`maju-stat-card w-full px-4 py-3 text-left transition hover:border-teal-300 hover:shadow-sm ${
+          active ? "border-teal-400 ring-1 ring-inset ring-teal-300" : ""
+        }`}
+        onClick={onClick}
+        title={title}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="maju-stat-card px-4 py-3" title={title}>
+      {content}
     </div>
   );
 }
