@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, MessageSquareText, Navigation, Phone, PlusCircle, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
+import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
-import { getTodayRoutePlan } from "@/lib/store";
+import { getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
 export default async function MobileTodayPage({ searchParams }: { searchParams?: Promise<{ customer?: string }> }) {
@@ -15,7 +16,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const session = await getCustomerSession();
   if (!session) redirect("/mobile/join");
 
-  const routePlan = await getTodayRoutePlan(session.companyId);
+  const [routePlan, companySettings] = await Promise.all([
+    getTodayRoutePlan(session.companyId),
+    getCompanySettings(session.companyId, session.companyName)
+  ]);
   const sourceReady = routePlan.source === "supabase";
   const driverName = session.name || "모바일 담당자";
   const normalizedDriverName = session.name?.trim();
@@ -70,6 +74,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           >
             PC 버전(전체 화면)으로 보기
           </Link>
+          <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
         </header>
 
         <div className="flex-1 space-y-4 px-5 py-5">
@@ -191,7 +196,17 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 phone={selectedStop.phone}
               />
               <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
-              <MobileDeliveryProofPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
+              <MobileDeliveryProofPanel
+                companyName={companySettings.name || session.companyName}
+                customerId={selectedStop.id}
+                customerName={selectedStop.name}
+                deliveryCompleteMessage={companySettings.deliveryCompleteMessage}
+                deliveryIssueMessage={companySettings.deliveryIssueMessage}
+                deliveryPartialMessage={companySettings.deliveryPartialMessage}
+                loadingPosition={selectedStop.loadingPosition}
+                notificationPhone={companySettings.notificationPhone}
+                notificationSenderName={companySettings.notificationSenderName}
+              />
               <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
             </section>
           ) : null}

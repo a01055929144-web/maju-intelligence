@@ -16,6 +16,7 @@ import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "./bu
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
+import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -77,8 +78,14 @@ export type CompanySettings = {
   id: string;
   name: string;
   businessType: string;
+  deliveryCompleteMessage?: string;
+  deliveryIssueMessage?: string;
+  deliveryPartialMessage?: string;
+  notificationPhone?: string;
+  notificationSenderName?: string;
   ownerName: string;
   originAddress: string;
+  smsSenderPhone?: string;
   status: string;
   telegramChatId?: string;
   updatedAt: string;
@@ -86,9 +93,15 @@ export type CompanySettings = {
 };
 export type CompanySettingsInput = {
   businessType?: string;
+  deliveryCompleteMessage?: string;
+  deliveryIssueMessage?: string;
+  deliveryPartialMessage?: string;
   name: string;
+  notificationPhone?: string;
+  notificationSenderName?: string;
   originAddress?: string;
   ownerName?: string;
+  smsSenderPhone?: string;
   telegramChatId?: string;
 };
 export type CustomerMasterItem = {
@@ -438,6 +451,55 @@ export type StaffInvitationUpdateInput = {
   role?: StaffInvitation["role"];
   status?: Extract<StaffInvitation["status"], "pending" | "revoked">;
 };
+export type StaffMobileLocationInput = {
+  accuracyMeters?: number;
+  companyId: string;
+  currentCustomerId?: string;
+  deliveryVehicle?: string;
+  driverName?: string;
+  lat: number;
+  lng: number;
+  status?: "active" | "paused" | "offline";
+  userAgent?: string;
+  userId: string;
+};
+export type StaffVehicleLocation = {
+  accuracyMeters?: number;
+  currentCustomerId?: string;
+  deliveryVehicle?: string;
+  driverName: string;
+  id: string;
+  isStale: boolean;
+  lastLocationAt?: string;
+  lastSeenAt?: string;
+  lat: number;
+  lng: number;
+  status: "active" | "paused" | "offline" | "stale";
+  userId: string;
+};
+export type StaffLocationEvent = {
+  accuracyMeters?: number;
+  currentCustomerId?: string;
+  deliveryVehicle?: string;
+  driverName: string;
+  id: string;
+  lat: number;
+  lng: number;
+  recordedAt: string;
+  userId: string;
+};
+export type DeliveryCompletionEvent = {
+  actualOrder: number;
+  completedAt: string;
+  customerId: string;
+  customerName: string;
+  deliveryDriver?: string;
+  deliveryVehicle?: string;
+  id: string;
+  memoSnippet?: string;
+  plannedOrder?: number;
+  statusLabel?: string;
+};
 export type StaffKakaoAcceptInput = {
   avatarUrl?: string;
   email?: string;
@@ -692,6 +754,19 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
 function isMissingStaffInvitationTableError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("PGRST205") && message.includes("staff_invitations");
+}
+
+function isMissingStaffMobileLocationSchemaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("staff_mobile_devices") &&
+    (message.includes("PGRST205") ||
+      message.includes("last_lat") ||
+      message.includes("last_lng") ||
+      message.includes("last_location_at") ||
+      message.includes("location_status") ||
+      message.includes("schema cache"))
+  );
 }
 
 function isInvalidSupabaseApiKeyError(error: unknown) {
@@ -2694,6 +2769,281 @@ function createStaffInviteUrl(inviteCode: string) {
   return `${appUrl.replace(/\/$/, "")}/mobile/join?invite=${encodeURIComponent(inviteCode)}`;
 }
 
+function toStaffVehicleLocation(row: {
+  current_customer_id?: string | null;
+  delivery_vehicle?: string | null;
+  driver_name?: string | null;
+  id: string;
+  last_accuracy_m?: number | string | null;
+  last_lat?: number | string | null;
+  last_lng?: number | string | null;
+  last_location_at?: string | null;
+  last_seen_at?: string | null;
+  location_status?: string | null;
+  user_id: string;
+}): StaffVehicleLocation | null {
+  const lat = Number(row.last_lat);
+  const lng = Number(row.last_lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const lastLocationAt = row.last_location_at || undefined;
+  const staleMs = lastLocationAt ? Date.now() - new Date(lastLocationAt).getTime() : Number.POSITIVE_INFINITY;
+  const isStale = staleMs > 5 * 60 * 1000;
+  return {
+    accuracyMeters: row.last_accuracy_m === null || row.last_accuracy_m === undefined ? undefined : Number(row.last_accuracy_m),
+    currentCustomerId: row.current_customer_id || undefined,
+    deliveryVehicle: row.delivery_vehicle || undefined,
+    driverName: row.driver_name || "배송기사",
+    id: row.id,
+    isStale,
+    lastLocationAt,
+    lastSeenAt: row.last_seen_at || undefined,
+    lat,
+    lng,
+    status: isStale ? "stale" : ((row.location_status || "active") as StaffVehicleLocation["status"]),
+    userId: row.user_id
+  };
+}
+
+export async function upsertStaffMobileLocation(input: StaffMobileLocationInput): Promise<{ location: StaffVehicleLocation | null; persisted: boolean }> {
+  if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!input.userId) throw new Error("실제 직원 계정으로 로그인해야 위치를 저장할 수 있습니다.");
+  if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) throw new Error("유효한 위치 좌표가 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return {
+      location: {
+        accuracyMeters: input.accuracyMeters,
+        currentCustomerId: input.currentCustomerId,
+        deliveryVehicle: input.deliveryVehicle,
+        driverName: input.driverName || "배송기사",
+        id: input.userId,
+        isStale: false,
+        lastLocationAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+        lat: input.lat,
+        lng: input.lng,
+        status: input.status || "active",
+        userId: input.userId
+      },
+      persisted: false
+    };
+  }
+
+  const now = new Date().toISOString();
+  try {
+    const rows = await supabaseRequest<
+      Array<{
+        current_customer_id: string | null;
+        delivery_vehicle: string | null;
+        driver_name: string | null;
+        id: string;
+        last_accuracy_m: number | string | null;
+        last_lat: number | string | null;
+        last_lng: number | string | null;
+        last_location_at: string | null;
+        last_seen_at: string | null;
+        location_status: string | null;
+        user_id: string;
+      }>
+    >("staff_mobile_devices?on_conflict=company_id,user_id,platform", {
+      method: "POST",
+      body: JSON.stringify([
+        {
+          company_id: input.companyId,
+          current_customer_id: input.currentCustomerId || null,
+          delivery_vehicle: input.deliveryVehicle || null,
+          device_label: input.driverName || "모바일 웹",
+          driver_name: input.driverName || null,
+          last_accuracy_m: Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : null,
+          last_lat: input.lat,
+          last_lng: input.lng,
+          last_location_at: now,
+          last_seen_at: now,
+          location_status: input.status || "active",
+          platform: "mobile_web",
+          user_agent: input.userAgent || null,
+          user_id: input.userId
+        }
+      ])
+    });
+    const location = toStaffVehicleLocation(rows[0]) || null;
+    if (location) {
+      await supabaseRequest("staff_location_events", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify([
+          {
+            accuracy_m: Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : null,
+            company_id: input.companyId,
+            current_customer_id: input.currentCustomerId || null,
+            delivery_vehicle: input.deliveryVehicle || null,
+            device_id: location.id,
+            driver_name: input.driverName || null,
+            latitude: input.lat,
+            longitude: input.lng,
+            recorded_at: now,
+            user_id: input.userId
+          }
+        ])
+      }).catch((eventError) => {
+        if (isMissingStaffMobileLocationSchemaError(eventError)) return null;
+        throw eventError;
+      });
+    }
+    return { location, persisted: true };
+  } catch (error) {
+    if (isMissingStaffMobileLocationSchemaError(error)) {
+      throw new Error("모바일 위치 저장 컬럼이 없습니다. Supabase SQL Editor에서 supabase/migrations/20260901_staff_mobile_location.sql 파일 내용을 실행한 뒤 다시 시도하세요.");
+    }
+    throw error;
+  }
+}
+
+export async function getStaffVehicleLocations(companyId?: string): Promise<StaffVehicleLocation[]> {
+  if (!companyId || !isProductionStoreConfigured()) return [];
+  try {
+    const rows = await supabaseRequest<
+      Array<{
+        current_customer_id: string | null;
+        delivery_vehicle: string | null;
+        driver_name: string | null;
+        id: string;
+        last_accuracy_m: number | string | null;
+        last_lat: number | string | null;
+        last_lng: number | string | null;
+        last_location_at: string | null;
+        last_seen_at: string | null;
+        location_status: string | null;
+        user_id: string;
+      }>
+    >(
+      `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(
+        companyId
+      )}&not.last_lat=is.null&not.last_lng=is.null&order=last_location_at.desc&limit=100`
+    );
+    return rows.map(toStaffVehicleLocation).filter((location): location is StaffVehicleLocation => Boolean(location));
+  } catch (error) {
+    if (isMissingStaffMobileLocationSchemaError(error)) return [];
+    throw error;
+  }
+}
+
+export async function getStaffLocationEvents(companyId?: string, options: { hours?: number; userId?: string } = {}): Promise<StaffLocationEvent[]> {
+  if (!companyId || !isProductionStoreConfigured()) return [];
+  const since = new Date(Date.now() - Math.max(1, options.hours || 12) * 60 * 60 * 1000).toISOString();
+  const userFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
+  try {
+    const rows = await supabaseRequest<
+      Array<{
+        accuracy_m: number | string | null;
+        current_customer_id: string | null;
+        delivery_vehicle: string | null;
+        driver_name: string | null;
+        id: string;
+        latitude: number | string;
+        longitude: number | string;
+        recorded_at: string;
+        user_id: string;
+      }>
+    >(
+      `staff_location_events?select=id,user_id,driver_name,delivery_vehicle,latitude,longitude,accuracy_m,recorded_at,current_customer_id&company_id=eq.${encodeURIComponent(
+        companyId
+      )}&recorded_at=gte.${encodeURIComponent(since)}${userFilter}&order=recorded_at.asc&limit=3000`
+    );
+    return rows
+      .map((row) => ({
+        accuracyMeters: row.accuracy_m === null || row.accuracy_m === undefined ? undefined : Number(row.accuracy_m),
+        currentCustomerId: row.current_customer_id || undefined,
+        deliveryVehicle: row.delivery_vehicle || undefined,
+        driverName: row.driver_name || "배송기사",
+        id: row.id,
+        lat: Number(row.latitude),
+        lng: Number(row.longitude),
+        recordedAt: row.recorded_at,
+        userId: row.user_id
+      }))
+      .filter((event) => Number.isFinite(event.lat) && Number.isFinite(event.lng));
+  } catch (error) {
+    if (isMissingStaffMobileLocationSchemaError(error)) return [];
+    throw error;
+  }
+}
+
+export async function getDeliveryCompletionEvents(
+  companyId?: string,
+  options: { deliveryVehicle?: string; driverName?: string; hours?: number } = {}
+): Promise<DeliveryCompletionEvent[]> {
+  if (!companyId || !isProductionStoreConfigured()) return [];
+  const since = new Date(Date.now() - Math.max(1, options.hours || 12) * 60 * 60 * 1000).toISOString();
+  try {
+    const rows = await supabaseRequest<
+      Array<{
+        created_at: string;
+        customer_id: string;
+        id: string;
+        memo: string;
+        next_action: string | null;
+      }>
+    >(
+      `customer_notes?select=id,customer_id,memo,next_action,created_at&company_id=eq.${encodeURIComponent(
+        companyId
+      )}&note_type=eq.delivery&created_at=gte.${encodeURIComponent(since)}&order=created_at.asc&limit=500`
+    );
+    if (!rows.length) return [];
+
+    const routePlan = await getTodayRoutePlan(companyId).catch(() => null);
+    const routeStops = (routePlan?.groups || []).flatMap((group) => group.stops);
+    const stopByCustomerId = new Map(routeStops.map((stop) => [stop.id, stop]));
+    const driverName = normalizeComparableText(options.driverName);
+    const deliveryVehicle = normalizeComparableText(options.deliveryVehicle);
+    const filtered = rows.filter((row) => {
+      const stop = stopByCustomerId.get(row.customer_id);
+      if (!stop) return !driverName && !deliveryVehicle;
+      const stopDriver = normalizeComparableText(stop.deliveryDriver);
+      const stopVehicle = normalizeComparableText(stop.deliveryVehicle);
+      if (deliveryVehicle && stopVehicle && stopVehicle !== deliveryVehicle) return false;
+      if (!deliveryVehicle && driverName && stopDriver && stopDriver !== driverName) return false;
+      return true;
+    });
+
+    return filtered.map((row, index) => {
+      const stop = stopByCustomerId.get(row.customer_id);
+      return {
+        actualOrder: index + 1,
+        completedAt: row.created_at,
+        customerId: row.customer_id,
+        customerName: stop?.name || "거래처",
+        deliveryDriver: stop?.deliveryDriver,
+        deliveryVehicle: stop?.deliveryVehicle,
+        id: row.id,
+        memoSnippet: summarizeDeliveryMemo(row.memo),
+        plannedOrder: stop?.order && stop.order < 10000 ? stop.order : undefined,
+        statusLabel: extractDeliveryStatus(row.memo)
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function summarizeDeliveryMemo(memo: string) {
+  return memo
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .find((line) => !line.startsWith("배송 상태:") && !line.startsWith("알림 방식:"))
+    ?.slice(0, 60);
+}
+
+function extractDeliveryStatus(memo: string) {
+  const match = memo.match(/배송 상태:\s*([^\n\r]+)/);
+  return match?.[1]?.trim();
+}
+
+function normalizeComparableText(value?: string | null) {
+  return (value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function getSystemStatus(): SystemStatus {
   const supabaseConfigured = isProductionStoreConfigured();
   const appUrlConfigured = Boolean(process.env.NEXT_PUBLIC_APP_URL);
@@ -3931,6 +4281,184 @@ export async function addCustomerAttachment(
     attachment,
     persisted: true
   };
+}
+
+export type CustomerMessageLogItem = {
+  id: string;
+  channel: string;
+  createdAt: string;
+  errorMessage?: string;
+  messageBody: string;
+  provider?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  sentAt?: string;
+  status: "failed" | "queued" | "sent";
+  triggerType: string;
+};
+
+type CustomerMessageLogRow = {
+  id: string;
+  channel: string;
+  created_at: string;
+  error_message: string | null;
+  message_body: string;
+  provider: string | null;
+  recipient_name: string | null;
+  recipient_phone: string | null;
+  sent_at: string | null;
+  status: "failed" | "queued" | "sent";
+  trigger_type: string;
+};
+
+function isMissingCustomerMessageLogsTableError(error: unknown) {
+  return error instanceof Error && error.message.includes("customer_message_logs");
+}
+
+function toCustomerMessageLogItem(row: CustomerMessageLogRow): CustomerMessageLogItem {
+  return {
+    id: row.id,
+    channel: row.channel,
+    createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+    errorMessage: row.error_message || undefined,
+    messageBody: row.message_body,
+    provider: row.provider || undefined,
+    recipientName: row.recipient_name || undefined,
+    recipientPhone: row.recipient_phone || undefined,
+    sentAt: row.sent_at ? new Date(row.sent_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined,
+    status: row.status,
+    triggerType: row.trigger_type
+  };
+}
+
+export async function sendCustomerDeliveryMessage(
+  input: {
+    attachmentId?: string;
+    channel: CustomerMessageChannel;
+    customerId: string;
+    message: string;
+    noteId?: string;
+    triggerType?: "delivery_complete" | "delivery_issue" | "manual";
+    triggeredByName?: string;
+  },
+  companyId?: string
+) {
+  const id = companyId || getDefaultCompanyId();
+  const message = input.message.trim();
+  if (!message) throw new Error("발송할 메시지가 없습니다.");
+
+  if (!isProductionStoreConfigured() || input.customerId.startsWith("sample-") || input.customerId.startsWith("local-")) {
+    return {
+      log: {
+        id: `local-message-${Date.now()}`,
+        channel: input.channel,
+        createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        errorMessage: "데이터베이스 미연결 상태라 실제 발송하지 않고 대기 기록만 만들었습니다.",
+        messageBody: message,
+        provider: "manual",
+        status: "queued" as const,
+        triggerType: input.triggerType || "delivery_complete"
+      },
+      ok: true,
+      sent: false
+    };
+  }
+
+  const customerRows = await supabaseRequest<
+    Array<{
+      customer_name: string;
+      phone: string | null;
+      representative_name: string | null;
+    }>
+  >(
+    `normalized_customers?select=customer_name,phone,representative_name&company_id=eq.${encodeURIComponent(id)}&id=eq.${encodeURIComponent(
+      input.customerId
+    )}&limit=1`
+  );
+  const customer = customerRows[0];
+  if (!customer) throw new Error("거래처를 찾을 수 없습니다.");
+
+  const contacts = await listCustomerContacts(id, input.customerId).catch(() => []);
+  const primaryContact = contacts.find((contact) => contact.isPrimary && contact.phone) || contacts.find((contact) => contact.phone);
+  const recipientName = primaryContact?.name || customer.representative_name || customer.customer_name;
+  const recipientPhone = primaryContact?.phone || customer.phone || "";
+  const sendResult = await sendCustomerMessage({ channel: input.channel, message, phone: recipientPhone });
+  const normalizedRecipientPhone = sendResult.recipientPhone || recipientPhone;
+
+  try {
+    const rows = await supabaseRequest<CustomerMessageLogRow[]>("customer_message_logs", {
+      method: "POST",
+      body: JSON.stringify([
+        {
+          attachment_id: input.attachmentId || null,
+          channel: input.channel,
+          company_id: id,
+          contact_id: primaryContact?.id || null,
+          customer_id: input.customerId,
+          error_message: sendResult.reason || null,
+          message_body: message,
+          note_id: input.noteId || null,
+          provider: sendResult.provider,
+          provider_message_id: sendResult.providerMessageId || null,
+          recipient_name: recipientName || null,
+          recipient_phone: normalizedRecipientPhone || null,
+          sent_at: sendResult.status === "sent" ? new Date().toISOString() : null,
+          status: sendResult.status,
+          trigger_type: input.triggerType || "delivery_complete",
+          triggered_by_name: input.triggeredByName || "현장 사용자"
+        }
+      ])
+    });
+    const log = toCustomerMessageLogItem(rows[0]);
+
+    await addCustomerNote(
+      {
+        customerId: input.customerId,
+        createdByName: input.triggeredByName || "현장 사용자",
+        memo:
+          sendResult.status === "sent"
+            ? `[알림 발송 완료]\n${message}`
+            : `[알림 발송 대기]\n${message}\n${sendResult.reason || "발송 설정 확인 필요"}`,
+        nextAction: sendResult.status === "sent" ? "거래처 알림 발송 완료" : "거래처 알림 수동 확인",
+        noteType: "delivery_message"
+      },
+      id
+    ).catch(() => null);
+
+    return {
+      log,
+      ok: true,
+      sent: log.status === "sent"
+    };
+  } catch (error) {
+    if (!isMissingCustomerMessageLogsTableError(error)) throw error;
+    await addCustomerNote(
+      {
+        customerId: input.customerId,
+        createdByName: input.triggeredByName || "현장 사용자",
+        memo: `[알림 발송 대기]\n${message}\n메시지 로그 테이블이 없어 거래처 메모로만 저장했습니다.`,
+        nextAction: "customer_message_logs 마이그레이션 적용",
+        noteType: "delivery_message"
+      },
+      id
+    ).catch(() => null);
+    return {
+      log: {
+        id: `fallback-message-${Date.now()}`,
+        channel: input.channel,
+        createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        errorMessage: "메시지 로그 테이블이 아직 준비되지 않았습니다.",
+        messageBody: message,
+        provider: sendResult.provider,
+        recipientName,
+        recipientPhone: normalizedRecipientPhone,
+        status: "queued" as const,
+        triggerType: input.triggerType || "delivery_complete"
+      },
+      ok: true,
+      sent: false
+    };
+  }
 }
 
 export async function uploadCustomerAttachmentFile(
@@ -7820,8 +8348,14 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     id,
     name: fallbackName,
     businessType: "식자재 유통",
+    deliveryCompleteMessage: "요청하신 위치에 배송 적재 완료했습니다.",
+    deliveryIssueMessage: "배송 중 확인이 필요한 사항이 있어 안내드립니다.",
+    deliveryPartialMessage: "일부 품목은 확인 후 별도 안내드리겠습니다.",
+    notificationPhone: process.env.COMPANY_NOTIFICATION_PHONE || "",
+    notificationSenderName: fallbackName,
     ownerName: "정두영",
     originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+    smsSenderPhone: process.env.SOLAPI_SENDER_PHONE || "",
     status: "fallback",
     updatedAt: "기준 데이터",
     workspaceType: "company" as const
@@ -7835,8 +8369,14 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     id: string;
     name: string;
     business_type: string | null;
+    delivery_complete_message?: string | null;
+    delivery_issue_message?: string | null;
+    delivery_partial_message?: string | null;
+    notification_phone?: string | null;
+    notification_sender_name?: string | null;
     owner_name: string | null;
     origin_address: string | null;
+    sms_sender_phone?: string | null;
     status: string;
     telegram_chat_id?: string | null;
     updated_at: string;
@@ -7846,7 +8386,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
 
   try {
     rows = await supabaseRequest<Array<CompanyRow>>(
-      `companies?select=id,name,business_type,owner_name,origin_address,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,sms_sender_phone,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     );
   } catch (error) {
     if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
@@ -7868,8 +8408,14 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     id: row.id,
     name: row.name,
     businessType: row.business_type || "",
+    deliveryCompleteMessage: row.delivery_complete_message || fallback.deliveryCompleteMessage,
+    deliveryIssueMessage: row.delivery_issue_message || fallback.deliveryIssueMessage,
+    deliveryPartialMessage: row.delivery_partial_message || fallback.deliveryPartialMessage,
+    notificationPhone: row.notification_phone || fallback.notificationPhone,
+    notificationSenderName: row.notification_sender_name || row.name || fallback.notificationSenderName,
     ownerName: row.owner_name || "",
     originAddress: row.origin_address || "",
+    smsSenderPhone: row.sms_sender_phone || fallback.smsSenderPhone,
     status: row.status,
     telegramChatId: row.telegram_chat_id || undefined,
     updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
@@ -7882,8 +8428,14 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     id: companyId,
     name: input.name.trim(),
     business_type: input.businessType?.trim() || null,
+    delivery_complete_message: input.deliveryCompleteMessage?.trim() || null,
+    delivery_issue_message: input.deliveryIssueMessage?.trim() || null,
+    delivery_partial_message: input.deliveryPartialMessage?.trim() || null,
+    notification_phone: input.notificationPhone?.trim() || null,
+    notification_sender_name: input.notificationSenderName?.trim() || null,
     owner_name: input.ownerName?.trim() || null,
     origin_address: input.originAddress?.trim() || null,
+    sms_sender_phone: input.smsSenderPhone?.trim() || null,
     telegram_chat_id: input.telegramChatId?.trim() || null,
     status: "active",
     updated_at: new Date().toISOString()
@@ -7898,8 +8450,14 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
         id: companyId,
         name: payload.name as string,
         businessType: (payload.business_type as string) || "",
+        deliveryCompleteMessage: (payload.delivery_complete_message as string) || "",
+        deliveryIssueMessage: (payload.delivery_issue_message as string) || "",
+        deliveryPartialMessage: (payload.delivery_partial_message as string) || "",
+        notificationPhone: (payload.notification_phone as string) || "",
+        notificationSenderName: (payload.notification_sender_name as string) || (payload.name as string),
         ownerName: (payload.owner_name as string) || "",
         originAddress: (payload.origin_address as string) || "",
+        smsSenderPhone: (payload.sms_sender_phone as string) || "",
         telegramChatId: (payload.telegram_chat_id as string) || undefined,
         status: "active",
         updatedAt: "서버 저장 미확인"
@@ -7911,8 +8469,14 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     id: string;
     name: string;
     business_type: string | null;
+    delivery_complete_message?: string | null;
+    delivery_issue_message?: string | null;
+    delivery_partial_message?: string | null;
+    notification_phone?: string | null;
+    notification_sender_name?: string | null;
     owner_name: string | null;
     origin_address: string | null;
+    sms_sender_phone?: string | null;
     telegram_chat_id?: string | null;
     status: string;
     updated_at: string;
@@ -7928,19 +8492,41 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       body: JSON.stringify([payload])
     });
   } catch (error) {
-    if (!isMissingTelegramChatIdColumnError(error)) throw error;
+    if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
+    if (
+      isMissingColumnError(error) &&
+      (payload.delivery_complete_message ||
+        payload.delivery_issue_message ||
+        payload.delivery_partial_message ||
+        payload.notification_phone ||
+        payload.notification_sender_name ||
+        payload.sms_sender_phone)
+    ) {
+      throw new Error(
+        "문자 알림 설정을 저장할 수 없습니다. Supabase에 회사 문자 설정 컬럼이 아직 없습니다. supabase/migrations/20260901_company_message_settings.sql 내용을 먼저 실행하세요."
+      );
+    }
     if (payload.telegram_chat_id) {
       throw new Error(
         "텔레그램 chat_id를 저장할 수 없습니다. Supabase에 telegram_chat_id 컬럼이 아직 없습니다. ALTER TABLE companies ADD COLUMN IF NOT EXISTS telegram_chat_id text; 를 먼저 실행하세요."
       );
     }
-    const { telegram_chat_id: _telegramChatId, ...payloadWithoutTelegram } = payload;
+    const {
+      notification_phone: _notificationPhone,
+      notification_sender_name: _notificationSenderName,
+      delivery_complete_message: _deliveryCompleteMessage,
+      delivery_issue_message: _deliveryIssueMessage,
+      delivery_partial_message: _deliveryPartialMessage,
+      sms_sender_phone: _smsSenderPhone,
+      telegram_chat_id: _telegramChatId,
+      ...payloadWithoutOptionalMessageColumns
+    } = payload;
     rows = await supabaseRequest<Array<CompanyRow>>("companies?on_conflict=id", {
       method: "POST",
       headers: {
         Prefer: "resolution=merge-duplicates,return=representation"
       },
-      body: JSON.stringify([payloadWithoutTelegram])
+      body: JSON.stringify([payloadWithoutOptionalMessageColumns])
     });
   }
 
@@ -7951,8 +8537,14 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       id: row.id,
       name: row.name,
       businessType: row.business_type || "",
+      deliveryCompleteMessage: row.delivery_complete_message || "",
+      deliveryIssueMessage: row.delivery_issue_message || "",
+      deliveryPartialMessage: row.delivery_partial_message || "",
+      notificationPhone: row.notification_phone || "",
+      notificationSenderName: row.notification_sender_name || row.name,
       ownerName: row.owner_name || "",
       originAddress: row.origin_address || "",
+      smsSenderPhone: row.sms_sender_phone || "",
       telegramChatId: row.telegram_chat_id || undefined,
       status: row.status,
       updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw } from "lucide-react";
+import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LinkifiedText } from "@/components/linkified-text";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
@@ -34,18 +34,30 @@ const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
 ];
 
 const messageChannels: Array<{ label: string; value: MessageChannel }> = [
-  { label: "카톡 발송 대기", value: "kakao" },
-  { label: "문자 발송 대기", value: "sms" }
+  { label: "SMS 자동", value: "sms" },
+  { label: "카카오 대기", value: "kakao" }
 ];
 
 export function MobileDeliveryProofPanel({
+  companyName,
   customerId,
   customerName,
-  loadingPosition
+  deliveryCompleteMessage,
+  deliveryIssueMessage,
+  deliveryPartialMessage,
+  loadingPosition,
+  notificationPhone,
+  notificationSenderName
 }: {
+  companyName?: string;
   customerId: string;
   customerName: string;
+  deliveryCompleteMessage?: string;
+  deliveryIssueMessage?: string;
+  deliveryPartialMessage?: string;
   loadingPosition?: string;
+  notificationPhone?: string;
+  notificationSenderName?: string;
 }) {
   const [copyMessage, setCopyMessage] = useState("");
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>("arrived");
@@ -56,14 +68,25 @@ export function MobileDeliveryProofPanel({
   const [location, setLocation] = useState<LocationTag | null>(null);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [memo, setMemo] = useState("");
-  const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
+  const [manualRecipientPhone, setManualRecipientPhone] = useState("");
+  const [messageChannel, setMessageChannel] = useState<MessageChannel>("sms");
+  const [messageResult, setMessageResult] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [errorDetail, setErrorDetail] = useState("");
   const deliveryProofAttachments = useMemo(() => attachments.filter((item) => item.attachmentType === "delivery_proof"), [attachments]);
-  const deliveryNotes = useMemo(() => notes.filter((item) => item.noteType === "delivery"), [notes]);
-  const ownerMessage = createOwnerMessage(customerName, memo, deliveryStatus, file?.name || "", loadingPosition);
+  const deliveryNotes = useMemo(() => notes.filter((item) => item.noteType === "delivery" || item.noteType === "delivery_message"), [notes]);
+  const ownerMessage = createOwnerMessage(customerName, memo, deliveryStatus, file?.name || "", loadingPosition, {
+    companyName,
+    notificationPhone,
+    notificationSenderName,
+    templates: {
+      arrived: deliveryCompleteMessage,
+      issue: deliveryIssueMessage,
+      partial: deliveryPartialMessage
+    }
+  });
 
   function handleFileSelect(selected: File | null) {
     if (selected && selected.size > MAX_UPLOAD_SIZE_BYTES) {
@@ -117,10 +140,12 @@ export function MobileDeliveryProofPanel({
 
     setSaving(true);
     setStatus("idle");
+    setMessageResult("");
+    setManualRecipientPhone("");
     const locationText = location
       ? `\n위치 태그: https://www.google.com/maps?q=${location.lat},${location.lng} (정확도 약 ${location.accuracy}m)`
       : "";
-    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}${locationText}`;
+    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카카오 수동/알림톡 대기" : "SMS 자동/무료 수동"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}${locationText}`;
 
     const noteRequest = fetch("/api/customer-operations", {
       method: "POST",
@@ -129,7 +154,7 @@ export function MobileDeliveryProofPanel({
         action: "note",
         customerId,
         memo: memoText,
-        nextAction: messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
+        nextAction: messageChannel === "kakao" ? "카카오 알림톡 또는 수동 공유" : "SMS 자동 발송 또는 수동 문자",
         noteType: "delivery"
       })
     });
@@ -156,6 +181,29 @@ export function MobileDeliveryProofPanel({
     }
 
     setErrorDetail("");
+    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
+    const attachmentPayload = attachmentResponse?.ok ? ((await attachmentResponse.json().catch(() => null)) as { attachment?: { id?: string } } | null) : null;
+    const messageResponse = await fetch("/api/customer-messages/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        attachmentId: attachmentPayload?.attachment?.id,
+        channel: messageChannel,
+        customerId,
+        message: ownerMessage,
+        noteId: notePayload?.note?.id,
+        triggerType: deliveryStatus === "issue" ? "delivery_issue" : "delivery_complete"
+      })
+    }).catch(() => null);
+    const messagePayload = (await messageResponse?.json().catch(() => null)) as
+      | { log?: { errorMessage?: string; recipientPhone?: string; status?: string }; message?: string; sent?: boolean }
+      | null;
+    setManualRecipientPhone(messagePayload?.log?.recipientPhone || "");
+    setMessageResult(
+      messagePayload?.sent
+        ? `거래처 알림 발송 완료 · ${messagePayload.log?.recipientPhone || "수신번호"}`
+        : messagePayload?.log?.errorMessage || messagePayload?.message || "거래처 알림은 발송 대기 상태로 저장되었습니다."
+    );
     setFile(null);
     setMemo("");
     setStatus("saved");
@@ -168,6 +216,19 @@ export function MobileDeliveryProofPanel({
       setCopyMessage("점주 발송 문구를 복사했습니다.");
     } catch {
       setCopyMessage("복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
+    }
+  }
+
+  async function shareOwnerMessage() {
+    if (!navigator.share) {
+      await copyOwnerMessage();
+      return;
+    }
+    try {
+      await navigator.share({ text: ownerMessage, title: `${customerName} 배송 안내` });
+      setCopyMessage("공유 화면을 열었습니다.");
+    } catch {
+      setCopyMessage("공유를 취소했거나 지원되지 않아 문구를 복사해 사용하세요.");
     }
   }
 
@@ -252,10 +313,16 @@ export function MobileDeliveryProofPanel({
       <div className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
-          <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={copyOwnerMessage} type="button">
-            <Copy className="h-3.5 w-3.5" />
-            복사
-          </button>
+          <div className="flex shrink-0 gap-1.5">
+            <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={shareOwnerMessage} type="button">
+              <Send className="h-3.5 w-3.5" />
+              공유
+            </button>
+            <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={copyOwnerMessage} type="button">
+              <Copy className="h-3.5 w-3.5" />
+              복사
+            </button>
+          </div>
         </div>
         <p className="mt-2 whitespace-pre-line rounded-lg bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
@@ -289,6 +356,16 @@ export function MobileDeliveryProofPanel({
         <p className="mt-2 text-xs font-bold text-rose-600">{errorDetail || "저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요."}</p>
       ) : null}
       {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">거래처 원장에 배송완료 기록이 저장되었습니다.</p> : null}
+      {messageResult ? <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-800 ring-1 ring-inset ring-blue-100">{messageResult}</p> : null}
+      {status === "saved" && manualRecipientPhone ? (
+        <a
+          className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white text-sm font-black text-blue-800 shadow-sm"
+          href={createSmsHref(manualRecipientPhone, ownerMessage)}
+        >
+          <MessageSquareText className="h-4 w-4" />
+          무료 문자앱으로 보내기
+        </a>
+      ) : null}
 
       <div className="mt-4 grid gap-2">
         <div className="flex items-center justify-between gap-2">
@@ -302,24 +379,28 @@ export function MobileDeliveryProofPanel({
           </p>
         ) : null}
         {!loadingProofs && !deliveryProofAttachments.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송완료 증빙이 없습니다.</p> : null}
-        {deliveryProofAttachments.slice(0, 4).map((item) => (
-          <a
-            className="flex items-center gap-3 rounded-lg border border-blue-100 bg-white p-3 transition hover:border-blue-300"
-            href={item.fileUrl || "#"}
-            key={item.id}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
-              {item.mimeType?.startsWith("video") ? <FileVideo className="h-5 w-5" /> : <ImageIcon className="h-5 w-5" />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-black text-slate-950">{item.title}</span>
-              <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">{item.createdAt}</span>
-            </span>
-            <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
-          </a>
-        ))}
+        {deliveryProofAttachments.length ? (
+          <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+            {deliveryProofAttachments.map((item) => (
+              <a
+                className="flex items-center gap-3 rounded-lg border border-blue-100 bg-white p-3 transition hover:border-blue-300"
+                href={item.fileUrl || "#"}
+                key={item.id}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+                  {item.mimeType?.startsWith("video") ? <FileVideo className="h-5 w-5" /> : <ImageIcon className="h-5 w-5" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black text-slate-950">{item.title}</span>
+                  <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">{item.createdAt}</span>
+                </span>
+                <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+              </a>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -328,18 +409,27 @@ export function MobileDeliveryProofPanel({
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryNotes.length}건</span>
         </div>
         {!loadingProofs && !deliveryNotes.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송 메모가 없습니다.</p> : null}
-        {deliveryNotes.slice(0, 3).map((item) => (
-          <div className="rounded-lg border border-blue-100 bg-white p-3" key={item.id}>
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs font-black text-blue-700">{item.nextAction || "배송 기록"}</p>
-              <p className="shrink-0 text-[11px] font-bold text-slate-400">{formatHistoryDate(item.createdAt)}</p>
-            </div>
-            <p className="mt-2 whitespace-pre-line text-xs font-bold leading-5 text-slate-700">
-              <LinkifiedText text={item.memo} />
-            </p>
-            <p className="mt-2 text-[11px] font-bold text-slate-400">{item.createdByName}</p>
+        {deliveryNotes.length ? (
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            {deliveryNotes.map((item) => (
+              <div className="rounded-lg border border-blue-100 bg-white p-3" key={item.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="mb-1 inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                      {item.noteType === "delivery_message" ? "알림" : "배송"}
+                    </span>
+                    <p className="truncate text-xs font-black text-blue-700">{item.nextAction || "배송 기록"}</p>
+                  </div>
+                  <p className="shrink-0 text-[11px] font-bold text-slate-400">{formatHistoryDate(item.createdAt)}</p>
+                </div>
+                <p className="mt-2 whitespace-pre-line text-xs font-bold leading-5 text-slate-700">
+                  <LinkifiedText text={item.memo} />
+                </p>
+                <p className="mt-2 text-[11px] font-bold text-slate-400">{item.createdByName}</p>
+              </div>
+            ))}
           </div>
-        ))}
+        ) : null}
       </div>
     </section>
   );
@@ -358,17 +448,39 @@ async function uploadDeliveryProof(customerId: string, file: File, title: string
   });
 }
 
-function createOwnerMessage(customerName: string, memo: string, status: DeliveryStatus, fileName: string, loadingPosition?: string) {
-  const baseMemo = memo.trim() || (status === "arrived" ? `${loadingPosition || "요청하신 위치"}에 배송 적재 완료했습니다.` : status === "partial" ? "일부 품목은 확인 후 별도 안내드리겠습니다." : "배송 중 확인이 필요한 사항이 있어 안내드립니다.");
+function createOwnerMessage(
+  customerName: string,
+  memo: string,
+  status: DeliveryStatus,
+  fileName: string,
+  loadingPosition?: string,
+  company?: {
+    companyName?: string;
+    notificationPhone?: string;
+    notificationSenderName?: string;
+    templates?: Partial<Record<DeliveryStatus, string | undefined>>;
+  }
+) {
+  const templateMemo = company?.templates?.[status]?.trim();
+  const fallbackMemo = status === "arrived" ? `${loadingPosition || "요청하신 위치"}에 배송 적재 완료했습니다.` : status === "partial" ? "일부 품목은 확인 후 별도 안내드리겠습니다." : "배송 중 확인이 필요한 사항이 있어 안내드립니다.";
+  const baseMemo = memo.trim() || templateMemo || fallbackMemo;
   const proofText = fileName ? `\n증빙자료: ${fileName}` : "";
+  const contactName = company?.notificationSenderName?.trim() || company?.companyName?.trim() || "MAJU";
+  const contactPhone = company?.notificationPhone?.trim();
+  const contactText = contactPhone ? `\n문의: ${contactName} ${contactPhone}` : `\n문의: ${contactName}`;
 
-  return `[MAJU 배송 안내]\n${customerName} ${deliveryStatusLabel(status)}\n${baseMemo}${proofText}`;
+  return `[${contactName} 배송 안내]\n${customerName} ${deliveryStatusLabel(status)}\n${baseMemo}${proofText}${contactText}`;
 }
 
 function deliveryStatusLabel(status: DeliveryStatus) {
   if (status === "partial") return "부분배송";
   if (status === "issue") return "이슈발생";
   return "도착완료";
+}
+
+function createSmsHref(phone: string, message: string) {
+  const normalizedPhone = phone.startsWith("82") ? `0${phone.slice(2)}` : phone;
+  return `sms:${normalizedPhone}?&body=${encodeURIComponent(message)}`;
 }
 
 function formatHistoryDate(value: string) {

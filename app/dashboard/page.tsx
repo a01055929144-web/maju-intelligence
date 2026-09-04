@@ -3,7 +3,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getTodayRoutePlan } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
@@ -17,13 +17,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes] = await Promise.all([
+  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId),
     getCustomerMaster(companyId),
     getCompanyOriginAddress(companyId),
     getChurnRiskCustomers(companyId).catch(() => []),
-    getDeliveryVehicleFuelTypes(companyId).catch(() => ({}))
+    getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
+    getStaffVehicleLocations(companyId).catch(() => [])
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   // 2026-08-31 피드백 대응: 회원가입 단계는 물류 출발지 주소를 받지 않아, 고객사가 회사 설정에서
@@ -62,6 +63,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           mapMarkers={mapMarkers}
           routePlan={routePlan}
           showOriginAddressBanner={showOriginAddressBanner}
+          staffVehicleLocations={staffVehicleLocations}
           timelineHref={timelineHref}
           vehicleFuelTypes={vehicleFuelTypes}
         />

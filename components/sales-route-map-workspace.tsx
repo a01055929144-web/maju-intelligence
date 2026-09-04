@@ -76,6 +76,7 @@ import { buildPlaceSearchLinks } from "@/lib/place-links";
 import {
   ChurnRiskCustomer,
   CustomerContactItem,
+  DeliveryCompletionEvent,
   DeliveryVehicle,
   PermitLeadActionItem,
   PermitLeadItem,
@@ -83,7 +84,9 @@ import {
   PermitLeadQueues,
   PossibleDuplicateCustomer,
   RoutePlan,
-  RoutePlanStop
+  RoutePlanStop,
+  StaffLocationEvent,
+  StaffVehicleLocation
 } from "@/lib/store";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
@@ -278,6 +281,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCustomers?: ChurnRiskCustomer[];
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
+  readonly staffVehicleLocations?: StaffVehicleLocation[];
   /** 2026-08-31 피드백 대응: 물류 출발지 주소가 아직 설정되지 않아 거리 계산이 기본값으로
    * 이뤄지고 있음을 알리는 배너를 띄울지 여부(고객사 계정에서만, 관리자 미리보기에서는 숨김). */
   readonly showOriginAddressBanner?: boolean;
@@ -324,7 +328,7 @@ export const tmapWaypointLimit = 15;
 const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
 export const QUOTE_FOLLOW_UP_STATUS_FILTER = "__quote_follow_up";
-const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
+export const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
 export const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
@@ -366,7 +370,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffVehicleLocations = [], timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -392,6 +396,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 함께 표시 중일 때(반경 검색 또는 "리드" 전체 표시 토글), 오른쪽 패널에서 거래처 목록과 리드
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
   const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
+  const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const [vehicleAnalysis, setVehicleAnalysis] = useState<{
+    completions: DeliveryCompletionEvent[];
+    events: StaffLocationEvent[];
+    error: string;
+    loading: boolean;
+    vehicle: StaffVehicleLocation | null;
+  }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -567,6 +579,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     return map;
   }, [baseDeliveryVehicles, vehicleFuelTypes]);
   const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
+  const storeById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
   const geocodableStoresForRadius = useMemo(() => allStores.filter((store) => store.address?.trim()), [allStores]);
 
   // overridePoint/overrideRadiusKm은 지도 클릭으로 반경을 방금 고정한 직후(handleLeadSearchLocked)
@@ -816,6 +829,68 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
+  useEffect(() => {
+    setLiveVehicleLocations(staffVehicleLocations);
+  }, [staffVehicleLocations]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const search = churnRiskCompanyId ? `?companyId=${encodeURIComponent(churnRiskCompanyId)}` : "";
+        const response = await fetchWithTimeout(`/api/staff/location${search}`, { cache: "no-store" }, 8000);
+        const payload = (await response.json().catch(() => null)) as { locations?: StaffVehicleLocation[] } | null;
+        if (!cancelled && response.ok && Array.isArray(payload?.locations)) setLiveVehicleLocations(payload.locations);
+      } catch {
+        // 다음 폴링에서 복구합니다. 위치 표시는 운영 보조 기능이라 화면 전체를 막지 않습니다.
+      }
+    };
+    void load();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(timer);
+    };
+  }, [churnRiskCompanyId]);
+  const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehicleLocations, storeById), [liveVehicleLocations, storeById]);
+  const liveVehicleSummary = useMemo(() => {
+    const active = liveVehicleLocations.filter((location) => !location.isStale).length;
+    const stale = liveVehicleLocations.filter((location) => location.isStale).length;
+    const latest = liveVehicleLocations
+      .map((location) => (location.lastLocationAt ? new Date(location.lastLocationAt).getTime() : 0))
+      .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)
+      .sort((a, b) => b - a)[0];
+    return {
+      active,
+      latestLabel: latest ? new Date(latest).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전",
+      stale,
+      total: liveVehicleLocations.length
+    };
+  }, [liveVehicleLocations]);
+  const openVehicleAnalysis = useCallback(
+    async (vehicle: StaffVehicleLocation) => {
+      setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, vehicle });
+      try {
+        const search = new URLSearchParams({ completions: "true", events: "true", hours: "12", userId: vehicle.userId });
+        if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
+        if (vehicle.driverName) search.set("driverName", vehicle.driverName);
+        if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
+        const response = await fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000);
+        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; events?: StaffLocationEvent[]; error?: string } | null;
+        if (!response.ok) throw new Error(payload?.error || "운행 기록을 불러오지 못했습니다.");
+        setVehicleAnalysis({ completions: payload?.completions || [], events: payload?.events || [], error: "", loading: false, vehicle });
+      } catch (error) {
+        setVehicleAnalysis({ completions: [], events: [], error: error instanceof Error ? error.message : "운행 기록을 불러오지 못했습니다.", loading: false, vehicle });
+      }
+    },
+    [churnRiskCompanyId]
+  );
   // 미등록 매장은 메인 지도에만 별도 마커로 합쳐 표시합니다.
   const unregisteredMapMarkers = useMemo(
     () =>
@@ -927,16 +1002,16 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 리드와 같은 소스(반경 검색 결과 우선, 없으면 "전체 리드 보기")를 그대로 사용해 목록과 지도가
   // 항상 같은 리드를 가리키게 합니다.
   const leadsForRightPanel = useMemo(() => {
-    if (leadRadiusResult?.leads.length) return leadRadiusResult.leads;
+    if (leadRadiusOpen && leadRadiusResult?.leads.length) return leadRadiusResult.leads;
     if (showAllLeadsOnMap) return filteredAllLeadsForMap;
     return [];
-  }, [leadRadiusResult, showAllLeadsOnMap, filteredAllLeadsForMap]);
+  }, [leadRadiusOpen, leadRadiusResult, showAllLeadsOnMap, filteredAllLeadsForMap]);
   // 리드가 지도에서 사라지면(반경 검색 종료·전체 리드 보기 끔) 탭이 빈 리드 목록에 멈춰있지
   // 않도록, 실제로 리드가 있을 때만 "leads" 탭을 유지합니다.
   const activeRightPanelTab: "stores" | "leads" = rightPanelTab === "leads" && leadsForRightPanel.length ? "leads" : "stores";
   const mapDisplayMarkers = useMemo(
-    () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers],
-    [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers]
+    () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers, ...liveVehicleMarkers],
+    [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleMarkers]
   );
   const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
@@ -1525,6 +1600,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               );
             })}
           </nav>
+          <div
+            className="hidden h-11 items-center gap-2 rounded-lg border border-teal-100 bg-teal-50 px-3 text-xs font-black text-teal-900 shadow-[0_1px_0_rgba(15,23,42,0.025)] xl:flex"
+            title={`최근 수신 ${liveVehicleSummary.latestLabel}`}
+          >
+            <Truck className="h-4 w-4 shrink-0 text-teal-700" />
+            <span>라이브 {liveVehicleSummary.active}대</span>
+            {liveVehicleSummary.stale ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">지연 {liveVehicleSummary.stale}</span> : null}
+          </div>
           <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
             <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">화면</span>
             <button
@@ -2061,11 +2144,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             >
               조회
             </button>
-            {mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd ? (
+            {mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
               <button
                 className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
                 onClick={() => {
                   setMapLeadIndustryFilter("");
+                  setMapLeadRegionSigungu("");
+                  setMapLeadRegionDong("");
                   setMapLeadOpenDateStart("");
                   setMapLeadOpenDateEnd("");
                   setMapLeadOpenDateStartDraft("");
@@ -2111,6 +2196,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         // 2026-08-31 피드백 대응: 우측 패널이 "거래처" 탭에 머물러 있으면 리드
                         // 마커를 클릭해도 그 항목이 아예 목록에 없어 우측 패널이 안 바뀝니다.
                         setRightPanelTab("leads");
+                        return;
+                      }
+                      if (marker.tone === "vehicle") {
+                        const vehicle = liveVehicleLocations.find((location) => `vehicle-${location.id}` === marker.id);
+                        const currentStoreId = vehicle?.currentCustomerId || "";
+                        if (currentStoreId && storeById.has(currentStoreId)) {
+                          setMapFocusId("");
+                          setPreviewLeadId("");
+                          setPreviewStoreId(currentStoreId);
+                          setRightPanelTab("stores");
+                          return;
+                        }
+                        if (vehicle) void openVehicleAnalysis(vehicle);
                         return;
                       }
                       if (!marker.id || marker.tone === "origin") return;
@@ -2273,6 +2371,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
+            {!rightCollapsed ? (
+              <LiveVehicleStatusPanel
+                onAnalyze={openVehicleAnalysis}
+                onPreviewStore={(storeId) => {
+                  setPreviewLeadId("");
+                  setPreviewStoreId(storeId);
+                  setRightPanelTab("stores");
+                }}
+                storeById={storeById}
+                vehicles={liveVehicleLocations}
+              />
+            ) : null}
             {!rightCollapsed && leadsForRightPanel.length ? (
               <div className="flex items-center gap-1 border-b border-slate-200/80 bg-slate-50 p-1.5">
                 <button
@@ -2338,6 +2448,24 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           selectedStoreId={selectedId}
           sourceReady={sourceReady}
           stores={visibleStores}
+        />
+      ) : null}
+
+      {vehicleAnalysis.vehicle ? (
+        <VehicleAnalysisModal
+          completions={vehicleAnalysis.completions}
+          currentStore={vehicleAnalysis.vehicle.currentCustomerId ? storeById.get(vehicleAnalysis.vehicle.currentCustomerId) : undefined}
+          error={vehicleAnalysis.error}
+          events={vehicleAnalysis.events}
+          loading={vehicleAnalysis.loading}
+          onClose={() => setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null })}
+          onOpenStore={(storeId) => {
+            setSelectedId(storeId);
+            setPreviewStoreId(storeId);
+            setRightPanelTab("stores");
+            setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null });
+          }}
+          vehicle={vehicleAnalysis.vehicle}
         />
       ) : null}
 
@@ -3756,8 +3884,9 @@ const PLACE_LINK_BRAND_STYLE: Record<string, { icon: ReactNode; tone: string }> 
 
 function PlaceLinkRow({ className = "", compact = false, store }: { readonly className?: string; readonly compact?: boolean; readonly store: StoreRow }) {
   const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
+  const storeNaverPlaceUrl = store.naverPlaceUrl?.trim();
   const links = [
-    { label: "네이버", tone: "bg-emerald-50 text-emerald-700 ring-emerald-200", url: isGenericNaverSearchLink(store.naverPlaceUrl) ? searchLinks.naverPlaceUrl : store.naverPlaceUrl!.trim() },
+    { label: "네이버", tone: "bg-emerald-50 text-emerald-700 ring-emerald-200", url: !storeNaverPlaceUrl || isGenericNaverSearchLink(storeNaverPlaceUrl) ? searchLinks.naverPlaceUrl : storeNaverPlaceUrl },
     { label: "카카오맵", tone: "bg-amber-50 text-amber-700 ring-amber-200", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
     { label: "구글맵", tone: "bg-blue-50 text-blue-700 ring-blue-200", url: store.googleMapUrl?.trim() || searchLinks.googleMapUrl }
   ];
@@ -3998,6 +4127,249 @@ function VehicleEditForm({
   );
 }
 
+function LiveVehicleStatusPanel({
+  onAnalyze,
+  onPreviewStore,
+  storeById,
+  vehicles
+}: {
+  readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
+  readonly onPreviewStore: (storeId: string) => void;
+  readonly storeById: Map<string, StoreRow>;
+  readonly vehicles: StaffVehicleLocation[];
+}) {
+  const sorted = [...vehicles].sort((a, b) => {
+    const staleDiff = Number(a.isStale) - Number(b.isStale);
+    if (staleDiff !== 0) return staleDiff;
+    const aTime = a.lastLocationAt ? new Date(a.lastLocationAt).getTime() : 0;
+    const bTime = b.lastLocationAt ? new Date(b.lastLocationAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
+  return (
+    <section className="border-b border-slate-200/80 bg-white">
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
+            <Truck className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-black text-slate-950">라이브 차량</p>
+            <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대</p>
+          </div>
+        </div>
+        <Badge className="shrink-0 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{sorted.length}대</Badge>
+      </div>
+      <div className="max-h-64 space-y-1 overflow-auto px-3 pb-2">
+        {!sorted.length ? (
+          <div className="rounded-md border border-amber-100 bg-amber-50 px-2 py-2">
+            <p className="text-[11px] font-black text-amber-800">수신 차량 없음</p>
+            <p className="mt-1 text-[10px] font-bold leading-4 text-amber-700">기사 모바일 화면에서 위치 권한을 허용하면 지도에 표시됩니다.</p>
+          </div>
+        ) : null}
+        {sorted.map((vehicle) => {
+          const checkedAt = vehicle.lastLocationAt ? new Date(vehicle.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전";
+          const ageText = formatVehicleLocationAge(vehicle.lastLocationAt);
+          const currentStore = vehicle.currentCustomerId ? storeById.get(vehicle.currentCustomerId) : undefined;
+          return (
+            <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={vehicle.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
+                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                    {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
+                    {ageText ? ` · ${ageText}` : ""}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                  {getVehicleStatusLabel(vehicle)}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
+                  {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
+                </p>
+                <div className="flex shrink-0 items-center gap-1">
+                <button
+                  className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
+                  onClick={() => onAnalyze(vehicle)}
+                  type="button"
+                >
+                  분석
+                </button>
+                {currentStore ? (
+                  <button
+                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                    onClick={() => onPreviewStore(currentStore.id)}
+                    type="button"
+                  >
+                    거래처
+                  </button>
+                ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function VehicleAnalysisModal({
+  completions,
+  currentStore,
+  error,
+  events,
+  loading,
+  onClose,
+  onOpenStore,
+  vehicle
+}: {
+  readonly completions: DeliveryCompletionEvent[];
+  readonly currentStore?: StoreRow;
+  readonly error: string;
+  readonly events: StaffLocationEvent[];
+  readonly loading: boolean;
+  readonly onClose: () => void;
+  readonly onOpenStore: (storeId: string) => void;
+  readonly vehicle: StaffVehicleLocation;
+}) {
+  const metrics = useMemo(() => summarizeLocationEvents(events), [events]);
+  const completionSummary = useMemo(() => summarizeCompletionOrder(completions), [completions]);
+  const routePath = useMemo(() => createLocationRoutePath(events), [events]);
+  const markers = useMemo<KakaoMapMarker[]>(() => {
+    const last = events[events.length - 1] || null;
+    if (!last) return [];
+    const vehicleMarker: KakaoMapMarker = {
+      address: "최근 수신 위치",
+      id: `analysis-${vehicle.id}`,
+      label: vehicle.deliveryVehicle || vehicle.driverName,
+      lat: last.lat,
+      lng: last.lng,
+      markerColor: vehicle.isStale ? "#64748b" : "#0f766e",
+      name: `${vehicle.driverName} · 최근 수신 ${new Date(last.recordedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`,
+      tone: "vehicle" as const,
+      x: 50,
+      y: 50
+    };
+    const currentStoreMarker: KakaoMapMarker | null = currentStore?.address
+      ? {
+          address: currentStore.address,
+          grade: currentStore.grade,
+          id: `analysis-store-${currentStore.id}`,
+          label: "작업",
+          name: currentStore.name,
+          tone: "customer" as const,
+          x: 52,
+          y: 52
+        }
+      : null;
+    return currentStoreMarker ? [vehicleMarker, currentStoreMarker] : [vehicleMarker];
+  }, [currentStore, events, vehicle]);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4" onClick={onClose}>
+      <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase text-teal-700">운행 기록 분석</p>
+            <h2 className="mt-1 truncate text-xl font-black text-slate-950">{vehicle.deliveryVehicle || vehicle.driverName}</h2>
+            <p className="mt-1 text-xs font-bold text-slate-500">
+              {vehicle.driverName} · {currentStore ? `현재 작업 ${currentStore.name}` : "최근 12시간 GPS 기록"}
+            </p>
+          </div>
+          <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">
+            닫기
+          </button>
+        </header>
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1fr_280px]">
+          <div className="min-h-[420px] bg-slate-100">
+            {loading ? (
+              <div className="grid h-full min-h-[420px] place-items-center text-sm font-black text-slate-500">GPS 기록을 불러오는 중입니다.</div>
+            ) : error ? (
+              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-rose-600">{error}</div>
+            ) : events.length ? (
+              <KakaoAddressMap mapClassName="h-full min-h-[420px] rounded-none border-0" markers={markers} routePath={routePath} showList={false} />
+            ) : (
+              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-slate-500">최근 12시간 동안 저장된 GPS 기록이 없습니다.</div>
+            )}
+          </div>
+          <aside className="min-h-0 overflow-auto border-l border-slate-200 bg-white p-4">
+            <div className="grid grid-cols-2 gap-2">
+              <RouteMetric label="실제 이동" value={`${metrics.distanceKm.toLocaleString()}km`} />
+              <RouteMetric label="운행 시간" value={formatMinutes(metrics.durationMinutes)} />
+              <RouteMetric label="GPS 기록" value={`${events.length.toLocaleString()}건`} />
+              <RouteMetric label="누락 구간" value={`${metrics.gapCount.toLocaleString()}구간`} />
+              <RouteMetric label="완료 매장" value={`${completions.length.toLocaleString()}곳`} />
+              <RouteMetric label="보정 제외" value={`${metrics.ignoredCount.toLocaleString()}건`} />
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-black text-slate-950">판단 기준</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">연속 위치 기록이 5분 이상 비거나, GPS 오차가 150m를 넘거나, 비정상 속도로 튄 좌표는 실제 경로에서 제외합니다.</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">배송 완료 메모는 실제 방문 순서로 표시하며 계획 순서 일치율은 {completionSummary.label}입니다.</p>
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-white">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+                <p className="text-xs font-black text-slate-950">실제 방문 순서</p>
+                <Badge className="bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-100">{completions.length}건</Badge>
+              </div>
+              <div className="max-h-44 overflow-auto p-2">
+                {loading ? (
+                  <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">완료 기록을 불러오는 중입니다.</p>
+                ) : completions.length ? (
+                  <div className="space-y-1.5">
+                    {completions.map((completion) => (
+                      <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={completion.id || `${completion.customerId}-${completion.completedAt}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-[11px] font-black text-slate-900">
+                            {completion.actualOrder}. {completion.customerName}
+                          </p>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
+                            {getCompletionOrderLabel(completion)}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-[10px] font-bold text-slate-500">
+                          {new Date(completion.completedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                          {completion.statusLabel ? ` · ${completion.statusLabel}` : ""}
+                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
+                          <button
+                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                            onClick={() => onOpenStore(completion.customerId)}
+                            type="button"
+                          >
+                            열기
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">최근 12시간 배송 완료 기록이 없습니다.</p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-black text-slate-950">최근 GPS 기록</p>
+              {events.slice(-8).reverse().map((event) => (
+                <div className="rounded-lg border border-slate-100 bg-white p-2" key={event.id}>
+                  <p className="text-[11px] font-black text-slate-900">{new Date(event.recordedAt).toLocaleString("ko-KR")}</p>
+                  <p className="mt-1 text-[10px] font-bold text-slate-500">
+                    {event.lat.toFixed(5)}, {event.lng.toFixed(5)}
+                    {Number.isFinite(event.accuracyMeters) ? ` · 오차 ${Math.round(event.accuracyMeters || 0)}m` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function StoreManagementPanel({
   collapsed,
   dataRegistrationHref,
@@ -4172,7 +4544,7 @@ function LeadListPanel({
 }) {
   // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
   // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
-  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   useEffect(() => {
     if (!selectedLeadId) return;
     itemRefs.current[selectedLeadId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -4221,32 +4593,72 @@ function LeadListPanel({
             leads.map((lead) => {
               const confidence = getLeadConfidence(lead);
               const openDate = getPermitLeadOpenDate(lead);
+              const instagramHandle = getLeadInstagramHandle(lead);
+              const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
+              const savedNaverPlaceUrl = lead.naverPlaceUrl?.trim();
+              const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
+              const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
+              const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
               return (
-                <button
+                <div
                   className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-teal-50 ${
                     lead.id === selectedLeadId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
                   }`}
                   key={lead.id}
-                  onClick={() => onSelectLead(lead.id)}
                   ref={(el) => {
                     itemRefs.current[lead.id] = el;
                   }}
-                  type="button"
                 >
-                  <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{lead.businessName}</p>
-                    <Badge className={`shrink-0 px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>
-                      {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
-                    </Badge>
+                  <button className="block w-full text-left" onClick={() => onSelectLead(lead.id)} type="button">
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                      <Badge className={`shrink-0 px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>
+                        {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
+                      <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
+                      <span className="truncate">{openDate || "개시일 미확인"}</span>
+                      <span className="truncate">{lead.phone || "전화 미확인"}</span>
+                      <span className="truncate font-black text-teal-700">우선순위 {confidence.score}점</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                      {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-inset ring-amber-100">
+                          리뷰 {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}
+                          {typeof lead.reviewCount === "number" ? ` · ${lead.reviewCount.toLocaleString()}건` : ""}
+                        </span>
+                      ) : null}
+                      {typeof lead.keywordVolume === "number" ? (
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                          검색 {lead.keywordVolume.toLocaleString()}
+                        </span>
+                      ) : null}
+                      {confidence.reasons.slice(0, 2).map((reason) => (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600" key={reason}>
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <a className="rounded-full bg-[#03C75A] px-2 py-1 text-[10px] font-black text-white" href={naverPlaceUrl} rel="noreferrer" target="_blank">
+                      N
+                    </a>
+                    <a className="rounded-full bg-[#FEE500] px-2 py-1 text-[10px] font-black text-slate-900" href={kakaoPlaceUrl} rel="noreferrer" target="_blank">
+                      K
+                    </a>
+                    <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-[#EA4335] ring-1 ring-inset ring-slate-200" href={googlePlaceUrl} rel="noreferrer" target="_blank">
+                      G
+                    </a>
+                    {instagramHandle ? (
+                      <a className="rounded-full bg-pink-50 px-2 py-1 text-[10px] font-black text-pink-700 ring-1 ring-inset ring-pink-100" href={getLeadInstagramSearchUrl(lead)} rel="noreferrer" target="_blank">
+                        {instagramHandle}
+                      </a>
+                    ) : null}
                   </div>
-                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
-                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
-                    <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
-                    <span className="truncate">{openDate || "개시일 미확인"}</span>
-                    <span className="truncate">{lead.phone || "전화 미확인"}</span>
-                    <span className="truncate font-black text-teal-700">우선순위 {confidence.score}점</span>
-                  </div>
-                </button>
+                </div>
               );
             })
           ) : (
@@ -4971,7 +5383,8 @@ function PermitLeadMapQuickCard({
   // 거래처 카드(PlaceLinkRow)와 동일하게 값이 없거나 일반 검색 링크면 상호명+주소 검색 링크로
   // 폴백해 항상 3개 링크가 뜨도록 합니다.
   const leadPlaceSearchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
-  const leadNaverPlaceUrl = isGenericNaverSearchLink(lead.naverPlaceUrl) ? leadPlaceSearchLinks.naverPlaceUrl : lead.naverPlaceUrl!.trim();
+  const savedLeadNaverPlaceUrl = lead.naverPlaceUrl?.trim();
+  const leadNaverPlaceUrl = !savedLeadNaverPlaceUrl || isGenericNaverSearchLink(savedLeadNaverPlaceUrl) ? leadPlaceSearchLinks.naverPlaceUrl : savedLeadNaverPlaceUrl;
   const leadKakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || leadPlaceSearchLinks.kakaoPlaceUrl;
   const leadGooglePlaceUrl = lead.googlePlaceUrl?.trim() || leadPlaceSearchLinks.googleMapUrl;
 
@@ -7504,6 +7917,143 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
   );
 
   return mergeMarkers(originWithId ? [originWithId, ...storeMarkers] : storeMarkers);
+}
+
+function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: Map<string, StoreRow>): KakaoMapMarker[] {
+  return locations
+    .filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng))
+    .map((location) => {
+      const label = (location.deliveryVehicle || location.driverName || "차량").replace(/\s+/g, " ").slice(0, 8);
+      const checkedAt = location.lastLocationAt ? new Date(location.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "시간 미확인";
+      const accuracyText = Number.isFinite(location.accuracyMeters) ? ` · 오차 ${Math.round(location.accuracyMeters || 0)}m` : "";
+      const statusText = getVehicleMarkerStatusText(location);
+      const currentStore = location.currentCustomerId ? storeById.get(location.currentCustomerId) : undefined;
+      const currentStoreText = currentStore ? ` · 작업 ${currentStore.name}` : "";
+      return {
+        address: `${statusText}${currentStoreText}${accuracyText}`,
+        id: `vehicle-${location.id}`,
+        label,
+        lat: location.lat,
+        lng: location.lng,
+        markerColor: location.isStale ? "#64748b" : "#0f766e",
+        name: `${location.driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
+        tone: "vehicle" as const,
+        x: 50,
+        y: 50
+      };
+    });
+}
+
+function createLocationRoutePath(events: StaffLocationEvent[]) {
+  const path: Array<{ lat: number; lng: number }> = [];
+  let previous: StaffLocationEvent | null = null;
+  events.forEach((event) => {
+    if (!isReliableLocationEvent(event)) {
+      previous = null;
+      path.push({ lat: Number.NaN, lng: Number.NaN });
+      return;
+    }
+    if (previous) {
+      const gapMinutes = (new Date(event.recordedAt).getTime() - new Date(previous.recordedAt).getTime()) / 60000;
+      const segmentKm = haversineKm(previous.lat, previous.lng, event.lat, event.lng);
+      const speedKmh = gapMinutes > 0 ? (segmentKm / gapMinutes) * 60 : 0;
+      if (gapMinutes > 5 || speedKmh > 120) path.push({ lat: Number.NaN, lng: Number.NaN });
+    }
+    path.push({ lat: event.lat, lng: event.lng });
+    previous = event;
+  });
+  return path;
+}
+
+function summarizeLocationEvents(events: StaffLocationEvent[]) {
+  let distanceKm = 0;
+  let gapCount = 0;
+  let ignoredCount = 0;
+  let previous: StaffLocationEvent | null = null;
+  events.forEach((event) => {
+    if (!isReliableLocationEvent(event)) {
+      ignoredCount += 1;
+      previous = null;
+      return;
+    }
+    if (!previous) {
+      previous = event;
+      return;
+    }
+    const gapMinutes = (new Date(event.recordedAt).getTime() - new Date(previous.recordedAt).getTime()) / 60000;
+    const segmentKm = haversineKm(previous.lat, previous.lng, event.lat, event.lng);
+    const speedKmh = gapMinutes > 0 ? (segmentKm / gapMinutes) * 60 : 0;
+    if (gapMinutes > 5) {
+      gapCount += 1;
+    } else if (speedKmh > 120) {
+      ignoredCount += 1;
+    } else {
+      distanceKm += segmentKm;
+    }
+    previous = event;
+  });
+  const first = events[0]?.recordedAt ? new Date(events[0].recordedAt).getTime() : 0;
+  const last = events[events.length - 1]?.recordedAt ? new Date(events[events.length - 1].recordedAt).getTime() : 0;
+  return {
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    durationMinutes: first && last ? Math.max(0, Math.round((last - first) / 60000)) : 0,
+    gapCount,
+    ignoredCount
+  };
+}
+
+function isReliableLocationEvent(event: StaffLocationEvent) {
+  return Number.isFinite(event.lat) && Number.isFinite(event.lng) && (!Number.isFinite(event.accuracyMeters) || Number(event.accuracyMeters) <= 150);
+}
+
+function summarizeCompletionOrder(completions: DeliveryCompletionEvent[]) {
+  const planned = completions.filter((completion) => Number.isFinite(completion.plannedOrder));
+  if (!planned.length) return { label: "-" };
+  const matched = planned.filter((completion) => completion.plannedOrder === completion.actualOrder).length;
+  return { label: `${matched}/${planned.length}` };
+}
+
+function getVehicleStatusLabel(vehicle: StaffVehicleLocation) {
+  if (vehicle.isStale) return "지연";
+  if (vehicle.status === "paused") return "대기";
+  if (vehicle.status === "offline") return "종료";
+  return "활성";
+}
+
+function formatVehicleLocationAge(lastLocationAt?: string) {
+  if (!lastLocationAt) return "";
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(lastLocationAt).getTime()) / 60000));
+  if (minutes < 1) return "방금";
+  if (minutes < 60) return `${minutes}분 전`;
+  return `${Math.floor(minutes / 60)}시간 전`;
+}
+
+function getVehicleMarkerStatusText(vehicle: StaffVehicleLocation) {
+  if (vehicle.isStale) return "위치 지연";
+  if (vehicle.status === "paused") return "화면 대기";
+  if (vehicle.status === "offline") return "위치 종료";
+  return "실시간 위치";
+}
+
+function getCompletionOrderLabel(completion: DeliveryCompletionEvent) {
+  if (!completion.plannedOrder) return "계획 미지정";
+  if (completion.plannedOrder === completion.actualOrder) return `계획 ${completion.plannedOrder} 일치`;
+  return `계획 ${completion.plannedOrder}`;
+}
+
+function getCompletionOrderClass(completion: DeliveryCompletionEvent) {
+  if (!completion.plannedOrder) return "bg-white text-slate-500 ring-slate-200";
+  if (completion.plannedOrder === completion.actualOrder) return "bg-teal-50 text-teal-800 ring-teal-100";
+  return "bg-amber-50 text-amber-800 ring-amber-100";
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function spreadMarkers(markers: KakaoMapMarker[]) {

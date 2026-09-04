@@ -11,9 +11,15 @@ import { CompanySettings } from "@/lib/store";
 export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [form, setForm] = useState({
     businessType: initial.businessType,
+    deliveryCompleteMessage: initial.deliveryCompleteMessage || "요청하신 위치에 배송 적재 완료했습니다.",
+    deliveryIssueMessage: initial.deliveryIssueMessage || "배송 중 확인이 필요한 사항이 있어 안내드립니다.",
+    deliveryPartialMessage: initial.deliveryPartialMessage || "일부 품목은 확인 후 별도 안내드리겠습니다.",
     name: initial.name,
+    notificationPhone: initial.notificationPhone || "",
+    notificationSenderName: initial.notificationSenderName || initial.name,
     originAddress: initial.originAddress,
     ownerName: initial.ownerName,
+    smsSenderPhone: initial.smsSenderPhone || "",
     telegramChatId: initial.telegramChatId || ""
   });
   const [message, setMessage] = useState("");
@@ -23,7 +29,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [telegramTesting, setTelegramTesting] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
   const hasCompanyName = Boolean(form.name.trim());
-  const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim())].filter(Boolean).length;
+  const hasNotificationPhone = Boolean(form.notificationPhone.trim());
+  const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim()), hasNotificationPhone].filter(Boolean).length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,8 +69,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <p className="maju-section-title">운영 기준값 상태</p>
               <p className="mt-1 maju-muted-label normal-case tracking-normal">지도, 배송코스, 거래처 히스토리에서 공통으로 사용하는 회사 기준입니다.</p>
             </div>
-            <Badge className={completedItems >= 3 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-              {completedItems}/3 완료
+            <Badge className={completedItems >= 4 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+              {completedItems}/4 완료
             </Badge>
           </div>
           <div className="grid md:grid-cols-3">
@@ -82,8 +89,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <OperationSignal
               icon={<ClipboardCheck className="h-4 w-4" />}
               label="운영 준비도"
-              ok={completedItems >= 3}
-              value={`${completedItems}/3 완료`}
+              ok={completedItems >= 4}
+              value={`${completedItems}/4 완료`}
             />
           </div>
         </section>
@@ -154,6 +161,64 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 placeholder="예: 경기도 하남시 초이로 133 1층"
               />
             </label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground">문자 문의번호</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  inputMode="tel"
+                  onChange={(event) => setForm({ ...form, notificationPhone: event.target.value })}
+                  placeholder="예: 010-0000-0000"
+                  value={form.notificationPhone}
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground">문자 표시명</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setForm({ ...form, notificationSenderName: event.target.value })}
+                  placeholder={form.name || "회사명"}
+                  value={form.notificationSenderName}
+                />
+              </label>
+            </div>
+            <label className="space-y-1.5">
+              <span className="text-xs font-bold text-muted-foreground">SOLAPI 발신번호 메모</span>
+              <input
+                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                inputMode="tel"
+                onChange={(event) => setForm({ ...form, smsSenderPhone: event.target.value })}
+                placeholder="실제 발신은 Vercel SOLAPI_SENDER_PHONE 기준"
+                value={form.smsSenderPhone}
+              />
+              <p className="text-xs font-semibold leading-5 text-slate-500">공용 SOLAPI 발신번호와 고객사 문의번호를 분리해 관리합니다. 점주에게 보이는 문의번호는 위 문자 문의번호입니다.</p>
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black text-slate-950">배송 알림 기본 문구</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-500">현장 직원 메모가 없을 때 상태별로 자동 사용됩니다.</p>
+                </div>
+                <Badge className="bg-white text-teal-800 ring-1 ring-inset ring-teal-100">고객사 수정 가능</Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <MessageTemplateField
+                  label="도착완료"
+                  onChange={(value) => setForm({ ...form, deliveryCompleteMessage: value })}
+                  value={form.deliveryCompleteMessage}
+                />
+                <MessageTemplateField
+                  label="부분배송"
+                  onChange={(value) => setForm({ ...form, deliveryPartialMessage: value })}
+                  value={form.deliveryPartialMessage}
+                />
+                <MessageTemplateField
+                  label="이슈발생"
+                  onChange={(value) => setForm({ ...form, deliveryIssueMessage: value })}
+                  value={form.deliveryIssueMessage}
+                />
+              </div>
+            </div>
             <label className="space-y-1.5">
               <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
                 <Bell className="h-3.5 w-3.5" />
@@ -272,6 +337,19 @@ function OperationSignal({ icon, label, ok, value }: { icon: ReactNode; label: s
       <p className="mt-3 text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-black text-foreground">{value}</p>
     </div>
+  );
+}
+
+function MessageTemplateField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  return (
+    <label className="space-y-1.5">
+      <span className="text-xs font-bold text-muted-foreground">{label}</span>
+      <textarea
+        className="min-h-[84px] w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold leading-5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
   );
 }
 
