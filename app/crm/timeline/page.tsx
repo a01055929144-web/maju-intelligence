@@ -91,6 +91,9 @@ const resultLabels: Record<string, string> = {
   interested: "관심 있음",
   "quote-requested": "견적 요청",
   memo: "메모 저장",
+  delivery: "배송 기록",
+  delivery_message: "발송 기록",
+  route_action: "현장 액션",
   pending: "보류",
   failed: "실패"
 };
@@ -1885,7 +1888,7 @@ export default function CrmTimelinePage() {
                     customerNotes.map((note) => (
                       <div key={note.id} className="p-4">
                         <div className="flex items-center justify-between gap-3">
-                          <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
+                          <Badge className={noteTypeBadgeClass(note.noteType)}>{noteTypeLabel(note.noteType)}</Badge>
                           <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
                         </div>
                         <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
@@ -2885,11 +2888,21 @@ function attachmentLabel(type: string, title: string) {
 }
 
 function noteTypeLabel(type: string) {
-  if (type === "delivery") return "배송";
-  if (type === "delivery_message") return "알림";
-  if (type === "sales") return "상담";
+  if (type === "delivery") return "배송 기록";
+  if (type === "delivery_message") return "발송 기록";
+  if (type === "route_action") return "현장 액션";
+  if (type === "sales") return "영업 상담";
   if (type === "settlement") return "정산";
   return "메모";
+}
+
+function noteTypeBadgeClass(type: string) {
+  if (type === "delivery") return "bg-emerald-50 text-emerald-700";
+  if (type === "delivery_message") return "bg-sky-50 text-sky-700";
+  if (type === "route_action") return "bg-teal-50 text-teal-700";
+  if (type === "sales") return "bg-blue-50 text-blue-700";
+  if (type === "settlement") return "bg-amber-50 text-amber-700";
+  return "bg-slate-100 text-slate-700";
 }
 
 function attachmentTitleFromType(type: string) {
