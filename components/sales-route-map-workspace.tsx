@@ -1589,6 +1589,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   setShowAllLeadsOnMap((value) => {
                     const next = !value;
                     setRightPanelTab(next ? "leads" : "stores");
+                    if (next) setRightCollapsed(false);
                     return next;
                   })
                 }
@@ -2418,7 +2419,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
-            {!rightCollapsed ? (
+            {!rightCollapsed && activeRightPanelTab === "stores" ? (
               <LiveVehicleStatusPanel
                 onAnalyze={openVehicleAnalysis}
                 onPreviewStore={(storeId) => {
@@ -2448,6 +2449,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   }`}
                   onClick={() => {
                     setShowAllLeadsOnMap(true);
+                    setRightCollapsed(false);
                     setRightPanelTab("leads");
                   }}
                   type="button"
@@ -2467,9 +2469,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 onSelectLead={(leadId) => {
                   setPreviewStoreId("");
                   setPreviewLeadId(leadId);
+                  setRightPanelTab("leads");
+                  setRightCollapsed(false);
                 }}
                 onShowAllLeads={() => {
                   setShowAllLeadsOnMap(true);
+                  setRightCollapsed(false);
                   setRightPanelTab("leads");
                 }}
                 onToggleCollapsed={() => setRightCollapsed((value) => !value)}
