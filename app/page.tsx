@@ -462,7 +462,7 @@ export default function Home() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        actorName: "정두영",
+        actorName: sessionUserName || "사용자",
         columnMapping: nextFieldMap,
         companyId: getAdminCompanyIdFromUrl(),
         companyName: nextRows[0]?.companyName || "업로드 고객사",
@@ -527,7 +527,7 @@ export default function Home() {
       });
     }
 
-    await refreshUploadHistory();
+    void refreshUploadHistory();
     window.setTimeout(() => {
       setIsAnalyzing(false);
       setScreen("report");
