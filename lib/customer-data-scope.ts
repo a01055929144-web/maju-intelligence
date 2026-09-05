@@ -12,6 +12,22 @@ export function normalizeAssignmentValue(value?: string | null) {
     .replace(/[\s\-().]/g, "");
 }
 
+function normalizeAssignmentTokens(value?: string | null) {
+  const tokens = String(value || "")
+    .toLowerCase()
+    .split(/[\s,;/|·:()[\]{}<>_\-]+/g)
+    .map((token) => normalizeAssignmentValue(token))
+    .filter(Boolean);
+  return Array.from(
+    new Set(
+      tokens.flatMap((token) => {
+        const stripped = token.replace(/(기사님|담당자님|매니저님|기사|담당자|매니저|님)$/, "");
+        return stripped && stripped !== token ? [token, stripped] : [token];
+      })
+    )
+  );
+}
+
 export function getSessionAssignmentKeys(session: CustomerSession | null) {
   if (!session) return new Set<string>();
   const keys = [session.name, session.email, session.email?.split("@")[0], session.userId, ...(session.assignmentKeys || [])]
@@ -28,7 +44,9 @@ export function isAssignedToSession(value: string | undefined, assignmentKeys: S
   const normalizedValue = normalizeAssignmentValue(value);
   if (!normalizedValue) return false;
   if (assignmentKeys.has(normalizedValue)) return true;
-  return Array.from(assignmentKeys).some((key) => key.length >= 3 && normalizedValue.includes(key));
+  const tokens = normalizeAssignmentTokens(value);
+  if (tokens.some((token) => assignmentKeys.has(token))) return true;
+  return Array.from(assignmentKeys).some((key) => key.length >= 5 && normalizedValue.includes(key));
 }
 
 export function scopeCustomerMasterForSession<T extends CustomerMasterLike>(customerMaster: T, session: CustomerSession | null): T {
