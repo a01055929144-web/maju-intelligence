@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { scopeCustomerMasterForSession } from "@/lib/customer-data-scope";
+import { scopeCustomerMasterForSession, shouldScopeCustomerSession } from "@/lib/customer-data-scope";
 import { CustomerMasterInput, getCustomerMaster, upsertCustomerMaster } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -42,8 +42,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "유효하지 않은 사업자등록번호입니다." }, { status: 400 });
   }
 
+  const customerInput: CustomerMasterInput & { confirmDuplicate?: boolean } = {
+    ...body,
+    deliveryManager:
+      body.deliveryManager || (shouldScopeCustomerSession(scope.customerSession) ? scope.customerSession?.name : undefined)
+  };
+
   const result = await upsertCustomerMaster(
-    body,
+    customerInput,
     scope.companyId,
     {
       actorName: scope.customerSession?.name || scope.adminSession?.name || "시스템",

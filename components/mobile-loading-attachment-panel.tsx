@@ -73,7 +73,8 @@ export function MobileLoadingAttachmentPanel({
 
     if (!response?.ok) {
       setSaveState("error");
-      setSaveErrorMessage("업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.");
+      const payload = (await response?.json().catch(() => null)) as { message?: string } | null;
+      setSaveErrorMessage(payload?.message || "업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요.");
       return;
     }
 
@@ -106,7 +107,16 @@ export function MobileLoadingAttachmentPanel({
       </div>
 
       <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-4 text-sm font-black text-blue-800 transition hover:bg-blue-100">
-        <input accept="image/*,video/*" className="hidden" onChange={(event) => uploadFile(event.target.files?.[0] || null)} type="file" />
+        <input
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0] || null;
+            event.target.value = "";
+            void uploadFile(file);
+          }}
+          type="file"
+        />
         {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         {saveState === "saving" ? "업로드 중" : "사진/영상 업로드"}
       </label>

@@ -463,7 +463,8 @@ function AttachmentSlotUploader({
 
     if (!response?.ok) {
       setSaveState("error");
-      setErrorMessage("업로드에 실패했습니다. 로그인 상태와 연결 상태를 확인해주세요.");
+      const payload = (await response?.json().catch(() => null)) as { message?: string } | null;
+      setErrorMessage(payload?.message || "업로드에 실패했습니다. 로그인 상태와 연결 상태를 확인해주세요.");
       return;
     }
 
@@ -483,7 +484,16 @@ function AttachmentSlotUploader({
       </div>
 
       <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-100">
-        <input accept={accept} className="hidden" onChange={(event) => uploadFile(event.target.files?.[0] || null)} type="file" />
+        <input
+          accept={accept}
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0] || null;
+            event.target.value = "";
+            void uploadFile(file);
+          }}
+          type="file"
+        />
         {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         {saveState === "saving" ? "업로드 중" : "파일 선택"}
       </label>
