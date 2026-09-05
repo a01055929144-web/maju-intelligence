@@ -399,6 +399,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
   const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
   const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const [liveRouteCosts, setLiveRouteCosts] = useState<StaffRouteDailySummary[]>([]);
   const [vehicleAnalysis, setVehicleAnalysis] = useState<{
     completions: DeliveryCompletionEvent[];
     events: StaffLocationEvent[];
@@ -846,6 +847,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         const response = await fetchWithTimeout(`/api/staff/location${search}`, { cache: "no-store" }, 8000);
         const payload = (await response.json().catch(() => null)) as { locations?: StaffVehicleLocation[] } | null;
         if (!cancelled && response.ok && Array.isArray(payload?.locations)) setLiveVehicleLocations(payload.locations);
+        const costPath = `/api/staff/route-costs?days=1${churnRiskCompanyId ? `&companyId=${encodeURIComponent(churnRiskCompanyId)}` : ""}`;
+        const costResponse = await fetchWithTimeout(costPath, { cache: "no-store" }, 8000).catch(() => null);
+        const costPayload = costResponse
+          ? ((await costResponse.json().catch(() => null)) as { summaries?: StaffRouteDailySummary[] } | null)
+          : null;
+        if (!cancelled && costResponse?.ok && Array.isArray(costPayload?.summaries)) setLiveRouteCosts(costPayload.summaries);
       } catch {
         // 다음 폴링에서 복구합니다. 위치 표시는 운영 보조 기능이라 화면 전체를 막지 않습니다.
       }
@@ -2419,6 +2426,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   setPreviewStoreId(storeId);
                   setRightPanelTab("stores");
                 }}
+                routeCosts={liveRouteCosts}
                 storeById={storeById}
                 vehicles={liveVehicleLocations}
               />
@@ -4205,11 +4213,13 @@ function VehicleEditForm({
 function LiveVehicleStatusPanel({
   onAnalyze,
   onPreviewStore,
+  routeCosts,
   storeById,
   vehicles
 }: {
   readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
   readonly onPreviewStore: (storeId: string) => void;
+  readonly routeCosts: StaffRouteDailySummary[];
   readonly storeById: Map<string, StoreRow>;
   readonly vehicles: StaffVehicleLocation[];
 }) {
@@ -4221,6 +4231,7 @@ function LiveVehicleStatusPanel({
     return bTime - aTime;
   });
   const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
+  const costByUserId = new Map(routeCosts.map((cost) => [cost.userId || "", cost]));
   return (
     <section className="border-b border-slate-200/80 bg-white">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -4246,6 +4257,7 @@ function LiveVehicleStatusPanel({
           const checkedAt = vehicle.lastLocationAt ? new Date(vehicle.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전";
           const ageText = formatVehicleLocationAge(vehicle.lastLocationAt);
           const currentStore = vehicle.currentCustomerId ? storeById.get(vehicle.currentCustomerId) : undefined;
+          const routeCost = costByUserId.get(vehicle.userId);
           return (
             <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={vehicle.id}>
               <div className="flex items-start justify-between gap-2">
@@ -4262,7 +4274,11 @@ function LiveVehicleStatusPanel({
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
-                  {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
+                  {routeCost
+                    ? `오늘 ${Number(routeCost.actualDistanceKm || 0).toLocaleString("ko-KR")}km · ${formatKoreanWon(Number(routeCost.estimatedTotalCostWon || 0))}`
+                    : Number.isFinite(vehicle.accuracyMeters)
+                      ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m`
+                      : "GPS 오차 미수신"}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
                 <button
