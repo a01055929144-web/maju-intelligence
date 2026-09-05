@@ -86,6 +86,7 @@ import {
   RoutePlan,
   RoutePlanStop,
   StaffLocationEvent,
+  StaffRouteDailySummary,
   StaffVehicleLocation
 } from "@/lib/store";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
@@ -403,8 +404,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     events: StaffLocationEvent[];
     error: string;
     loading: boolean;
+    routeCosts: StaffRouteDailySummary[];
     vehicle: StaffVehicleLocation | null;
-  }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
+  }>({ completions: [], events: [], error: "", loading: false, routeCosts: [], vehicle: null });
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -879,18 +881,33 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   }, [liveVehicleLocations]);
   const openVehicleAnalysis = useCallback(
     async (vehicle: StaffVehicleLocation) => {
-      setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, vehicle });
+      setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, routeCosts: [], vehicle });
       try {
         const search = new URLSearchParams({ completions: "true", events: "true", hours: "12", userId: vehicle.userId });
         if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
         if (vehicle.driverName) search.set("driverName", vehicle.driverName);
         if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
-        const response = await fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000);
+        const costSearch = new URLSearchParams({ days: "1", userId: vehicle.userId });
+        if (churnRiskCompanyId) costSearch.set("companyId", churnRiskCompanyId);
+        const [response, costResponse] = await Promise.all([
+          fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000),
+          fetchWithTimeout(`/api/staff/route-costs?${costSearch.toString()}`, { cache: "no-store" }, 10000).catch(() => null)
+        ]);
         const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; events?: StaffLocationEvent[]; error?: string } | null;
+        const costPayload = costResponse
+          ? ((await costResponse.json().catch(() => null)) as { summaries?: StaffRouteDailySummary[] } | null)
+          : null;
         if (!response.ok) throw new Error(payload?.error || "운행 기록을 불러오지 못했습니다.");
-        setVehicleAnalysis({ completions: payload?.completions || [], events: payload?.events || [], error: "", loading: false, vehicle });
+        setVehicleAnalysis({
+          completions: payload?.completions || [],
+          events: payload?.events || [],
+          error: "",
+          loading: false,
+          routeCosts: costResponse?.ok && Array.isArray(costPayload?.summaries) ? costPayload.summaries : [],
+          vehicle
+        });
       } catch (error) {
-        setVehicleAnalysis({ completions: [], events: [], error: error instanceof Error ? error.message : "운행 기록을 불러오지 못했습니다.", loading: false, vehicle });
+        setVehicleAnalysis({ completions: [], events: [], error: error instanceof Error ? error.message : "운행 기록을 불러오지 못했습니다.", loading: false, routeCosts: [], vehicle });
       }
     },
     [churnRiskCompanyId]
@@ -2483,13 +2500,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           error={vehicleAnalysis.error}
           events={vehicleAnalysis.events}
           loading={vehicleAnalysis.loading}
-          onClose={() => setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null })}
+          onClose={() => setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, routeCosts: [], vehicle: null })}
           onOpenStore={(storeId) => {
             setSelectedId(storeId);
             setPreviewStoreId(storeId);
             setRightPanelTab("stores");
-            setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null });
+            setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, routeCosts: [], vehicle: null });
           }}
+          routeCosts={vehicleAnalysis.routeCosts}
           vehicle={vehicleAnalysis.vehicle}
         />
       ) : null}
@@ -4272,6 +4290,7 @@ function VehicleAnalysisModal({
   loading,
   onClose,
   onOpenStore,
+  routeCosts,
   vehicle
 }: {
   readonly completions: DeliveryCompletionEvent[];
@@ -4281,10 +4300,33 @@ function VehicleAnalysisModal({
   readonly loading: boolean;
   readonly onClose: () => void;
   readonly onOpenStore: (storeId: string) => void;
+  readonly routeCosts: StaffRouteDailySummary[];
   readonly vehicle: StaffVehicleLocation;
 }) {
   const metrics = useMemo(() => summarizeLocationEvents(events), [events]);
   const completionSummary = useMemo(() => summarizeCompletionOrder(completions), [completions]);
+  const routeCostSummary = useMemo(
+    () =>
+      routeCosts.reduce(
+        (acc, item) => ({
+          actualDistanceKm: Math.round((acc.actualDistanceKm + Number(item.actualDistanceKm || 0)) * 100) / 100,
+          drivingMinutes: acc.drivingMinutes + Number(item.drivingMinutes || 0),
+          estimatedFuelCostWon: acc.estimatedFuelCostWon + Number(item.estimatedFuelCostWon || 0),
+          estimatedLaborCostWon: acc.estimatedLaborCostWon + Number(item.estimatedLaborCostWon || 0),
+          estimatedTotalCostWon: acc.estimatedTotalCostWon + Number(item.estimatedTotalCostWon || 0),
+          visitedCustomerCount: acc.visitedCustomerCount + Number(item.visitedCustomerCount || 0)
+        }),
+        {
+          actualDistanceKm: 0,
+          drivingMinutes: 0,
+          estimatedFuelCostWon: 0,
+          estimatedLaborCostWon: 0,
+          estimatedTotalCostWon: 0,
+          visitedCustomerCount: 0
+        }
+      ),
+    [routeCosts]
+  );
   const routePath = useMemo(() => createLocationRoutePath(events), [events]);
   const markers = useMemo<KakaoMapMarker[]>(() => {
     const last = events[events.length - 1] || null;
@@ -4351,6 +4393,25 @@ function VehicleAnalysisModal({
               <RouteMetric label="누락 구간" value={`${metrics.gapCount.toLocaleString()}구간`} />
               <RouteMetric label="완료 매장" value={`${completions.length.toLocaleString()}곳`} />
               <RouteMetric label="보정 제외" value={`${metrics.ignoredCount.toLocaleString()}건`} />
+            </div>
+            <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black text-teal-950">오늘 누적 비용</p>
+                <Badge className="bg-white text-teal-700 ring-1 ring-inset ring-teal-100">{routeCosts.length ? "집계됨" : "대기"}</Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <RouteMetric label="누적 거리" value={`${routeCostSummary.actualDistanceKm.toLocaleString("ko-KR")}km`} />
+                <RouteMetric label="누적 시간" value={formatMinutes(routeCostSummary.drivingMinutes)} />
+                <RouteMetric label="유류비" value={formatKoreanWon(routeCostSummary.estimatedFuelCostWon)} />
+                <RouteMetric label="인건비" value={formatKoreanWon(routeCostSummary.estimatedLaborCostWon)} />
+              </div>
+              <div className="mt-3 rounded-md bg-white px-3 py-2 ring-1 ring-inset ring-teal-100">
+                <p className="text-[11px] font-bold text-slate-500">총 추정 물류비</p>
+                <p className="mt-1 text-lg font-black text-teal-800">{formatKoreanWon(routeCostSummary.estimatedTotalCostWon)}</p>
+              </div>
+              {!routeCosts.length ? (
+                <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">오늘 모바일 GPS가 저장되면 자동으로 누적됩니다.</p>
+              ) : null}
             </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-black text-slate-950">판단 기준</p>
@@ -8588,6 +8649,11 @@ export function formatMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
+}
+
+function formatKoreanWon(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "-";
+  return `${Math.round(value).toLocaleString("ko-KR")}원`;
 }
 
 // 2026-08-24 피드백("전체 거래처 0km가 되네")에 대응한 헬퍼입니다. distanceKm은 아직 거리 계산을
