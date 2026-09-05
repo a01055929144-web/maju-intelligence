@@ -4352,6 +4352,12 @@ function VehicleAnalysisModal({
       ),
     [routeCosts]
   );
+  const routeCostBasisLabel = useMemo(() => {
+    const basis = routeCosts.find((cost) => cost.costBasis)?.costBasis;
+    const fuelWonPerKm = Number(basis?.fuelWonPerKm || 180);
+    const laborWonPerHour = Number(basis?.laborWonPerHour || 12000);
+    return `유류비 ${fuelWonPerKm.toLocaleString("ko-KR")}원/km, 인건비 ${laborWonPerHour.toLocaleString("ko-KR")}원/시간 기준의 운영 추정치입니다.`;
+  }, [routeCosts]);
   const routePath = useMemo(() => createLocationRoutePath(events), [events]);
   const markers = useMemo<KakaoMapMarker[]>(() => {
     const last = events[events.length - 1] || null;
@@ -4442,7 +4448,7 @@ function VehicleAnalysisModal({
               {!routeCosts.length ? (
                 <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">오늘 위치 저장 후 자동 집계됩니다. 설정에서 일자별 비용을 함께 확인할 수 있습니다.</p>
               ) : (
-                <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">유류비 180원/km, 인건비 12,000원/시간 기준의 운영 추정치입니다.</p>
+                <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">{routeCostBasisLabel}</p>
               )}
             </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">

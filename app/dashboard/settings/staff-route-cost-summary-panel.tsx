@@ -30,6 +30,13 @@ function formatMinutes(value: number) {
   return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
 }
 
+function getCostBasisLabel(summaries: StaffRouteDailySummary[]) {
+  const basis = summaries.find((summary) => summary.costBasis)?.costBasis;
+  const fuelWonPerKm = Number(basis?.fuelWonPerKm || 180);
+  const laborWonPerHour = Number(basis?.laborWonPerHour || 12000);
+  return `유류비 ${fuelWonPerKm.toLocaleString("ko-KR")}원/km · 인건비 ${laborWonPerHour.toLocaleString("ko-KR")}원/h`;
+}
+
 export function StaffRouteCostSummaryPanel() {
   const [days, setDays] = useState<(typeof daysOptions)[number]>(30);
   const [loading, setLoading] = useState(true);
@@ -67,6 +74,7 @@ export function StaffRouteCostSummaryPanel() {
   }, [days]);
 
   const driverCount = useMemo(() => new Set(summaries.map((summary) => summary.userId || summary.driverName)).size, [summaries]);
+  const costBasisLabel = useMemo(() => getCostBasisLabel(summaries), [summaries]);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -78,6 +86,7 @@ export function StaffRouteCostSummaryPanel() {
             <Badge className="bg-white">{driverCount}명</Badge>
           </div>
           <p className="mt-1 text-sm text-slate-500">모바일 위치 기록 기준으로 실제 이동거리와 예상 물류비를 집계합니다.</p>
+          <p className="mt-1 text-xs font-semibold text-slate-400">{costBasisLabel}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">

@@ -27,6 +27,8 @@ export async function PATCH(request: Request) {
       notificationSenderName: body.notificationSenderName,
       originAddress: body.originAddress,
       ownerName: body.ownerName,
+      routeFuelCostWonPerKm: body.routeFuelCostWonPerKm,
+      routeLaborCostWonPerHour: body.routeLaborCostWonPerHour,
       smsSenderPhone: body.smsSenderPhone,
       telegramChatId: body.telegramChatId
     });

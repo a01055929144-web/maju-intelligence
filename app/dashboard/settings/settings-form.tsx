@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { FormEvent, useState } from "react";
-import { Bell, Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
+import { Bell, Building2, Check, ClipboardCheck, Database, FileSpreadsheet, Fuel, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanySettings } from "@/lib/store";
@@ -19,6 +19,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     notificationSenderName: initial.notificationSenderName || initial.name,
     originAddress: initial.originAddress,
     ownerName: initial.ownerName,
+    routeFuelCostWonPerKm: initial.routeFuelCostWonPerKm || 180,
+    routeLaborCostWonPerHour: initial.routeLaborCostWonPerHour || 12000,
     smsSenderPhone: initial.smsSenderPhone || "",
     telegramChatId: initial.telegramChatId || ""
   });
@@ -161,6 +163,40 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 placeholder="예: 경기도 하남시 초이로 133 1층"
               />
             </label>
+            <div className="rounded-lg border border-teal-100 bg-teal-50/70 p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Fuel className="h-4 w-4 text-teal-700" />
+                  <p className="text-sm font-black text-slate-950">GPS 비용 기준</p>
+                </div>
+                <Badge className="bg-white text-teal-800 ring-1 ring-inset ring-teal-100">회사별 적용</Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold text-muted-foreground">유류비 / km</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                    inputMode="numeric"
+                    min={0}
+                    onChange={(event) => setForm({ ...form, routeFuelCostWonPerKm: Math.max(0, Math.round(Number(event.target.value) || 0)) })}
+                    type="number"
+                    value={form.routeFuelCostWonPerKm}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold text-muted-foreground">인건비 / 시간</span>
+                  <input
+                    className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                    inputMode="numeric"
+                    min={0}
+                    onChange={(event) => setForm({ ...form, routeLaborCostWonPerHour: Math.max(0, Math.round(Number(event.target.value) || 0)) })}
+                    type="number"
+                    value={form.routeLaborCostWonPerHour}
+                  />
+                </label>
+              </div>
+              <p className="mt-2 text-xs font-semibold leading-5 text-teal-800">실시간 차량 위치, 운행·비용 분석, 일자별 배송 GPS 비용 집계에 같이 적용됩니다.</p>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground">문자 문의번호</span>
@@ -280,6 +316,12 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           <div className="rounded-lg border border-teal-100 bg-teal-50/70 p-3">
             <p className="text-xs font-black text-primary">현재 출발지</p>
             <p className="mt-1 text-sm font-black text-foreground">{hasOrigin ? form.originAddress : "출발지 주소를 입력해주세요"}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-black text-slate-600">GPS 비용 기준</p>
+            <p className="mt-1 text-sm font-black text-foreground">
+              {form.routeFuelCostWonPerKm.toLocaleString("ko-KR")}원/km · {form.routeLaborCostWonPerHour.toLocaleString("ko-KR")}원/h
+            </p>
           </div>
         </div>
         <div className="space-y-4 p-4 text-sm leading-6 text-muted-foreground">

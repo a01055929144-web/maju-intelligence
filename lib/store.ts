@@ -85,6 +85,8 @@ export type CompanySettings = {
   notificationSenderName?: string;
   ownerName: string;
   originAddress: string;
+  routeFuelCostWonPerKm?: number;
+  routeLaborCostWonPerHour?: number;
   smsSenderPhone?: string;
   status: string;
   telegramChatId?: string;
@@ -101,6 +103,8 @@ export type CompanySettingsInput = {
   notificationSenderName?: string;
   originAddress?: string;
   ownerName?: string;
+  routeFuelCostWonPerKm?: number;
+  routeLaborCostWonPerHour?: number;
   smsSenderPhone?: string;
   telegramChatId?: string;
 };
@@ -2882,8 +2886,50 @@ function toStaffVehicleLocation(row: {
   };
 }
 
+const DEFAULT_ROUTE_FUEL_COST_WON_PER_KM = 180;
+const DEFAULT_ROUTE_LABOR_COST_WON_PER_HOUR = 12000;
+const routeCostBasisCache = new Map<string, { expiresAt: number; fuelWonPerKm: number; laborWonPerHour: number }>();
+
+function normalizeRouteCostBasis(input: { fuelWonPerKm?: unknown; laborWonPerHour?: unknown }) {
+  const fuelWonPerKm = Math.max(0, Math.round(Number(input.fuelWonPerKm ?? DEFAULT_ROUTE_FUEL_COST_WON_PER_KM)));
+  const laborWonPerHour = Math.max(0, Math.round(Number(input.laborWonPerHour ?? DEFAULT_ROUTE_LABOR_COST_WON_PER_HOUR)));
+  return {
+    fuelWonPerKm: Number.isFinite(fuelWonPerKm) ? fuelWonPerKm : DEFAULT_ROUTE_FUEL_COST_WON_PER_KM,
+    laborWonPerHour: Number.isFinite(laborWonPerHour) ? laborWonPerHour : DEFAULT_ROUTE_LABOR_COST_WON_PER_HOUR
+  };
+}
+
+async function getCompanyRouteCostBasis(companyId: string) {
+  const cached = routeCostBasisCache.get(companyId);
+  if (cached && cached.expiresAt > Date.now()) return cached;
+
+  let basis = normalizeRouteCostBasis({});
+  if (isProductionStoreConfigured()) {
+    try {
+      const rows = await supabaseRequest<Array<{ route_fuel_cost_won_per_km?: number | string | null; route_labor_cost_won_per_hour?: number | string | null }>>(
+        `companies?select=route_fuel_cost_won_per_km,route_labor_cost_won_per_hour&id=eq.${encodeURIComponent(companyId)}&limit=1`
+      );
+      basis = normalizeRouteCostBasis({
+        fuelWonPerKm: rows[0]?.route_fuel_cost_won_per_km,
+        laborWonPerHour: rows[0]?.route_labor_cost_won_per_hour
+      });
+    } catch (error) {
+      if (!isMissingColumnError(error)) throw error;
+    }
+  }
+
+  const cachedBasis = { ...basis, expiresAt: Date.now() + 5 * 60 * 1000 };
+  routeCostBasisCache.set(companyId, cachedBasis);
+  return cachedBasis;
+}
+
 async function upsertStaffRouteDailySummary(input: StaffMobileLocationInput, recordedAt: string) {
   if (!isProductionStoreConfigured()) return;
+  const costBasis = await getCompanyRouteCostBasis(input.companyId).catch(() => ({
+    expiresAt: Date.now(),
+    fuelWonPerKm: DEFAULT_ROUTE_FUEL_COST_WON_PER_KM,
+    laborWonPerHour: DEFAULT_ROUTE_LABOR_COST_WON_PER_HOUR
+  }));
   const routeDate = recordedAt.slice(0, 10);
   const previousRows = await supabaseRequest<Array<{ latitude: number | string; longitude: number | string; recorded_at: string }>>(
     `staff_location_events?select=latitude,longitude,recorded_at&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
@@ -2925,15 +2971,15 @@ async function upsertStaffRouteDailySummary(input: StaffMobileLocationInput, rec
   const existing = existingRows[0];
   const nextDistanceKm = Math.round((Number(existing?.actual_distance_km || 0) + distanceKm) * 100) / 100;
   const nextDrivingMinutes = Number(existing?.driving_minutes || 0) + drivingMinutes;
-  const fuelCostWon = Math.round(nextDistanceKm * 180);
-  const laborCostWon = Math.round((nextDrivingMinutes / 60) * 12000);
+  const fuelCostWon = Math.round(nextDistanceKm * costBasis.fuelWonPerKm);
+  const laborCostWon = Math.round((nextDrivingMinutes / 60) * costBasis.laborWonPerHour);
 
   const payload = {
     actual_distance_km: nextDistanceKm,
     company_id: input.companyId,
     cost_basis: {
-      fuelWonPerKm: 180,
-      laborWonPerHour: 12000,
+      fuelWonPerKm: costBasis.fuelWonPerKm,
+      laborWonPerHour: costBasis.laborWonPerHour,
       source: "staff_location_events"
     },
     delivery_vehicle: input.deliveryVehicle || null,
@@ -8571,6 +8617,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     notificationSenderName: fallbackName,
     ownerName: "정두영",
     originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+    routeFuelCostWonPerKm: DEFAULT_ROUTE_FUEL_COST_WON_PER_KM,
+    routeLaborCostWonPerHour: DEFAULT_ROUTE_LABOR_COST_WON_PER_HOUR,
     smsSenderPhone: process.env.SOLAPI_SENDER_PHONE || "",
     status: "fallback",
     updatedAt: "기준 데이터",
@@ -8592,6 +8640,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     notification_sender_name?: string | null;
     owner_name: string | null;
     origin_address: string | null;
+    route_fuel_cost_won_per_km?: number | string | null;
+    route_labor_cost_won_per_hour?: number | string | null;
     sms_sender_phone?: string | null;
     status: string;
     telegram_chat_id?: string | null;
@@ -8602,7 +8652,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
 
   try {
     rows = await supabaseRequest<Array<CompanyRow>>(
-      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,sms_sender_phone,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,route_fuel_cost_won_per_km,route_labor_cost_won_per_hour,sms_sender_phone,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     );
   } catch (error) {
     if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
@@ -8631,6 +8681,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     notificationSenderName: row.notification_sender_name || row.name || fallback.notificationSenderName,
     ownerName: row.owner_name || "",
     originAddress: row.origin_address || "",
+    routeFuelCostWonPerKm: normalizeRouteCostBasis({ fuelWonPerKm: row.route_fuel_cost_won_per_km }).fuelWonPerKm,
+    routeLaborCostWonPerHour: normalizeRouteCostBasis({ laborWonPerHour: row.route_labor_cost_won_per_hour }).laborWonPerHour,
     smsSenderPhone: row.sms_sender_phone || fallback.smsSenderPhone,
     status: row.status,
     telegramChatId: row.telegram_chat_id || undefined,
@@ -8651,6 +8703,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     notification_sender_name: input.notificationSenderName?.trim() || null,
     owner_name: input.ownerName?.trim() || null,
     origin_address: input.originAddress?.trim() || null,
+    route_fuel_cost_won_per_km: normalizeRouteCostBasis({ fuelWonPerKm: input.routeFuelCostWonPerKm }).fuelWonPerKm,
+    route_labor_cost_won_per_hour: normalizeRouteCostBasis({ laborWonPerHour: input.routeLaborCostWonPerHour }).laborWonPerHour,
     sms_sender_phone: input.smsSenderPhone?.trim() || null,
     telegram_chat_id: input.telegramChatId?.trim() || null,
     status: "active",
@@ -8673,6 +8727,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
         notificationSenderName: (payload.notification_sender_name as string) || (payload.name as string),
         ownerName: (payload.owner_name as string) || "",
         originAddress: (payload.origin_address as string) || "",
+        routeFuelCostWonPerKm: payload.route_fuel_cost_won_per_km as number,
+        routeLaborCostWonPerHour: payload.route_labor_cost_won_per_hour as number,
         smsSenderPhone: (payload.sms_sender_phone as string) || "",
         telegramChatId: (payload.telegram_chat_id as string) || undefined,
         status: "active",
@@ -8692,6 +8748,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     notification_sender_name?: string | null;
     owner_name: string | null;
     origin_address: string | null;
+    route_fuel_cost_won_per_km?: number | string | null;
+    route_labor_cost_won_per_hour?: number | string | null;
     sms_sender_phone?: string | null;
     telegram_chat_id?: string | null;
     status: string;
@@ -8716,10 +8774,12 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
         payload.delivery_partial_message ||
         payload.notification_phone ||
         payload.notification_sender_name ||
+        payload.route_fuel_cost_won_per_km ||
+        payload.route_labor_cost_won_per_hour ||
         payload.sms_sender_phone)
     ) {
       throw new Error(
-        "문자 알림 설정을 저장할 수 없습니다. Supabase에 회사 문자 설정 컬럼이 아직 없습니다. supabase/migrations/20260901_company_message_settings.sql 내용을 먼저 실행하세요."
+        "회사 운영 기준값을 저장할 수 없습니다. Supabase에 회사 설정 컬럼이 아직 없습니다. supabase/migrations/20260905b_company_route_cost_basis.sql 내용을 먼저 실행하세요."
       );
     }
     if (payload.telegram_chat_id) {
@@ -8733,6 +8793,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       delivery_complete_message: _deliveryCompleteMessage,
       delivery_issue_message: _deliveryIssueMessage,
       delivery_partial_message: _deliveryPartialMessage,
+      route_fuel_cost_won_per_km: _routeFuelCostWonPerKm,
+      route_labor_cost_won_per_hour: _routeLaborCostWonPerHour,
       sms_sender_phone: _smsSenderPhone,
       telegram_chat_id: _telegramChatId,
       ...payloadWithoutOptionalMessageColumns
@@ -8760,6 +8822,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       notificationSenderName: row.notification_sender_name || row.name,
       ownerName: row.owner_name || "",
       originAddress: row.origin_address || "",
+      routeFuelCostWonPerKm: normalizeRouteCostBasis({ fuelWonPerKm: row.route_fuel_cost_won_per_km }).fuelWonPerKm,
+      routeLaborCostWonPerHour: normalizeRouteCostBasis({ laborWonPerHour: row.route_labor_cost_won_per_hour }).laborWonPerHour,
       smsSenderPhone: row.sms_sender_phone || "",
       telegramChatId: row.telegram_chat_id || undefined,
       status: row.status,
