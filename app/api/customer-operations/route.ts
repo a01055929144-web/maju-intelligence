@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { addCustomerAttachment, addCustomerNote, getCustomerOperations } from "@/lib/store";
+import { canAccessCustomerIdForSession } from "@/lib/customer-data-scope";
+import { addCustomerAttachment, addCustomerNote, getCustomerMaster, getCustomerOperations } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,10 @@ export async function GET(request: NextRequest) {
   const customerId = request.nextUrl.searchParams.get("customerId");
   if (!customerId) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
+  }
+
+  if (!(await canAccessCustomerForScope(scope, customerId))) {
+    return NextResponse.json({ message: "담당 거래처 기록만 조회할 수 있습니다." }, { status: 403 });
   }
 
   const result = await getCustomerOperations(customerId, scope.companyId);
@@ -44,6 +49,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
   }
 
+  if (!(await canAccessCustomerForScope(scope, body.customerId))) {
+    return NextResponse.json({ message: "담당 거래처에만 기록을 저장할 수 있습니다." }, { status: 403 });
+  }
+
   if (body.action === "attachment") {
     const result = await addCustomerAttachment(
       {
@@ -70,4 +79,13 @@ export async function POST(request: NextRequest) {
     scope.companyId
   );
   return NextResponse.json(result);
+}
+
+async function canAccessCustomerForScope(
+  scope: Awaited<ReturnType<typeof getRequestAuthScope>>,
+  customerId: string
+) {
+  if (!scope.companyId) return false;
+  const customerMaster = await getCustomerMaster(scope.companyId);
+  return canAccessCustomerIdForSession(customerMaster, scope.customerSession, customerId);
 }

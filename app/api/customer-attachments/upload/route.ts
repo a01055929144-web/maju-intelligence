@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { uploadCustomerAttachmentFile } from "@/lib/store";
+import { canAccessCustomerIdForSession } from "@/lib/customer-data-scope";
+import { getCustomerMaster, uploadCustomerAttachmentFile } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,11 @@ export async function POST(request: NextRequest) {
 
   if (!customerId) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
+  }
+
+  const customerMaster = await getCustomerMaster(scope.companyId);
+  if (!canAccessCustomerIdForSession(customerMaster, scope.customerSession, customerId)) {
+    return NextResponse.json({ message: "담당 거래처에만 첨부파일을 저장할 수 있습니다." }, { status: 403 });
   }
 
   if (!(file instanceof File)) {

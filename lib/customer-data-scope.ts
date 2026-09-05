@@ -89,6 +89,12 @@ export function scopeChurnRiskCustomersForSession(customers: ChurnRiskCustomer[]
   return customers.filter((customer) => visibleCustomerIds.has(customer.customerId));
 }
 
+export function canAccessCustomerIdForSession<T extends CustomerMasterLike>(customerMaster: T, session: CustomerSession | null, customerId?: string | null) {
+  if (!customerId) return false;
+  if (!shouldScopeCustomerSession(session)) return true;
+  return scopeCustomerMasterForSession(customerMaster, session).customers.some((customer) => customer.id === customerId);
+}
+
 export function scopeStaffVehicleLocationsForSession(locations: StaffVehicleLocation[], session: CustomerSession | null) {
   if (!shouldScopeCustomerSession(session)) return locations;
   const assignmentKeys = getSessionAssignmentKeys(session);
