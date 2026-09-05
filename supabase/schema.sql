@@ -4,11 +4,19 @@ create table if not exists public.companies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   business_type text,
+  delivery_complete_message text,
+  delivery_issue_message text,
+  delivery_partial_message text,
+  notification_phone text,
+  notification_sender_name text,
   owner_name text,
   origin_address text,
   origin_lat numeric,
   origin_lng numeric,
+  sms_sender_phone text,
   status text not null default 'active',
+  workspace_type text not null default 'company',
+  owner_user_id uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -19,12 +27,24 @@ create table if not exists public.app_users (
   phone text unique,
   name text not null,
   role text not null default 'customer_member',
+  password_hash text,
   kakao_user_id text,
   auth_provider text not null default 'password',
   avatar_url text,
   last_login_at timestamptz,
   status text not null default 'active',
   created_at timestamptz not null default now()
+);
+
+create table if not exists public.auth_identities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.app_users(id) on delete cascade,
+  provider text not null,
+  provider_user_id text not null,
+  email text,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  unique(provider, provider_user_id)
 );
 
 create table if not exists public.company_members (
@@ -60,7 +80,31 @@ create table if not exists public.staff_mobile_devices (
   device_label text,
   platform text not null default 'mobile_web',
   push_token text,
+  last_lat numeric,
+  last_lng numeric,
+  last_accuracy_m numeric,
+  last_location_at timestamptz,
+  location_status text not null default 'active',
+  current_customer_id uuid references public.normalized_customers(id) on delete set null,
+  driver_name text,
+  delivery_vehicle text,
+  user_agent text,
   last_seen_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.staff_location_events (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  user_id uuid not null references public.app_users(id) on delete cascade,
+  device_id uuid references public.staff_mobile_devices(id) on delete set null,
+  current_customer_id uuid references public.normalized_customers(id) on delete set null,
+  driver_name text,
+  delivery_vehicle text,
+  latitude numeric not null,
+  longitude numeric not null,
+  accuracy_m numeric,
+  recorded_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
 
@@ -142,6 +186,9 @@ create table if not exists public.normalized_customers (
   delivery_manager text,
   delivery_zone text,
   loading_position text,
+  access_method_type text,
+  access_note text,
+  access_password text,
   route_calculated_at timestamptz,
   business_status text,
   business_status_checked_at timestamptz,
@@ -181,6 +228,42 @@ create table if not exists public.customer_attachments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.customer_contacts (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  customer_id uuid not null references public.normalized_customers(id) on delete cascade,
+  role text not null default '담당자',
+  name text not null,
+  phone text,
+  memo text,
+  birth_date date,
+  is_primary boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.customer_message_logs (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  customer_id uuid not null references public.normalized_customers(id) on delete cascade,
+  contact_id uuid references public.customer_contacts(id) on delete set null,
+  note_id uuid references public.customer_notes(id) on delete set null,
+  attachment_id uuid references public.customer_attachments(id) on delete set null,
+  trigger_type text not null default 'manual',
+  channel text not null default 'sms',
+  recipient_name text,
+  recipient_phone text,
+  message_body text not null,
+  status text not null default 'queued',
+  provider text,
+  provider_message_id text,
+  error_message text,
+  triggered_by_name text,
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.route_distance_cache (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -208,6 +291,16 @@ create table if not exists public.delivery_vehicles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint delivery_vehicles_company_driver_unique unique (company_id, driver_name)
+);
+
+create table if not exists public.business_number_exceptions (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  business_registration_number text not null,
+  memo text,
+  created_by text,
+  created_at timestamptz not null default now(),
+  constraint business_number_exceptions_company_number_unique unique (company_id, business_registration_number)
 );
 
 create table if not exists public.sales_transactions (
@@ -286,8 +379,17 @@ create table if not exists public.admin_audit_logs (
 
 create index if not exists idx_company_members_company on public.company_members(company_id);
 create unique index if not exists idx_app_users_kakao_user_id on public.app_users(kakao_user_id) where kakao_user_id is not null;
+create unique index if not exists idx_app_users_email_lower on public.app_users(lower(email)) where email is not null;
+create index if not exists idx_auth_identities_user on public.auth_identities(user_id);
+create unique index if not exists idx_auth_identities_provider_user on public.auth_identities(provider, provider_user_id);
+create index if not exists idx_company_members_user_status on public.company_members(user_id, status);
+create index if not exists idx_company_members_company_status_role on public.company_members(company_id, status, role);
 create index if not exists idx_staff_invitations_company_status on public.staff_invitations(company_id, status, created_at desc);
 create index if not exists idx_staff_mobile_devices_user on public.staff_mobile_devices(user_id, last_seen_at desc);
+create unique index if not exists idx_staff_mobile_devices_company_user_platform on public.staff_mobile_devices(company_id, user_id, platform);
+create index if not exists idx_staff_mobile_devices_company_location on public.staff_mobile_devices(company_id, last_location_at desc);
+create index if not exists idx_staff_location_events_company_recorded on public.staff_location_events(company_id, recorded_at desc);
+create index if not exists idx_staff_location_events_user_recorded on public.staff_location_events(user_id, recorded_at desc);
 create index if not exists idx_uploaded_files_company_created on public.uploaded_files(company_id, created_at desc);
 create index if not exists idx_customer_imports_company_created on public.customer_imports(company_id, created_at desc);
 create index if not exists idx_column_mappings_import on public.column_mappings(import_id);
@@ -300,6 +402,11 @@ create index if not exists idx_customer_attachments_customer_created on public.c
 create unique index if not exists idx_route_distance_cache_company_destination on public.route_distance_cache(company_id, destination_address);
 create index if not exists idx_route_distance_cache_company_calculated on public.route_distance_cache(company_id, calculated_at desc);
 create index if not exists idx_delivery_vehicles_company on public.delivery_vehicles(company_id);
+create index if not exists customer_contacts_customer_idx on public.customer_contacts (customer_id, sort_order);
+create index if not exists customer_contacts_company_idx on public.customer_contacts (company_id);
+create index if not exists idx_customer_message_logs_company_created on public.customer_message_logs(company_id, created_at desc);
+create index if not exists idx_customer_message_logs_customer_created on public.customer_message_logs(customer_id, created_at desc);
+create index if not exists idx_business_number_exceptions_company on public.business_number_exceptions(company_id);
 create index if not exists idx_sales_transactions_company_date on public.sales_transactions(company_id, sales_date desc);
 create index if not exists idx_sales_transactions_customer_key on public.sales_transactions(company_id, customer_key);
 create index if not exists idx_ai_reports_company_created on public.ai_reports(company_id, created_at desc);
@@ -310,6 +417,7 @@ create index if not exists idx_admin_audit_logs_company_created on public.admin_
 
 alter table public.companies enable row level security;
 alter table public.app_users enable row level security;
+alter table public.auth_identities enable row level security;
 alter table public.company_members enable row level security;
 alter table public.staff_invitations enable row level security;
 alter table public.staff_mobile_devices enable row level security;
@@ -321,8 +429,11 @@ alter table public.raw_customer_rows enable row level security;
 alter table public.normalized_customers enable row level security;
 alter table public.customer_notes enable row level security;
 alter table public.customer_attachments enable row level security;
+alter table public.customer_contacts enable row level security;
+alter table public.customer_message_logs enable row level security;
 alter table public.route_distance_cache enable row level security;
 alter table public.delivery_vehicles enable row level security;
+alter table public.business_number_exceptions enable row level security;
 alter table public.sales_transactions enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.health_score_snapshots enable row level security;

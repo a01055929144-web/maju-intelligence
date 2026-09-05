@@ -41,12 +41,36 @@ function writeDismissedIds(companyId: string | undefined, ids: string[]) {
   }
 }
 
-export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string; timelineHref: string }) {
-  const [customers, setCustomers] = useState<ChurnRiskCustomer[]>([]);
+export function ChurnRiskAlert({
+  companyId,
+  initialCustomers,
+  timelineHref
+}: {
+  companyId?: string;
+  /** 2026-08-24 피드백: "전반적으로 속도가 더뎌, 빠른 속도가 중요할 것 같아" — 지도 홈 서버 컴포넌트가
+   * 이미 같은 이탈 위험 거래처 목록을 계산해뒀는데, 이 컴포넌트가 마운트되자마자 똑같은 API를
+   * 다시 호출해 왕복이 하나 더 생기고 있었습니다. 서버에서 미리 계산한 값을 받으면 그걸 그대로
+   * 쓰고, 없을 때만(예: 별도 화면에서 이 컴포넌트만 단독으로 쓰는 경우) 기존처럼 직접 불러옵니다. */
+  initialCustomers?: ChurnRiskCustomer[];
+  timelineHref: string;
+}) {
+  const [customers, setCustomers] = useState<ChurnRiskCustomer[]>(initialCustomers || []);
   const [dismissed, setDismissed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(Boolean(initialCustomers));
 
   useEffect(() => {
+    function applyDismissedState(list: ChurnRiskCustomer[]) {
+      const dismissedIds = new Set(readDismissedIds(companyId));
+      const stillAllDismissed = list.length > 0 && list.every((customer) => dismissedIds.has(customer.customerId));
+      setDismissed(stillAllDismissed);
+    }
+
+    if (initialCustomers) {
+      applyDismissedState(initialCustomers);
+      setLoaded(true);
+      return;
+    }
+
     let mounted = true;
     const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
 
@@ -56,10 +80,7 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
         if (!mounted || !Array.isArray(payload?.customers)) return;
         const fetchedCustomers = payload.customers as ChurnRiskCustomer[];
         setCustomers(fetchedCustomers);
-
-        const dismissedIds = new Set(readDismissedIds(companyId));
-        const stillAllDismissed = fetchedCustomers.length > 0 && fetchedCustomers.every((customer) => dismissedIds.has(customer.customerId));
-        setDismissed(stillAllDismissed);
+        applyDismissedState(fetchedCustomers);
       })
       .catch(() => null)
       .finally(() => {
@@ -69,7 +90,7 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
     return () => {
       mounted = false;
     };
-  }, [companyId]);
+  }, [companyId, initialCustomers]);
 
   if (!loaded || dismissed || !customers.length) return null;
 
@@ -94,7 +115,7 @@ export function ChurnRiskAlert({ companyId, timelineHref }: { companyId?: string
               <p className="mt-0.5 text-[11px] font-bold text-rose-700">21일 이상 매출 없음 · 방문 우선 추천</p>
             </div>
           </div>
-          <button aria-label="알림 닫기" className="shrink-0 text-rose-400 transition hover:text-rose-700" onClick={handleDismiss} type="button">
+          <button aria-label="알림 닫기" className="maju-hit-slop shrink-0 p-1 text-rose-400 transition hover:text-rose-700" onClick={handleDismiss} type="button">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>

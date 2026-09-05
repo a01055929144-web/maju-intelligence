@@ -6,10 +6,11 @@ import { Lock, LogIn, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("a01055929144@gmail.com");
-  const [password, setPassword] = useState("0000");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -18,20 +19,27 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError("");
 
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
+    // 2026-08-31 에러 처리 감사 대응: fetch가 실패(네트워크 끊김 등)해도 setLoading(false)가
+    // 실행되도록 try/finally로 감싸, 버튼이 영구히 잠기지 않게 합니다. fetchWithTimeout을 써서
+    // 서버가 응답 없이 연결만 붙들고 있는 경우(방화벽 드롭 등)에도 무한 대기하지 않습니다.
+    try {
+      const response = await fetchWithTimeout("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
 
-    setLoading(false);
+      if (!response.ok) {
+        setError("관리자 계정 정보를 확인해주세요.");
+        return;
+      }
 
-    if (!response.ok) {
-      setError("관리자 계정 정보를 확인해주세요.");
-      return;
+      window.location.href = "/admin";
+    } catch (error) {
+      setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
     }
-
-    window.location.href = "/admin";
   }
 
   return (
@@ -52,7 +60,10 @@ export default function AdminLoginPage() {
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">이메일</span>
               <input
+                autoComplete="username"
                 className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                id="admin-login-email"
+                name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
@@ -61,7 +72,10 @@ export default function AdminLoginPage() {
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">비밀번호</span>
               <input
+                autoComplete="current-password"
                 className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                id="admin-login-password"
+                name="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"

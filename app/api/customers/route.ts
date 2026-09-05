@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { scopeCustomerMasterForSession } from "@/lib/customer-data-scope";
 import { CustomerMasterInput, getCustomerMaster, upsertCustomerMaster } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +15,17 @@ export async function GET(request: NextRequest) {
   const offsetParam = request.nextUrl.searchParams.get("offset");
   const offset = offsetParam ? Math.max(0, Number.parseInt(offsetParam, 10) || 0) : 0;
   const result = await getCustomerMaster(scope.companyId, { offset });
-  return NextResponse.json(result);
+  return NextResponse.json(scopeCustomerMasterForSession(result, scope.customerSession));
 }
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as (CustomerMasterInput & { companyId?: string; validateBusinessNumber?: boolean }) | null;
+  const body = (await request.json().catch(() => null)) as
+    | (CustomerMasterInput & {
+        companyId?: string;
+        validateBusinessNumber?: boolean;
+        confirmDuplicate?: boolean;
+      })
+    | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) {
@@ -35,11 +42,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "유효하지 않은 사업자등록번호입니다." }, { status: 400 });
   }
 
-  const result = await upsertCustomerMaster(body, scope.companyId, {
-    actorName: scope.customerSession?.name || scope.adminSession?.name || "시스템",
-    actorRole: scope.role,
-    requestMethod: request.method
-  });
+  const result = await upsertCustomerMaster(
+    body,
+    scope.companyId,
+    {
+      actorName: scope.customerSession?.name || scope.adminSession?.name || "시스템",
+      actorRole: scope.role,
+      requestMethod: request.method
+    },
+    { confirmDuplicate: body.confirmDuplicate }
+  );
   return NextResponse.json(result);
 }
 

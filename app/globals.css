@@ -9,6 +9,60 @@ html {
   font-size: 90%;
 }
 
+/* 2026-08-28 피드백 대응(모바일 가독성이 떨어짐: 글자·버튼이 너무 작고 정보가 빽빽함).
+   위 90% 축소가 데스크톱 정보 밀도에는 맞았지만, 좁은 화면에서는 text-xs/text-[11px] 같은
+   이미 작은 유틸리티들과 겹치면서 글자가 너무 작아졌습니다. 모바일 폭(768px 미만)에서만
+   기준 폰트를 되돌리고, rem 스케일을 안 타는 임의값(text-[9~11px]) 글자도 함께 키우고,
+   버튼류의 최소 터치 영역을 44px(iOS 권장 기준)로 확보합니다. 데스크톱 레이아웃은 그대로 둡니다. */
+@media (max-width: 767px) {
+  html {
+    font-size: 102%;
+  }
+
+  .text-\[9px\] {
+    font-size: 11px;
+  }
+
+  .text-\[10px\] {
+    font-size: 12px;
+  }
+
+  .text-\[11px\] {
+    font-size: 13px;
+  }
+
+  .maju-button,
+  .maju-button-primary,
+  .maju-button-secondary,
+  .maju-button-blue {
+    min-height: 2.75rem;
+  }
+
+  /* maju-button-* 클래스를 안 쓰는 개별 아이콘 버튼(예: 신규 리드 표의 숨김 처리 버튼)에
+     붙이는 클래스입니다. 데스크톱 표의 기존 밀도는 그대로 두고, 모바일에서만 44px를 확보합니다. */
+  .maju-icon-btn {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+/* 2026-08-28 피드백 대응(지도 상단 KPI·전체화면·필터초기화 아이콘 버튼이 36px로 작음): 이
+   버튼들은 h-11(44px) 고정 높이 툴바 안에 촘촘히 배치돼 있어, 버튼 자체를 키우면 툴바 밖으로
+   튀어나오거나 옆 버튼과 겹칠 위험이 있습니다. 대신 시각적 크기는 그대로 두고, 보이지 않는
+   ::after 레이어로 클릭 가능 영역만 살짝 넓힙니다(레이아웃에 영향 없음 — Radix/Reach UI 등에서
+   쓰는 "hit slop" 기법). PC/모바일 공통 적용해도 마우스 사용자에게는 해가 없습니다. */
+.maju-hit-slop {
+  position: relative;
+}
+
+.maju-hit-slop::after {
+  content: "";
+  position: absolute;
+  /* 이 클래스를 쓰는 버튼들은 보통 gap-1(4px) 간격으로 촘촘히 붙어 있어, 확장 폭을 절반인
+     -2px로 보수적으로 잡아 옆 버튼 클릭 영역과 겹치지 않게 합니다. */
+  inset: -2px;
+}
+
 :root {
   --background: 210 30% 98%;
   --foreground: 222 34% 14%;
@@ -34,7 +88,7 @@ html {
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(241, 245, 249, 0.96) 100%),
+    linear-gradient(180deg, #f8fafc 0%, #f3f6f9 48%, #eef3f7 100%),
     #f6f8fb;
   color: hsl(var(--foreground));
   font-family:
@@ -52,6 +106,21 @@ select {
   background: rgba(13, 148, 136, 0.2);
 }
 
+@keyframes majuVehiclePulse {
+  0% {
+    opacity: 0.18;
+    transform: scale(0.72);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
 @layer base {
   a,
   button {
@@ -67,63 +136,63 @@ select {
 
 @layer components {
   .maju-app-bg {
-    @apply bg-[radial-gradient(circle_at_top_left,rgba(15,118,110,0.08),transparent_32%),linear-gradient(180deg,#f8fafc_0%,#eef3f7_100%)];
+    @apply bg-[linear-gradient(180deg,#f8fafc_0%,#f3f6f9_52%,#eef3f7_100%)];
   }
 
   .maju-surface {
-    @apply border border-slate-200/80 bg-white/95 shadow-[0_14px_36px_rgba(15,23,42,0.08)] backdrop-blur-xl;
+    @apply border border-slate-200 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)];
   }
 
   .maju-panel {
-    @apply rounded-lg border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)];
+    @apply rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.035)];
   }
 
   .maju-section-card {
-    @apply overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.055)];
+    @apply overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.045)];
   }
 
   .maju-card-header {
-    @apply border-b border-slate-200/80 bg-slate-50/70 px-4 py-3;
+    @apply border-b border-slate-200 bg-slate-50 px-3 py-2.5;
   }
 
   .maju-stat-card {
-    @apply rounded-md border border-slate-200 bg-white p-3 shadow-[0_1px_0_rgba(15,23,42,0.03)];
+    @apply rounded-md border border-slate-200 bg-white p-2.5 shadow-[0_1px_0_rgba(15,23,42,0.025)];
   }
 
   .maju-filter-box {
-    @apply rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)];
+    @apply rounded-md border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.025)];
   }
 
   .maju-search-field {
-    @apply flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.03)];
+    @apply flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.025)];
   }
 
   .maju-empty-state {
-    @apply rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center;
+    @apply rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-center;
   }
 
   .maju-button {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-black transition;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-black transition duration-150;
   }
 
   .maju-button-primary {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm transition hover:bg-teal-800;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)] transition duration-150 hover:bg-teal-800 active:translate-y-px;
   }
 
   .maju-button-secondary {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white/95 px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] transition duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:translate-y-px;
   }
 
   .maju-button-blue {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50/95 px-3 text-xs font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition hover:border-blue-200 hover:bg-blue-100;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 text-xs font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.025)] transition duration-150 hover:border-blue-200 hover:bg-blue-100 active:translate-y-px;
   }
 
   .maju-nav-item {
-    @apply flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-black transition;
+    @apply flex h-10 items-center gap-3 rounded-md px-3 text-sm font-black transition duration-150;
   }
 
   .maju-nav-item-active {
-    @apply bg-teal-50 text-teal-900 ring-1 ring-inset ring-teal-100;
+    @apply bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)];
   }
 
   .maju-nav-item-idle {

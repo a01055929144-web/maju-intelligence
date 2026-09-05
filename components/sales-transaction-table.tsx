@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { SortableTh } from "@/components/sortable-th";
 import type { SalesTransactionItem } from "@/lib/store";
+import { useTableSort } from "@/lib/use-table-sort";
+
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function SalesTransactionTable({
   companyId,
@@ -21,6 +26,27 @@ export function SalesTransactionTable({
   const [truncated, setTruncated] = useState(initialTruncated);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(30);
+  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
+  type TransactionSortKey = "businessRegistrationNumber" | "createdAt" | "customerName" | "productName" | "quantity" | "salesAmount" | "salesDate";
+  const { sortDirection, sortKey, sortedRows: sortedItems, toggleSort } = useTableSort<SalesTransactionItem, TransactionSortKey>(items, {
+    businessRegistrationNumber: (a, b) => (a.businessRegistrationNumber || "").localeCompare(b.businessRegistrationNumber || ""),
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    customerName: (a, b) => a.customerName.localeCompare(b.customerName, "ko"),
+    productName: (a, b) => (a.productName || "").localeCompare(b.productName || "", "ko"),
+    quantity: (a, b) => a.quantity - b.quantity,
+    salesAmount: (a, b) => a.salesAmount - b.salesAmount,
+    salesDate: (a, b) => (a.salesDate || "").localeCompare(b.salesDate || "")
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedItems.slice(start, start + pageSize);
+  }, [currentPage, sortedItems, pageSize]);
+  const pageStart = sortedItems.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(sortedItems.length, currentPage * pageSize);
 
   async function loadMore() {
     if (isLoadingMore || !truncated) return;
@@ -52,26 +78,89 @@ export function SalesTransactionTable({
           <h2 className="text-lg font-black text-slate-950">원장 테이블</h2>
           <p className="mt-1 text-sm font-semibold text-slate-500">최근 업로드 행</p>
         </div>
-        <Badge className="bg-slate-900 text-white">{items.length.toLocaleString()}행 표시</Badge>
+        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{items.length.toLocaleString()}행 표시</Badge>
       </div>
-      <div className="max-h-[520px] overflow-auto">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+            보기
+            <select
+              className="h-7 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+              onChange={(event) => {
+                setPageSize(Number(event.target.value) as ListPageSize);
+                setPage(1);
+              }}
+              value={pageSize}
+            >
+              {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}개
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="rounded-full bg-slate-50 px-2 py-1 text-xs font-black text-slate-500">
+            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {items.length.toLocaleString()}행
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={currentPage <= 1}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            type="button"
+          >
+            이전
+          </button>
+          <span className="text-xs font-black text-slate-400">
+            {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+          </span>
+          <button
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            type="button"
+          >
+            다음
+          </button>
+        </div>
+      </div>
+      <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
         <table className="w-full min-w-[920px] border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-white">
+          <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_#e2e8f0]">
             <tr className="text-left text-xs font-black text-slate-500">
               <th className="border-b border-slate-200 px-3 py-3 text-center">No</th>
-              <th className="border-b border-slate-200 px-3 py-3">매출일</th>
-              <th className="border-b border-slate-200 px-3 py-3">거래처</th>
-              <th className="border-b border-slate-200 px-3 py-3">사업자번호</th>
-              <th className="border-b border-slate-200 px-3 py-3">품목</th>
-              <th className="border-b border-slate-200 px-3 py-3 text-right">수량</th>
-              <th className="border-b border-slate-200 px-3 py-3 text-right">매출금액</th>
-              <th className="border-b border-slate-200 px-3 py-3">적재시각</th>
+              <SortableTh active={sortKey === "salesDate"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="매출일" onClick={() => toggleSort("salesDate")} />
+              <SortableTh active={sortKey === "customerName"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="거래처" onClick={() => toggleSort("customerName")} />
+              <SortableTh
+                active={sortKey === "businessRegistrationNumber"}
+                className="border-b border-slate-200 px-3 py-3"
+                direction={sortDirection}
+                label="사업자번호"
+                onClick={() => toggleSort("businessRegistrationNumber")}
+              />
+              <SortableTh active={sortKey === "productName"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="품목" onClick={() => toggleSort("productName")} />
+              <SortableTh
+                active={sortKey === "quantity"}
+                className="border-b border-slate-200 px-3 py-3 text-right"
+                direction={sortDirection}
+                label="수량"
+                onClick={() => toggleSort("quantity")}
+              />
+              <SortableTh
+                active={sortKey === "salesAmount"}
+                className="border-b border-slate-200 px-3 py-3 text-right"
+                direction={sortDirection}
+                label="매출금액"
+                onClick={() => toggleSort("salesAmount")}
+              />
+              <SortableTh active={sortKey === "createdAt"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="적재시각" onClick={() => toggleSort("createdAt")} />
             </tr>
           </thead>
           <tbody>
-            {items.map((item, index) => (
+            {pagedItems.map((item, index) => (
               <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
-                <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{index + 1}</td>
+                <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{(currentPage - 1) * pageSize + index + 1}</td>
                 <td className="border-b border-slate-100 px-3 py-3">{item.salesDate || "-"}</td>
                 <td className="border-b border-slate-100 px-3 py-3">{item.customerName}</td>
                 <td className="border-b border-slate-100 px-3 py-3">{item.businessRegistrationNumber || "-"}</td>
@@ -84,7 +173,7 @@ export function SalesTransactionTable({
             {!items.length ? (
               <tr>
                 <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
-                  아직 업로드된 매출 거래내역이 없습니다. 매출 거래내역서를 업로드하면 이곳에 누적됩니다.
+                  아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다.
                 </td>
               </tr>
             ) : null}

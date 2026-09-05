@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { getCompanyOriginAddress } from "@/lib/store";
+import { getCompanyOriginAddress, saveRouteDistanceCache } from "@/lib/store";
 import { calculateRouteDistance, GeoPoint, haversineDistanceKm, resolveAddressPoint } from "@/lib/tmap";
 
 type RoutePoint = {
@@ -30,6 +30,21 @@ export async function POST(request: NextRequest) {
   const companyId = scope.companyId;
   const originAddress = String(body?.originAddress || (await getCompanyOriginAddress(companyId))).trim();
   const { legs: optimizedLegs, geoPoints } = await optimizeRouteLegs(originAddress, destinations);
+
+  // 경유 코스 계산에서 나온 실제 티맵 거리를 route_distance_cache에 저장합니다.
+  // 이전에는 이 화면에서 실제로 티맵 계산을 실행해도 결과가 저장되지 않아서,
+  // 거래처 데이터 화면의 "티맵 실제거리 반영률"이 항상 0%로 표시됐습니다.
+  // 실패해도 경로 표시 자체는 계속되도록 응답과 분리해 처리합니다.
+  await Promise.allSettled(
+    optimizedLegs
+      .filter(({ result }) => result.provider === "tmap")
+      .map(({ result }) => saveRouteDistanceCache(companyId, result))
+  ).then((settled) => {
+    settled.forEach((outcome) => {
+      if (outcome.status === "rejected") console.error("route_distance_cache 저장 실패:", outcome.reason);
+    });
+  });
+
   const legs = optimizedLegs.map(({ destinationAddress, fromAddress, order, result }) => ({
     distanceKm: result.distanceKm,
     durationMinutes: result.durationMinutes,

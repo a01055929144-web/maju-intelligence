@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
+import { scopeRoutePlanForSession } from "@/lib/customer-data-scope";
 import { getTodayRoutePlan } from "@/lib/store";
 
 export async function GET(request: NextRequest) {
@@ -9,7 +10,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const routePlan = await getTodayRoutePlan(scope.companyId);
   return NextResponse.json({
-    routePlan: await getTodayRoutePlan(scope.companyId)
+    routePlan: scopeRoutePlanForSession(routePlan, scope.customerSession)
   });
 }

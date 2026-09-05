@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearAdminSession, setCustomerSession, validateCustomerCredentials } from "@/lib/auth";
+import { clearAdminSession, getLongLivedCustomerSessionSeconds, setCustomerSession, validateCustomerCredentials } from "@/lib/auth";
 import { checkLoginThrottle, clearLoginThrottle, recordLoginFailure } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
+  const body = (await request.json().catch(() => null)) as { email?: string; password?: string; remember?: boolean } | null;
   const identifier = body?.email || "unknown";
 
   const throttle = checkLoginThrottle(identifier);
@@ -23,6 +23,6 @@ export async function POST(request: NextRequest) {
 
   clearLoginThrottle(identifier);
   await clearAdminSession();
-  await setCustomerSession(session);
+  await setCustomerSession(session, body?.remember ? getLongLivedCustomerSessionSeconds() : undefined);
   return NextResponse.json({ ok: true, session });
 }

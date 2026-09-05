@@ -79,7 +79,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         <div className="flex flex-wrap gap-2">
           {quickMemos.map((item) => (
             <button
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+              className="min-h-[2.75rem] rounded-full border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               key={item}
               onClick={() => setMemo(item)}
               type="button"
@@ -109,7 +109,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           {saving ? "저장 중" : status === "saved" ? "저장 완료" : "히스토리에 저장"}
         </Button>
 
-        {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 DB 연결을 확인해주세요.</p> : null}
+        {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 저장 연결을 확인해주세요.</p> : null}
         {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장되었습니다. 거래처 원장에서 같은 기록을 확인할 수 있습니다.</p> : null}
       </div>
     </section>

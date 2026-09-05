@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
 function buildDatabaseSummary(system: Awaited<ReturnType<typeof getSystemDiagnostics>> | null) {
   if (!system) {
     return {
-      description: "DB 진단 API가 실패했습니다. Vercel 환경변수와 Supabase 테이블 상태를 확인해야 합니다.",
-      label: "DB 진단 실패",
+      description: "저장 진단 API가 실패했습니다. Vercel 환경변수와 Supabase 테이블 상태를 확인해야 합니다.",
+      label: "저장 진단 실패",
       normalizedCustomers: null,
       tone: "fallback",
       visitResults: null
@@ -58,11 +58,11 @@ function buildDatabaseSummary(system: Awaited<ReturnType<typeof getSystemDiagnos
 
   return {
     description: ready
-      ? "Supabase 실 DB가 연결되어 있고 주요 테이블 조회가 가능합니다."
+      ? "Supabase 실서버가 연결되어 있고 주요 테이블 조회가 가능합니다."
       : system.mode === "production-db"
         ? "Supabase 환경변수는 있으나 일부 테이블 조회를 확인해야 합니다."
-        : "Supabase 환경변수가 없거나 미완성이라 DB 거래처 원장을 표시할 수 없습니다. 데이터 등록과 환경변수를 먼저 확인하세요.",
-    label: ready ? "실 DB 연결" : system.mode === "production-db" ? "DB 원장 점검 필요" : "DB 원장 연결 필요",
+        : "Supabase 환경변수가 없거나 미완성이라 거래처 원장을 표시할 수 없습니다. 데이터 등록과 환경변수를 먼저 확인하세요.",
+    label: ready ? "실서버 연결" : system.mode === "production-db" ? "원장 점검 필요" : "원장 연결 필요",
     normalizedCustomers,
     tone: ready ? "ready" : "fallback",
     visitResults

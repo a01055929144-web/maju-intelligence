@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       await createStaffInvitation({
         companyId: session.companyId,
+        employeeEmail: body.employeeEmail,
         employeeName: body.employeeName,
         employeePhone: body.employeePhone,
         role: body.role
@@ -68,6 +69,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       await updateStaffInvitation({
         companyId: session.companyId,
+        employeeEmail: body.employeeEmail,
+        employeeName: body.employeeName,
+        employeePhone: body.employeePhone,
         invitationId: body.invitationId,
         role: body.role,
         status: body.status

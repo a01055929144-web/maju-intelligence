@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSort } from "@/lib/use-table-sort";
+
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 type UploadHistoryItem = {
   id: string;
@@ -32,12 +36,42 @@ function useAdminCompanyId() {
   return companyId;
 }
 
+// 2026-08-30 피드백("다수 고객들 사용할 수 있도록 개선된거야?") 대응: 이 페이지는 클라이언트
+// 컴포넌트라 서버 세션을 직접 읽지 못해, 지금까지는 모든 일반 고객 로그인에 회사명/이름을
+// "마주식자재"/"정두영"으로 고정 표시하고 있었습니다(다른 고객사가 로그인해도 항상 이렇게 보임 —
+// 실제 데이터 자체는 세션 쿠키로 서버에서 이미 회사별로 분리돼 있지만 헤더 표시만 틀렸던 것).
+// /api/customer/me로 실제 로그인한 회사명·이름을 가져와 어떤 고객사든 자기 정보를 보게 합니다.
+function useCustomerIdentity(isAdminPreview: boolean) {
+  const [companyName, setCompanyName] = useState("");
+  const [userName, setUserName] = useState("");
+  useEffect(() => {
+    if (isAdminPreview) return;
+    let ignore = false;
+    fetch("/api/customer/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (ignore || !payload?.session) return;
+        setCompanyName(payload.session.companyName || "");
+        setUserName(payload.session.name || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [isAdminPreview]);
+  return { companyName, userName };
+}
+
+
 export default function CustomerDataManagementPage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
+  const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
   const [uploads, setUploads] = useState<UploadHistoryItem[]>([]);
   const [uploadsLoaded, setUploadsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(30);
 
   useEffect(() => {
     let active = true;
@@ -64,17 +98,36 @@ export default function CustomerDataManagementPage() {
 
   const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
 
+  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
+  type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
+  const { sortDirection, sortKey, sortedRows: sortedUploads, toggleSort } = useTableSort<UploadHistoryItem, UploadSortKey>(uploads, {
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    duplicateCount: (a, b) => a.duplicateCount - b.duplicateCount,
+    filename: (a, b) => (a.filename || "").localeCompare(b.filename || "", "ko"),
+    qualityScore: (a, b) => a.qualityScore - b.qualityScore,
+    rows: (a, b) => a.rows - b.rows,
+    status: (a, b) => a.status.localeCompare(b.status)
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedUploads.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = sortedUploads.length ? (safeCurrentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(sortedUploads.length, safeCurrentPage * pageSize);
+  const visibleUploads = sortedUploads.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize, sortKey, sortDirection, uploads.length]);
+
   return (
     <CustomerAppShell
       active="data-management"
-      companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
+      companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="데이터 등록 이력과 누락·미매칭·정합성 문제를 확인하고 관리합니다."
-      title="거래처 관리 · 데이터 관리"
-      userName={isAdminPreview ? "관리자" : "정두영"}
+      subtitle="등록 이력, 누락, 미매칭 확인"
+      title="등록 이력 조회"
+      userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <CustomerWorkspaceTabs />
       <div className="mx-auto max-w-[1560px] space-y-4">
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
@@ -86,28 +139,73 @@ export default function CustomerDataManagementPage() {
             </h2>
             <p className="mt-1 text-xs font-bold text-slate-500">과거 데이터 업로드 작업의 파일명, 처리 건수, 시각, 처리 결과입니다.</p>
           </div>
-          <div className="overflow-x-auto">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                보기
+                <select
+                  className="h-7 rounded border-0 bg-transparent text-xs font-black text-slate-900 outline-none"
+                  onChange={(event) => setPageSize(Number(event.target.value) as ListPageSize)}
+                  value={pageSize}
+                >
+                  {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}개
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500 ring-1 ring-inset ring-slate-200">
+                {pageStart}-{pageEnd} / {sortedUploads.length.toLocaleString()}건
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                type="button"
+              >
+                이전
+              </button>
+              <span className="min-w-14 text-center text-xs font-black text-slate-500">
+                {safeCurrentPage} / {totalPages}
+              </span>
+              <button
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                type="button"
+              >
+                다음
+              </button>
+            </div>
+          </div>
+          <div className="max-h-[calc(100dvh-360px)] min-h-[320px] overflow-auto overscroll-contain">
             {!uploadsLoaded ? (
-              <p className="p-6 text-sm font-bold text-slate-400">불러오는 중…</p>
+              <p className="flex items-center gap-1.5 p-4 text-sm font-bold text-slate-400">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                업로드 이력을 불러오는 중입니다...
+              </p>
             ) : loadError ? (
-              <p className="p-6 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
+              <p className="p-4 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
             ) : uploads.length === 0 ? (
-              <p className="p-6 text-sm font-bold text-slate-400">업로드 이력이 아직 없습니다. 거래처 관리 &gt; 등록에서 엑셀을 업로드해보세요.</p>
+              <p className="p-4 text-sm font-bold text-slate-400">업로드 이력이 아직 없습니다. 거래처 관리 &gt; 등록에서 엑셀을 업로드해보세요.</p>
             ) : (
               <table className="w-full min-w-[640px] text-left text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-black uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-2.5">파일명</th>
-                    <th className="px-4 py-2.5">건수</th>
-                    <th className="px-4 py-2.5">품질점수</th>
-                    <th className="px-4 py-2.5">중복</th>
-                    <th className="px-4 py-2.5">상태</th>
-                    <th className="px-4 py-2.5">등록일시</th>
+                    <SortableTh active={sortKey === "filename"} className="px-4 py-2.5" direction={sortDirection} label="파일명" onClick={() => toggleSort("filename")} />
+                    <SortableTh active={sortKey === "rows"} className="px-4 py-2.5" direction={sortDirection} label="건수" onClick={() => toggleSort("rows")} />
+                    <SortableTh active={sortKey === "qualityScore"} className="px-4 py-2.5" direction={sortDirection} label="품질점수" onClick={() => toggleSort("qualityScore")} />
+                    <SortableTh active={sortKey === "duplicateCount"} className="px-4 py-2.5" direction={sortDirection} label="중복" onClick={() => toggleSort("duplicateCount")} />
+                    <SortableTh active={sortKey === "status"} className="px-4 py-2.5" direction={sortDirection} label="상태" onClick={() => toggleSort("status")} />
+                    <SortableTh active={sortKey === "createdAt"} className="px-4 py-2.5" direction={sortDirection} label="등록일시" onClick={() => toggleSort("createdAt")} />
                     <th className="px-4 py-2.5">작업</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {uploads.map((upload) => (
+                  {visibleUploads.map((upload) => (
                     <tr className="border-b border-slate-100 last:border-0" key={upload.id}>
                       <td className="px-4 py-2.5 font-bold text-slate-800">{upload.filename || "파일명 없음"}</td>
                       <td className="px-4 py-2.5 text-slate-600">{upload.rows.toLocaleString()}행</td>

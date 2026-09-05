@@ -11,13 +11,14 @@ export type PlaceLinks = {
   checkedAt: string | null;
   enrichedPhone: string;
   enrichedIndustry: string;
+  enrichedAddress: string;
 };
 
 type ExistingPlaceLinks = Partial<Pick<PlaceLinks, "googleMapUrl" | "kakaoPlaceUrl" | "naverPlaceUrl">>;
 
 export async function resolvePlaceLinks(input: PlaceLinkInput, existing: ExistingPlaceLinks = {}): Promise<PlaceLinks> {
   const query = buildPlaceSearchQuery(input);
-  const fallbackLinks = buildPlaceSearchLinks(query);
+  const fallbackLinks = buildPlaceSearchLinks(input);
   const kakaoResult = await resolveKakaoPlace(query);
   const kakaoPlaceUrl = existing.kakaoPlaceUrl?.trim() || kakaoResult.placeUrl || fallbackLinks.kakaoPlaceUrl;
   const naverPlaceUrl = existing.naverPlaceUrl?.trim() || (await resolveNaverPlaceUrl(query)) || fallbackLinks.naverPlaceUrl;
@@ -31,18 +32,22 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
     naverBlogSearchUrl: buildNaverBlogSearchUrl(query),
     checkedAt,
     enrichedPhone: kakaoResult.phone,
-    enrichedIndustry: kakaoResult.industry
+    enrichedIndustry: kakaoResult.industry,
+    enrichedAddress: kakaoResult.address
   };
 }
 
-export function buildPlaceSearchLinks(query: string) {
-  const encodedQuery = encodeURIComponent(query || "매장");
+export function buildPlaceSearchLinks(input: PlaceLinkInput) {
+  const fullQuery = buildPlaceSearchQuery(input) || "거래처";
+  const encodedFullQuery = encodeURIComponent(fullQuery);
+  // 네이버 지도는 "상호명 + 상세주소(동/호수·층수 포함)"로 검색하면 네이버 DB에 등록된 주소 표기와
+  // 조금만 달라도 결과가 아예 없거나 엉뚱한 곳으로 연결되는 경우가 많았습니다(사용자 리포트로 확인).
+  // 반면 상호명 단독 검색은 해당 업체가 최상단에 뜨는 경우가 훨씬 많아, 네이버만 상호명만으로 검색합니다.
+  const naverQuery = input.customerName?.trim() || fullQuery;
   return {
-    googleMapUrl: `https://www.google.com/maps/search/${encodedQuery}`,
-    kakaoPlaceUrl: `https://map.kakao.com/?q=${encodedQuery}`,
-    // search.naver.com은 일반 웹검색 결과라 특정 매장 상세(리뷰·영업시간)로 바로 연결되지 않는 경우가 많습니다.
-    // map.naver.com/p/search는 지도 검색 딥링크로, 상호명+주소로 유일하게 매칭되면 해당 매장 상세 패널로 바로 이동합니다.
-    naverPlaceUrl: `https://map.naver.com/p/search/${encodedQuery}`
+    googleMapUrl: `https://www.google.com/maps/search/${encodedFullQuery}`,
+    kakaoPlaceUrl: `https://map.kakao.com/?q=${encodedFullQuery}`,
+    naverPlaceUrl: `https://map.naver.com/p/search/${encodeURIComponent(naverQuery)}`
   };
 }
 
@@ -59,10 +64,11 @@ type KakaoPlaceResult = {
   placeUrl: string;
   phone: string;
   industry: string;
+  address: string;
 };
 
 async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
-  const empty: KakaoPlaceResult = { placeUrl: "", phone: "", industry: "" };
+  const empty: KakaoPlaceResult = { placeUrl: "", phone: "", industry: "", address: "" };
   const restKey = process.env.KAKAO_REST_KEY;
   if (!restKey || restKey === "replace-with-kakao-rest-api-key" || !query.trim()) return empty;
 
@@ -76,7 +82,7 @@ async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
 
     if (!response.ok) return empty;
     const payload = (await response.json()) as {
-      documents?: Array<{ id?: string; place_url?: string; phone?: string; category_name?: string }>;
+      documents?: Array<{ id?: string; place_url?: string; phone?: string; category_name?: string; road_address_name?: string; address_name?: string }>;
     };
     const place = payload.documents?.[0];
     if (!place) return empty;
@@ -88,7 +94,9 @@ async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
     return {
       placeUrl,
       phone: place.phone?.trim() || "",
-      industry
+      industry,
+      // 도로명 주소를 우선하고, 없으면 지번 주소로 대체합니다(영업리드 주소 미확인 보강, 2026-08-24 피드백).
+      address: place.road_address_name?.trim() || place.address_name?.trim() || ""
     };
   } catch {
     return empty;

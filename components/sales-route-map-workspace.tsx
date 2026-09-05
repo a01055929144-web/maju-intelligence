@@ -1,48 +1,166 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CalendarDays,
   Camera,
   Check,
   CheckCircle2,
   ChevronDown,
+  CircleSlash,
   Clock,
   Copy,
+  CreditCard,
+  Crosshair,
+  Download,
   Edit3,
+  ExternalLink,
+  Eye,
+  EyeOff,
   FileImage,
+  Gauge,
+  GripVertical,
+  Instagram,
+  KeyRound,
+  Layers,
+  ListFilter,
+  Loader2,
+  Lock,
   Maximize2,
   Minimize2,
   MapPin,
+  MapPinned,
+  MessageCircle,
   MessageSquareText,
   Navigation,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Phone,
   Plus,
+  Radar,
   RefreshCw,
   Search,
+  Star,
   Store,
+  Target,
+  Trash2,
   Truck,
+  Upload,
+  UserCheck,
   UserRound,
+  Warehouse,
   X,
   type LucideIcon
 } from "lucide-react";
+import { LinkifiedText } from "@/components/linkified-text";
+import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
+import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
-import { DeliveryVehicle, RoutePlan, RoutePlanStop } from "@/lib/store";
+import { buildPlaceSearchLinks } from "@/lib/place-links";
+import {
+  ChurnRiskCustomer,
+  CustomerContactItem,
+  DeliveryCompletionEvent,
+  DeliveryVehicle,
+  PermitLeadActionItem,
+  PermitLeadItem,
+  PermitLeadPeriod,
+  PermitLeadQueues,
+  PossibleDuplicateCustomer,
+  RoutePlan,
+  RoutePlanStop,
+  StaffLocationEvent,
+  StaffVehicleLocation
+} from "@/lib/store";
+import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 type MarkerViewMode = "grade" | "vehicle";
-type WorkspaceView = "map" | "customers" | "course";
+type WorkspaceView = "map" | "customers" | "course" | "leads";
+export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
+export type BulkLeadActionBusy = PermitLeadActionKind | "quoteFollowUp" | "";
+export type LeadOpenDateFilterMode = "all" | "year" | "month" | "custom" | "missing";
+export type PermitLeadActionResult = { action?: PermitLeadActionItem; message?: string; ok: boolean; status?: string };
+export type PermitLeadActionIntent = "call" | "dm" | "followup" | "info" | "";
+export const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+export type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
+export type PermitLeadEnrichResponse = {
+  lead?: Partial<PermitLeadItem>;
+  message?: string;
+  ok?: boolean;
+  persisted?: boolean;
+  skippedFields?: string[];
+  sources?: {
+    googleReviews?: boolean;
+    keywordVolume?: boolean;
+    placeLinks?: boolean;
+  };
+};
+type ExternalBusinessResult = {
+  address: string;
+  industry: string;
+  kakaoPlaceUrl: string;
+  name: string;
+  phone: string;
+  roadAddress: string;
+};
 
-type StoreRow = RoutePlanStop & {
+// 검색으로 찾은 미등록 매장은 아직 거래처 id가 없으므로, 지도 마커/클릭 매칭에 쓸 안정적인
+// id를 상호명+주소로 만들어 씁니다. 같은 상호명이 검색 결과에 여러 번 나와도 주소가 다르면 구분됩니다.
+function externalResultId(result: ExternalBusinessResult) {
+  return `external-${result.name}-${result.roadAddress || result.address}`;
+}
+
+// 검색 결과를 편집 없이 그대로(상호명·주소·연락처·업종) 빠르게 거래처로 저장합니다. 개별 등록
+// 패널(QuickRegisterDrawer)의 저장 로직과 별개로, 여러 매장을 체크해 한 번에 등록할 때 씁니다.
+async function registerExternalBusinessResult(result: ExternalBusinessResult): Promise<{ id: string; name: string }> {
+  const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+  const response = await fetch("/api/customers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      address: result.roadAddress || result.address,
+      businessStatus: "확인 필요",
+      companyId: companyId || undefined,
+      customerName: result.name,
+      industry: result.industry || "미분류",
+      kakaoPlaceUrl: result.kakaoPlaceUrl,
+      phone: result.phone,
+      validateBusinessNumber: false
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.message || `${result.name} 등록에 실패했습니다.`);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 여러 곳을 한 번에 등록하는 흐름이라
+  // 검색 결과마다 확인창을 띄우기 어려우므로, 이미 같은 상호명의 거래처가 있으면 등록하지 않고
+  // 건너뛴 것으로 처리합니다(사용자가 정말 새 거래처로 등록하고 싶다면 개별 등록 패널을 쓰면 됩니다).
+  if (payload?.possibleDuplicate) throw new Error(`${result.name}은(는) 이미 등록된 거래처와 이름이 같아 건너뛰었습니다.`);
+
+  const customerId = String(payload?.customer?.id || "");
+  if (!customerId) throw new Error(`${result.name}은(는) 저장됐지만 ID를 확인하지 못했습니다.`);
+  return { id: customerId, name: result.name };
+}
+
+export type StoreRow = RoutePlanStop & {
   accountCopyStatus: "missing" | "received";
   bankAccount: string;
   birthDate: string;
@@ -82,8 +200,12 @@ type StoreEdit = Partial<
     | "businessRegistrationNumber"
     | "businessStatus"
     | "businessHours"
+    | "accessMethodType"
+    | "accessNote"
+    | "accessPassword"
     | "deliveryArea"
     | "deliveryDriver"
+    | "deliveryVehicleName"
     | "email"
     | "expectedRevenue"
     | "grade"
@@ -93,11 +215,16 @@ type StoreEdit = Partial<
     | "name"
     | "openingDate"
     | "phone"
+    | "relationshipStatus"
     | "representativeName"
+    | "reviewSummary"
+    | "reviewKeywords"
+    | "reviewSource"
     | "status"
+    | "updatedAt"
   >
 >;
-type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver" | "fuelType">>;
+type VehicleEdit = Partial<Pick<DeliveryVehicle, "area" | "driver" | "fuelType" | "name">>;
 
 type StoreHistoryItem = {
   id: string;
@@ -105,9 +232,11 @@ type StoreHistoryItem = {
   recordedAt: string;
 };
 
-type DeliveryProof = {
+export type DeliveryProof = {
   deliveryStatus: "arrived" | "partial" | "issue";
   fileName: string;
+  // 2026-08-28 피드백 대응: 저장 실패 시 그 이유를 함께 남겨 화면에 오류 배너로 보여줍니다.
+  failureReason?: string;
   messageChannel: "kakao" | "sms";
   memo: string;
   persisted?: boolean;
@@ -115,7 +244,7 @@ type DeliveryProof = {
   storeId: string;
 };
 
-type DeliveryProofInput = {
+export type DeliveryProofInput = {
   deliveryStatus: DeliveryProof["deliveryStatus"];
   file?: File | null;
   fileName: string;
@@ -126,7 +255,6 @@ type DeliveryProofInput = {
 type StoreAttachment = {
   businessCertificate?: AttachmentFile;
   bankbookCopy?: AttachmentFile;
-  loadingPositionMedia?: AttachmentFile[];
 };
 
 type AttachmentFile = {
@@ -145,13 +273,23 @@ type BusinessOcrSuggestion = {
 
 type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
+  /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
+  readonly companyName?: string;
+  /** 2026-08-24 피드백: "전반적으로 속도가 더뎌" — 서버 컴포넌트가 이미 계산한 이탈 위험 거래처
+   * 목록을 그대로 내려받아, ChurnRiskAlert가 마운트되자마자 같은 데이터를 다시 fetch하는 중복
+   * 네트워크 왕복을 없앱니다. */
+  readonly churnRiskCustomers?: ChurnRiskCustomer[];
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
+  readonly staffVehicleLocations?: StaffVehicleLocation[];
+  /** 2026-08-31 피드백 대응: 물류 출발지 주소가 아직 설정되지 않아 거리 계산이 기본값으로
+   * 이뤄지고 있음을 알리는 배너를 띄울지 여부(고객사 계정에서만, 관리자 미리보기에서는 숨김). */
+  readonly showOriginAddressBanner?: boolean;
   readonly timelineHref?: string;
   readonly vehicleFuelTypes?: Record<string, "gasoline" | "diesel">;
 };
 
-type CourseSummary = {
+export type CourseSummary = {
   distanceKm: number;
   durationMinutes: number;
   expectedRevenue: number;
@@ -164,7 +302,7 @@ type FuelPriceSummary = {
   pricePerLiter: number;
   sourceLabel: string;
 };
-type FuelPriceByType = Record<"diesel" | "gasoline", FuelPriceSummary | null>;
+export type FuelPriceByType = Record<"diesel" | "gasoline", FuelPriceSummary | null>;
 
 const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "전체", value: "all" },
@@ -173,66 +311,500 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "C등급", value: "C" }
 ];
 const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
-  { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치 확인", value: "map" },
-  { helper: "검색·상세·편집", icon: Store, label: "거래처 목록", shortLabel: "원장 관리", value: "customers" },
-  { helper: "선택·경유·티맵", icon: Navigation, label: "경유 코스", shortLabel: "티맵 계산", value: "course" }
+  { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치", value: "map" },
+  { helper: "검색·상세·편집", icon: Store, label: "거래처", shortLabel: "원장", value: "customers" },
+  { helper: "선택·경유·티맵", icon: Navigation, label: "코스", shortLabel: "경유", value: "course" },
+  { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
-  course: "배송차와 매장을 선택한 뒤 티맵 도로 경유 순서를 계산합니다.",
-  customers: "전체 거래처 원장을 검색, 등급, 배송차 기준으로 확인합니다.",
-  map: "매장 등급 또는 배송차 기준으로 지도 마커를 확인합니다."
+  course: "배송차와 거래처를 선택해 티맵 도로 기준 방문 순서를 계산합니다.",
+  customers: "거래처 원장, 첨부자료, 메모를 관리합니다.",
+  leads: "신규 인허가 데이터와 반경 리드를 관리합니다.",
+  map: "거래처 등급, 배송차, 신규 리드를 지도에서 확인합니다."
 };
 const originMarkerId = "origin-hub";
-const tmapWaypointLimit = 15;
-const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
+export const tmapWaypointLimit = 15;
+// "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
+const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
+export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
+export const QUOTE_FOLLOW_UP_STATUS_FILTER = "__quote_follow_up";
+export const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
-const localStoreKeys = {
+export const localStoreKeys = {
   attachments: "maju:sales-route:attachments",
   deliveryProofs: "maju:sales-route:delivery-proofs",
   histories: "maju:sales-route:histories",
+  manualDrivers: "maju:sales-route:manual-drivers",
+  manualVehicles: "maju:sales-route:manual-vehicles",
+  quoteDrafts: "maju:sales-route:quote-drafts",
   storeEdits: "maju:sales-route:store-edits",
-  vehicleEdits: "maju:sales-route:vehicle-edits"
+  // 2026-08-28 피드백 대응(localStorage 편집 캐시가 서버 값과 영구히 어긋날 수 있음): 각 편집
+  // 항목이 저장된 시각을 별도로 기록해, 오래된(48시간 이상) 항목은 다음 로딩 때 자동으로 정리합니다.
+  storeEditsSavedAt: "maju:sales-route:store-edits-saved-at",
+  vehicleEdits: "maju:sales-route:vehicle-edits",
+  vehicleEditsSavedAt: "maju:sales-route:vehicle-edits-saved-at"
 };
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePlan, timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+// 2026-08-28 피드백 대응: storeEdits/vehicleEdits는 이 브라우저에서만 유지되는 "서버 저장 전까지의
+// 임시 낙관적 캐시"인데, 지우는 로직이 없어 한 번 저장되면 영구히 남아 있었습니다. 실제 서버 값이
+// 나중에 다른 경로(다른 기기, 관리자 도구 등)로 바뀌어도 이 브라우저는 계속 옛 값을 보여주는
+// 문제가 있었습니다. 완전한 해결(저장 성공 시 즉시 제거)은 현재 화면이 서버 재조회 없이 이 캐시에만
+// 의존해 렌더링하는 구조상 화면이 원래 값으로 되돌아가 보이는 부작용이 있어, 대신 TTL(48시간)을 둬서
+// "최소한 며칠 넘게 어긋난 채로 남아있지는 않게" 합니다.
+const EDIT_CACHE_TTL_MS = 48 * 60 * 60 * 1000;
+
+function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values: Record<string, T>; savedAt: Record<string, number> } {
+  const values = readLocalJson<Record<string, T>>(valueKey, {});
+  const savedAt = readLocalJson<Record<string, number>>(savedAtKey, {});
+  const now = Date.now();
+  const freshValues: Record<string, T> = {};
+  const freshSavedAt: Record<string, number> = {};
+  for (const [id, value] of Object.entries(values)) {
+    const timestamp = savedAt[id];
+    // 저장 시각이 없는 과거 편집 캐시는 서버 원장 값 위에 영구적으로 덮여 보일 수 있어 버립니다.
+    // 사용자가 "기존 거래처 데이터가 바뀐 것 같다"고 느끼는 대표 원인이 이 legacy localStorage였습니다.
+    if (!timestamp) continue;
+    if (timestamp && now - timestamp > EDIT_CACHE_TTL_MS) continue;
+    freshValues[id] = value;
+    freshSavedAt[id] = timestamp;
+  }
+  return { values: freshValues, savedAt: freshSavedAt };
+}
+
+export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffVehicleLocations = [], timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
+  // 같이 보여주고 그 자리에서 바로 등록으로 넘어갈 수 있도록, 카카오 매장 검색 결과를 함께 붙입니다.
+  const [externalResults, setExternalResults] = useState<ExternalBusinessResult[]>([]);
+  const [isSearchingExternal, setIsSearchingExternal] = useState(false);
+  const [externalSearchMessage, setExternalSearchMessage] = useState("");
+  const [showExternalResults, setShowExternalResults] = useState(false);
+  // 지도 검색에서 고른 미등록 매장의 빠른 등록 대상입니다.
+  const [quickRegisterTarget, setQuickRegisterTarget] = useState<ExternalBusinessResult | null>(null);
+  // 검색 결과 일괄 등록 선택 상태입니다.
+  const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
+  const [isBulkRegistering, setIsBulkRegistering] = useState(false);
+  const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
-  // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, 좌우 목록 패널은 기본적으로 접어두고
-  // 얇은 토글 스트립만 남깁니다. 필요할 때 한 번 눌러서 펼치는 방식입니다.
-  const [leftCollapsed, setLeftCollapsed] = useState(true);
-  const [rightCollapsed, setRightCollapsed] = useState(true);
-  // 네이버맵·카카오맵처럼 지도가 화면 대부분을 차지하도록, KPI 통계/가이드 영역은 기본적으로 접어둡니다.
+  // 지도 우선 화면이라 통계 패널은 기본 접힘 상태를 유지하지만, 왼쪽 배송차량·담당자 필터와 오른쪽
+  // 거래처 필터 패널은 기본으로 펼쳐 둡니다(2026-08-24 피드백: "차량, 매니저 필터랑 거래처 필터가
+  // 안보이네" → 왼쪽은 이미 펼침으로 고쳤는데도 "매장 필터가 안 보이네"가 다시 나와 확인해보니
+  // 거래처 목록은 오른쪽 패널(StoreManagementPanel)이라 rightCollapsed 기본값이 문제였음).
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  // 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함"): 지도에 신규 리드가
+  // 함께 표시 중일 때(반경 검색 또는 "리드" 전체 표시 토글), 오른쪽 패널에서 거래처 목록과 리드
+  // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
+  const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
+  const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const [vehicleAnalysis, setVehicleAnalysis] = useState<{
+    completions: DeliveryCompletionEvent[];
+    events: StaffLocationEvent[];
+    error: string;
+    loading: boolean;
+    vehicle: StaffVehicleLocation | null;
+  }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
   const [statsExpanded, setStatsExpanded] = useState(false);
-  // 지도가 브라우저 전체 화면을 차지하는 실제 Fullscreen API 모드. 팝업 창을 새로 띄우는 대신
-  // 이 작업공간 전체를 그대로 화면 가득 확대해 네이버맵·카카오맵과 같은 방식으로 조작할 수 있습니다.
+  // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
+  // 지도 탭에서 검색/필터/신규 리드 반경 바가 지도 위에 떠 있는 카드로 표시됩니다(xl:absolute).
+  // "신규 리드 반경"을 켜면 이 카드에 한 줄이 더 늘어나 높이가 커지는데, 지도 오른쪽 위
+  // MapControls(내 위치 버튼)의 세로 위치가 고정값이면 늘어난 카드와 겹칩니다.
+  //
+  // 이 카드(mapHeaderRef)는 위쪽 KPI/이탈 위험 알림 블록을 건너뛰고 항상 지도 영역의 부모
+  // 기준 top-2에 뜨는데(xl:absolute), MapControls는 지도 영역 자신(mapAreaRef)의 top을
+  // 기준으로 위치합니다 — 두 기준점이 서로 다른 조상이라, 카드 높이만으로 오프셋을 계산하면
+  // KPI 패널이 펼쳐져 있거나 이탈 위험 알림 배너가 떠 있을 때 실제 카드 아래쪽 가장자리와
+  // MapControls 위치가 어긋납니다. getBoundingClientRect()로 카드의 실제 화면 아래쪽 가장자리와
+  // 지도 영역의 실제 화면 위쪽 가장자리를 직접 비교해 그 차이를 오프셋으로 써서, 위에 어떤 블록이
+  // 얼마나 있든 항상 카드 바로 아래에 오도록 합니다.
+  const mapHeaderRef = useRef<HTMLElement>(null);
+  const mapAreaRef = useRef<HTMLDivElement>(null);
+  const [mapHeaderHeightPx, setMapHeaderHeightPx] = useState(0);
+  const recomputeMapHeaderOffset = useCallback(() => {
+    const headerNode = mapHeaderRef.current;
+    const areaNode = mapAreaRef.current;
+    if (!headerNode || !areaNode) return;
+    const headerRect = headerNode.getBoundingClientRect();
+    const areaRect = areaNode.getBoundingClientRect();
+    setMapHeaderHeightPx(Math.max(0, headerRect.bottom - areaRect.top + 16));
+  }, []);
+  useEffect(() => {
+    const headerNode = mapHeaderRef.current;
+    const areaNode = mapAreaRef.current;
+    if (!headerNode || !areaNode || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(recomputeMapHeaderOffset);
+    observer.observe(headerNode);
+    observer.observe(areaNode);
+    recomputeMapHeaderOffset();
+    return () => observer.disconnect();
+  }, [recomputeMapHeaderOffset]);
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
-  const [activeView, setActiveView] = useState<WorkspaceView>("map");
+  // 지도 홈 퀵카드에서 "경유지 추가"를 누르면 경유 코스 탭으로 바로 이동시키면서 이 값을 같이
+  // 넘겨, TodayCourseView가 마운트된 뒤 해당 거래처를 오늘 경유 선택에 자동으로 포함시킵니다.
+  const [pendingCourseStoreId, setPendingCourseStoreId] = useState("");
+  // /leads/permits 같은 예전 딥링크(?view=leads)로 들어와도 같은 탭이 바로 열리도록 초기값을 URL에서 읽습니다.
+  const [activeView, setActiveView] = useState<WorkspaceView>(() => {
+    if (typeof window === "undefined") return "map";
+    const requested = new URLSearchParams(window.location.search).get("view");
+    return requested === "leads" || requested === "customers" || requested === "course" ? requested : "map";
+  });
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
-  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(() => readLocalJson(localStoreKeys.storeEdits, {}));
+  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(
+    () => loadEditCacheWithTtl<StoreEdit>(localStoreKeys.storeEdits, localStoreKeys.storeEditsSavedAt).values
+  );
+  const [storeEditsSavedAt, setStoreEditsSavedAt] = useState<Record<string, number>>(
+    () => loadEditCacheWithTtl<StoreEdit>(localStoreKeys.storeEdits, localStoreKeys.storeEditsSavedAt).savedAt
+  );
   const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
-  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(() => readLocalJson(localStoreKeys.vehicleEdits, {}));
+  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(
+    () => loadEditCacheWithTtl<VehicleEdit>(localStoreKeys.vehicleEdits, localStoreKeys.vehicleEditsSavedAt).values
+  );
+  const [vehicleEditsSavedAt, setVehicleEditsSavedAt] = useState<Record<string, number>>(
+    () => loadEditCacheWithTtl<VehicleEdit>(localStoreKeys.vehicleEdits, localStoreKeys.vehicleEditsSavedAt).savedAt
+  );
+  const [manualDrivers, setManualDrivers] = useState<string[]>(() => readLocalJson(localStoreKeys.manualDrivers, []));
+  // 배송차는 담당자와 별개로 지정될 수 있어(같은 트럭을 여러 담당자가 나눠 쓰거나, 한 담당자가
+  // 상황에 따라 다른 차량을 몰 수 있음), 아직 어떤 거래처에도 배정되지 않은 배송차 이름을 미리
+  // 등록해 두는 목록입니다. manualDrivers와 동일한 로컬 저장 방식을 씁니다.
+  const [manualVehicles, setManualVehicles] = useState<string[]>(() => readLocalJson(localStoreKeys.manualVehicles, []));
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
-  const sourceReady = routePlan.source === "supabase";
-  const routeSeedStores = useMemo(() => (sourceReady ? createStoreRows(routePlan, mapMarkers) : []), [mapMarkers, routePlan, sourceReady]);
+  const [recalculatingDistances, setRecalculatingDistances] = useState(false);
+  const [distanceRecalcError, setDistanceRecalcError] = useState("");
+  // 지도 탭에서 바로 켜는 "반경 리드" — 리드 탭의 리드 탐색과 같은 API를 쓰지만,
+  // 지도 위에 마커로 바로 보여주기 위한 별도 상태입니다(리드 탭 상태와는 독립적).
+  // 기본 모드는 "point"(지도 클릭) — 네이버 지도 반경 도구처럼 지도를 클릭하면 그 지점에
+  // 고정 기본값(0.5km) 반경이 즉시 생기고, 손잡이로 조절, 오른쪽 클릭이나 지우기 버튼으로 지웁니다.
+  const [leadRadiusOpen, setLeadRadiusOpen] = useState(false);
+  const [leadRadiusAnchorMode, setLeadRadiusAnchorMode] = useState<"all" | "customer" | "point">("point");
+  const [leadRadiusCustomerId, setLeadRadiusCustomerId] = useState("");
+  // point 모드에서 클릭으로 고정한 중심좌표입니다. 아직 고정 전이면 null이고, 이 값이 null인
+  // 동안에만 지도 클릭이 "이 지점에 반경 만들기" 인터랙션을 받습니다.
+  const [leadRadiusPoint, setLeadRadiusPoint] = useState<{ lat: number; lng: number } | null>(null);
+  // 지도가 마지막으로 멈춘 중심좌표 — "빠른 반경 선택" 칩을 누르면 클릭 없이도 지금 보고 있는
+  // 지도 중심을 기준으로 바로 탐색할 수 있게 합니다(네이버 지도의 "이 지역 검색"과 비슷한 흐름).
+  const [mapCenterPoint, setMapCenterPoint] = useState<{ lat: number; lng: number } | null>(null);
+  // 반경 기본값은 0.5km로 고정합니다(2026-08-20 피드백) — 지도를 클릭하면 항상 이 값으로
+  // 시작하고, 이후 손잡이 드래그나 숫자 입력으로 조절합니다.
+  const [leadRadiusKm, setLeadRadiusKm] = useState(DEFAULT_LEAD_SEARCH_RADIUS_KM);
+  const [leadRadiusSearching, setLeadRadiusSearching] = useState(false);
+  const [leadRadiusResult, setLeadRadiusResult] = useState<NearbyPermitLeadResult | null>(null);
+  const [leadRadiusError, setLeadRadiusError] = useState("");
+  const [previewLeadId, setPreviewLeadId] = useState("");
+  // "전체 리드 보기" — 반경 검색과 무관하게 활성 신규 리드 전체를 메인 지도에 바로 표시합니다.
+  // 예전에는 신규 리드 탭 안에 별도 지도가 있었는데(같은 데이터를 두 지도에서 따로 관리),
+  // 이제 메인 지도 한 곳에서만 보여주도록 합칩니다(2026-08-20 피드백).
+  const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(false);
+  const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
+  const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
+  // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
+  // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
+  const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
+  const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
+  const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
+  // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
+  // 반영되도록 Draft/Applied 상태를 분리합니다(2026-08-24 피드백: "리드들의 날짜 기간을 설정하면
+  // 조회 버튼이 필요해보여").
+  const [mapLeadOpenDateStartDraft, setMapLeadOpenDateStartDraft] = useState("");
+  const [mapLeadOpenDateEndDraft, setMapLeadOpenDateEndDraft] = useState("");
+  // 숨김(제외) 처리한 리드도 나중에 다시 거래할 수 있으니, 지도에서 완전히 사라지게 하지 않고
+  // "활성/숨김" 필터로 전환해서 볼 수 있게 합니다(2026-08-24 피드백: "숨김처리하게되면 별도의
+  // 필터값이 있으면 좋을 것 같아 ... 추후에 숨김처리한 거래처도 거래할 수도 있으니깐").
+  const [showDismissedLeadsOnMap, setShowDismissedLeadsOnMap] = useState(false);
+  // 네이버 부동산의 지역 드릴다운을 참고해, 검색창 아래에 시군구 → 동 단위로 리드를 좁혀볼 수 있는
+  // 칩 목록을 둡니다(2026-08-24 피드백: "시군구, 동 구분하여 리드 구분을 하게끔 만들것"). 동은
+  // 시군구를 먼저 골라야 그 안의 동만 추려서 보여줍니다.
+  const [mapLeadRegionSigungu, setMapLeadRegionSigungu] = useState("");
+  const [mapLeadRegionDong, setMapLeadRegionDong] = useState("");
+  // 카드 안에 줄이 늘거나 줄 때(신규 리드 반경 열기, 리드 전체 필터 표시 등) ResizeObserver가 항상
+  // 제때 다시 계산해 주는 건 아니라서(2026-08-24 발견: "내 현재위치 이모티콘 위치가 동떨어져있어") —
+  // 카드 높이를 바꾸는 대표 상태들이 바뀔 때마다 렌더 직후 한 번 더 명시적으로 재계산합니다.
+  useEffect(() => {
+    recomputeMapHeaderOffset();
+  }, [
+    recomputeMapHeaderOffset,
+    leadRadiusOpen,
+    leadRadiusAnchorMode,
+    leadRadiusPoint,
+    leadRadiusResult,
+    leadRadiusError,
+    showAllLeadsOnMap,
+    allLeadsLoadState,
+    mapLeadIndustryFilter,
+    mapLeadOpenDateStart,
+    mapLeadOpenDateEnd,
+    showDismissedLeadsOnMap,
+    mapLeadRegionSigungu,
+    mapLeadRegionDong
+  ]);
+  // 업종·메뉴 기반 견적서 초안 — 지도 위 리드 카드/거래처 카드 어디서든 열 수 있는 공용 상태입니다.
+  const [quoteSubject, setQuoteSubject] = useState<QuoteSubject | null>(null);
+  const ledgerFallbackStores = useMemo(() => createStoreRowsFromLedgerMarkers(mapMarkers), [mapMarkers]);
+  const sourceReady = routePlan.source === "supabase" || ledgerFallbackStores.length > 0;
+  const routeSeedStores = useMemo(() => {
+    const routeStores = routePlan.source === "supabase" ? createStoreRows(routePlan, mapMarkers) : [];
+    return routeStores.length ? routeStores : ledgerFallbackStores;
+  }, [ledgerFallbackStores, mapMarkers, routePlan]);
+  // manualDrivers도 넘겨야 "새 담당자·배송차 추가"로 등록한, 아직 거래처가 없는 담당자가 빈 배송차로
+  // 목록에 보입니다(2026-08-24 발견: 이전에는 manualVehicles만 반영되어 담당자만 추가하면 목록에
+  // 나타나지 않는 버그가 있었음 — 삭제 기능을 테스트하다 발견).
   const baseDeliveryVehicles = useMemo(
-    () => createDeliveryVehiclesFromStores(routeSeedStores, vehicleFuelTypes),
-    [routeSeedStores, vehicleFuelTypes]
+    // storeEdits(개별 거래처에서 담당자·배송차를 바꾼 편집 내역)를 그룹핑 전에 먼저 반영해야, 편집
+    // 직후 지도 필터(deliveryVehicleId)와 거래처 상세 화면이 같은 배송차를 가리킵니다. 2026-08-27
+    // 피드백("배송담당자 필터랑 거래처 상세 필터랑 데이터가 안맞아") 대응.
+    () =>
+      createDeliveryVehiclesFromStores(
+        applyStoreEditsForVehicleGrouping(routeSeedStores, storeEdits, storeEditsSavedAt),
+        vehicleFuelTypes,
+        manualVehicles,
+        manualDrivers
+      ),
+    [routeSeedStores, storeEdits, storeEditsSavedAt, vehicleFuelTypes, manualVehicles, manualDrivers]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
+  // "미배정" 자동 그룹은 실제로 저장된 배송차가 아니므로, 헤더의 "N대" 배지에는 실제 배송차 수만
+  // 셉니다(2026-08-24 피드백 대응으로 미배정 그룹을 도입하며 함께 정리).
+  const realVehicleCount = useMemo(() => deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length, [deliveryVehicles]);
   const fuelTypeConfiguredByVehicleId = useMemo(() => {
     const map = new Map<string, boolean>();
     baseDeliveryVehicles.forEach((vehicle) => map.set(vehicle.id, Boolean(vehicleFuelTypes?.[vehicle.driver])));
     return map;
   }, [baseDeliveryVehicles, vehicleFuelTypes]);
-  const allStores = useMemo(() => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits), [deliveryVehicles, mapMarkers, storeEdits]);
+  const allStores = useMemo(
+    () => applyStoreEdits(createDeliveryStoreRows(deliveryVehicles, mapMarkers), storeEdits, storeEditsSavedAt),
+    [deliveryVehicles, mapMarkers, storeEdits, storeEditsSavedAt]
+  );
+  const storeById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
+  const geocodableStoresForRadius = useMemo(() => allStores.filter((store) => store.address?.trim()), [allStores]);
+
+  // overridePoint/overrideRadiusKm은 지도 클릭으로 반경을 방금 고정한 직후(handleLeadSearchLocked)
+  // 처럼, setLeadRadiusPoint/setLeadRadiusKm 호출 직후라 아직 state에 반영되지 않은 값을 즉시 검색에
+  // 써야 할 때 씁니다(React state 업데이트는 비동기라 바로 이어서 읽으면 이전 값이 잡히는 문제 방지).
+  async function runMapLeadRadiusSearch(overridePoint?: { lat: number; lng: number } | null, overrideRadiusKm?: number) {
+    setLeadRadiusError("");
+    const point = overridePoint !== undefined ? overridePoint : leadRadiusPoint;
+    const radiusKmValue = overrideRadiusKm ?? leadRadiusKm;
+    if (leadRadiusAnchorMode === "customer" && !leadRadiusCustomerId) {
+      setLeadRadiusError("기준 거래처를 선택하세요.");
+      return;
+    }
+    if (leadRadiusAnchorMode === "point" && !point) {
+      setLeadRadiusError("지도를 클릭해 반경을 먼저 선택하세요.");
+      return;
+    }
+    const anchorStore = geocodableStoresForRadius.find((store) => store.id === leadRadiusCustomerId);
+    if (leadRadiusAnchorMode === "customer" && !anchorStore) {
+      setLeadRadiusError("선택한 거래처에 주소 정보가 없습니다.");
+      return;
+    }
+
+    setLeadRadiusSearching(true);
+    setLeadRadiusResult(null);
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/nearby"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anchorMode: leadRadiusAnchorMode,
+          anchorCustomer: anchorStore ? { id: anchorStore.id, name: anchorStore.name, address: anchorStore.address } : undefined,
+          anchorPoint: leadRadiusAnchorMode === "point" ? point : undefined,
+          radiusKm: radiusKmValue
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setLeadRadiusError(payload?.message || "리드 탐색에 실패했습니다.");
+        return;
+      }
+      setLeadRadiusResult(payload);
+      if (payload?.leads?.length) setRightPanelTab("leads");
+    } catch {
+      setLeadRadiusError("네트워크 오류로 리드 탐색을 완료하지 못했습니다.");
+    } finally {
+      setLeadRadiusSearching(false);
+    }
+  }
+
+  // 지도를 클릭해 반경을 만든 순간(네이버 지도 반경 도구 참고) — 좌표·반경(기본 0.5km)을 state에
+  // 반영하고 곧바로 그 값으로 탐색합니다.
+  function handleLeadSearchLocked(point: { lat: number; lng: number }, radiusMeters: number) {
+    const radiusKmValue = Math.min(50, Math.max(0.1, Math.round((radiusMeters / 1000) * 10) / 10));
+    setLeadRadiusPoint(point);
+    setLeadRadiusKm(radiusKmValue);
+    void runMapLeadRadiusSearch(point, radiusKmValue);
+  }
+
+  // "지점 다시 선택"/"지우기" — 고정된 지점을 지우고 지도 클릭으로 새 지점을 다시 고를 수 있게
+  // 합니다. 지도 위 말풍선의 지우기 버튼(onClear)과 오른쪽 클릭에서도 이 함수를 그대로 씁니다.
+  function resetLeadSearchPoint() {
+    setLeadRadiusPoint(null);
+    setLeadRadiusResult(null);
+    setLeadRadiusError("");
+    setPreviewLeadId("");
+  }
+
+  // 네이버 지도의 "이 지역에서 검색" 칩처럼, 클릭 없이도 지금 보고 있는 지도 중심을 기준으로
+  // 미리 정해둔 반경으로 바로 탐색합니다 — 마우스 정밀 조작이 부담스러운 사용자를 위한 빠른 경로입니다.
+  function runPresetRadiusSearch(radiusKmValue: number) {
+    if (!mapCenterPoint) {
+      setLeadRadiusError("지도가 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
+      return;
+    }
+    setLeadRadiusAnchorMode("point");
+    setLeadRadiusPoint(mapCenterPoint);
+    setLeadRadiusKm(radiusKmValue);
+    void runMapLeadRadiusSearch(mapCenterPoint, radiusKmValue);
+  }
+
+  // "전체 리드 보기" 켤 때 활성 신규 리드를 한 번 불러옵니다(반경 검색과 무관 — 거래처 등록 여부와
+  // 상관없이 지금 살아있는 리드 전체를 지도에 뿌립니다). 신규 리드 탭의 목록 로딩과 같은 엔드포인트를
+  // 씁니다.
+  async function loadAllLeadsForMap() {
+    setAllLeadsLoadState("loading");
+    try {
+      // 숨김(제외) 리드도 함께 받아와서, "활성/숨김" 토글로 클라이언트에서 바로 전환할 수 있게
+      // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
+      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits?excludeExcluded=false"), { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        setAllLeadsLoadState("error");
+        return;
+      }
+      setAllLeadsForMap(Array.isArray(payload.leads) ? payload.leads : []);
+      setAllLeadsLoadState("ready");
+    } catch {
+      setAllLeadsLoadState("error");
+    }
+  }
+
+  useEffect(() => {
+    if (showAllLeadsOnMap && allLeadsLoadState === "idle") void loadAllLeadsForMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAllLeadsOnMap]);
+  // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
+  // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
+  // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
+  useEffect(() => {
+    if (query.trim().length >= 2 && allLeadsLoadState === "idle") void loadAllLeadsForMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // 지도 위 리드 카드에서 바로 "관심 없음"으로 숨길 수 있게 합니다(2026-08-24 피드백: "관심 없으면
+  // 숨김처리 하면 좋을 것 같네"). 신규 리드 탭의 runLeadAction과 같은 액션 API를 쓰지만, 이 컴포넌트
+  // (SalesRouteMapWorkspace)와 신규 리드 탭(PermitLeadsView)은 서로 다른 컴포넌트라 상태를 공유하지
+  // 않으므로, 지도 쪽 로컬 목록만 직접 갱신합니다.
+  async function dismissLeadFromMap(lead: PermitLeadItem) {
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType: "exclude", result: "제외" })
+      });
+      if (!response.ok) return;
+      // 목록에서 완전히 지우지 않고 상태만 "제외"로 바꿔둡니다 — "숨김 리드" 필터로 다시 볼 수 있고,
+      // 나중에 복구도 가능합니다(2026-08-24 피드백).
+      setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "제외" } : item)));
+      setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((item) => item.id !== lead.id) } : current));
+      setPreviewLeadId("");
+    } catch {
+      // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다 — 신규 리드 탭에서 다시 시도할 수 있습니다.
+    }
+  }
+
+  // 숨김(제외) 처리한 리드를 다시 활성으로 되돌립니다. 전용 "복구" 액션 타입은 따로 없어 기존
+  // "hold"(검토 필요) 액션을 재사용합니다 — 제외 상태만 아니면 지도/리드 탭 양쪽에서 정상적으로
+  // 다시 보이기 때문입니다.
+  async function restoreLeadFromMap(lead: PermitLeadItem) {
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType: "hold" })
+      });
+      if (!response.ok) return;
+      setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "검토 필요" } : item)));
+    } catch {
+      // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다.
+    }
+  }
+
+  // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
+  // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
+  const vehicleNameOptions = useMemo(() => {
+    const names = new Set<string>();
+    allStores.forEach((store) => {
+      if (store.deliveryVehicleName) names.add(store.deliveryVehicleName);
+    });
+    manualVehicles.forEach((name) => names.add(name));
+    return Array.from(names).sort();
+  }, [allStores, manualVehicles]);
+  const registeredStoreNames = useMemo(() => new Set(allStores.map((store) => store.name.trim().toLowerCase())), [allStores]);
+  // 이미 거래처로 등록된 곳은 "미등록 매장" 목록에서 빼서 중복으로 보이지 않게 합니다.
+  const unregisteredResults = useMemo(
+    () => externalResults.filter((result) => result.name.trim() && !registeredStoreNames.has(result.name.trim().toLowerCase())),
+    [externalResults, registeredStoreNames]
+  );
+  // 검색창은 원래 "미등록 매장" 카카오맵 검색 결과만 목록으로 보여줬습니다 — 이미 등록된 거래처는
+  // 지도 마커 필터링(gradeBaseStores)으로만 걸러져서, 목록에는 안 보이고 지도 위에서만 좁혀지다
+  // 보니 "검색하면 등록 안 된 곳만 나온다"는 오해를 샀습니다. 등록된 거래처 매치도 같은 드롭다운에
+  // 목록으로 보여주고, 클릭하면 그 거래처로 바로 이동하도록 추가합니다.
+  const registeredMatches = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (keyword.length < 2) return [];
+    return allStores
+      .filter((store) => `${store.name} ${store.region} ${store.address || ""}`.toLowerCase().includes(keyword))
+      .slice(0, 8);
+  }, [allStores, query]);
+  // 신규 리드도 같은 검색창에서 함께 찾을 수 있게 합니다(2026-08-24 피드백). 이미 "제외" 처리한 리드는
+  // 다른 신규 리드 목록들과 마찬가지로 기본 검색 결과에서는 뺍니다.
+  const leadMatches = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (keyword.length < 2) return [];
+    return allLeadsForMap
+      .filter((lead) => lead.status !== "제외")
+      .filter((lead) => `${lead.businessName} ${lead.address || ""} ${lead.industryPrimary || ""}`.toLowerCase().includes(keyword))
+      .slice(0, 8);
+  }, [allLeadsForMap, query]);
+  // 검색어가 바뀌면 이전 검색 결과에 대한 체크 선택은 의미가 없으므로 함께 초기화합니다.
+  useEffect(() => {
+    setSelectedResultIds(new Set());
+    setBulkRegisterMessage("");
+  }, [query]);
+  useEffect(() => {
+    const keyword = query.trim();
+    if (keyword.length < 2) {
+      setExternalResults([]);
+      setExternalSearchMessage("");
+      setIsSearchingExternal(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearchingExternal(true);
+    const timer = setTimeout(async () => {
+      const response = await fetch(`/api/business-search?query=${encodeURIComponent(keyword)}`, { cache: "no-store" }).catch(() => null);
+      if (cancelled) return;
+      const payload = response?.ok ? await response.json().catch(() => null) : null;
+      const results = Array.isArray(payload?.results) ? payload.results : [];
+      setExternalResults(results);
+      setExternalSearchMessage(results.length ? "" : payload?.message || "");
+      setIsSearchingExternal(false);
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
   const gradeBaseStores = useMemo(
     () =>
       allStores.filter((store) => {
@@ -243,7 +815,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             .toLowerCase()
             .includes(keyword);
         const matchesVehicle = vehicleFilterId === "all" || store.deliveryVehicleId === vehicleFilterId;
-        const matchesStatus = !excludeClosedStores || store.businessStatus !== "closed";
+        // "이탈 제외" 토글은 사업자 상태가 폐업인 곳뿐 아니라, 수동으로 "거래 종료"로 표시한
+        // 거래처도 함께 빼줍니다. 둘 다 더 이상 영업 대상이 아니라는 점은 같습니다.
+        const matchesStatus = !excludeClosedStores || (store.businessStatus !== "closed" && store.relationshipStatus !== "거래종료");
         return matchesQuery && matchesVehicle && matchesStatus;
       }),
     [allStores, excludeClosedStores, query, vehicleFilterId]
@@ -259,6 +833,195 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
+  useEffect(() => {
+    setLiveVehicleLocations(staffVehicleLocations);
+  }, [staffVehicleLocations]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const search = churnRiskCompanyId ? `?companyId=${encodeURIComponent(churnRiskCompanyId)}` : "";
+        const response = await fetchWithTimeout(`/api/staff/location${search}`, { cache: "no-store" }, 8000);
+        const payload = (await response.json().catch(() => null)) as { locations?: StaffVehicleLocation[] } | null;
+        if (!cancelled && response.ok && Array.isArray(payload?.locations)) setLiveVehicleLocations(payload.locations);
+      } catch {
+        // 다음 폴링에서 복구합니다. 위치 표시는 운영 보조 기능이라 화면 전체를 막지 않습니다.
+      }
+    };
+    void load();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(timer);
+    };
+  }, [churnRiskCompanyId]);
+  const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehicleLocations, storeById), [liveVehicleLocations, storeById]);
+  const liveVehicleSummary = useMemo(() => {
+    const active = liveVehicleLocations.filter((location) => !location.isStale).length;
+    const stale = liveVehicleLocations.filter((location) => location.isStale).length;
+    const latest = liveVehicleLocations
+      .map((location) => (location.lastLocationAt ? new Date(location.lastLocationAt).getTime() : 0))
+      .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)
+      .sort((a, b) => b - a)[0];
+    return {
+      active,
+      latestLabel: latest ? new Date(latest).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전",
+      stale,
+      total: liveVehicleLocations.length
+    };
+  }, [liveVehicleLocations]);
+  const openVehicleAnalysis = useCallback(
+    async (vehicle: StaffVehicleLocation) => {
+      setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, vehicle });
+      try {
+        const search = new URLSearchParams({ completions: "true", events: "true", hours: "12", userId: vehicle.userId });
+        if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
+        if (vehicle.driverName) search.set("driverName", vehicle.driverName);
+        if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
+        const response = await fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000);
+        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; events?: StaffLocationEvent[]; error?: string } | null;
+        if (!response.ok) throw new Error(payload?.error || "운행 기록을 불러오지 못했습니다.");
+        setVehicleAnalysis({ completions: payload?.completions || [], events: payload?.events || [], error: "", loading: false, vehicle });
+      } catch (error) {
+        setVehicleAnalysis({ completions: [], events: [], error: error instanceof Error ? error.message : "운행 기록을 불러오지 못했습니다.", loading: false, vehicle });
+      }
+    },
+    [churnRiskCompanyId]
+  );
+  // 미등록 매장은 메인 지도에만 별도 마커로 합쳐 표시합니다.
+  const unregisteredMapMarkers = useMemo(
+    () =>
+      unregisteredResults.map((result, index) => ({
+        address: result.roadAddress || result.address,
+        id: externalResultId(result),
+        label: "미등록",
+        name: result.name,
+        tone: "unregistered" as const,
+        x: 50,
+        y: 50 + index
+      })),
+    [unregisteredResults]
+  );
+  // 지도 탭에서 "신규 리드 반경 체크"를 켰을 때만 리드를 마커로 함께 보여줍니다(기본은 꺼짐 — 거래처 마커만).
+  const leadRadiusMapMarkers: KakaoMapMarker[] = useMemo(() => {
+    if (!leadRadiusOpen || !leadRadiusResult) return [];
+    return leadRadiusResult.leads
+      .filter((lead) => lead.address)
+      .map((lead) => ({
+        address: lead.address!,
+        grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
+        id: lead.id,
+        label: `${lead.distanceKm}km`,
+        name: lead.businessName,
+        tone: "lead" as const,
+        x: 0,
+        y: 0
+      }));
+  }, [leadRadiusOpen, leadRadiusResult]);
+  // "활성/숨김" 토글의 1차 분리 — 숨김 보기에서는 status가 "제외"인 것만, 활성 보기에서는 그 외
+  // 전부를 보여줍니다(2026-08-24 피드백: 숨김 리드도 별도로 조회 가능해야 함).
+  const statusScopedLeadsForMap = useMemo(
+    () => allLeadsForMap.filter((lead) => (showDismissedLeadsOnMap ? lead.status === "제외" : lead.status !== "제외")),
+    [allLeadsForMap, showDismissedLeadsOnMap]
+  );
+  // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — 활성/숨김 범위 기준이라
+  // 토글을 바꾸면 옵션 목록도 그 범위에 맞게 갱신됩니다.
+  const mapLeadIndustryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    statusScopedLeadsForMap.forEach((lead) => {
+      const industry = lead.industryPrimary || "미분류";
+      counts.set(industry, (counts.get(industry) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  }, [statusScopedLeadsForMap]);
+  // 지도 "리드 전체"용 지역(시군구) 빠른 선택 옵션 — 네이버 부동산처럼 검색창 아래에서 시군구를
+  // 고르면 그 안의 동만 다시 추려 보여줍니다.
+  const mapLeadRegionOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    statusScopedLeadsForMap.forEach((lead) => {
+      const { sigungu } = parseLeadRegion(lead.address);
+      if (!sigungu) return;
+      counts.set(sigungu, (counts.get(sigungu) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);
+  }, [statusScopedLeadsForMap]);
+  const mapLeadDongOptions = useMemo(() => {
+    if (!mapLeadRegionSigungu) return [];
+    const counts = new Map<string, number>();
+    statusScopedLeadsForMap.forEach((lead) => {
+      const region = parseLeadRegion(lead.address);
+      if (region.sigungu !== mapLeadRegionSigungu || !region.dong) return;
+      counts.set(region.dong, (counts.get(region.dong) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);
+  }, [statusScopedLeadsForMap, mapLeadRegionSigungu]);
+  function selectMapLeadRegionSigungu(next: string) {
+    setMapLeadRegionSigungu((current) => (current === next ? "" : next));
+    setMapLeadRegionDong("");
+  }
+  const filteredAllLeadsForMap = useMemo(() => {
+    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    return statusScopedLeadsForMap.filter((lead) => {
+      if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
+      if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
+        if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
+      }
+      if (mapLeadRegionSigungu) {
+        const region = parseLeadRegion(lead.address);
+        if (region.sigungu !== mapLeadRegionSigungu) return false;
+        if (mapLeadRegionDong && region.dong !== mapLeadRegionDong) return false;
+      }
+      return true;
+    });
+  }, [statusScopedLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
+  // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
+  const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
+    if (!showAllLeadsOnMap) return [];
+    const radiusLeadIds = new Set(leadRadiusMapMarkers.map((marker) => marker.id));
+    return filteredAllLeadsForMap
+      .filter((lead) => lead.address && !radiusLeadIds.has(lead.id))
+      .map((lead) => ({
+        address: lead.address!,
+        grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
+        id: lead.id,
+        label: "신규",
+        // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
+        // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
+        nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
+        name: lead.businessName,
+        tone: "lead" as const,
+        x: 0,
+        y: 0
+      }));
+  }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
+  // 2026-08-30 피드백: 오른쪽 패널 "신규 리드" 탭에 쓸 목록입니다 — 실제로 지도에 마커로 떠 있는
+  // 리드와 같은 소스(반경 검색 결과 우선, 없으면 "전체 리드 보기")를 그대로 사용해 목록과 지도가
+  // 항상 같은 리드를 가리키게 합니다.
+  const leadsForRightPanel = useMemo(() => {
+    const source =
+      leadRadiusOpen && leadRadiusResult?.leads.length
+        ? leadRadiusResult.leads
+        : showAllLeadsOnMap
+          ? filteredAllLeadsForMap
+          : [];
+    return sortPermitLeadsForSales(source);
+  }, [leadRadiusOpen, leadRadiusResult, showAllLeadsOnMap, filteredAllLeadsForMap]);
+  // 리드 버튼을 눌렀는데 결과가 0건이면 예전에는 강제로 거래처 탭으로 돌아가 "기거래처만 보이는"
+  // 느낌을 줬습니다. 이제 리드 조회/표시 모드가 켜져 있으면 0건이어도 리드 탭을 유지합니다.
+  const hasLeadRightPanelContext = leadRadiusOpen || showAllLeadsOnMap || showDismissedLeadsOnMap || leadsForRightPanel.length > 0;
+  const activeRightPanelTab: "stores" | "leads" = rightPanelTab === "leads" && hasLeadRightPanelContext ? "leads" : "stores";
+  const mapDisplayMarkers = useMemo(
+    () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers, ...liveVehicleMarkers],
+    [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleMarkers]
+  );
   const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
@@ -266,13 +1029,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   const missingAddressCount = allStores.length - mapReadyStoreCount;
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
   const isVehicleFiltered = vehicleFilterId !== "all";
-  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 매장";
+  const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 거래처";
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
   const activeDistanceKm = kpiSummary?.distanceKm ?? routeTotals.distanceKm;
-  const distanceKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 매장까지";
-  const durationKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 매장까지";
+  const distanceKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 거래처까지";
+  const durationKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 거래처까지";
   const vehicleFuelTypeById = useMemo(() => {
     const map = new Map<string, "gasoline" | "diesel">();
     deliveryVehicles.forEach((vehicle) => map.set(vehicle.id, vehicle.fuelType || "diesel"));
@@ -355,7 +1118,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
   useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
   useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
   useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
+  useEffect(() => saveLocalJson(localStoreKeys.storeEditsSavedAt, storeEditsSavedAt), [storeEditsSavedAt]);
   useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
+  useEffect(() => saveLocalJson(localStoreKeys.vehicleEditsSavedAt, vehicleEditsSavedAt), [vehicleEditsSavedAt]);
+  useEffect(() => saveLocalJson(localStoreKeys.manualDrivers, manualDrivers), [manualDrivers]);
+  useEffect(() => saveLocalJson(localStoreKeys.manualVehicles, manualVehicles), [manualVehicles]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
@@ -401,23 +1168,121 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
     if (!currentStore) return { persisted: false };
 
     const nextStore = { ...currentStore, ...edit };
+    // 2026-08-28 피드백 대응(저장 실패해도 화면엔 저장된 것처럼 남음): PATCH가 실패하면 낙관적으로
+    // 반영해둔 이 값을 되돌려야 하므로, 덮어쓰기 전 이전 값을 스냅샷으로 남겨둡니다.
+    const previousEdit = storeEdits[storeId];
     setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], ...edit } }));
+    setStoreEditsSavedAt((current) => ({ ...current, [storeId]: Date.now() }));
 
-    const response = await fetch("/api/customers", {
+    try {
+      const response = await fetchWithTimeout("/api/customers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toCustomerPayload(nextStore))
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
+      // 2026-08-31 개선: 동시 편집 감지(낙관적 동시성 제어). 서버가 이 화면이 마지막으로 읽은
+      // updated_at과 현재 값이 다르다고 판단하면(그 사이 다른 사람이 먼저 저장) conflict: true를
+      // 돌려주고 실제로는 저장하지 않습니다 — 여기서 명확한 에러로 바꿔 아래 catch의 롤백 경로를
+      // 그대로 타게 합니다(방금 낙관적으로 반영한 값을 되돌려야 하므로).
+      if (payload?.conflict) {
+        throw new Error("다른 사용자가 방금 이 정보를 수정했습니다. 새로고침 후 다시 시도해주세요.");
+      }
+      // 다음 저장에서도 동시 편집 감지가 계속 동작하도록, 서버가 이번에 실제로 반영한 updated_at을
+      // 로컬 편집 상태에 함께 남겨둡니다.
+      if (payload?.customer?.updatedAt) {
+        setStoreEdits((current) => ({
+          ...current,
+          [storeId]: { ...current[storeId], updatedAt: payload.customer.updatedAt }
+        }));
+      }
+      return { persisted: payload?.persisted !== false };
+    } catch (error) {
+      // 저장이 실패했으니(네트워크 오류 포함) 낙관적으로 반영했던 값을 이전 상태로 되돌립니다 —
+      // 그래야 화면이 "저장된 것처럼" 계속 남아 있지 않습니다.
+      setStoreEdits((current) => {
+        const next = { ...current };
+        if (previousEdit === undefined) delete next[storeId];
+        else next[storeId] = previousEdit;
+        return next;
+      });
+      setStoreEditsSavedAt((current) => {
+        const next = { ...current };
+        if (previousEdit === undefined) delete next[storeId];
+        return next;
+      });
+      throw error;
+    }
+  }
+
+  // 구글 리뷰 자동 수집(Google Places API)은 호출당 비용이 발생합니다. 카드를 열 때마다 백그라운드로
+  // 자동 호출하던 방식(2026-08-18 도입)도 결국 "사용자가 요청하지 않아도 비용이 발생"하는 셈이라
+  // 완전히 제거했습니다(2026-08-19). 이제 구글 리뷰 API는 담당자가 "리뷰 새로고침" 버튼을 직접
+  // 눌렀을 때만 호출됩니다 — syncGoogleReviews() 핸들러 참고. 네이버·카카오 리뷰는 원래부터 API
+  // 비용이 전혀 없는 붙여넣기 방식이라 이 정책과 무관합니다.
+
+  // 사업자 휴폐업 상태(자동 조회)와 별개로, "이 거래처와 더 이상 거래하지 않기로 했다"는 판단은
+  // 사람이 직접 내려서 저장합니다. /api/customers의 일반 upsert가 아니라 전용 엔드포인트를 쓰는 이유는
+  // lib/store.ts의 setCustomerRelationshipStatus() 주석 참고 — 이 컬럼이 없는 환경에서도 나머지 거래처
+  // 저장 기능이 함께 깨지지 않도록 하기 위해서입니다.
+  async function updateRelationshipStatus(storeId: string, status: string, note?: string) {
+    const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+    const response = await fetch("/api/customers/relationship-status", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(toCustomerPayload(nextStore))
+      body: JSON.stringify({ companyId: companyId || undefined, customerId: storeId, status, note })
     });
     const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
-    return { persisted: payload?.persisted !== false };
+    if (!response.ok) throw new Error(payload?.message || "거래 상태 저장에 실패했습니다.");
+    setStoreEdits((current) => ({ ...current, [storeId]: { ...current[storeId], relationshipStatus: status } }));
+    return { persisted: payload?.updated !== false };
   }
 
   async function updateVehicle(vehicleId: string, edit: VehicleEdit): Promise<{ ok: boolean; message?: string }> {
+    const baseVehicle = baseDeliveryVehicles.find((vehicle) => vehicle.id === vehicleId);
+
+    // 호차명(vehicle.name) 변경은 화면 표시값만 바꾸는 게 아니라, 이 배송차에 실제로 배정된
+    // 거래처들의 deliveryVehicle 값을 서버에 일괄 저장합니다. 그래야 새로고침 후에도, 코스 계산
+    // 그룹핑에도 새 이름이 그대로 유지됩니다. 아직 거래처가 없는 빈(수동 등록) 배송차는 저장할
+    // 거래처가 없으니 로컬 배송차 이름 목록(manualVehicles)의 이름만 바꿉니다.
+    if (baseVehicle && edit.name !== undefined) {
+      const trimmedName = edit.name.trim();
+      if (!trimmedName) return { ok: false, message: "호차명을 입력하세요." };
+
+      if (trimmedName !== baseVehicle.name) {
+        if (baseVehicle.stops.length) {
+          try {
+            const response = await fetch("/api/customers/bulk-vehicle", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+                customerIds: baseVehicle.stops.map((stop) => stop.id),
+                deliveryVehicle: trimmedName
+              })
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) return { ok: false, message: payload?.message || "호차명 저장에 실패했습니다." };
+          } catch {
+            return { ok: false, message: "호차명 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
+          }
+        }
+
+        setManualVehicles((current) =>
+          current.includes(baseVehicle.name) ? current.map((name) => (name === baseVehicle.name ? trimmedName : name)) : current
+        );
+        router.refresh();
+      }
+    }
+
+    // 2026-08-28 피드백 대응: 아래 연료 타입 PATCH가 실패할 경우 낙관적으로 반영해둔 값을 되돌릴 수
+    // 있도록, 덮어쓰기 전 이전 값을 스냅샷으로 남겨둡니다.
+    const previousVehicleEdit = vehicleEdits[vehicleId];
     setVehicleEdits((current) => ({ ...current, [vehicleId]: { ...current[vehicleId], ...edit } }));
+    setVehicleEditsSavedAt((current) => ({ ...current, [vehicleId]: Date.now() }));
 
     if (edit.fuelType === undefined) return { ok: true };
-    const baseVehicle = baseDeliveryVehicles.find((vehicle) => vehicle.id === vehicleId);
     if (!baseVehicle) return { ok: true };
 
     try {
@@ -431,34 +1296,288 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         })
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) return { ok: false, message: payload?.message || "연료 타입 저장에 실패했습니다." };
+      if (!response.ok) {
+        setVehicleEdits((current) => {
+          const next = { ...current };
+          if (previousVehicleEdit === undefined) delete next[vehicleId];
+          else next[vehicleId] = previousVehicleEdit;
+          return next;
+        });
+        return { ok: false, message: payload?.message || "연료 타입 저장에 실패했습니다." };
+      }
       return { ok: true };
     } catch {
+      setVehicleEdits((current) => {
+        const next = { ...current };
+        if (previousVehicleEdit === undefined) delete next[vehicleId];
+        else next[vehicleId] = previousVehicleEdit;
+        return next;
+      });
       return { ok: false, message: "연료 타입 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
     }
   }
 
+  /**
+   * "배송차"는 실제로는 거래처의 담당자(deliveryDriver) 값으로 그룹핑해 만드는 화면 전용 개념이라
+   * 별도의 차량 테이블이 없습니다. 새 담당자·배송차를 추가한다는 것은 아직 어떤 거래처에도 배정되지
+   * 않은 담당자 이름을 미리 등록해 목록에 보이게 하는 것과 같습니다. 연료 타입은 delivery_vehicles에
+   * upsert되어 새로고침 후에도 유지되고, manualDrivers는 거래처가 배정되기 전까지 빈 배송차로 보이게
+   * 하기 위한 이 화면 전용 로컬 저장값입니다.
+   */
+  async function addManualDriver(driverName: string, fuelType: "gasoline" | "diesel" = "diesel"): Promise<{ ok: boolean; message?: string }> {
+    const trimmed = driverName.trim();
+    if (!trimmed) return { ok: false, message: "담당자 이름을 입력하세요." };
+    // 배송차 하나에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우), 배송차의 대표
+    // 담당자(vehicle.driver)만으로는 중복 여부를 놓칠 수 있습니다. deliveryDefaults.drivers는 모든
+    // 거래처의 담당자를 모은 목록이라 이걸로 확인합니다.
+    if (deliveryDefaults.drivers.includes(trimmed)) {
+      return { ok: false, message: "이미 등록된 담당자입니다." };
+    }
+
+    try {
+      const response = await fetch("/api/delivery-vehicles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+          driverName: trimmed,
+          fuelType
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) return { ok: false, message: payload?.message || "담당자 저장에 실패했습니다." };
+    } catch {
+      return { ok: false, message: "담당자 저장에 실패했습니다. 네트워크 상태를 확인하세요." };
+    }
+
+    setManualDrivers((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    return { ok: true };
+  }
+
+  // 2026-08-24 피드백("추가는 있는데 삭제가 없다")에 대응해 처음 만든 삭제 함수는 거래처가 하나도
+  // 없는(stops.length === 0) 배송차만 지울 수 있었습니다. 그런데 실제로 화면에 보이는 배송차는
+  // 대부분 이미 거래처가 배정돼 있어서 사실상 아무것도 못 지우는 것과 같았습니다(2026-08-24 재피드백:
+  // "배송 담당자 필터에서 배송차, 매니저 삭제해야하는데 개선이 안된것 같아"). 이제 배정된 거래처가
+  // 있어도, 그 거래처들을 먼저 "담당자 미지정" 상태로 되돌린 뒤 배송차 자체를 지웁니다.
+  async function deleteVehicle(vehicle: DeliveryVehicle): Promise<{ ok: boolean; message?: string }> {
+    if (vehicle.stops.length > 0) {
+      try {
+        const clearResponse = await fetch("/api/customers/bulk-clear-assignment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+            customerIds: vehicle.stops.map((stop) => stop.id)
+          })
+        });
+        if (!clearResponse.ok) {
+          const payload = await clearResponse.json().catch(() => null);
+          return { ok: false, message: payload?.message || "배정된 거래처를 해제하는 데 실패했습니다." };
+        }
+      } catch {
+        return { ok: false, message: "배정된 거래처를 해제하는 데 실패했습니다. 네트워크 상태를 확인하세요." };
+      }
+    }
+
+    if (vehicle.driver) {
+      try {
+        const response = await fetch("/api/delivery-vehicles", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+            driverName: vehicle.driver
+          })
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          return { ok: false, message: payload?.message || "삭제에 실패했습니다." };
+        }
+      } catch {
+        return { ok: false, message: "삭제에 실패했습니다. 네트워크 상태를 확인하세요." };
+      }
+    }
+
+    setManualDrivers((current) => current.filter((name) => name !== vehicle.driver));
+    setManualVehicles((current) => current.filter((name) => name !== vehicle.name));
+    setVehicleEdits((current) => {
+      if (!(vehicle.id in current)) return current;
+      const next = { ...current };
+      delete next[vehicle.id];
+      return next;
+    });
+    if (vehicleFilterId === vehicle.id) setVehicleFilterId("all");
+    // 배정 해제된 거래처가 있었다면 서버 데이터를 다시 받아와야 그 거래처들이 "미배정"으로 바로 반영됩니다.
+    if (vehicle.stops.length > 0) router.refresh();
+    return { ok: true };
+  }
+
+  // 2026-08-24 피드백("전체 거래처 0km가 되네") 대응: distanceKm은 거리 계산을 한 번도 안 돌린
+  // 거래처는 0으로 채워지는데, 계산 자체가 자동으로 도는 곳이 없어서 신규/미계산 거래처는 계속 0으로
+  // 남아 있었습니다. 이미 있는 /api/routes/batch-distance(코스 탭 티맵 계산과 같은 API)를 재사용해
+  // "전체 거래처" 패널에서 바로 일괄 계산할 수 있게 합니다. 한 번 호출에 최대 25개 주소까지만
+  // 받으므로 25개씩 나눠서 순차 호출합니다.
+  async function recalculateStoreDistances(missingStores: StoreRow[]): Promise<{ ok: boolean; message?: string }> {
+    const destinations = Array.from(new Set(missingStores.map((store) => store.address).filter(Boolean)));
+    if (!destinations.length) return { ok: false, message: "계산할 거래처 주소가 없습니다." };
+    setRecalculatingDistances(true);
+    setDistanceRecalcError("");
+    try {
+      const companyId = new URLSearchParams(window.location.search).get("companyId") || undefined;
+      const allFailures: Array<{ address: string; message: string }> = [];
+      for (let index = 0; index < destinations.length; index += 25) {
+        const chunk = destinations.slice(index, index + 25);
+        const response = await fetch("/api/routes/batch-distance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId, destinations: chunk })
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message = payload?.error || "거리 계산에 실패했습니다.";
+          setDistanceRecalcError(message);
+          return { ok: false, message };
+        }
+        if (Array.isArray(payload?.failures)) allFailures.push(...payload.failures);
+      }
+      router.refresh();
+      if (allFailures.length) {
+        const message = `${allFailures.length}곳은 계산에 실패했습니다 (${allFailures[0].message}).`;
+        setDistanceRecalcError(message);
+        return { ok: true, message };
+      }
+      return { ok: true };
+    } catch {
+      const message = "거리 계산 중 오류가 발생했습니다. 네트워크 상태를 확인하세요.";
+      setDistanceRecalcError(message);
+      return { ok: false, message };
+    } finally {
+      setRecalculatingDistances(false);
+    }
+  }
+
+  /**
+   * 위 addManualDriver()는 "코스 계산용 배송차 그룹(담당자 기준)" 목록에 이름을 추가하는 함수이고,
+   * 이 함수는 그것과 별개로 거래처마다 독립적으로 지정할 수 있는 "배송차" 값(정식 명칭, 예: "냉동
+   * 1호차")을 드롭다운 제안 목록에 미리 추가해 두는 함수입니다. 담당자와 달리 서버에 별도로 저장할
+   * 부가 속성(연료 타입 등)이 없어 이 화면 전용 로컬 저장값만으로 충분합니다.
+   */
+  async function addManualVehicle(vehicleName: string): Promise<{ ok: boolean; message?: string }> {
+    const trimmed = vehicleName.trim();
+    if (!trimmed) return { ok: false, message: "배송차 이름을 입력하세요." };
+    if (vehicleNameOptions.includes(trimmed)) return { ok: false, message: "이미 등록된 배송차입니다." };
+
+    setManualVehicles((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    return { ok: true };
+  }
+
+  function toggleResultSelection(id: string) {
+    setSelectedResultIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllResults() {
+    setSelectedResultIds((current) =>
+      current.size === unregisteredResults.length ? new Set() : new Set(unregisteredResults.map((result) => externalResultId(result)))
+    );
+  }
+
+  // 체크한 미등록 매장을 한 번에 거래처로 등록합니다. 하나씩 순차 등록해, 하나가 실패해도
+  // 나머지는 계속 저장되도록 하고 마지막에 성공/실패 건수를 함께 보여줍니다.
+  async function registerSelectedResults() {
+    const targets = unregisteredResults.filter((result) => selectedResultIds.has(externalResultId(result)));
+    if (!targets.length || isBulkRegistering) return;
+
+    setIsBulkRegistering(true);
+    setBulkRegisterMessage("");
+    let succeeded = 0;
+    const failures: string[] = [];
+
+    for (const result of targets) {
+      try {
+        await registerExternalBusinessResult(result);
+        succeeded += 1;
+      } catch (error) {
+        failures.push(`${result.name}: ${error instanceof Error ? error.message : "등록 실패"}`);
+      }
+    }
+
+    setIsBulkRegistering(false);
+    setSelectedResultIds(new Set());
+    setBulkRegisterMessage(
+      failures.length ? `${succeeded}곳 등록 완료, ${failures.length}곳 실패 (${failures.join(", ")})` : `${succeeded}곳을 거래처로 등록했습니다.`
+    );
+    if (succeeded) router.refresh();
+  }
+
   return (
     <div
-      className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 xl:h-full xl:min-h-0 ${isFullscreen ? "!rounded-none" : ""}`}
+      className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 ${
+        activeView === "map" ? "xl:h-full xl:min-h-0" : "!overflow-visible xl:min-h-[760px]"
+      } ${isFullscreen ? "!rounded-none" : ""}`}
       ref={workspaceRef}
     >
-      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
-          <p className="maju-muted-label text-teal-700">지도 작업공간</p>
-          <h2 className="mt-1 text-[18px] font-black leading-tight">영업·배송 운영</h2>
+      <header className="flex shrink-0 flex-col gap-1.5 border-b border-slate-200 bg-white px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-[16px] font-black leading-tight">영업·배송 지도</h2>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
+            {sourceReady ? `${allStores.length}곳` : "거래처 등록 필요"}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
+            {sourceReady ? `${realVehicleCount}대` : "배송차 대기"}
+          </span>
         </div>
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
+        <div className="flex max-w-full flex-wrap items-center justify-start gap-2 xl:justify-end">
+          {activeView === "map" ? (
+            <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+              <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">탐색</span>
+              <button
+                aria-pressed={leadRadiusOpen}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                  leadRadiusOpen ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-teal-800 hover:bg-teal-50"
+                }`}
+                onClick={() => setLeadRadiusOpen((value) => !value)}
+                title="지도를 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
+                type="button"
+              >
+                <Radar className="h-4 w-4" />
+                <span className="hidden sm:inline">반경</span>
+              </button>
+              <button
+                aria-pressed={showAllLeadsOnMap}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                  showAllLeadsOnMap ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+                onClick={() =>
+                  setShowAllLeadsOnMap((value) => {
+                    const next = !value;
+                    setRightPanelTab(next ? "leads" : "stores");
+                    return next;
+                  })
+                }
+                title="지도에 활성 신규 리드 전체를 표시합니다."
+                type="button"
+              >
+                <Layers className="h-4 w-4" />
+                <span className="hidden sm:inline">{allLeadsLoadState === "loading" ? "로딩" : "리드"}</span>
+              </button>
+            </div>
+          ) : null}
+          <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">표시</span>
             {[
-              { label: "매장 등급", value: "grade" },
-              { label: "배송차", value: "vehicle" }
+              { label: "등급별", value: "grade" },
+              { label: "차량별", value: "vehicle" }
             ].map((item) => {
               const selected = markerViewMode === item.value;
               return (
                 <button
-                  className={`h-8 rounded px-3 text-xs font-black transition ${
-                    selected ? "bg-blue-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  className={`h-9 rounded-md px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
@@ -469,14 +1588,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               );
             })}
           </div>
-          <nav className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 p-1">
+          <nav className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무</span>
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
               return (
                 <button
-                  className={`flex h-8 items-center gap-1.5 rounded px-3 text-xs font-black transition ${
-                    selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => changeWorkspaceView(item.value)}
@@ -484,77 +1604,97 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                   type="button"
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  {item.label}
+                  <span className="hidden sm:inline">{item.label}</span>
                 </button>
               );
             })}
           </nav>
-          <button
-            aria-expanded={statsExpanded}
-            className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${statsExpanded ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
-            onClick={() => setStatsExpanded((value) => !value)}
-            title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
-            type="button"
+          <div
+            className="hidden h-11 items-center gap-2 rounded-lg border border-teal-100 bg-teal-50 px-3 text-xs font-black text-teal-900 shadow-[0_1px_0_rgba(15,23,42,0.025)] xl:flex"
+            title={`최근 수신 ${liveVehicleSummary.latestLabel}`}
           >
-            {statsExpanded ? "통계 접기" : "통계 보기"}
-          </button>
-          <button
-            aria-pressed={isFullscreen}
-            className={`maju-button-secondary h-10 shrink-0 rounded-md px-3 text-xs font-black ${isFullscreen ? "border-teal-300 bg-teal-50 text-teal-800" : "text-slate-600"}`}
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "전체 화면 종료" : "네이버맵·카카오맵처럼 전체 화면으로 크게 보기"}
-            type="button"
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            <span className="hidden sm:inline">{isFullscreen ? "전체 화면 종료" : "전체 화면"}</span>
-          </button>
-          <button
-            aria-label="필터 초기화"
-            className="maju-button-secondary h-10 shrink-0 rounded-md px-3 text-slate-600"
-            onClick={resetWorkspace}
-            title="필터 초기화"
-            type="button"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
+            <Truck className="h-4 w-4 shrink-0 text-teal-700" />
+            <span>라이브 {liveVehicleSummary.active}대</span>
+            {liveVehicleSummary.stale ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">지연 {liveVehicleSummary.stale}</span> : null}
+          </div>
+          <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">화면</span>
+            <button
+              aria-expanded={statsExpanded}
+              aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
+              className={`maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${statsExpanded ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              onClick={() => setStatsExpanded((value) => !value)}
+              title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
+              type="button"
+            >
+              <Gauge className="h-4 w-4" />
+            </button>
+            <button
+              aria-label={isFullscreen ? "전체 화면 종료" : "전체 화면"}
+              aria-pressed={isFullscreen}
+              className={`maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${isFullscreen ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
+              type="button"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+            <button
+              aria-label="필터 초기화"
+              className="maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              onClick={resetWorkspace}
+              title="필터 초기화"
+              type="button"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </header>
 
-      {timelineHref ? (
-        <div className="shrink-0 px-5 pt-3 empty:hidden">
-          <ChurnRiskAlert companyId={churnRiskCompanyId} timelineHref={timelineHref} />
-        </div>
-      ) : null}
+      <div className={`relative flex flex-1 flex-col ${activeView === "map" ? "xl:min-h-0" : ""}`}>
+        {showOriginAddressBanner ? (
+          <div className="shrink-0 px-4 pt-3">
+            <Link
+              className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"
+              href="/dashboard/settings"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>물류 출발지 주소가 아직 설정되지 않아, 배송·영업 거리가 기본 주소 기준으로 계산되고 있습니다. 회사 설정에서 출발지 주소를 등록해주세요.</span>
+              <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0" />
+            </Link>
+          </div>
+        ) : null}
+        {timelineHref ? (
+          <div className="shrink-0 px-4 pt-3 empty:hidden">
+            <ChurnRiskAlert companyId={churnRiskCompanyId} initialCustomers={churnRiskCustomers} timelineHref={timelineHref} />
+          </div>
+        ) : null}
 
-      {/*
-        네이버맵/카카오맵처럼 지도가 화면 대부분을 차지해야 한다는 피드백에 따라, KPI 통계·기준값
-        가이드·필터 조건 요약은 기본 접힘 상태로 두고 "통계 보기" 토글로만 펼치게 했습니다. 지도
-        섹션이 항상 곧바로 이어지도록 이 블록 전체를 조건부로 렌더링합니다.
-      */}
       {statsExpanded ? (
         <>
-          <section className="grid shrink-0 grid-cols-2 border-b border-slate-200/80 bg-white lg:grid-cols-3 2xl:grid-cols-6">
+          <section className="grid shrink-0 grid-cols-3 border-b border-slate-200/80 bg-white lg:grid-cols-6">
             <Kpi
               helper={`전체 ${gradeBaseStores.length} · A ${gradeCounts.A} · B ${gradeCounts.B} · C ${gradeCounts.C}`}
-              label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 매장"} · ${selectedGradeLabel}`}
+              label={kpiSummary ? "선택 경유지" : `${isVehicleFiltered ? selectedVehicleLabel : "등급 거래처"} · ${selectedGradeLabel}`}
               tone={gradeFilter === "A" ? "green" : gradeFilter === "C" ? "purple" : "blue"}
               value={sourceReady ? `${kpiSummary?.selectedCount ?? selectedGradeCount}곳` : "등록 필요"}
             />
             <Kpi
-              helper={selectedVehicle ? `${selectedVehicle.driver} · ${selectedVehicle.area}` : "전체 배송차 기준"}
+              helper={selectedVehicle ? [selectedVehicle.driver, selectedVehicle.area].filter(Boolean).join(" · ") : "전체 배송차 기준"}
               label={selectedVehicle ? "선택 배송차" : "배송차량"}
               tone="blue"
-              value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${deliveryVehicles.length}대`) : "등록 후 배정"}
+              value={sourceReady ? (selectedVehicle ? selectedVehicle.name : `${realVehicleCount}대`) : "등록 후 배정"}
             />
             <Kpi
               helper={kpiSummary ? "선택 경유지 기준" : "현재 필터 기준"}
-              label="매장 매출합"
+              label="매출합"
               tone="green"
               value={sourceReady ? `${(kpiSummary?.expectedRevenue ?? routeTotals.expectedRevenue).toLocaleString()}만원` : "-"}
             />
             <Kpi helper={distanceKpiHelper} label={kpiSummary ? "경유 코스 거리" : "출발지 기준 거리"} tone="purple" value={sourceReady ? `${(kpiSummary?.distanceKm ?? routeTotals.distanceKm).toLocaleString()}km` : "-"} />
             <Kpi helper={durationKpiHelper} label={kpiSummary ? "경유 코스 시간" : "출발지 기준 시간"} tone="red" value={sourceReady ? formatMinutes(kpiSummary?.durationMinutes ?? routeTotals.durationMinutes) : "-"} />
-            <Kpi helper={fuelKpiHelper} label={fuelBasisIsOpinet ? "OPINET 예상 유류비" : "예상 유류비"} tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
+            <Kpi helper={fuelKpiHelper} label="예상 유류비" tone="green" value={sourceReady ? `${estimatedFuelCostWon.toLocaleString()}원` : "-"} />
           </section>
 
           <RouteBasisStrip
@@ -566,6 +1706,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             mapReadyStoreCount={mapReadyStoreCount}
             missingAddressCount={missingAddressCount}
             routePlan={routePlan}
+            sourceReady={sourceReady}
             visibleMapReadyStoreCount={visibleMapReadyStoreCount}
           />
 
@@ -581,75 +1722,214 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         </>
       ) : null}
 
-      {/*
-        네이버맵/카카오맵처럼 지도가 배경을 꽉 채우고, 검색·필터 바와 좌우 패널은 그 위에 뜨는 카드로
-        보이도록 했습니다. 모바일(작은 화면)에서는 겹치는 카드가 쓰기 어려워서 xl 이상에서만 지도 위에
-        띄우고, 그 아래 화면에서는 기존처럼 지도 위쪽에 일반 문서 흐름으로 쌓이게 둡니다.
-      */}
       <section
-        className={`shrink-0 space-y-2 border-b border-slate-200/80 bg-slate-50/70 px-5 py-2.5 ${
+        className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-white px-4 py-2 ${
           activeView === "map"
-            ? "xl:absolute xl:inset-x-3 xl:top-3 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-4 xl:py-2.5 xl:shadow-lg xl:backdrop-blur-sm"
+            ? "xl:absolute xl:inset-x-2 xl:top-2 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:px-3 xl:py-2 xl:shadow-[0_10px_28px_rgba(15,23,42,.12)]"
             : ""
         }`}
+        ref={mapHeaderRef}
       >
-        <div className="grid gap-2 xl:grid-cols-[minmax(320px,1fr)_auto] xl:items-center">
+        <div className="grid gap-2 xl:grid-cols-[minmax(360px,1fr)_minmax(420px,auto)] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
+              onBlur={() => setShowExternalResults(false)}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="거래처명·지역·주소 검색..."
+              onFocus={() => setShowExternalResults(true)}
+              placeholder="거래처명·리드·지역·주소 검색"
               value={query}
             />
+            {showExternalResults && query.trim().length >= 2 ? (
+              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+                {registeredMatches.length ? (
+                  <div className="border-b border-slate-100">
+                    <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                      등록된 거래처 {registeredMatches.length.toLocaleString()}곳
+                    </p>
+                    {registeredMatches.map((store) => (
+                      <button
+                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
+                        key={store.id}
+                        onClick={() => {
+                          setPreviewLeadId("");
+                          setPreviewStoreId(store.id || "");
+                          setShowExternalResults(false);
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="button"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-slate-950">{store.name}</p>
+                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">지도에서 보기</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {leadMatches.length ? (
+                  <div className="border-b border-slate-100">
+                    <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                      신규 리드 {leadMatches.length.toLocaleString()}건
+                    </p>
+                    {leadMatches.map((lead) => (
+                      <button
+                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
+                        key={lead.id}
+                        onClick={() => {
+                          setPreviewStoreId("");
+                          setPreviewLeadId(lead.id);
+                          setShowExternalResults(false);
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="button"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-black text-cyan-700">리드 카드 보기</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">미등록 매장 · 카카오맵 검색</p>
+                  {unregisteredResults.length ? (
+                    <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-black text-slate-500">
+                      <input
+                        checked={selectedResultIds.size > 0 && selectedResultIds.size === unregisteredResults.length}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
+                        onChange={toggleSelectAllResults}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="checkbox"
+                      />
+                      전체 선택
+                    </label>
+                  ) : null}
+                </div>
+                {isSearchingExternal ? (
+                  <p className="px-3 py-2 text-xs font-bold text-slate-400">검색 중...</p>
+                ) : unregisteredResults.length ? (
+                  unregisteredResults.map((result) => {
+                    const resultId = externalResultId(result);
+                    const isSelected = selectedResultIds.has(resultId);
+                    return (
+                      <div
+                        className={`flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-teal-50 ${
+                          isSelected ? "bg-teal-50" : ""
+                        }`}
+                        key={resultId}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <input
+                            checked={isSelected}
+                            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
+                            onChange={() => toggleResultSelection(resultId)}
+                            onMouseDown={(event) => event.preventDefault()}
+                            type="checkbox"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-slate-950">{result.name}</p>
+                            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
+                              {result.roadAddress || result.address || "주소 정보 없음"}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
+                          onClick={() => {
+                            setPreviewStoreId("");
+                            setPreviewLeadId("");
+                            setQuickRegisterTarget(result);
+                            setShowExternalResults(false);
+                          }}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                        >
+                          거래처로 등록
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="px-3 py-2 text-xs font-bold text-slate-400">{externalSearchMessage || "새로 찾은 미등록 매장이 없습니다."}</p>
+                )}
+                {selectedResultIds.size > 0 ? (
+                  <div className="sticky bottom-0 flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-3 py-2">
+                    <p className="text-xs font-bold text-slate-500">{selectedResultIds.size}곳 선택됨</p>
+                    <button
+                      className="maju-button-primary flex h-8 shrink-0 items-center gap-1.5 px-3 text-xs disabled:opacity-60"
+                      disabled={isBulkRegistering}
+                      onClick={registerSelectedResults}
+                      onMouseDown={(event) => event.preventDefault()}
+                      type="button"
+                    >
+                      {isBulkRegistering ? "등록 중" : `선택 ${selectedResultIds.size}곳 일괄 등록`}
+                    </button>
+                  </div>
+                ) : null}
+                {bulkRegisterMessage ? (
+                  <p className="border-t border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{bulkRegisterMessage}</p>
+                ) : null}
+              </div>
+            ) : null}
           </label>
-          <div className="flex flex-wrap items-center justify-start gap-1.5 xl:justify-end">
-            <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
-            {gradeFilters.map((filter) => (
-              <button
-                className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
-                  gradeFilter === filter.value
-                    ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
-                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+          <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+            <MarkerModeLegend
+              mode={markerViewMode}
+              showLeads={showAllLeadsOnMap || Boolean(leadRadiusMapMarkers.length)}
+              showVehicles={Boolean(liveVehicleLocations.length)}
+              vehicles={deliveryVehicles}
+            />
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end">
+              <select
+                className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
                 }`}
-                key={filter.value}
-                onClick={() => setGradeFilter(filter.value)}
+                onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
+                value={gradeFilter}
+              >
+                {gradeFilters.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
+                  </option>
+                ))}
+              </select>
+              <button
+                aria-pressed={excludeClosedStores}
+                className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                  excludeClosedStores
+                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                }`}
+                onClick={() => setExcludeClosedStores((value) => !value)}
                 type="button"
               >
-                {filter.label}
+                {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
               </button>
-            ))}
-          <button
-            aria-pressed={excludeClosedStores}
-            className={`h-10 rounded-lg border px-3 text-xs font-black transition ${
-              excludeClosedStores
-                ? "border-rose-300 bg-rose-50 text-rose-700 shadow-[0_1px_0_rgba(15,23,42,0.03)]"
-                : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-            }`}
-            onClick={() => setExcludeClosedStores((value) => !value)}
-            type="button"
-          >
-            {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
-          </button>
-          <button
-            className="maju-button-blue h-10 rounded-lg"
-            onClick={focusOrigin}
-            title="물류 출발지로 지도 이동"
-            type="button"
-          >
-            출발지 보기
-          </button>
-          <span className={`rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
-            {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
-          </span>
-          <span className="ml-1 text-xs font-black text-slate-500">
-            {sourceReady ? `${visibleStores.length}/${allStores.length}개` : "거래처 등록 필요"}
-          </span>
+              <button
+                className="maju-button-secondary h-9 rounded-md px-3 text-xs"
+                onClick={focusOrigin}
+                title="물류 출발지로 지도 이동"
+                type="button"
+              >
+                출발지
+              </button>
+              <span className={`min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-white text-slate-700 ring-1 ring-inset ring-slate-200" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
+                {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
+              </span>
+              <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200">
+                {sourceReady ? `${visibleStores.length}/${allStores.length}곳` : "등록 필요"}
+              </span>
+            </div>
           </div>
         </div>
         {statsExpanded ? (
-          <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <span className="text-xs font-black text-slate-400">현재 조건</span>
+          <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="text-xs font-black text-slate-500">현재 조건</span>
             {activeFilterLabels.length ? (
               activeFilterLabels.map((label) => (
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
@@ -657,68 +1937,439 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
                 </span>
               ))
             ) : sourceReady ? (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">전체 매장 표시 중</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">전체 거래처 표시 중</span>
             ) : (
               <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 등록 대기</span>
             )}
           </div>
         ) : null}
+        {activeView === "map" && leadRadiusOpen ? (
+          <div className="space-y-2 rounded-lg border border-teal-100 bg-teal-50/60 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-black text-teal-800">
+                <Radar className="h-3.5 w-3.5" />
+                리드 반경
+              </span>
+              <div className="flex h-8 items-center rounded-lg border border-teal-200 bg-white p-0.5">
+                {[
+                  { label: "지도 클릭", value: "point" as const },
+                  { label: "거래처 1곳", value: "customer" as const },
+                  { label: "전체 거래처", value: "all" as const }
+                ].map((item) => (
+                  <button
+                    className={`h-7 rounded-md px-2.5 text-[11px] font-black transition ${
+                      leadRadiusAnchorMode === item.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"
+                    }`}
+                    key={item.value}
+                    onClick={() => {
+                      setLeadRadiusAnchorMode(item.value);
+                      setLeadRadiusResult(null);
+                      setLeadRadiusError("");
+                      setPreviewLeadId("");
+                      if (item.value !== "point") {
+                        setLeadRadiusPoint(null);
+                      }
+                    }}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {leadRadiusAnchorMode === "customer" ? (
+                <select
+                  className="h-8 min-w-[160px] flex-1 rounded-md border border-teal-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300 sm:flex-none"
+                  onChange={(event) => setLeadRadiusCustomerId(event.target.value)}
+                  value={leadRadiusCustomerId}
+                >
+                  <option value="">기준 거래처 선택</option>
+                  {geocodableStoresForRadius.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              ) : leadRadiusAnchorMode === "all" ? (
+                <span className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-inset ring-teal-100">
+                  주소 확인된 거래처 {geocodableStoresForRadius.length.toLocaleString()}곳 기준
+                </span>
+              ) : leadRadiusPoint ? (
+                <span className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-inset ring-teal-100">
+                  지도 클릭 지점 기준
+                  <button className="font-black text-teal-700 underline decoration-dotted underline-offset-2 hover:text-teal-900" onClick={resetLeadSearchPoint} type="button">
+                    지점 다시 선택
+                  </button>
+                </span>
+              ) : null}
+              <label className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                반경
+                <input
+                  className="h-8 w-14 rounded-md border border-teal-200 bg-white px-1.5 text-center text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300"
+                  max={50}
+                  min={0.5}
+                  onChange={(event) => setLeadRadiusKm(Number(event.target.value) || DEFAULT_LEAD_SEARCH_RADIUS_KM)}
+                  step={0.5}
+                  type="number"
+                  value={leadRadiusKm}
+                />
+                km
+              </label>
+              <button
+                className="maju-button-primary h-8 shrink-0 text-[11px]"
+                disabled={leadRadiusSearching || (leadRadiusAnchorMode === "point" && !leadRadiusPoint)}
+                onClick={() => void runMapLeadRadiusSearch()}
+                type="button"
+              >
+                {leadRadiusSearching ? "탐색 중..." : "탐색"}
+              </button>
+            </div>
+
+            {leadRadiusAnchorMode === "point" && !leadRadiusPoint ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-teal-100 pt-2">
+                <span className="text-[11px] font-black text-slate-500">빠른 선택</span>
+                {[0.5, 1, 1.5, 3, 5].map((presetKm) => (
+                  <button
+                    className="h-7 rounded-full border border-teal-200 bg-white px-3 text-[11px] font-black text-teal-700 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!mapCenterPoint}
+                    key={presetKm}
+                    onClick={() => runPresetRadiusSearch(presetKm)}
+                    title="지금 보고 있는 지도 중심 기준으로 바로 탐색합니다."
+                    type="button"
+                  >
+                    현재 위치 {presetKm}km
+                  </button>
+                ))}
+                <span className="text-[11px] font-bold text-slate-500">
+                  또는 지도를 클릭해 원하는 지점에 기본 {DEFAULT_LEAD_SEARCH_RADIUS_KM}km 반경을 바로 만드세요.
+                </span>
+              </div>
+            ) : null}
+
+            {leadRadiusResult || leadRadiusError || (leadRadiusAnchorMode !== "point" || leadRadiusPoint) ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-teal-100 pt-2 text-[11px] font-bold">
+                {leadRadiusResult ? (
+                  <span className="font-black text-teal-800">
+                    반경 {leadRadiusResult.radiusKm}km 안 리드 {leadRadiusResult.leads.length.toLocaleString()}곳 지도에 표시 중
+                  </span>
+                ) : null}
+                {leadRadiusError ? <span className="font-black text-rose-600">{leadRadiusError}</span> : null}
+                {leadRadiusAnchorMode !== "point" || leadRadiusPoint ? (
+                  <span className="text-teal-700">지도 위 원 가장자리의 흰 손잡이를 드래그해 반경을 조절할 수 있습니다.</span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {/* 지역 필터: 칩을 죽 나열하던 방식은 시군구가 많아지면 가독성이 떨어진다는 피드백(2026-08-24:
+        "지역 필터는 사용성이 떨어지네, 드롭다운으로 시군구동까지 나눠서 필터하는게 더 가독성이
+        좋아보임")을 받아, 네이버 부동산 스타일 드릴다운 칩 목록 대신 시군구·동 2단 드롭다운으로 바꿨습니다. */}
+        {activeView === "map" && showAllLeadsOnMap && mapLeadRegionOptions.length ? (
+          <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-black text-slate-400">
+              <MapPin className="h-3.5 w-3.5" />
+              지역
+            </span>
+            <select
+              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-black text-slate-700 outline-none focus:border-teal-300"
+              onChange={(event) => selectMapLeadRegionSigungu(event.target.value)}
+              value={mapLeadRegionSigungu}
+            >
+              <option value="">시군구 전체</option>
+              {mapLeadRegionOptions.map(([sigungu, count]) => (
+                <option key={sigungu} value={sigungu}>
+                  {sigungu} ({count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-black text-slate-700 outline-none focus:border-teal-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              disabled={!mapLeadRegionSigungu || !mapLeadDongOptions.length}
+              onChange={(event) => setMapLeadRegionDong(event.target.value)}
+              value={mapLeadRegionDong}
+            >
+              <option value="">{mapLeadRegionSigungu ? `${mapLeadRegionSigungu} 전체` : "동 전체"}</option>
+              {mapLeadDongOptions.map(([dong, count]) => (
+                <option key={dong} value={dong}>
+                  {dong} ({count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        {activeView === "map" && showAllLeadsOnMap ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="flex shrink-0 items-center gap-1.5 text-xs font-black text-slate-600">
+              <Layers className="h-3.5 w-3.5" />
+              리드 전체 필터
+            </span>
+            <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 청록 테두리·★ = 기거래처 인근 리드." />
+            <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+              <button
+                className={`h-8 px-2.5 text-[11px] font-black transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                onClick={() => setShowDismissedLeadsOnMap(false)}
+                type="button"
+              >
+                활성 리드
+              </button>
+              <button
+                className={`h-8 px-2.5 text-[11px] font-black transition ${showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                onClick={() => setShowDismissedLeadsOnMap(true)}
+                type="button"
+              >
+                숨김 리드
+              </button>
+            </div>
+            <select
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+              onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
+              value={mapLeadIndustryFilter}
+            >
+              <option value="">업종 전체</option>
+              {mapLeadIndustryOptions.map(([industry, count]) => (
+                <option key={industry} value={industry}>
+                  {industry} ({count.toLocaleString()})
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1">
+              <span className="text-[11px] font-black text-slate-400">개시일</span>
+              <input
+                className="h-6 rounded border-0 text-[11px] font-bold text-slate-900 outline-none"
+                onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)}
+                type="date"
+                value={mapLeadOpenDateStartDraft}
+              />
+              <span className="text-[11px] font-bold text-slate-400">~</span>
+              <input
+                className="h-6 rounded border-0 text-[11px] font-bold text-slate-900 outline-none"
+                onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)}
+                type="date"
+                value={mapLeadOpenDateEndDraft}
+              />
+            </div>
+            <button
+              className="h-8 shrink-0 rounded-md bg-teal-700 px-3 text-[11px] font-black text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              disabled={mapLeadOpenDateStartDraft === mapLeadOpenDateStart && mapLeadOpenDateEndDraft === mapLeadOpenDateEnd}
+              onClick={() => {
+                setMapLeadOpenDateStart(mapLeadOpenDateStartDraft);
+                setMapLeadOpenDateEnd(mapLeadOpenDateEndDraft);
+              }}
+              type="button"
+            >
+              조회
+            </button>
+            {mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
+              <button
+                className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
+                onClick={() => {
+                  setMapLeadIndustryFilter("");
+                  setMapLeadRegionSigungu("");
+                  setMapLeadRegionDong("");
+                  setMapLeadOpenDateStart("");
+                  setMapLeadOpenDateEnd("");
+                  setMapLeadOpenDateStartDraft("");
+                  setMapLeadOpenDateEndDraft("");
+                }}
+                type="button"
+              >
+                필터 초기화
+              </button>
+            ) : null}
+            <span className="ml-auto text-[11px] font-bold text-slate-500">
+              {allLeadsLoadState === "loading"
+                ? "불러오는 중..."
+                : showDismissedLeadsOnMap
+                  ? `숨김 리드 ${filteredAllLeadsForMap.length.toLocaleString()}곳`
+                  : `${filteredAllLeadsForMap.length.toLocaleString()} / ${statusScopedLeadsForMap.length.toLocaleString()}곳 표시 중`}
+            </span>
+          </div>
+        ) : null}
       </section>
 
-      {/*
-        지도가 배경(전체 화면)이 되고, 배송담당자 필터·거래처 목록 패널은 그 위에 뜨는 카드로
-        배치됩니다(네이버맵/카카오맵 방식). xl 미만 화면은 겹치는 플로팅 카드가 오히려 쓰기
-        어려워서 기존처럼 지도 위/아래로 패널이 일반 문서 흐름으로 쌓이는 레이아웃을 유지합니다.
-      */}
       {activeView === "map" ? (
-        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0">
+        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0" ref={mapAreaRef}>
           <div className={`relative min-h-0 min-w-0 bg-slate-100 xl:absolute xl:inset-0 ${isFullscreen ? "h-full" : "h-[420px] xl:h-full"}`}>
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    focusedMarkerId={previewStoreId || selectedId || mapFocusId || undefined}
+                    controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}
+                    controlsOffsetPx={mapHeaderHeightPx || undefined}
+                    focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
-                    markers={markers}
+                    markers={mapDisplayMarkers}
                     onMarkerClick={(marker) => {
+                      if (marker.tone === "unregistered") {
+                        const target = unregisteredResults.find((result) => externalResultId(result) === marker.id);
+                        if (target) setQuickRegisterTarget(target);
+                        return;
+                      }
+                      if (marker.tone === "lead") {
+                        setPreviewStoreId("");
+                        setPreviewLeadId(marker.id || "");
+                        // 2026-08-31 피드백 대응: 우측 패널이 "거래처" 탭에 머물러 있으면 리드
+                        // 마커를 클릭해도 그 항목이 아예 목록에 없어 우측 패널이 안 바뀝니다.
+                        setRightPanelTab("leads");
+                        return;
+                      }
+                      if (marker.tone === "vehicle") {
+                        const vehicle = liveVehicleLocations.find((location) => `vehicle-${location.id}` === marker.id);
+                        const currentStoreId = vehicle?.currentCustomerId || "";
+                        if (currentStoreId && storeById.has(currentStoreId)) {
+                          setMapFocusId("");
+                          setPreviewLeadId("");
+                          setPreviewStoreId(currentStoreId);
+                          setRightPanelTab("stores");
+                          return;
+                        }
+                        if (vehicle) void openVehicleAnalysis(vehicle);
+                        return;
+                      }
                       if (!marker.id || marker.tone === "origin") return;
                       setMapFocusId("");
+                      setPreviewLeadId("");
                       setPreviewStoreId(marker.id);
+                      // 위와 대칭으로, 리드 탭에 머물러 있는 상태에서 기거래처 마커를 클릭해도
+                      // 우측 패널이 그 거래처를 보여주도록 거래처 탭으로 전환합니다.
+                      setRightPanelTab("stores");
                     }}
+                    leadSearch={{
+                      active: leadRadiusOpen && leadRadiusAnchorMode === "point" && !leadRadiusPoint,
+                      defaultRadiusMeters: DEFAULT_LEAD_SEARCH_RADIUS_KM * 1000,
+                      onLocked: handleLeadSearchLocked
+                    }}
+                    onCenterChange={setMapCenterPoint}
+                    radiusOverlay={
+                      leadRadiusOpen && (leadRadiusAnchorMode !== "point" || leadRadiusPoint)
+                        ? {
+                            centerMarkerId: leadRadiusAnchorMode === "customer" ? leadRadiusCustomerId || undefined : undefined,
+                            centerPoint: leadRadiusAnchorMode === "point" ? leadRadiusPoint || undefined : undefined,
+                            onClear: leadRadiusAnchorMode === "point" ? resetLeadSearchPoint : undefined,
+                            onRadiusChange: (meters) => setLeadRadiusKm(Math.min(50, Math.max(0.1, Math.round((meters / 1000) * 10) / 10))),
+                            radiusMeters: leadRadiusKm * 1000
+                          }
+                        : undefined
+                    }
                     showList={false}
                   />
                 </div>
+                {/* 2026-08-28 피드백 대응(지도 필터 조합 결과가 0건이어도 별다른 안내 없이 빈 지도만
+                    보임): 배송차량·등급 필터 등으로 거래처가 전부 걸러졌을 때 빈 지도만 덩그러니
+                    보이지 않도록, 필터를 초기화할 수 있는 안내 배너를 보여줍니다. 거래처가 아예
+                    0곳인 경우(등록 자체가 안 된 상태)는 RouteWorkspaceGuide가 별도로 안내하므로
+                    allStores.length > 0을 조건에 포함해 중복 안내를 피합니다. */}
+                {visibleStores.length === 0 && allStores.length > 0 && allLeadsMapMarkers.length === 0 ? (
+                  <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex -translate-y-1/2 justify-center px-4">
+                    <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-5 py-4 text-center shadow-lg">
+                      <p className="text-sm font-black text-slate-800">현재 필터 조건에 맞는 거래처가 없습니다</p>
+                      <p className="text-xs font-bold text-slate-500">
+                        {selectedVehicle ? `${selectedVehicle.name} · ` : ""}
+                        {gradeFilter !== "all" ? `${gradeFilter}등급 · ` : ""}
+                        전체 {allStores.length.toLocaleString()}곳 중 조건에 맞는 거래처가 0곳입니다.
+                      </p>
+                      {isVehicleFiltered || gradeFilter !== "all" ? (
+                        <button
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-black text-white hover:bg-slate-700"
+                          onClick={() => {
+                            selectVehicle("all");
+                            setGradeFilter("all");
+                          }}
+                          type="button"
+                        >
+                          필터 초기화
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {previewStore ? (
                   <StoreQuickCard
+                    driverOptions={deliveryDefaults.drivers}
+                    headerOffsetPx={mapHeaderHeightPx}
+                    leftPanelCollapsed={leftCollapsed}
+                    onAddDriver={addManualDriver}
+                    onAddVehicle={addManualVehicle}
+                    onAddToRoute={() => {
+                      // 경유 코스 탭은 배송차가 지정돼야 경유 선택이 유지됩니다(미지정 상태에서 배송차를
+                      // 고르면 그 차량 기본 목록으로 선택이 초기화되어 방금 추가한 거래처가 빠질 수 있음) —
+                      // 이 거래처에 배정된 배송차를 먼저 선택해 그 문제를 피합니다.
+                      selectVehicle(previewStore.deliveryVehicleId || deliveryVehicles[0]?.id || "all");
+                      setPendingCourseStoreId(previewStore.id);
+                      setPreviewStoreId("");
+                      setActiveView("course");
+                    }}
                     onClose={() => setPreviewStoreId("")}
                     onOpenDetail={() => {
                       setSelectedId(previewStore.id);
                       setPreviewStoreId("");
                     }}
+                    onOpenQuote={(targetStore) =>
+                      setQuoteSubject({
+                        address: targetStore.address,
+                        customerId: targetStore.id,
+                        industry: resolveDisplayIndustry(targetStore),
+                        menuNotes: targetStore.menuSummary,
+                        name: targetStore.name,
+                        outboundNotes: buildOutboundItemNotes(resolveDisplayIndustry(targetStore)),
+                        phone: targetStore.phone
+                      })
+                    }
                     onSave={(edit) => updateStore(previewStore.id, edit)}
                     originAddress={originMarker?.address || ""}
                     store={previewStore}
+                    vehicleOptions={vehicleNameOptions}
+                  />
+                ) : null}
+                {previewLeadId ? (
+                  <PermitLeadMapQuickCard
+                    allStores={allStores}
+                    headerOffsetPx={mapHeaderHeightPx}
+                    lead={
+                      leadRadiusResult?.leads.find((lead) => lead.id === previewLeadId) ||
+                      allLeadsForMap.find((lead) => lead.id === previewLeadId) ||
+                      null
+                    }
+                    leftPanelCollapsed={leftCollapsed}
+                    onClose={() => setPreviewLeadId("")}
+                    onConverted={() => {
+                      setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((lead) => lead.id !== previewLeadId) } : current));
+                      setAllLeadsForMap((current) => current.filter((lead) => lead.id !== previewLeadId));
+                      setPreviewLeadId("");
+                    }}
+                    onDismiss={dismissLeadFromMap}
+                    onOpenQuote={(lead) =>
+                      setQuoteSubject(getPermitLeadQuoteSubject(lead))
+                    }
+                    onRestore={restoreLeadFromMap}
                   />
                 ) : null}
               </>
             ) : (
               <OperationalEmptyState
                 actionHref={dataRegistrationHref}
-                actionLabel="거래처 마스터 등록"
-                description="거래처 기본정보를 저장하면 지도, 원장, 코스가 같은 DB 기준으로 연결됩니다."
-                title="표시할 거래처가 없습니다."
+                actionLabel="거래처 등록"
+                description="거래처 기본정보를 저장하면 지도와 코스가 열립니다."
+                title="거래처 원장 필요"
               />
             )}
           </div>
 
+          {/* 2026-08-24 피드백("차량 매니저 필터가 검색창하고 겹쳐보여"): 이 좌우 패널은 mapAreaRef
+              기준 xl:absolute 오버레이인데, 위 mapHeaderRef 검색창 카드도 같은 좌표계에 xl:absolute로
+              떠 있고 리드 필터 행이 늘어나면 높이가 커집니다. 좌우 패널이 고정 xl:top-3만 쓰면 헤더가
+              커질 때 그 아래로 가려지므로, 크로스헤어 버튼과 동일하게 mapHeaderHeightPx를 top 인라인
+              스타일로 반영합니다. */}
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:top-20 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              leftCollapsed ? "xl:w-[52px]" : "xl:bottom-3 xl:w-[300px]"
+            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
+              leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[300px]"
             }`}
+            style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
             <DeliveryAssignmentPanel
               collapsed={leftCollapsed}
               fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
+              onAddDriver={addManualDriver}
+              onDeleteVehicle={deleteVehicle}
               onSelectVehicle={selectVehicle}
               onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
               onUpdateVehicle={updateVehicle}
@@ -729,20 +2380,87 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           </div>
 
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:top-20 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              rightCollapsed ? "xl:w-[52px]" : "xl:bottom-3 xl:w-[340px]"
+            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
+              rightCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[340px]"
             }`}
+            style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
-            <StoreManagementPanel
-              collapsed={rightCollapsed}
-              dataRegistrationHref={dataRegistrationHref}
-              onSelectStore={setSelectedId}
-              onToggleCollapsed={() => setRightCollapsed((value) => !value)}
-              selectedStoreId={selectedId}
-              sourceReady={sourceReady}
-              title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 매장 거래처"}
-              stores={visibleStores}
-            />
+            {!rightCollapsed ? (
+              <LiveVehicleStatusPanel
+                onAnalyze={openVehicleAnalysis}
+                onPreviewStore={(storeId) => {
+                  setPreviewLeadId("");
+                  setPreviewStoreId(storeId);
+                  setRightPanelTab("stores");
+                }}
+                storeById={storeById}
+                vehicles={liveVehicleLocations}
+              />
+            ) : null}
+            {!rightCollapsed && hasLeadRightPanelContext ? (
+              <div className="flex items-center gap-1 border-b border-slate-200/80 bg-slate-50 p-1.5">
+                <button
+                  className={`flex-1 rounded-md px-2 py-1.5 text-xs font-black transition ${
+                    activeRightPanelTab === "stores" ? "bg-white text-slate-950 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  onClick={() => setRightPanelTab("stores")}
+                  type="button"
+                >
+                  거래처 {visibleStores.length.toLocaleString()}
+                </button>
+                <button
+                  className={`flex-1 rounded-md px-2 py-1.5 text-xs font-black transition ${
+                    activeRightPanelTab === "leads" ? "bg-teal-700 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  onClick={() => {
+                    setShowAllLeadsOnMap(true);
+                    setRightPanelTab("leads");
+                  }}
+                  type="button"
+                >
+                  신규 리드 {leadsForRightPanel.length.toLocaleString()}
+                </button>
+              </div>
+            ) : null}
+            {activeRightPanelTab === "leads" ? (
+              <LeadListPanel
+                collapsed={rightCollapsed}
+                isLoading={allLeadsLoadState === "loading"}
+                leads={leadsForRightPanel}
+                onOpenQuote={(lead) =>
+                  setQuoteSubject(getPermitLeadQuoteSubject(lead))
+                }
+                onSelectLead={(leadId) => {
+                  setPreviewStoreId("");
+                  setPreviewLeadId(leadId);
+                }}
+                onShowAllLeads={() => {
+                  setShowAllLeadsOnMap(true);
+                  setRightPanelTab("leads");
+                }}
+                onToggleCollapsed={() => setRightCollapsed((value) => !value)}
+                selectedLeadId={previewLeadId}
+                title={showDismissedLeadsOnMap ? "숨김 리드" : "신규 리드"}
+              />
+            ) : (
+              <StoreManagementPanel
+                collapsed={rightCollapsed}
+                dataRegistrationHref={dataRegistrationHref}
+                distanceRecalcError={distanceRecalcError}
+                onEditStore={setSelectedId}
+                onRecalculateDistances={recalculateStoreDistances}
+                onSelectStore={(storeId) => {
+                  setPreviewLeadId("");
+                  setPreviewStoreId(storeId);
+                }}
+                onToggleCollapsed={() => setRightCollapsed((value) => !value)}
+                recalculatingDistances={recalculatingDistances}
+                selectedStoreId={previewStoreId || selectedId}
+                sourceReady={sourceReady}
+                title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
+                stores={visibleStores}
+              />
+            )}
           </div>
         </div>
       ) : null}
@@ -750,6 +2468,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
       {activeView === "customers" ? (
         <CustomerDirectoryView
           dataRegistrationHref={dataRegistrationHref}
+          fuelPrices={fuelPrices}
           onSelectStore={setSelectedId}
           selectedStoreId={selectedId}
           sourceReady={sourceReady}
@@ -757,14 +2476,35 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
         />
       ) : null}
 
+      {vehicleAnalysis.vehicle ? (
+        <VehicleAnalysisModal
+          completions={vehicleAnalysis.completions}
+          currentStore={vehicleAnalysis.vehicle.currentCustomerId ? storeById.get(vehicleAnalysis.vehicle.currentCustomerId) : undefined}
+          error={vehicleAnalysis.error}
+          events={vehicleAnalysis.events}
+          loading={vehicleAnalysis.loading}
+          onClose={() => setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null })}
+          onOpenStore={(storeId) => {
+            setSelectedId(storeId);
+            setPreviewStoreId(storeId);
+            setRightPanelTab("stores");
+            setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null });
+          }}
+          vehicle={vehicleAnalysis.vehicle}
+        />
+      ) : null}
+
       {activeView === "course" ? (
         <TodayCourseView
           dataRegistrationHref={dataRegistrationHref}
+          fuelPrices={fuelPrices}
           markers={markers}
+          onConsumePendingAddStore={() => setPendingCourseStoreId("")}
           onPreviewStore={setPreviewStoreId}
           onSummaryChange={setCourseSummary}
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
+          pendingAddStoreId={pendingCourseStoreId}
           routeTotals={routeTotals}
           selectedStoreId={selectedId}
           selectedVehicle={selectedVehicle}
@@ -774,13 +2514,26 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
           vehicles={deliveryVehicles}
         />
       ) : null}
+
+      {activeView === "leads" ? (
+        <PermitLeadsView
+          onOpenQuote={(lead) =>
+            setQuoteSubject(getPermitLeadQuoteSubject(lead))
+          }
+          stores={allStores}
+        />
+      ) : null}
+      </div>
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
           areaOptions={deliveryDefaults.areas}
           driverOptions={deliveryDefaults.drivers}
+          fuelPrices={fuelPrices}
           history={storeHistories[selectedStore.id] || []}
           key={selectedStore.id}
+          onAddDriver={addManualDriver}
+          onAddVehicle={addManualVehicle}
           onClose={() => setSelectedId("")}
           onClearHistory={(storeId) =>
             setStoreHistories((current) => ({
@@ -803,15 +2556,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
               }
             }))
           }
-          onSaveLoadingMedia={(files) =>
-            setStoreAttachments((current) => ({
-              ...current,
-              [selectedStore.id]: {
-                ...current[selectedStore.id],
-                loadingPositionMedia: [...(current[selectedStore.id]?.loadingPositionMedia || []), ...files]
-              }
-            }))
-          }
+          onUpdateRelationshipStatus={updateRelationshipStatus}
           onUpdateStore={updateStore}
           onWriteHistory={(storeId, memo) =>
             setStoreHistories((current) => ({
@@ -827,16 +2572,285 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, mapMarkers, routePl
             }))
           }
           store={selectedStore}
+          vehicleOptions={vehicleNameOptions}
         />
       ) : null}
+      {quickRegisterTarget ? (
+        <QuickRegisterDrawer
+          driverOptions={deliveryDefaults.drivers}
+          onAddDriver={addManualDriver}
+          onAddVehicle={addManualVehicle}
+          onClose={() => setQuickRegisterTarget(null)}
+          onRegistered={() => router.refresh()}
+          result={quickRegisterTarget}
+          vehicleOptions={vehicleNameOptions}
+        />
+      ) : null}
+      {quoteSubject ? <QuoteDrawer companyName={companyName} onClose={() => setQuoteSubject(null)} subject={quoteSubject} /> : null}
     </div>
   );
 }
 
+// 지도 검색에서 찾은 미등록 매장을 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있게 하는 패널입니다.
+// 상호명만 있으면 저장할 수 있고(사업자등록번호는 나중에 서류로 보완), 저장에 성공하면 같은 패널 안에서
+// 바로 사업자등록증·신분증·적재위치 파일을 업로드할 수 있도록 이어집니다.
+function QuickRegisterDrawer({
+  driverOptions,
+  onAddDriver,
+  onAddVehicle,
+  onClose,
+  onRegistered,
+  result,
+  vehicleOptions
+}: {
+  driverOptions?: string[];
+  onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
+  onClose: () => void;
+  onRegistered: () => void;
+  result: ExternalBusinessResult;
+  vehicleOptions?: string[];
+}) {
+  const [customerName, setCustomerName] = useState(result.name);
+  const [address, setAddress] = useState(result.roadAddress || result.address);
+  const [phone, setPhone] = useState(result.phone);
+  const [industry, setIndustry] = useState(result.industry);
+  const [deliveryManager, setDeliveryManager] = useState("");
+  const [deliveryVehicle, setDeliveryVehicle] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string } | null>(null);
+  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 서버가 상호명이 같은 기존 거래처를
+  // 발견하면 바로 저장하지 않고 이 상태에 그 목록을 담아 확인창을 띄웁니다. 사용자가 "그래도 등록"을
+  // 선택해야만 confirmDuplicate: true로 다시 요청을 보내 실제로 저장합니다.
+  const [duplicateMatches, setDuplicateMatches] = useState<PossibleDuplicateCustomer[] | null>(null);
+  // 2026-08-31 에러 처리/복원력 감사 후속: 카카오 검색 결과로 채워진 값을 그대로 두거나(=아직
+  // 손대지 않음) 이미 등록을 마쳤다면 이탈 경고를 띄우지 않고, 사용자가 실제로 뭔가 고치거나
+  // 담당자/배송차를 지정했을 때만(=저장 안 하고 나가면 다시 입력해야 함) 경고합니다.
+  const isDraftDirty =
+    !createdCustomer &&
+    (customerName !== (result.name || "") ||
+      address !== (result.roadAddress || result.address || "") ||
+      phone !== (result.phone || "") ||
+      industry !== (result.industry || "") ||
+      Boolean(deliveryManager) ||
+      Boolean(deliveryVehicle));
+  useUnsavedChangesWarning(isDraftDirty);
+
+  async function saveCustomer(confirmDuplicate = false) {
+    if (!customerName.trim() || isSaving) return;
+
+    setIsSaving(true);
+    setSaveError("");
+
+    try {
+      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+      const response = await fetchWithTimeout("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address,
+          businessStatus: "확인 필요",
+          companyId: companyId || undefined,
+          confirmDuplicate,
+          customerName,
+          deliveryManager: deliveryManager || undefined,
+          deliveryVehicle: deliveryVehicle || undefined,
+          industry: industry || "미분류",
+          kakaoPlaceUrl: result.kakaoPlaceUrl,
+          phone,
+          validateBusinessNumber: false
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
+      if (payload?.possibleDuplicate) {
+        setDuplicateMatches(payload.duplicateMatches || []);
+        return;
+      }
+
+      const customerId = String(payload?.customer?.id || "");
+      if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리에서 확인해주세요.");
+
+      setCreatedCustomer({ id: customerId, name: customerName });
+      onRegistered();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <button aria-label="빠른 등록 닫기" className="fixed inset-0 z-40 bg-slate-950/45" onClick={onClose} type="button" />
+      <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <header className="maju-card-header border-b px-4 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black text-teal-700">지도 검색 · 빠른 등록</p>
+              <h3 className="mt-1 truncate text-xl font-black text-slate-950">{createdCustomer ? `${createdCustomer.name} 등록 완료` : "거래처로 등록"}</h3>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                {createdCustomer ? "서류를 업로드하면 바로 사용할 수 있습니다." : "이름과 주소만 있으면 바로 저장할 수 있습니다."}
+              </p>
+            </div>
+            <button
+              aria-label="닫기"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
+          {createdCustomer ? (
+            <div className="space-y-4">
+              <CustomerAttachmentUploadPanel customerId={createdCustomer.id} customerName={createdCustomer.name} />
+              <button className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm" onClick={onClose} type="button">
+                <Check className="h-4 w-4" />
+                완료
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">상호명 (필수)</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  value={customerName}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">주소</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setAddress(event.target.value)}
+                  value={address}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">연락처</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setPhone(formatPhoneNumberInput(event.target.value))}
+                  value={phone}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black text-slate-500">업종</span>
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setIndustry(event.target.value)}
+                  value={industry}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-black text-slate-500">담당자</span>
+                  <DriverSelectField driverOptions={driverOptions || []} onAddDriver={onAddDriver} onChange={setDeliveryManager} value={deliveryManager} />
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-black text-slate-500">배송차</span>
+                  <DriverSelectField
+                    driverOptions={vehicleOptions || []}
+                    entityLabel="배송차"
+                    onAddDriver={onAddVehicle}
+                    onChange={setDeliveryVehicle}
+                    value={deliveryVehicle}
+                  />
+                </label>
+              </div>
+              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-800">
+                사업자등록번호는 지금 없어도 됩니다. 저장 후 사업자등록증을 업로드해 보완할 수 있습니다.
+              </p>
+              {saveError ? <p className="text-xs font-bold text-rose-600">{saveError}</p> : null}
+              <button
+                className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm disabled:opacity-60"
+                disabled={!customerName.trim() || isSaving}
+                onClick={() => saveCustomer()}
+                type="button"
+              >
+                {isSaving ? "저장 중" : "거래처로 등록"}
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+      {duplicateMatches ? (
+        <ConfirmDialog
+          cancelLabel="취소"
+          confirmLabel="그래도 등록"
+          message={`이름이 같은 거래처가 이미 있습니다.\n${duplicateMatches.map((match) => `· ${match.customerName}${match.address ? ` (${match.address})` : ""}`).join("\n")}\n\n그래도 새 거래처로 등록하시겠습니까?`}
+          onCancel={() => setDuplicateMatches(null)}
+          onConfirm={() => {
+            setDuplicateMatches(null);
+            saveCustomer(true);
+          }}
+          title="중복 의심 거래처"
+          tone="default"
+        />
+      ) : null}
+    </>
+  );
+}
+
+// 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아. 확인이 필요해")에 대응해 만든 공용 확인
+// 모달입니다. 기존에는 window.confirm()을 썼는데, 이건 페이지에서 확인창이 짧은 시간 안에 여러 번
+// 뜨면 브라우저가 "이 페이지에서 대화상자를 추가로 표시하지 않음" 체크박스를 자동으로 붙이고, 사용자가
+// 이걸 한 번이라도 체크하면 그 뒤로는 confirm()이 화면에 아무것도 안 띄우고 조용히 false만 반환합니다
+// — 즉 삭제 버튼을 눌러도 아무 반응이 없는 것처럼 보일 수 있습니다. 화면 안에서 직접 그리는 모달로
+// 바꾸면 이 문제 자체가 사라집니다.
+function ConfirmDialog({
+  cancelLabel = "취소",
+  confirmLabel = "확인",
+  message,
+  onCancel,
+  onConfirm,
+  title,
+  tone = "destructive"
+}: {
+  readonly cancelLabel?: string;
+  readonly confirmLabel?: string;
+  readonly message: string;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+  readonly title?: string;
+  /** 2026-08-31 UX 감사 대응: 되돌릴 수 없는 파괴적 액션(삭제·병합)만 빨간 버튼(rose)을 쓰고,
+   * 단순 확인(예: 중복 이름이어도 계속 등록)은 브랜드색(teal)을 쓰도록 구분합니다 — 이전에는
+   * 모든 확인 버튼이 빨간색이라, 파괴적이지 않은 작업에도 위험 신호를 줬습니다. */
+  readonly tone?: "destructive" | "default";
+}) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        {title ? <p className="text-sm font-black text-slate-950">{title}</p> : null}
+        <p className={`whitespace-pre-line text-sm font-bold leading-6 text-slate-700 ${title ? "mt-2" : ""}`}>{message}</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="maju-button-secondary h-9 px-4 text-xs" onClick={onCancel} type="button">
+            {cancelLabel}
+          </button>
+          <button
+            className={`maju-button-primary h-9 px-4 text-xs ${tone === "destructive" ? "bg-rose-600 hover:bg-rose-700" : ""}`}
+            onClick={onConfirm}
+            type="button"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
+  onAddDriver,
+  onDeleteVehicle,
   onSelectVehicle,
   onToggleCollapsed,
   onUpdateVehicle,
@@ -846,6 +2860,8 @@ function DeliveryAssignmentPanel({
 }: {
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
+  readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onDeleteVehicle: (vehicle: DeliveryVehicle) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
@@ -854,20 +2870,46 @@ function DeliveryAssignmentPanel({
   readonly vehicles: DeliveryVehicle[];
 }) {
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ vehicleId: string; message: string } | null>(null);
+  const [pendingDeleteVehicle, setPendingDeleteVehicle] = useState<DeliveryVehicle | null>(null);
+
+  // 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아") 대응: 삭제 버튼을 누르면 바로
+  // window.confirm()을 띄우던 예전 방식 대신, 화면 안에 확인 모달(ConfirmDialog)을 띄우도록 2단계로
+  // 나눴습니다. 실제 삭제 동작은 사용자가 모달 안의 "삭제" 버튼을 눌렀을 때(runDelete)만 실행됩니다.
+  function handleDelete(vehicle: DeliveryVehicle) {
+    setPendingDeleteVehicle(vehicle);
+  }
+
+  async function runPendingDelete() {
+    const vehicle = pendingDeleteVehicle;
+    if (!vehicle) return;
+    setPendingDeleteVehicle(null);
+    setDeletingVehicleId(vehicle.id);
+    setDeleteError(null);
+    const result = await onDeleteVehicle(vehicle);
+    setDeletingVehicleId(null);
+    if (!result.ok) setDeleteError({ vehicleId: vehicle.id, message: result.message || "삭제에 실패했습니다." });
+  }
 
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-3 border-r border-slate-200/80 bg-white py-3">
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-r border-slate-200/80 bg-white px-1.5 py-2">
         <button
           aria-label="배송 담당자 패널 펼치기"
-          className="maju-button-secondary h-9 w-9 px-0"
+          className="maju-button-secondary h-8 w-8 shrink-0 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelLeftOpen className="h-4 w-4" />
+          <PanelLeftOpen className="h-3.5 w-3.5" />
         </button>
-        <Truck className="h-5 w-5 text-slate-500" />
-        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">담당자필터</span>
+        <span className="relative inline-flex shrink-0" title="배송담당자 필터">
+          <Truck className="h-4 w-4 text-slate-500" />
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+            {vehicles.length}
+          </span>
+        </span>
       </aside>
     );
   }
@@ -894,7 +2936,7 @@ function DeliveryAssignmentPanel({
       <div className="border-b border-slate-100 p-3">
         <button
           className={`w-full rounded-md border px-3 py-2.5 text-left transition ${
-            selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"
+            selectedVehicleId === "all" ? "border-teal-300 bg-teal-50 ring-1 ring-teal-100" : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
           onClick={() => onSelectVehicle("all")}
           type="button"
@@ -903,17 +2945,17 @@ function DeliveryAssignmentPanel({
             <p className="text-sm font-black text-slate-950">전체 담당자</p>
             <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">{totalStores}곳</span>
           </div>
-          <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 매장 표시</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 거래처 표시</p>
         </button>
       </div>
-      <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-auto">
+      <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 divide-y divide-slate-100 overflow-auto xl:max-h-none">
         {vehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
           return (
             <div
               className={`w-full px-4 py-3 text-left transition ${
-                selected ? "bg-slate-50 shadow-[inset_3px_0_0_#0f172a]" : "bg-white hover:bg-slate-50"
+                selected ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : "bg-white hover:bg-slate-50"
               }`}
               key={vehicle.id}
             >
@@ -931,42 +2973,181 @@ function DeliveryAssignmentPanel({
               ) : (
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                    <div className="flex items-center gap-1">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
-                        {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
-                        {fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : " (기본값)"}
-                      </span>
+                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{vehicle.name}</p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {vehicle.isUnassigned ? null : (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
+                          {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
+                          {fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : " (기본값)"}
+                        </span>
+                      )}
                       <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
                         {vehicle.stops.length}곳
                       </span>
                     </div>
                   </div>
-                  <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-                    <UserRound className="h-3.5 w-3.5" />
-                    {vehicle.driver}
-                  </p>
+                  {vehicle.isUnassigned ? (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-400">
+                      <UserRound className="h-3.5 w-3.5" />
+                      담당자·배송차가 지정되지 않은 거래처 모음 (자동 그룹)
+                    </p>
+                  ) : (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+                      <UserRound className="h-3.5 w-3.5" />
+                      {vehicle.driver}
+                    </p>
+                  )}
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
-                    <span
-                      className="maju-button-secondary inline-flex h-7 shrink-0 items-center gap-1 px-2 text-xs"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setEditingVehicleId(vehicle.id);
-                      }}
-                      role="button"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                      편집
-                    </span>
+                    {vehicle.isUnassigned ? null : (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span
+                          aria-label="담당자·배송차 삭제"
+                          className="maju-button-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center px-0 text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (deletingVehicleId) return;
+                            void handleDelete(vehicle);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (deletingVehicleId) return;
+                            void handleDelete(vehicle);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title={
+                            vehicle.stops.length === 0
+                              ? "삭제 · 배정된 거래처가 없어 바로 삭제할 수 있습니다"
+                              : `삭제 · 배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
+                          }
+                        >
+                          {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </span>
+                        <span
+                          aria-label="담당자·배송차 편집"
+                          className="maju-button-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center px-0"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingVehicleId(vehicle.id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setEditingVehicleId(vehicle.id);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title="편집"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </span>
+                      </div>
+                    )}
                   </div>
+                  {deleteError?.vehicleId === vehicle.id ? (
+                    <p className="mt-1.5 text-[11px] font-bold leading-4 text-rose-600">{deleteError.message}</p>
+                  ) : null}
                 </button>
               )}
             </div>
           );
         })}
       </div>
+      <div className="shrink-0 border-t border-slate-200/80 p-3">
+        {isAdding ? (
+          <AddDriverForm
+            onCancel={() => setIsAdding(false)}
+            onSave={async (driverName, fuelType) => {
+              const result = await onAddDriver(driverName, fuelType);
+              if (result.ok) setIsAdding(false);
+              return result;
+            }}
+          />
+        ) : (
+          <button className="maju-button-secondary flex h-9 w-full items-center justify-center gap-1.5 text-xs" onClick={() => setIsAdding(true)} type="button">
+            <Plus className="h-3.5 w-3.5" />
+            새 담당자·배송차 추가
+          </button>
+        )}
+      </div>
+      {pendingDeleteVehicle ? (
+        <ConfirmDialog
+          confirmLabel="삭제"
+          message={
+            pendingDeleteVehicle.stops.length > 0
+              ? `"${pendingDeleteVehicle.name}" 배송차를 삭제할까요? 배정된 거래처 ${pendingDeleteVehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다. 이 작업은 되돌릴 수 없습니다.`
+              : `"${pendingDeleteVehicle.name}" 배송차를 삭제할까요? 이 작업은 되돌릴 수 없습니다.`
+          }
+          onCancel={() => setPendingDeleteVehicle(null)}
+          onConfirm={runPendingDelete}
+        />
+      ) : null}
     </aside>
+  );
+}
+
+function AddDriverForm({
+  onCancel,
+  onSave
+}: {
+  readonly onCancel: () => void;
+  readonly onSave: (driverName: string, fuelType: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+}) {
+  const [driverName, setDriverName] = useState("");
+  const [fuelType, setFuelType] = useState<"gasoline" | "diesel">("diesel");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    const result = await onSave(driverName, fuelType);
+    setSaving(false);
+    if (!result.ok) setError(result.message || "저장에 실패했습니다.");
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-teal-200 bg-teal-50/40 p-2.5">
+      <p className="text-xs font-black text-slate-950">새 담당자·배송차 추가</p>
+      <input
+        autoFocus
+        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => setDriverName(event.target.value)}
+        placeholder="담당자 이름 (예: 김배송 매니저)"
+        value={driverName}
+      />
+      <div className="grid grid-cols-2 gap-1.5">
+        {[
+          { label: "경유", value: "diesel" as const },
+          { label: "휘발유", value: "gasoline" as const }
+        ].map((item) => (
+          <button
+            className={`h-8 rounded-md border px-2 text-xs font-black transition ${
+              fuelType === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"
+            }`}
+            key={item.value}
+            onClick={() => setFuelType(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {error ? <p className="text-[11px] font-bold leading-4 text-rose-600">{error}</p> : null}
+      <p className="text-[11px] font-bold leading-4 text-slate-400">거래처 배정은 거래처 관리에서 담당자를 지정하면 이 배송차에 자동으로 묶입니다.</p>
+      <div className="flex items-center justify-end gap-1.5">
+        <button className="maju-button-secondary h-8 px-3 text-xs" disabled={saving} onClick={onCancel} type="button">
+          취소
+        </button>
+        <button className="maju-button-primary h-8 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={saving || !driverName.trim()} onClick={handleSave} type="button">
+          {saving ? "저장 중" : "추가"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -987,18 +3168,21 @@ function RouteWorkspaceGuide({
   readonly sourceReady: boolean;
   readonly visibleStoreCount: number;
 }) {
-  const viewLabel = activeView === "map" ? "지도 확인" : activeView === "customers" ? "거래처 목록" : "경유 코스";
-  const markerLabel = markerViewMode === "grade" ? "매장 등급별 마커" : "배송차별 마커";
+  const viewLabel =
+    activeView === "map" ? "지도 홈" : activeView === "customers" ? "거래처" : activeView === "leads" ? "신규리드" : "방문 코스";
+  const markerLabel = markerViewMode === "grade" ? "등급별 보기" : "차량별 보기";
   const guide =
     !sourceReady
-      ? "거래처 마스터를 등록하면 지도, 거래처 목록, 배송차 경유 계산이 같은 원장 기준으로 열립니다."
+      ? "거래처를 등록하면 지도, 목록, 배송차 경유 계산이 같은 기준으로 열립니다."
       : activeView === "course"
       ? courseSummary
         ? `${selectedVehicleLabel} 기준 경유 ${courseSummary.selectedCount}곳의 도로 거리와 시간이 계산되었습니다.`
-        : `${selectedVehicleLabel} 기준 경유 매장을 선택한 뒤 티맵 계산을 실행하세요.`
+        : `${selectedVehicleLabel} 기준 방문 거래처를 선택한 뒤 티맵 계산을 실행하세요.`
       : activeView === "customers"
         ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
-        : "마커를 누르면 간략 카드가 열리고, 상세 버튼으로 거래처 관리를 확인합니다.";
+        : activeView === "leads"
+          ? "사업자 인허가 데이터를 업로드하고, 기존 거래처 주변 반경에서 신규리드를 탐색하세요."
+          : "마커를 선택하면 간략 정보와 상세 이동 버튼이 열립니다.";
 
   return (
     <section className="shrink-0 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
@@ -1006,13 +3190,13 @@ function RouteWorkspaceGuide({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-slate-800 ring-1 ring-inset ring-slate-200">{viewLabel}</span>
           <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{markerLabel}</span>
-          <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">{visibleStoreCount.toLocaleString()}개 표시</span>
+          <span className="rounded-md bg-white px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-100">{visibleStoreCount.toLocaleString()}곳 표시</span>
         </div>
         <div className="flex min-w-0 flex-col gap-2 lg:items-end">
           <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 lg:text-right">{guide}</p>
           {!sourceReady ? (
             <Link className="maju-button-primary h-8" href={dataRegistrationHref}>
-              거래처 마스터 등록
+              거래처 등록
             </Link>
           ) : null}
         </div>
@@ -1041,7 +3225,7 @@ async function geocodeAddresses(addresses: string[]): Promise<Record<string, Geo
  * the app), plus app-required Naver Map / Tmap options, with a plain search-link fallback if
  * coordinates couldn't be resolved. See lib/navigation-links.ts for why Kakao is the default.
  */
-function NavigateMenu({
+export function NavigateMenu({
   compact,
   destinationAddress,
   destinationName,
@@ -1160,7 +3344,7 @@ function NavigateMenu({
  * supports up to 5 waypoints via URL scheme, so a course longer than 6 stops (start + 5 vias +
  * destination) is capped to the first 5 vias + final destination and flagged as partial.
  */
-function FullRouteNavigateAction({
+export function FullRouteNavigateAction({
   originLabel,
   originPoint,
   stopPointByAddress,
@@ -1205,56 +3389,188 @@ function FullRouteNavigateAction({
   );
 }
 
-function StoreQuickCard({
+export function StoreQuickCard({
+  driverOptions,
+  headerOffsetPx,
+  isInRoute,
+  leftPanelCollapsed,
+  onAddDriver,
+  onAddToRoute,
+  onAddVehicle,
   onClose,
   onOpenDetail,
+  onOpenQuote,
   onSave,
   originAddress,
-  store
+  store,
+  variant = "floating",
+  vehicleOptions
 }: {
+  readonly driverOptions?: string[];
+  /** 지도 위에 떠 있는 검색 헤더의 현재 높이(px). 헤더가 필터 줄 추가 등으로 커질 때 카드가
+   * 헤더 아래로 가려지지 않도록 top 위치를 함께 늘립니다(미전달 시 기존 고정값 사용). */
+  readonly headerOffsetPx?: number;
+  /** 경유 코스 탭에서만 전달됩니다 — 오늘 경유 선택에 이미 포함돼 있는지 여부. */
+  readonly isInRoute?: boolean;
+  readonly leftPanelCollapsed?: boolean;
+  readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  /** "경유지 추가" 버튼. 지도 홈에서는 경유 코스 탭으로 이동시키는 콜백, 경유 코스 탭에서는 즉시 토글하는 콜백을 받습니다. */
+  readonly onAddToRoute?: () => void;
+  readonly onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onOpenDetail: () => void;
+  readonly onOpenQuote?: (store: StoreRow) => void;
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
   readonly originAddress?: string;
   readonly store: StoreRow;
+  /**
+   * "floating": 지도 홈처럼 지도 위에 떠 있는 좌측 패널을 피해야 하는 전체화면 지도용 위치 계산.
+   * "grid": 경유 코스처럼 이미 별도 그리드 컬럼으로 좌우 패널 공간이 확보된 레이아웃용 — 항상 지도 영역
+   * 안쪽에서 안전한 고정 여백만 사용해 옆 패널을 절대 침범하지 않습니다.
+   */
+  readonly variant?: "floating" | "grid";
+  readonly vehicleOptions?: string[];
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // 리뷰 요약은 공간을 꽤 차지해서 기본 접힘 상태로 두고, 필요할 때만 펼쳐 보게 합니다.
+  const [showReviews, setShowReviews] = useState(false);
+  // 메모는 전체 편집 폼(isEditing)을 열지 않고도 카드에서 바로 입력·수정할 수 있어야 현장에서 자주 남깁니다.
+  const [isMemoEditing, setIsMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState("");
+  const [isSavingMemo, setIsSavingMemo] = useState(false);
+  // 2026-08-31 에러 처리 감사 후속: 이 카드의 저장(메모/전체 편집)은 실패해도 화면에 아무 표시가
+  // 없어 사용자가 저장이 안 됐다는 것을 알 방법이 없었습니다(네트워크 오류·동시 편집 충돌 포함).
+  const [saveError, setSaveError] = useState("");
+  // 출입방법 비밀번호는 카드가 열려 있는 동안 실수로 어깨너머로 노출되지 않도록 기본은 가려두고,
+  // 필요할 때만 눌러서 확인합니다.
+  const [showAccessPassword, setShowAccessPassword] = useState(false);
+  // 2026-08-24 피드백: "기거래처 카드도 움직일 수 있도록 해줘" — 지도 위 리드 카드(PermitLeadMapQuickCard)와
+  // 같은 방식으로, 기본 위치에서 마우스로 끌어 옮긴 만큼만 transform으로 얹습니다. 다른 거래처를 클릭해
+  // 카드 내용이 바뀌면 다시 기본 위치로 돌아갑니다.
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [draft, setDraft] = useState({
     name: store.name,
     phone: store.phone || "",
     deliveryDriver: store.deliveryDriver || "",
+    deliveryVehicleName: store.deliveryVehicleName || "",
     memo: store.memo || "",
     businessHours: store.businessHours || "",
     menuSummary: store.menuSummary || ""
   });
+  const [addressCopied, setAddressCopied] = useState(false);
+
+  async function copyAddress() {
+    const address = store.address || store.region;
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1500);
+    } catch {
+      // 클립보드 권한이 없으면 조용히 무시합니다 — 이 카드에는 별도 오류 메시지 영역이 없습니다.
+    }
+  }
 
   useEffect(() => {
     setDraft({
       name: store.name,
       phone: store.phone || "",
       deliveryDriver: store.deliveryDriver || "",
+      deliveryVehicleName: store.deliveryVehicleName || "",
       memo: store.memo || "",
       businessHours: store.businessHours || "",
       menuSummary: store.menuSummary || ""
     });
     setIsEditing(false);
+    setIsMemoEditing(false);
+    setShowAccessPassword(false);
+    setDragOffset({ x: 0, y: 0 });
+    setSaveError("");
   }, [store.id]);
+
+  function onDragHandleMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const originX = dragOffset.x;
+    const originY = dragOffset.y;
+    function handleMove(moveEvent: globalThis.MouseEvent) {
+      setDragOffset({ x: originX + (moveEvent.clientX - startX), y: originY + (moveEvent.clientY - startY) });
+    }
+    function handleUp() {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    }
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }
+
+  function startMemoEdit() {
+    setMemoDraft(store.memo || "");
+    setIsMemoEditing(true);
+    setSaveError("");
+  }
+
+  async function saveMemo() {
+    if (!onSave || isSavingMemo) return;
+    setIsSavingMemo(true);
+    setSaveError("");
+    try {
+      await onSave({ memo: memoDraft });
+      setIsMemoEditing(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "메모 저장에 실패했습니다.");
+    } finally {
+      setIsSavingMemo(false);
+    }
+  }
 
   async function handleSave() {
     if (!onSave) return;
     setIsSaving(true);
+    setSaveError("");
     try {
       await onSave(draft);
       setIsEditing(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "거래처 정보 저장에 실패했습니다.");
     } finally {
       setIsSaving(false);
     }
   }
 
+  // grid 변형은 이미 그리드 컬럼으로 좌우 여백이 확보돼 있으므로 고정된 작은 좌측 여백만 사용합니다.
+  // floating 변형(지도 홈)은 지도 위에 떠 있는 좌측 패널을 피해야 해서 더 큰 오프셋을 쓰되,
+  // 두 경우 모두 너비를 컨테이너 폭 기준 calc()로 제한해 옆 패널을 절대 침범하지 않게 합니다.
+  const positionClassName =
+    variant === "grid"
+      ? "left-4 w-[min(300px,calc(100%-32px))]"
+      : `left-4 w-[min(300px,calc(100%-32px))] ${
+          leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(300px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(300px,calc(100%-352px))]"
+        }`;
+  const topClassName = variant === "grid" ? "top-4" : "top-4 xl:top-[var(--quick-card-top,5rem)]";
+
   return (
-    <div className="absolute left-4 top-4 z-30 h-auto w-[min(300px,calc(100%-32px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)]">
-      <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+    <div
+      className={`absolute ${topClassName} z-30 h-auto overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
+      style={{
+        ["--quick-card-top" as string]: headerOffsetPx ? `${headerOffsetPx + 12}px` : undefined,
+        transform: dragOffset.x || dragOffset.y ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined
+      } as React.CSSProperties}
+    >
+      <div className="flex items-start gap-1 px-1.5 pt-1.5">
+        <span
+          aria-label="카드 위치 옮기기"
+          className="grid h-5 w-6 shrink-0 cursor-grab place-items-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
+          onMouseDown={onDragHandleMouseDown}
+          role="button"
+          title="드래그해서 카드 위치 옮기기"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </span>
+      </div>
+      <div className="flex items-start justify-between gap-2 px-3 pb-2.5 pt-0.5">
         <div className="min-w-0 flex-1">
           {isEditing ? (
             <input
@@ -1264,14 +3580,12 @@ function StoreQuickCard({
               value={draft.name}
             />
           ) : (
-            <div className="flex min-w-0 items-center gap-1.5 pr-1">
-              <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
-              <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-            </div>
+            <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{store.name}</p>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700">{store.grade}등급</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{resolveDisplayIndustry(store)}</span>
           </div>
         </div>
         <button aria-label="닫기" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
@@ -1279,39 +3593,184 @@ function StoreQuickCard({
         </button>
       </div>
       <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2.5">
-        <p className="flex gap-2 text-[13px] font-bold leading-5 text-slate-600">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
-          <span className="line-clamp-2">{store.address || store.region}</span>
-        </p>
-        {!isEditing && (store.businessHours || store.menuSummary) ? (
-          <div className="mt-1.5 space-y-1">
+        <div className="flex items-start gap-1">
+          <p className="flex min-w-0 flex-1 gap-2 text-[13px] font-bold leading-5 text-slate-600">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+            <span className="line-clamp-2">{store.address || store.region}</span>
+          </p>
+          {store.address || store.region ? (
+            <button
+              aria-label="주소 복사"
+              className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
+              onClick={() => void copyAddress()}
+              title="주소 복사"
+              type="button"
+            >
+              {addressCopied ? <Check className="h-3.5 w-3.5 text-teal-600" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+        </div>
+        {!isEditing ? (
+          // 영업·배송 현장에서 실제로 바로 필요한 정보(담당자·배송차, 연락처)를 최상단에 배치합니다.
+          // 대표자/사업자번호/개업일 같은 등록 정보는 하루하루 영업엔 급하지 않은 행정 데이터라 아래로 내렸습니다.
+          <div className="mt-2 space-y-1">
+            <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-slate-700">
+              <Truck className="h-3.5 w-3.5 shrink-0 text-teal-600" />
+              <span className="min-w-0 flex-1 truncate">
+                {[store.deliveryDriver, store.deliveryVehicleName].filter(Boolean).join(" · ") || "담당자·배송차 미지정"}
+              </span>
+            </p>
+            <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-slate-700">
+              <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1 truncate">{store.phone || "연락처 미등록"}</span>
+            </p>
+          </div>
+        ) : null}
+        {!isEditing ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {store.businessHours ? (
-              <p className="flex gap-2 text-[12px] font-bold leading-5 text-slate-600">
-                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600" />
-                <span className="line-clamp-1">{store.businessHours}</span>
-              </p>
+              <IconBadge title={`영업시간 · ${store.businessHours}`} tone="bg-teal-50 text-teal-700 ring-teal-200">
+                <Clock className="h-3.5 w-3.5" />
+              </IconBadge>
             ) : null}
             {store.menuSummary ? (
-              <p className="flex gap-2 text-[12px] font-bold leading-5 text-slate-600">
-                <Store className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                <span className="line-clamp-2">{store.menuSummary}</span>
-              </p>
+              <IconBadge title={`주요 메뉴 · ${store.menuSummary}`} tone="bg-orange-50 text-orange-700 ring-orange-200">
+                <Store className="h-3.5 w-3.5" />
+              </IconBadge>
             ) : null}
+            <PlaceLinkRow compact store={store} />
           </div>
+        ) : null}
+        {/* 배송하는 사람이 현장에서 바로 참고할 적재위치·메모는 리뷰보다 위, 접지 않고 항상 보여줍니다. */}
+        {!isEditing && store.loadingPosition ? (
+          <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-600">
+            <Warehouse className="mt-0.5 h-3 w-3 shrink-0 text-teal-500" />
+            <span className="line-clamp-2">적재위치 · {store.loadingPosition}</span>
+          </p>
+        ) : null}
+        {/* 출입방법·비밀번호(2026-08-24 피드백: "거래처의 출입방법과 비밀번호를 저장해야해 ... 퀵카드,
+        상세에도 적재해서 보여줘야해"). 비밀번호는 기본 마스킹, 눌러야만 노출됩니다. 적재위치 사진도
+        같이 보여달라는 요청(1-1)에 맞춰 바로 아래에 사진 미리보기를 함께 붙입니다. */}
+        {!isEditing && (store.accessMethodType || store.accessNote || store.accessPassword) ? (
+          <div className="mt-1.5 rounded-md bg-teal-50/60 px-2 py-1.5">
+            <p className="flex items-start gap-1.5 text-[11px] font-bold leading-4 text-slate-700">
+              {(() => {
+                const AccessIcon = getAccessMethodIcon(store.accessMethodType);
+                return <AccessIcon className="mt-0.5 h-3 w-3 shrink-0 text-teal-600" />;
+              })()}
+              <span className="min-w-0 flex-1">
+                {store.accessMethodType ? <span className="font-black text-teal-800">{store.accessMethodType}</span> : null}
+                {store.accessMethodType && store.accessNote ? " · " : ""}
+                <span className="line-clamp-2">{store.accessNote}</span>
+              </span>
+            </p>
+            {store.accessPassword ? (
+              <button
+                className="mt-1 inline-flex items-center gap-1 text-[11px] font-black text-teal-700"
+                onClick={() => setShowAccessPassword((value) => !value)}
+                type="button"
+              >
+                {showAccessPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                비밀번호 {showAccessPassword ? store.accessPassword : "••••••"}
+              </button>
+            ) : null}
+            <QuickCardAccessPhotoPreview customerId={store.id} />
+          </div>
+        ) : null}
+        {!isEditing && isMemoEditing ? (
+          <div className="mt-1.5 flex gap-1.5">
+            <MessageSquareText className="mt-2 h-3 w-3 shrink-0 text-slate-400" />
+            <div className="min-w-0 flex-1">
+              <textarea
+                autoFocus
+                className="min-h-[52px] w-full resize-none rounded-md border border-teal-300 bg-white p-2 text-[11px] font-bold leading-4 text-slate-700 outline-none focus:ring-2 focus:ring-teal-100"
+                onChange={(event) => setMemoDraft(event.target.value)}
+                placeholder="메모를 입력하세요 (예: 정기 납품 조건, 현장 특이사항)"
+                value={memoDraft}
+              />
+              <div className="mt-1 flex justify-end gap-1.5">
+                <button
+                  className="h-6 px-2 text-[10.5px] font-bold text-slate-500 hover:text-slate-700"
+                  onClick={() => setIsMemoEditing(false)}
+                  type="button"
+                >
+                  취소
+                </button>
+                <button
+                  className="h-6 rounded-md bg-teal-700 px-2.5 text-[10.5px] font-black text-white hover:bg-teal-800 disabled:opacity-60"
+                  disabled={isSavingMemo}
+                  onClick={saveMemo}
+                  type="button"
+                >
+                  {isSavingMemo ? "저장 중" : "저장"}
+                </button>
+              </div>
+              {saveError ? <p className="mt-1 text-right text-[10.5px] font-bold text-rose-600">{saveError}</p> : null}
+            </div>
+          </div>
+        ) : !isEditing && onSave ? (
+          <button
+            className="mt-1.5 flex w-full items-start gap-1.5 rounded-md py-0.5 text-left hover:bg-slate-50"
+            onClick={startMemoEdit}
+            type="button"
+          >
+            <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+            <span className={`line-clamp-2 text-[11px] font-bold leading-4 ${store.memo ? "text-slate-600" : "text-slate-300"}`}>
+              {store.memo ? `메모 · ${store.memo}` : "메모 추가하기"}
+            </span>
+          </button>
+        ) : !isEditing && store.memo ? (
+          <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-600">
+            <MessageSquareText className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+            <span className="line-clamp-2">메모 · {store.memo}</span>
+          </p>
+        ) : null}
+        {!isEditing && (store.reviewKeywords?.length || store.reviewSummary) ? (
+          <button
+            className="mt-1.5 text-[11px] font-bold text-slate-400 underline decoration-dotted underline-offset-2 hover:text-slate-600"
+            onClick={() => setShowReviews((value) => !value)}
+            type="button"
+          >
+            {showReviews ? "리뷰 요약 접기" : `리뷰 요약 보기${store.reviewKeywords?.length ? ` · #${store.reviewKeywords.length}` : ""}`}
+          </button>
+        ) : null}
+        {!isEditing && showReviews && store.reviewKeywords?.length ? (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {store.reviewKeywords.slice(0, 6).map((keyword) => (
+              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" key={keyword}>
+                #{keyword}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {!isEditing && showReviews && store.reviewSummary ? (
+          <p className="mt-1.5 flex gap-1.5 text-[11px] font-bold leading-4 text-slate-500">
+            <MessageCircle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+            <span>{store.reviewSummary}</span>
+          </p>
         ) : null}
         {isEditing ? (
           <div className="mt-2 space-y-1.5">
             <input
               className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
-              onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
+              onChange={(event) => setDraft((current) => ({ ...current, phone: formatPhoneNumberInput(event.target.value) }))}
               placeholder="연락처"
               value={draft.phone}
             />
-            <input
-              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
-              onChange={(event) => setDraft((current) => ({ ...current, deliveryDriver: event.target.value }))}
-              placeholder="담당 기사"
+            <DriverSelectField
+              compact
+              driverOptions={driverOptions || []}
+              onAddDriver={onAddDriver}
+              onChange={(value) => setDraft((current) => ({ ...current, deliveryDriver: value }))}
               value={draft.deliveryDriver}
+            />
+            <DriverSelectField
+              compact
+              driverOptions={vehicleOptions || []}
+              entityLabel="배송차"
+              onAddDriver={onAddVehicle}
+              onChange={(value) => setDraft((current) => ({ ...current, deliveryVehicleName: value }))}
+              value={draft.deliveryVehicleName}
             />
             <input
               className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
@@ -1331,6 +3790,7 @@ function StoreQuickCard({
               placeholder="메모"
               value={draft.memo}
             />
+            {saveError ? <p className="text-right text-[10.5px] font-bold text-rose-600">{saveError}</p> : null}
             <div className="flex items-center justify-end gap-1.5">
               <button className="maju-button-secondary h-8 px-3 text-xs" disabled={isSaving} onClick={() => setIsEditing(false)} type="button">
                 취소
@@ -1342,14 +3802,47 @@ function StoreQuickCard({
           </div>
         ) : (
           <>
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-400">{store.deliveryVehicleName || "담당자 미지정"}</span>
+            {store.representativeName || store.businessRegistrationNumber || store.openingDate ? (
+              <p className="mt-2.5 truncate text-[10.5px] font-bold text-slate-400">
+                {[
+                  store.representativeName ? `대표 ${store.representativeName}` : null,
+                  store.businessRegistrationNumber ? `사업자 ${store.businessRegistrationNumber}` : null,
+                  store.openingDate ? `개업 ${store.openingDate}` : null
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : (
+              <p className="mt-2.5 text-[10.5px] font-bold text-slate-300">사업자 등록정보 미확인</p>
+            )}
+            <div className="mt-1.5 flex items-center justify-end gap-2">
               {onSave ? (
-                <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => setIsEditing(true)} type="button">
+                <button
+                  className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
+                  onClick={() => {
+                    setSaveError("");
+                    setIsEditing(true);
+                  }}
+                  type="button"
+                >
                   <Edit3 className="h-3.5 w-3.5" />
                 </button>
               ) : null}
-              <NavigateMenu destinationAddress={store.address || store.region} destinationName={store.name} originAddress={originAddress} />
+              {onAddToRoute ? (
+                <button
+                  className={`h-8 shrink-0 px-2.5 text-xs ${isInRoute ? "maju-button-secondary bg-teal-50 text-teal-700" : "maju-button-secondary"}`}
+                  onClick={onAddToRoute}
+                  type="button"
+                >
+                  {isInRoute ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                  {isInRoute ? "경유지 추가됨" : "경유지 추가"}
+                </button>
+              ) : null}
+              {onOpenQuote ? (
+                <button className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs" onClick={() => onOpenQuote(store)} title="견적서 작성" type="button">
+                  견적서
+                </button>
+              ) : null}
               <button className="maju-button-primary h-8 shrink-0 px-3 text-xs" onClick={onOpenDetail} type="button">
                 상세 열기
               </button>
@@ -1361,38 +3854,245 @@ function StoreQuickCard({
   );
 }
 
-function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; readonly vehicles: DeliveryVehicle[] }) {
-  if (mode === "grade") {
+/**
+ * 저장된 네이버·카카오·구글 링크가 있으면 그 링크로, 없으면 상호명+주소 검색 링크로 새 탭에서 엽니다.
+ * 실제 리뷰·영업시간·메뉴는 각 플랫폼 페이지에서 확인합니다(공식 리뷰 API는 유료라 여기서는 연결만 제공).
+ */
+// 예전 로직으로 저장된 네이버 링크는 "상호명+상세주소" 조합 검색이라 결과가 어긋나는 경우가 많았습니다.
+// 실제로 네이버 API가 확정 매칭한 링크(map.naver.com/p/search가 아닌 다른 경로)가 아니라면,
+// 저장된 값 대신 항상 최신 로직(상호명 단독 검색)으로 다시 계산해서 보여줍니다.
+const isGenericNaverSearchLink = (url?: string) => {
+  const trimmed = url?.trim();
+  return !trimmed || /^https:\/\/map\.naver\.com\/p\/search\//.test(trimmed);
+};
+
+// 네이버·카카오맵·구글맵처럼 클릭 시 새 탭으로 열리는 링크형 아이콘과 영업시간·메뉴처럼
+// 클릭 동작 없이 마우스오버로만 내용을 보여주는 정보형 아이콘에 공통으로 쓰는 배지입니다.
+function IconBadge({
+  children,
+  className = "",
+  href,
+  shape = "circle",
+  title,
+  tone
+}: {
+  readonly children: React.ReactNode;
+  readonly className?: string;
+  readonly href?: string;
+  readonly shape?: "circle" | "square";
+  readonly title: string;
+  readonly tone: string;
+}) {
+  const shapeClassName = shape === "square" ? "rounded-[9px]" : "rounded-full";
+  const sharedClassName = `grid h-7 w-7 shrink-0 place-items-center ${shapeClassName} text-[11px] font-black ring-1 ring-inset transition hover:scale-105 ${tone} ${className}`;
+  if (href) {
     return (
-      <div className="maju-filter-box flex flex-wrap items-center gap-1 px-2 py-1">
-        <span className="mr-1 text-xs font-black text-slate-500">마커</span>
-        {[
-          ["A", "#7c3aed"],
-          ["B", "#2563eb"],
-          ["C", "#64748b"]
-        ].map(([label, color]) => (
-          <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={label}>
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-            {label}등급
-          </span>
-        ))}
+      <a className={sharedClassName} href={href} rel="noreferrer" target="_blank" title={title}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <span className={sharedClassName} title={title}>
+      {children}
+    </span>
+  );
+}
+
+// 원 안에 첫 글자만 넣던 방식 대신, 각 플랫폼의 실제 브랜드 컬러(네이버 그린·카카오 옐로우)와
+// 지도 서비스임을 알 수 있는 핀 아이콘을 조합해 한눈에 구분되도록 했습니다.
+const PLACE_LINK_BRAND_STYLE: Record<string, { icon: ReactNode; tone: string }> = {
+  구글맵: { icon: <MapPin className="h-4 w-4" />, tone: "bg-white text-[#EA4335] ring-slate-200" },
+  네이버: { icon: <span className="text-[13px] font-black leading-none">N</span>, tone: "bg-[#03C75A] text-white ring-[#03C75A]" },
+  카카오맵: { icon: <MapPin className="h-4 w-4" />, tone: "bg-[#FEE500] text-slate-900 ring-[#FEE500]" }
+};
+
+function PlaceLinkRow({ className = "", compact = false, store }: { readonly className?: string; readonly compact?: boolean; readonly store: StoreRow }) {
+  const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
+  const storeNaverPlaceUrl = store.naverPlaceUrl?.trim();
+  const links = [
+    { label: "네이버", tone: "bg-emerald-50 text-emerald-700 ring-emerald-200", url: !storeNaverPlaceUrl || isGenericNaverSearchLink(storeNaverPlaceUrl) ? searchLinks.naverPlaceUrl : storeNaverPlaceUrl },
+    { label: "카카오맵", tone: "bg-amber-50 text-amber-700 ring-amber-200", url: store.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl },
+    { label: "구글맵", tone: "bg-blue-50 text-blue-700 ring-blue-200", url: store.googleMapUrl?.trim() || searchLinks.googleMapUrl }
+  ];
+
+  if (compact) {
+    return (
+      <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+        {links.map((link) => {
+          const brand = PLACE_LINK_BRAND_STYLE[link.label];
+          return (
+            <IconBadge href={link.url} key={link.label} shape="square" title={`${link.label}에서 보기`} tone={brand?.tone ?? link.tone}>
+              {brand?.icon ?? link.label[0]}
+            </IconBadge>
+          );
+        })}
       </div>
     );
   }
 
   return (
-    <div className="maju-filter-box flex max-w-full flex-wrap items-center gap-1 px-2 py-1">
-      <span className="mr-1 text-xs font-black text-slate-500">마커</span>
-      {vehicles.slice(0, 5).map((vehicle, index) => (
-        <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700" key={vehicle.id}>
-          <span className="grid h-4 min-w-4 place-items-center rounded-full text-[10px] text-white" style={{ backgroundColor: vehicleMarkerColors[index % vehicleMarkerColors.length] }}>
-            {index + 1}
-          </span>
-          {vehicle.name}
+    <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+      {links.map((link) => (
+        <a
+          className="inline-flex h-6 items-center gap-1 rounded-full bg-white px-2 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+          href={link.url}
+          key={link.label}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {link.label}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 담당자·배송차 선택 드롭다운. 목록 맨 아래 "+ 새 OO 추가"를 고르면 이름을 입력해 바로 등록합니다.
+ * entityLabel로 "담당자"/"배송차" 등 어떤 항목을 고르는 드롭다운인지 문구를 바꿔 재사용합니다.
+ * 담당자와 배송차는 서로 다른 값일 수 있어(같은 트럭을 여러 담당자가 나눠 쓰거나, 한 담당자가
+ * 상황에 따라 다른 차량을 몰 수 있음) 완전히 독립된 값으로 취급합니다.
+ */
+function DriverSelectField({
+  compact,
+  driverOptions,
+  entityLabel = "담당자",
+  onAddDriver,
+  onChange,
+  value
+}: {
+  readonly compact?: boolean;
+  readonly driverOptions: string[];
+  readonly entityLabel?: string;
+  readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onChange: (value: string) => void;
+  readonly value: string;
+}) {
+  const ADD_NEW = "__add_new_driver__";
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const options = value && !driverOptions.includes(value) ? [value, ...driverOptions] : driverOptions;
+  const selectClassName = compact
+    ? "h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+    : "h-10 min-w-0 rounded-md border border-slate-200 bg-white px-3 font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100";
+
+  async function handleAddNew() {
+    if (!onAddDriver) return;
+    setSaving(true);
+    setError("");
+    const result = await onAddDriver(newName);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.message || `${entityLabel} 추가에 실패했습니다.`);
+      return;
+    }
+    onChange(newName.trim());
+    setIsAddingNew(false);
+    setNewName("");
+  }
+
+  if (isAddingNew) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <input
+            autoFocus
+            className={compact ? "h-8 w-full rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400" : "h-10 w-full rounded-md border border-teal-200 bg-white px-3 font-bold outline-none focus:border-teal-400"}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder={`새 ${entityLabel} 이름`}
+            value={newName}
+          />
+          <button className="maju-button-secondary h-8 shrink-0 px-2 text-xs" disabled={saving} onClick={() => setIsAddingNew(false)} type="button">
+            취소
+          </button>
+          <button className="maju-button-primary h-8 shrink-0 px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-60" disabled={saving || !newName.trim()} onClick={handleAddNew} type="button">
+            {saving ? "추가 중" : "추가"}
+          </button>
+        </div>
+        {error ? <p className="text-[11px] font-bold text-rose-600">{error}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <select
+      className={selectClassName}
+      onChange={(event) => {
+        if (event.target.value === ADD_NEW) {
+          setIsAddingNew(true);
+          return;
+        }
+        onChange(event.target.value);
+      }}
+      value={value}
+    >
+      <option value="">{entityLabel} 미지정</option>
+      {options.map((driver) => (
+        <option key={driver} value={driver}>
+          {driver}
+        </option>
+      ))}
+      {onAddDriver ? <option value={ADD_NEW}>+ 새 {entityLabel} 추가</option> : null}
+    </select>
+  );
+}
+
+// 등급/배송차별 마커 색상 범례입니다. 예전에는 색점만 모아 보여주고 전체 설명은 마우스오버
+// 툴팁으로 옮겼는데("마커 ●●●"), 어떤 색이 어떤 등급/배송차인지 hover 없이는 전혀 알 수 없다는
+// 피드백을 받아(2026-08-19) 각 점 옆에 짧은 글자 라벨을 항상 보이게 되돌렸습니다. 대신 공간을
+// 아끼기 위해 등급은 "A"처럼 한 글자로, 배송차는 이름을 그대로 쓰되 개수를 4개로 줄였습니다.
+function MarkerModeLegend({
+  mode,
+  showLeads,
+  showVehicles,
+  vehicles
+}: {
+  readonly mode: MarkerViewMode;
+  readonly showLeads?: boolean;
+  readonly showVehicles?: boolean;
+  readonly vehicles: DeliveryVehicle[];
+}) {
+  const baseItems: Array<{ color: string; label: string; ring?: boolean; shortLabel: string }> =
+    mode === "grade"
+      ? [
+          { color: "#7c3aed", label: "A등급", shortLabel: "A" },
+          { color: "#2563eb", label: "B등급", shortLabel: "B" },
+          { color: "#64748b", label: "C등급", shortLabel: "C" }
+        ]
+      : vehicles
+          .slice(0, 8)
+          .map((vehicle, index) => ({ color: vehicleMarkerColors[index % vehicleMarkerColors.length], label: vehicle.name, shortLabel: vehicle.name }));
+  const overlayItems = [
+    ...(showLeads
+      ? [
+          { color: "#059669", label: "신규 리드", shortLabel: "리드" },
+          { color: "#0891b2", label: "기거래처 인근 리드", ring: true, shortLabel: "근접" }
+        ]
+      : []),
+    ...(showVehicles ? [{ color: "#0f766e", label: "실시간 차량", shortLabel: "차" }] : [])
+  ];
+  const items = [...baseItems, ...overlayItems];
+  const visibleCount = mode === "grade" ? items.length : Math.min(items.length, 6);
+  const title = items.length ? `마커 색상 안내 · ${items.map((item) => item.label).join(" · ")}` : "마커 색상 안내";
+
+  return (
+    <span className="maju-filter-box inline-flex h-10 shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-1" title={title}>
+      <span className="mr-0.5 text-xs font-black text-slate-500">마커</span>
+      {items.slice(0, visibleCount).map((item) => (
+        <span className="inline-flex items-center gap-1" key={item.label}>
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: item.color, boxShadow: item.ring ? "0 0 0 2px rgba(8,145,178,.24)" : undefined }}
+          />
+          <span className="whitespace-nowrap text-[11px] font-bold text-slate-600">{item.shortLabel}</span>
         </span>
       ))}
-      {vehicles.length > 5 ? <span className="px-1 text-[11px] font-black text-slate-400">+{vehicles.length - 5}</span> : null}
-    </div>
+      {items.length > visibleCount ? <span className="text-[11px] font-black text-slate-400">+{items.length - visibleCount}</span> : null}
+    </span>
   );
 }
 
@@ -1407,6 +4107,7 @@ function VehicleEditForm({
   readonly onSave: (edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly vehicle: DeliveryVehicle;
 }) {
+  const [name, setName] = useState(vehicle.name);
   const [driver, setDriver] = useState(vehicle.driver);
   const [area, setArea] = useState(vehicle.area);
   const [fuelType, setFuelType] = useState<"gasoline" | "diesel">(vehicle.fuelType || "diesel");
@@ -1416,7 +4117,7 @@ function VehicleEditForm({
   async function handleSave() {
     setSaving(true);
     setError("");
-    const result = await onSave({ area, driver, fuelType });
+    const result = await onSave({ area, driver, fuelType, name: name.trim() || vehicle.name });
     setSaving(false);
     if (!result.ok) setError(result.message || "저장에 실패했습니다.");
   }
@@ -1424,14 +4125,24 @@ function VehicleEditForm({
   return (
     <div className="space-y-2">
       <p className="text-sm font-black text-slate-950">{vehicle.name} 편집</p>
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
-      <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      <label className="grid gap-1 text-xs">
+        <span className="font-black text-slate-500">호차명</span>
+        <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setName(event.target.value)} value={name} />
+      </label>
+      <label className="grid gap-1 text-xs">
+        <span className="font-black text-slate-500">담당자</span>
+        <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setDriver(event.target.value)} value={driver} />
+      </label>
+      <label className="grid gap-1 text-xs">
+        <span className="font-black text-slate-500">구역</span>
+        <input className="h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-bold outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setArea(event.target.value)} value={area} />
+      </label>
       <p className="text-[11px] font-bold leading-4 text-slate-400">
-        담당자·구역 표시는 이 화면에만 저장됩니다. 실제 거래처 담당자를 바꾸려면 거래처 관리의 담당자 일괄 변경을 사용하세요.
+        호차명은 이 배송차에 배정된 거래처 전체에 반영되어 저장됩니다. 담당자·구역은 화면 표시값만 바뀝니다.
       </p>
       {!fuelTypeConfigured ? (
         <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] font-bold leading-4 text-amber-800">
-          연료 타입이 아직 설정되지 않아 기본값(경유)이 적용 중입니다. 저장하면 이 담당자 전용 값으로 저장됩니다.
+          연료 타입 기본값은 경유입니다.
         </p>
       ) : null}
       <div className="grid grid-cols-2 gap-1.5">
@@ -1464,11 +4175,258 @@ function VehicleEditForm({
   );
 }
 
+function LiveVehicleStatusPanel({
+  onAnalyze,
+  onPreviewStore,
+  storeById,
+  vehicles
+}: {
+  readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
+  readonly onPreviewStore: (storeId: string) => void;
+  readonly storeById: Map<string, StoreRow>;
+  readonly vehicles: StaffVehicleLocation[];
+}) {
+  const sorted = [...vehicles].sort((a, b) => {
+    const staleDiff = Number(a.isStale) - Number(b.isStale);
+    if (staleDiff !== 0) return staleDiff;
+    const aTime = a.lastLocationAt ? new Date(a.lastLocationAt).getTime() : 0;
+    const bTime = b.lastLocationAt ? new Date(b.lastLocationAt).getTime() : 0;
+    return bTime - aTime;
+  });
+  const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
+  return (
+    <section className="border-b border-slate-200/80 bg-white">
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
+            <Truck className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-black text-slate-950">라이브 차량</p>
+            <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대</p>
+          </div>
+        </div>
+        <Badge className="shrink-0 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{sorted.length}대</Badge>
+      </div>
+      <div className="max-h-64 space-y-1 overflow-auto px-3 pb-2">
+        {!sorted.length ? (
+          <div className="rounded-md border border-amber-100 bg-amber-50 px-2 py-2">
+            <p className="text-[11px] font-black text-amber-800">수신 차량 없음</p>
+            <p className="mt-1 text-[10px] font-bold leading-4 text-amber-700">기사 모바일 화면에서 위치 권한을 허용하면 지도에 표시됩니다.</p>
+          </div>
+        ) : null}
+        {sorted.map((vehicle) => {
+          const checkedAt = vehicle.lastLocationAt ? new Date(vehicle.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전";
+          const ageText = formatVehicleLocationAge(vehicle.lastLocationAt);
+          const currentStore = vehicle.currentCustomerId ? storeById.get(vehicle.currentCustomerId) : undefined;
+          return (
+            <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={vehicle.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
+                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                    {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
+                    {ageText ? ` · ${ageText}` : ""}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                  {getVehicleStatusLabel(vehicle)}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
+                  {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
+                </p>
+                <div className="flex shrink-0 items-center gap-1">
+                <button
+                  className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
+                  onClick={() => onAnalyze(vehicle)}
+                  type="button"
+                >
+                  분석
+                </button>
+                {currentStore ? (
+                  <button
+                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                    onClick={() => onPreviewStore(currentStore.id)}
+                    type="button"
+                  >
+                    거래처
+                  </button>
+                ) : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function VehicleAnalysisModal({
+  completions,
+  currentStore,
+  error,
+  events,
+  loading,
+  onClose,
+  onOpenStore,
+  vehicle
+}: {
+  readonly completions: DeliveryCompletionEvent[];
+  readonly currentStore?: StoreRow;
+  readonly error: string;
+  readonly events: StaffLocationEvent[];
+  readonly loading: boolean;
+  readonly onClose: () => void;
+  readonly onOpenStore: (storeId: string) => void;
+  readonly vehicle: StaffVehicleLocation;
+}) {
+  const metrics = useMemo(() => summarizeLocationEvents(events), [events]);
+  const completionSummary = useMemo(() => summarizeCompletionOrder(completions), [completions]);
+  const routePath = useMemo(() => createLocationRoutePath(events), [events]);
+  const markers = useMemo<KakaoMapMarker[]>(() => {
+    const last = events[events.length - 1] || null;
+    if (!last) return [];
+    const vehicleMarker: KakaoMapMarker = {
+      address: "최근 수신 위치",
+      id: `analysis-${vehicle.id}`,
+      label: vehicle.deliveryVehicle || vehicle.driverName,
+      lat: last.lat,
+      lng: last.lng,
+      markerColor: vehicle.isStale ? "#64748b" : "#0f766e",
+      name: `${vehicle.driverName} · 최근 수신 ${new Date(last.recordedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`,
+      tone: "vehicle" as const,
+      x: 50,
+      y: 50
+    };
+    const currentStoreMarker: KakaoMapMarker | null = currentStore?.address
+      ? {
+          address: currentStore.address,
+          grade: currentStore.grade,
+          id: `analysis-store-${currentStore.id}`,
+          label: "작업",
+          name: currentStore.name,
+          tone: "customer" as const,
+          x: 52,
+          y: 52
+        }
+      : null;
+    return currentStoreMarker ? [vehicleMarker, currentStoreMarker] : [vehicleMarker];
+  }, [currentStore, events, vehicle]);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4" onClick={onClose}>
+      <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase text-teal-700">운행 기록 분석</p>
+            <h2 className="mt-1 truncate text-xl font-black text-slate-950">{vehicle.deliveryVehicle || vehicle.driverName}</h2>
+            <p className="mt-1 text-xs font-bold text-slate-500">
+              {vehicle.driverName} · {currentStore ? `현재 작업 ${currentStore.name}` : "최근 12시간 GPS 기록"}
+            </p>
+          </div>
+          <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">
+            닫기
+          </button>
+        </header>
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1fr_280px]">
+          <div className="min-h-[420px] bg-slate-100">
+            {loading ? (
+              <div className="grid h-full min-h-[420px] place-items-center text-sm font-black text-slate-500">GPS 기록을 불러오는 중입니다.</div>
+            ) : error ? (
+              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-rose-600">{error}</div>
+            ) : events.length ? (
+              <KakaoAddressMap mapClassName="h-full min-h-[420px] rounded-none border-0" markers={markers} routePath={routePath} showList={false} />
+            ) : (
+              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-slate-500">최근 12시간 동안 저장된 GPS 기록이 없습니다.</div>
+            )}
+          </div>
+          <aside className="min-h-0 overflow-auto border-l border-slate-200 bg-white p-4">
+            <div className="grid grid-cols-2 gap-2">
+              <RouteMetric label="실제 이동" value={`${metrics.distanceKm.toLocaleString()}km`} />
+              <RouteMetric label="운행 시간" value={formatMinutes(metrics.durationMinutes)} />
+              <RouteMetric label="GPS 기록" value={`${events.length.toLocaleString()}건`} />
+              <RouteMetric label="누락 구간" value={`${metrics.gapCount.toLocaleString()}구간`} />
+              <RouteMetric label="완료 매장" value={`${completions.length.toLocaleString()}곳`} />
+              <RouteMetric label="보정 제외" value={`${metrics.ignoredCount.toLocaleString()}건`} />
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-black text-slate-950">판단 기준</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">연속 위치 기록이 5분 이상 비거나, GPS 오차가 150m를 넘거나, 비정상 속도로 튄 좌표는 실제 경로에서 제외합니다.</p>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">배송 완료 메모는 실제 방문 순서로 표시하며 계획 순서 일치율은 {completionSummary.label}입니다.</p>
+            </div>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-white">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+                <p className="text-xs font-black text-slate-950">실제 방문 순서</p>
+                <Badge className="bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-100">{completions.length}건</Badge>
+              </div>
+              <div className="max-h-44 overflow-auto p-2">
+                {loading ? (
+                  <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">완료 기록을 불러오는 중입니다.</p>
+                ) : completions.length ? (
+                  <div className="space-y-1.5">
+                    {completions.map((completion) => (
+                      <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={completion.id || `${completion.customerId}-${completion.completedAt}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-[11px] font-black text-slate-900">
+                            {completion.actualOrder}. {completion.customerName}
+                          </p>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
+                            {getCompletionOrderLabel(completion)}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-[10px] font-bold text-slate-500">
+                          {new Date(completion.completedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                          {completion.statusLabel ? ` · ${completion.statusLabel}` : ""}
+                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
+                          <button
+                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                            onClick={() => onOpenStore(completion.customerId)}
+                            type="button"
+                          >
+                            열기
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">최근 12시간 배송 완료 기록이 없습니다.</p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-black text-slate-950">최근 GPS 기록</p>
+              {events.slice(-8).reverse().map((event) => (
+                <div className="rounded-lg border border-slate-100 bg-white p-2" key={event.id}>
+                  <p className="text-[11px] font-black text-slate-900">{new Date(event.recordedAt).toLocaleString("ko-KR")}</p>
+                  <p className="mt-1 text-[10px] font-bold text-slate-500">
+                    {event.lat.toFixed(5)}, {event.lng.toFixed(5)}
+                    {Number.isFinite(event.accuracyMeters) ? ` · 오차 ${Math.round(event.accuracyMeters || 0)}m` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function StoreManagementPanel({
   collapsed,
   dataRegistrationHref,
+  distanceRecalcError,
+  onEditStore,
+  onRecalculateDistances,
   onSelectStore,
   onToggleCollapsed,
+  recalculatingDistances,
   selectedStoreId,
   sourceReady,
   stores,
@@ -1476,27 +4434,44 @@ function StoreManagementPanel({
 }: {
   readonly collapsed: boolean;
   readonly dataRegistrationHref: string;
+  readonly distanceRecalcError: string;
+  readonly onEditStore: (storeId: string) => void;
+  readonly onRecalculateDistances: (missingStores: StoreRow[]) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectStore: (storeId: string) => void;
   readonly onToggleCollapsed: () => void;
+  readonly recalculatingDistances: boolean;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
   readonly title: string;
 }) {
+  const storesMissingDistance = stores.filter((store) => !store.distanceKm && store.address);
+  // 2026-08-31 피드백("지도 마커를 클릭하면 우측 패널도 동일한 상호명이 나오도록") 대응: 마커를
+  // 클릭하면 selectedStoreId는 바뀌어 강조 스타일(bg-teal-50)은 적용되지만, 그 항목이 이미 스크롤
+  // 밖에 있으면 화면에는 안 보여서 "우측 패널이 안 맞다"고 느껴집니다. 선택된 항목의 DOM을 ref로
+  // 잡아두고 selectedStoreId가 바뀔 때마다 목록 스크롤을 그 항목으로 자동 이동시킵니다.
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    if (!selectedStoreId) return;
+    itemRefs.current[selectedStoreId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedStoreId]);
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 flex-col items-center gap-3 border-l border-slate-200/80 bg-white py-3">
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
         <button
           aria-label="거래처 목록 패널 펼치기"
-          className="maju-button-secondary h-9 w-9 px-0"
+          className="maju-button-secondary h-8 w-8 shrink-0 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelRightOpen className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
         </button>
-        <Store className="h-5 w-5 text-slate-500" />
-        <span className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">{title}</span>
-        <span className="rounded-md bg-slate-100 px-1.5 py-1 text-[11px] font-black text-slate-700">{stores.length}</span>
+        <span className="relative inline-flex shrink-0" title={title}>
+          <Store className="h-4 w-4 text-slate-500" />
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+            {stores.length}
+          </span>
+        </span>
       </aside>
     );
   }
@@ -1506,8 +4481,8 @@ function StoreManagementPanel({
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
-            <p className="text-sm font-black text-slate-950">{title}</p>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">매장을 누르면 상세 패널이 열립니다.</p>
+            <p className="truncate text-sm font-black text-slate-950">{title}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">거래처를 누르면 지도 위치를 보여줍니다.</p>
           </div>
           <button
             aria-label="거래처 목록 패널 접기"
@@ -1519,36 +4494,65 @@ function StoreManagementPanel({
           </button>
           <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">
-          {stores.length ? (
-            stores.map((store) => (
+        {storesMissingDistance.length > 0 ? (
+          <div className="shrink-0 border-b border-slate-200/80 bg-amber-50 px-4 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold leading-4 text-amber-800">거리 미계산 {storesMissingDistance.length}곳</p>
               <button
-                className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                  store.id === selectedStoreId ? "bg-slate-50 shadow-[inset_3px_0_0_#0f172a]" : ""
-                }`}
-                key={store.id}
-                onClick={() => onSelectStore(store.id)}
+                className="maju-button-secondary h-7 shrink-0 px-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={recalculatingDistances}
+                onClick={() => void onRecalculateDistances(storesMissingDistance)}
                 type="button"
               >
-                <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
-                  <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                </div>
-                <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
-                  <p className="text-xs font-bold text-slate-400">
-                    {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
-                  </p>
-                  <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-                </div>
+                {recalculatingDistances ? <Loader2 className="h-3 w-3 animate-spin" /> : <Navigation className="h-3 w-3" />}
+                거리 계산
               </button>
+            </div>
+            {distanceRecalcError ? <p className="mt-1 text-[11px] font-bold leading-4 text-rose-600">{distanceRecalcError}</p> : null}
+          </div>
+        ) : null}
+        <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
+          {stores.length ? (
+            stores.map((store) => (
+              <div
+                className={`flex items-stretch border-b border-slate-100 transition hover:bg-slate-50 ${
+                  store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
+                }`}
+                key={store.id}
+                ref={(el) => {
+                  itemRefs.current[store.id] = el;
+                }}
+              >
+                <button className="min-w-0 flex-1 px-4 py-3 text-left" onClick={() => onSelectStore(store.id)} type="button">
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
+                    <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                  </div>
+                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
+                  <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
+                    <p className="text-xs font-bold text-slate-400">
+                      {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
+                    </p>
+                    <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                  </div>
+                </button>
+                <button
+                  aria-label={`${store.name} 상세 편집`}
+                  className="my-3 mr-3 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-teal-50 hover:text-teal-700"
+                  onClick={() => onEditStore(store.id)}
+                  title="상세 편집"
+                  type="button"
+                >
+                  <Edit3 className="h-4 w-4" />
+                </button>
+              </div>
             ))
           ) : (
-            <div className="grid h-full min-h-[180px] place-items-center px-5 text-center">
+            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
               <div>
                 <p className="text-sm font-black text-slate-700">{sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}</p>
                 <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처 마스터를 먼저 등록하면 담당자별 매장 목록이 표시됩니다."}
+                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처를 먼저 등록하면 담당자별 거래처 목록이 표시됩니다."}
                 </p>
                 {!sourceReady ? (
                 <Link className="maju-button-primary mt-3 h-8" href={dataRegistrationHref}>
@@ -1560,7 +4564,225 @@ function StoreManagementPanel({
           )}
         </div>
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-bold leading-5 text-slate-500">상세 정보, 메모, 첨부자료는 매장 선택 후 우측 넓은 패널에서 관리합니다.</p>
+          <p className="text-xs font-bold leading-5 text-slate-500">연필 아이콘을 누르면 상세 정보를 편집할 수 있습니다.</p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/** 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함") 대응: StoreManagementPanel과
+ * 같은 레이아웃으로 신규 리드 목록을 보여줍니다. 클릭하면 previewLeadId가 바뀌어 지도 카드가 열리고
+ * (신규 리드 클릭 시 지도 포커스 버그 수정과 같은 focusedMarkerId 경로를 그대로 씁니다), 우선순위·안정도는
+ * 이미 카드에도 쓰는 getLeadConfidence 점수를 그대로 재사용합니다(새 산정 로직 없음). */
+function LeadListPanel({
+  collapsed,
+  isLoading,
+  leads,
+  onOpenQuote,
+  onSelectLead,
+  onShowAllLeads,
+  onToggleCollapsed,
+  selectedLeadId,
+  title
+}: {
+  readonly collapsed: boolean;
+  readonly isLoading?: boolean;
+  readonly leads: Array<PermitLeadItem & { distanceKm?: number }>;
+  readonly onOpenQuote: (lead: PermitLeadItem) => void;
+  readonly onSelectLead: (leadId: string) => void;
+  readonly onShowAllLeads?: () => void;
+  readonly onToggleCollapsed: () => void;
+  readonly selectedLeadId: string;
+  readonly title: string;
+}) {
+  // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
+  // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    if (!selectedLeadId) return;
+    itemRefs.current[selectedLeadId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedLeadId]);
+  const callableLeadCount = leads.filter((lead) => Boolean(lead.phone)).length;
+  const dmReadyLeadCount = leads.filter((lead) => Boolean(getLeadInstagramHandle(lead))).length;
+  const enrichedLeadCount = leads.filter((lead) => lead.reviewCount != null || lead.rating != null || lead.keywordVolume != null).length;
+  const topLead = leads[0];
+  const topLeadConfidence = topLead ? getLeadConfidence(topLead) : null;
+  if (collapsed) {
+    return (
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
+        <button
+          aria-label="리드 목록 패널 펼치기"
+          className="maju-button-secondary h-8 w-8 shrink-0 px-0"
+          onClick={onToggleCollapsed}
+          type="button"
+        >
+          <PanelRightOpen className="h-3.5 w-3.5" />
+        </button>
+        <span className="relative inline-flex shrink-0" title={title}>
+          <Radar className="h-4 w-4 text-teal-700" />
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+            {leads.length}
+          </span>
+        </span>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-slate-950">{title}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">
+              우선순위순 · 전화 {callableLeadCount}곳 · DM {dmReadyLeadCount}곳 · 보강 {enrichedLeadCount}곳
+            </p>
+          </div>
+          <button
+            aria-label="리드 목록 패널 접기"
+            className="maju-button-secondary h-8 w-8 shrink-0 px-0"
+            onClick={onToggleCollapsed}
+            type="button"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
+          <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-black text-teal-700">{leads.length}곳</span>
+        </div>
+        {topLead && topLeadConfidence ? (
+          <div className="border-b border-teal-100 bg-teal-50/70 px-4 py-2">
+            <p className="truncate text-[11px] font-black text-teal-900">
+              1순위 {topLead.businessName} · {topLeadConfidence.label} · {getPermitLeadSalesPriorityScore(topLead)}점
+            </p>
+          </div>
+        ) : null}
+        <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
+          {leads.length ? (
+            leads.map((lead) => {
+              const confidence = getLeadConfidence(lead);
+              const salesPriorityScore = getPermitLeadSalesPriorityScore(lead);
+              const openDate = getPermitLeadOpenDate(lead);
+              const instagramHandle = getLeadInstagramHandle(lead);
+              const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
+              const savedNaverPlaceUrl = lead.naverPlaceUrl?.trim();
+              const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
+              const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
+              const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
+              const phoneHref = lead.phone ? `tel:${lead.phone.replace(/[^0-9+]/g, "")}` : "";
+              return (
+                <div
+                  className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-teal-50 ${
+                    lead.id === selectedLeadId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
+                  }`}
+                  key={lead.id}
+                  ref={(el) => {
+                    itemRefs.current[lead.id] = el;
+                  }}
+                >
+                  <button className="block w-full text-left" onClick={() => onSelectLead(lead.id)} type="button">
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                      <Badge className={`shrink-0 px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>
+                        {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
+                      <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
+                      <span className="truncate">{openDate || "개시일 미확인"}</span>
+                      <span className="truncate">{lead.phone || "전화 미확인"}</span>
+                      <span className="truncate font-black text-teal-700">영업점수 {salesPriorityScore}점</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                      {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-inset ring-amber-100">
+                          리뷰 {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}
+                          {typeof lead.reviewCount === "number" ? ` · ${lead.reviewCount.toLocaleString()}건` : ""}
+                        </span>
+                      ) : null}
+                      {typeof lead.keywordVolume === "number" ? (
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                          검색 {lead.keywordVolume.toLocaleString()}
+                        </span>
+                      ) : null}
+                      {confidence.reasons.slice(0, 2).map((reason) => (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600" key={reason}>
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    {phoneHref ? (
+                      <a
+                        className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-teal-100 bg-white px-2 text-[11px] font-black text-teal-700 transition hover:bg-teal-50"
+                        href={phoneHref}
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        전화
+                      </a>
+                    ) : (
+                      <span className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-slate-100 bg-slate-50 px-2 text-[11px] font-black text-slate-400">
+                        <Phone className="h-3.5 w-3.5" />
+                        전화
+                      </span>
+                    )}
+                    <button
+                      className="inline-flex h-8 items-center justify-center gap-1 rounded-md bg-teal-700 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-teal-800"
+                      onClick={() => onOpenQuote(lead)}
+                      type="button"
+                    >
+                      <MessageSquareText className="h-3.5 w-3.5" />
+                      견적
+                    </button>
+                    <button
+                      className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                      onClick={() => onSelectLead(lead.id)}
+                      type="button"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      상세
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <a className="rounded-full bg-[#03C75A] px-2 py-1 text-[10px] font-black text-white" href={naverPlaceUrl} rel="noreferrer" target="_blank">
+                      N
+                    </a>
+                    <a className="rounded-full bg-[#FEE500] px-2 py-1 text-[10px] font-black text-slate-900" href={kakaoPlaceUrl} rel="noreferrer" target="_blank">
+                      K
+                    </a>
+                    <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-[#EA4335] ring-1 ring-inset ring-slate-200" href={googlePlaceUrl} rel="noreferrer" target="_blank">
+                      G
+                    </a>
+                    {instagramHandle ? (
+                      <a className="rounded-full bg-pink-50 px-2 py-1 text-[10px] font-black text-pink-700 ring-1 ring-inset ring-pink-100" href={getLeadInstagramSearchUrl(lead)} rel="noreferrer" target="_blank">
+                        {instagramHandle}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          ) : isLoading ? (
+            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
+              <InlineLoading label="신규 리드를 불러오는 중입니다..." />
+            </div>
+          ) : (
+            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
+              <div>
+                <p className="text-sm font-black text-slate-700">조건에 맞는 리드가 없습니다.</p>
+                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">업종, 지역, 개시일 필터를 조정해 주세요.</p>
+                {onShowAllLeads ? (
+                  <button className="maju-button-primary mt-3 h-8 justify-center text-xs" onClick={onShowAllLeads} type="button">
+                    전체 리드 표시
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-bold leading-5 text-slate-500">우선순위는 사업자 상태·연락처·주소·등급·신선도·리뷰를 합산합니다.</p>
         </div>
       </div>
     </aside>
@@ -1569,55 +4791,258 @@ function StoreManagementPanel({
 
 function CustomerDirectoryView({
   dataRegistrationHref,
+  fuelPrices,
   onSelectStore,
   selectedStoreId,
   sourceReady,
   stores
 }: {
   readonly dataRegistrationHref: string;
+  readonly fuelPrices: FuelPriceByType;
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
 }) {
-  const totals = getStoreTotals(stores);
+  const router = useRouter();
+  const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
   const gradeCounts = countGrades(stores);
-  const closedCount = stores.filter((store) => store.businessStatus === "closed").length;
+  const unknownCount = stores.filter((store) => store.businessStatus === "unknown").length;
+  // 2026-08-31 피드백 대응: "물류비 합계" KPI. 거래처 하나하나가 출발지에서 각자 왕복한다고
+  // 가정해 전부 더하면(=지금 표의 "예산 물류비" 열을 단순 합산) 실제 배송보다 훨씬 부풀려집니다 —
+  // 실제로는 배송차 한 대가 담당 거래처를 한 번의 경로로 순회합니다. 배송차별 실제 순회 경로를
+  // 매번 계산하려면 배송차마다 티맵 API를 호출해야 해 비용·속도 부담이 크므로, 그 배송차가 맡은
+  // 거래처 중 가장 먼 거리를 "이 배송차가 한 번 나가서 도는 왕복 거리"의 근사치로 삼습니다(가장 먼
+  // 곳까지 갔다 오는 길에 나머지 거래처를 들른다고 가정 — 실제 순회 경로보다는 다소 넉넉한 편이지만,
+  // 거래처별 왕복을 전부 더하는 것보다는 훨씬 현실에 가깝습니다).
+  const totalLogisticsCostWon = useMemo(() => {
+    const farthestDistanceByVehicle = new Map<string, number>();
+    stores.forEach((store) => {
+      const vehicleKey = store.deliveryVehicleName || store.deliveryDriver || `__unassigned_${store.id}`;
+      const distanceKm = store.distanceKm || 0;
+      const current = farthestDistanceByVehicle.get(vehicleKey) ?? 0;
+      if (distanceKm > current) farthestDistanceByVehicle.set(vehicleKey, distanceKm);
+    });
+    let total = 0;
+    farthestDistanceByVehicle.forEach((distanceKm) => {
+      total += estimateFuelCostWon(distanceKm, deliveryPricePerLiter) * 2;
+    });
+    return total;
+  }, [stores, deliveryPricePerLiter]);
+  type DirectorySortKey = "businessStatus" | "deliveryDriver" | "deliveryVehicleName" | "distanceKm" | "expectedRevenue" | "grade" | "industry" | "logisticsCost" | "name";
+  const [sortKey, setSortKey] = useState<DirectorySortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  function toggleSort(key: DirectorySortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  }
+  const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
+  const sortedStores = useMemo(() => {
+    if (!sortKey) return stores;
+    const decorated = stores.map((store) => ({
+      logisticsCost: estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2,
+      store
+    }));
+    decorated.sort((a, b) => {
+      let diff = 0;
+      if (sortKey === "name") diff = a.store.name.localeCompare(b.store.name, "ko");
+      else if (sortKey === "industry") diff = (a.store.industry || "").localeCompare(b.store.industry || "", "ko");
+      else if (sortKey === "grade") diff = (gradeSortWeight[a.store.grade] || 0) - (gradeSortWeight[b.store.grade] || 0);
+      else if (sortKey === "deliveryDriver") diff = (a.store.deliveryDriver || "").localeCompare(b.store.deliveryDriver || "", "ko");
+      else if (sortKey === "deliveryVehicleName") diff = (a.store.deliveryVehicleName || "").localeCompare(b.store.deliveryVehicleName || "", "ko");
+      else if (sortKey === "expectedRevenue") diff = a.store.expectedRevenue - b.store.expectedRevenue;
+      else if (sortKey === "distanceKm") diff = (a.store.distanceKm || 0) - (b.store.distanceKm || 0);
+      else if (sortKey === "logisticsCost") diff = a.logisticsCost - b.logisticsCost;
+      else if (sortKey === "businessStatus") diff = getBusinessStatusLabel(a.store.businessStatus).localeCompare(getBusinessStatusLabel(b.store.businessStatus), "ko");
+      return sortDirection === "asc" ? diff : -diff;
+    });
+    return decorated.map((item) => item.store);
+  }, [stores, sortKey, sortDirection, deliveryPricePerLiter]);
+  function SortableHeader({
+    className = "",
+    label,
+    sortKeyValue,
+    title
+  }: {
+    className?: string;
+    label: string;
+    sortKeyValue: DirectorySortKey;
+    title?: string;
+  }) {
+    const isActive = sortKey === sortKeyValue;
+    return (
+      <th className={`border-r border-slate-200 px-4 py-3 ${className}`} title={title}>
+        <button
+          className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`}
+          onClick={() => toggleSort(sortKeyValue)}
+          type="button"
+        >
+          {label}
+          {isActive ? sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
+        </button>
+      </th>
+    );
+  }
+  // 2026-08-27 피드백("거래처가 중복되어 있는게 있어") 대응: 상호명+주소가 동일한 거래처를 화면에서
+  // 바로 찾아 병합할 수 있게 합니다. 서버에는 이미 병합 API(mergeDuplicateCustomers)가 있었지만 이를
+  // 부를 UI가 없어서 사용자가 중복을 직접 발견해도 정리할 방법이 없었습니다.
+  const duplicateGroups = useMemo(() => {
+    const groups = new Map<string, StoreRow[]>();
+    stores.forEach((store) => {
+      const key = `${store.name}`.trim().toLowerCase().replace(/\s/g, "") + "|" + `${store.address || ""}`.trim().toLowerCase().replace(/\s/g, "");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(store);
+    });
+    return Array.from(groups.values()).filter((group) => group.length > 1);
+  }, [stores]);
+  const [mergingKey, setMergingKey] = useState<string | null>(null);
+  const [mergeError, setMergeError] = useState("");
+  const [pendingMergeGroup, setPendingMergeGroup] = useState<StoreRow[] | null>(null);
+
+  function completenessScore(store: StoreRow) {
+    return [store.businessRegistrationNumber, store.deliveryDriver, store.deliveryVehicleName, store.phone, store.representativeName, store.accessMethodType, store.loadingPosition].filter(
+      Boolean
+    ).length;
+  }
+
+  async function runMerge(group: StoreRow[]) {
+    const sorted = [...group].sort((a, b) => completenessScore(b) - completenessScore(a));
+    const primary = sorted[0];
+    const duplicates = sorted.slice(1);
+    const groupKey = group.map((store) => store.id).join(",");
+    setMergingKey(groupKey);
+    setMergeError("");
+    try {
+      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+      const response = await fetch("/api/customers/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: companyId || undefined,
+          primaryCustomerId: primary.id,
+          duplicateCustomerIds: duplicates.map((store) => store.id)
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "중복 거래처 병합에 실패했습니다.");
+      setPendingMergeGroup(null);
+      router.refresh();
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : "중복 거래처 병합에 실패했습니다.");
+    } finally {
+      setMergingKey(null);
+    }
+  }
 
   return (
-    <section className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl bg-[#f6f8fb] p-4 xl:min-h-0">
-      <div className="grid shrink-0 gap-3 lg:grid-cols-4">
+    <section className="flex min-h-[480px] flex-1 flex-col overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-3">
         <DirectoryStat label="거래처" value={`${stores.length}곳`} />
         <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
-        <DirectoryStat label="예상매출" value={`${totals.expectedRevenue.toLocaleString()}만원`} />
-        <DirectoryStat label="사업자 확인" value={`${closedCount}곳`} tone={closedCount ? "rose" : "slate"} />
+        <DirectoryStat
+          label="물류비 합계"
+          title="배송차별로, 그 배송차가 맡은 거래처 중 가장 먼 곳까지의 왕복 유류비를 더한 값입니다(참고용 추정치). 거래처 각각의 왕복을 단순 합산하지 않고 배송차 한 대가 한 번에 순회한다고 가정합니다."
+          value={`${Math.round(totalLogisticsCostWon / 10000).toLocaleString()}만원`}
+        />
       </div>
 
-      <div className="maju-section-card mt-4 min-h-[480px] flex-1 xl:min-h-0">
+      {sourceReady && duplicateGroups.length ? (
+        <div className="mt-3 flex shrink-0 flex-col gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <Copy className="h-4 w-4 shrink-0 text-rose-700" />
+            <p className="text-xs font-bold leading-5 text-rose-900">
+              상호명·주소가 같은 중복 의심 거래처가 <span className="font-black">{duplicateGroups.length}건</span> 있습니다. 매출·거래내역이 나뉘어
+              집계될 수 있어 병합을 권장합니다.
+            </p>
+          </div>
+          {mergeError ? <p className="text-xs font-bold text-rose-700">{mergeError}</p> : null}
+          <div className="flex flex-col gap-2">
+            {duplicateGroups.map((group) => {
+              const groupKey = group.map((store) => store.id).join(",");
+              const sorted = [...group].sort((a, b) => completenessScore(b) - completenessScore(a));
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-100 bg-white px-3 py-2" key={groupKey}>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black text-slate-950">{sorted[0].name}</p>
+                    <p className="truncate text-[11px] font-bold text-slate-500">
+                      {sorted[0].address || sorted[0].region} · {group.length}건 중복 · 기준 레코드는 자동으로 정보가 더 많은 쪽을 선택합니다
+                    </p>
+                  </div>
+                  <button
+                    className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
+                    disabled={mergingKey === groupKey}
+                    onClick={() => setPendingMergeGroup(group)}
+                    type="button"
+                  >
+                    {mergingKey === groupKey ? "병합 중..." : "병합"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {sourceReady && unknownCount ? (
+        <div className="mt-3 flex shrink-0 items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+          <p className="text-xs font-bold leading-5 text-amber-900">
+            사업자 상태가 아직 확인되지 않은 거래처가 <span className="font-black">{unknownCount}곳</span> 있습니다. 아래 목록에서 거래처를 눌러 상세
+            패널의 &quot;사업자 상태 조회&quot;를 실행하세요.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="maju-section-card mt-4 !overflow-visible">
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
-            actionLabel="거래처 마스터 등록"
-            description="사업자번호, 주소, 담당자, 매출등급을 먼저 저장하세요."
-            title="거래처 원장이 비어 있습니다."
+            actionLabel="거래처 등록"
+            description="사업자번호, 주소, 담당자, 매출등급을 등록하세요."
+            title="거래처 원장 필요"
           />
         ) : null}
         {sourceReady ? (
           stores.length ? (
-            <div className="h-full overflow-auto">
-              <table className="w-full min-w-[920px] border-separate border-spacing-0 text-left text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1520px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
-                    <th className="w-[34%] border-r border-slate-200 px-4 py-3">거래처</th>
-                    <th className="w-[96px] border-r border-slate-200 px-4 py-3">매출등급</th>
-                    <th className="w-[150px] border-r border-slate-200 px-4 py-3">담당자</th>
-                    <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">예상매출</th>
-                    <th className="w-[120px] border-r border-slate-200 px-4 py-3 text-right">출발지 거리</th>
-                    <th className="w-[120px] px-4 py-3">사업자 상태</th>
+                    <SortableHeader className="w-[28%]" label="거래처" sortKeyValue="name" />
+                    <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" />
+                    <SortableHeader className="w-[96px]" label="매출등급" sortKeyValue="grade" />
+                    <SortableHeader className="w-[130px]" label="담당자" sortKeyValue="deliveryDriver" />
+                    <SortableHeader
+                      className="w-[130px]"
+                      label="배송차"
+                      sortKeyValue="deliveryVehicleName"
+                      title="담당자와 배송차는 서로 독립적으로 지정할 수 있습니다(같은 배송차를 여러 담당자가 나눠 쓰는 경우 포함). 지도 필터가 이 값 기준으로 동작합니다."
+                    />
+                    <SortableHeader className="w-[120px] text-right" label="예상매출" sortKeyValue="expectedRevenue" />
+                    <SortableHeader className="w-[120px] text-right" label="출발지 거리" sortKeyValue="distanceKm" />
+                    <SortableHeader
+                      className="w-[150px] text-right"
+                      label="예산 물류비"
+                      sortKeyValue="logisticsCost"
+                      title="출발지에서 이 거래처까지 왕복했을 때 예상 유류비입니다(참고용 추정치)."
+                    />
+                    <SortableHeader className="w-[120px]" label="사업자 상태" sortKeyValue="businessStatus" />
+                    <th className="w-[110px] border-r border-slate-200 px-4 py-3">출입 방법</th>
+                    <th
+                      className="w-[90px] border-r border-slate-200 px-4 py-3"
+                      title="보안을 위해 실제 비밀번호 값은 목록에 노출하지 않습니다. 거래처를 눌러 상세 패널에서 확인하세요."
+                    >
+                      비밀번호
+                    </th>
+                    <th className="w-[150px] px-4 py-3">적재 위치</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {stores.map((store) => (
+                  {sortedStores.map((store) => (
                     <tr
                       aria-selected={store.id === selectedStoreId}
                       className={`cursor-pointer transition hover:bg-slate-50 ${store.id === selectedStoreId ? "bg-teal-50/70 shadow-[inset_3px_0_0_#0f766e]" : "bg-white"}`}
@@ -1633,15 +5058,37 @@ function CustomerDirectoryView({
                         <p className="truncate font-black text-slate-950">{store.name}</p>
                         <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                       </td>
+                      <td className="max-w-[96px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.industry || "미분류"}</td>
                       <td className="border-r border-slate-100 px-4 py-3">
                         <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                       </td>
-                      <td className="max-w-[150px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
+                      <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
+                      <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryVehicleName || "미지정"}</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
                       <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
-                      <td className="px-4 py-3">
-                        <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                      <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">
+                        {(() => {
+                          const roundTripCost = estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2;
+                          return roundTripCost ? `왕복 ${roundTripCost.toLocaleString()}원` : <span className="text-slate-400">확인 필요</span>;
+                        })()}
                       </td>
+                      <td className="border-r border-slate-100 px-4 py-3">
+                        <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                        {store.relationshipStatus === "거래종료" ? (
+                          <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
+                        ) : null}
+                      </td>
+                      <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td>
+                      <td className="border-r border-slate-100 px-4 py-3">
+                        {store.accessPassword ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
+                            <Lock className="h-3 w-3" /> 등록됨
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400">미등록</span>
+                        )}
+                      </td>
+                      <td className="max-w-[150px] truncate px-4 py-3 font-bold text-slate-500">{store.loadingPosition || "미등록"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1651,668 +5098,1360 @@ function CustomerDirectoryView({
             <OperationalEmptyState
               actionHref={dataRegistrationHref}
               actionLabel="거래처 관리 확인"
-              description="검색어, 매출등급, 배송차 조건에 맞는 거래처가 없습니다. 현재 필터를 초기화하거나 거래처 관리에서 값을 확인하세요."
-              title="현재 조건에 맞는 거래처가 없습니다."
+              description="필터를 초기화하거나 거래처 값을 확인하세요."
+              title="조건에 맞는 거래처 없음"
             />
           )
         ) : null}
       </div>
+
+      {pendingMergeGroup ? (
+        <ConfirmDialog
+          confirmLabel="병합"
+          message={`"${pendingMergeGroup[0].name}" ${pendingMergeGroup.length}건을 하나로 병합합니다. 정보가 더 많은 레코드를 기준으로 남기고 나머지는 거래내역·메모·첨부자료를 옮긴 뒤 삭제합니다. 되돌릴 수 없습니다.`}
+          onCancel={() => setPendingMergeGroup(null)}
+          onConfirm={() => runMerge(pendingMergeGroup)}
+          title="중복 거래처 병합"
+        />
+      ) : null}
     </section>
   );
 }
 
-function TodayCourseView({
-  dataRegistrationHref,
-  markers,
-  onPreviewStore,
-  onSummaryChange,
-  onSelectStore,
-  onSelectVehicle,
-  routeTotals,
-  selectedStoreId,
-  selectedVehicle,
-  selectedVehicleId,
-  sourceReady,
-  stores,
-  vehicles
-}: {
-  readonly dataRegistrationHref: string;
-  readonly markers: KakaoMapMarker[];
-  readonly onPreviewStore: (storeId: string) => void;
-  readonly onSummaryChange: (summary: CourseSummary) => void;
-  readonly onSelectStore: (storeId: string) => void;
-  readonly onSelectVehicle: (vehicleId: string) => void;
-  readonly routeTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
-  readonly selectedStoreId: string;
-  readonly selectedVehicle?: DeliveryVehicle;
-  readonly selectedVehicleId: string;
-  readonly sourceReady: boolean;
-  readonly stores: StoreRow[];
-  readonly vehicles: DeliveryVehicle[];
-}) {
-  const [routeSequence, setRouteSequence] = useState<RouteSequence | null>(null);
-  const [routeBatchIndex, setRouteBatchIndex] = useState(0);
-  const [routePanelCollapsed, setRoutePanelCollapsed] = useState(false);
-  const [routeQuery, setRouteQuery] = useState("");
-  const [routeSelectedStoreId, setRouteSelectedStoreId] = useState("");
-  const [selectedRouteStoreIds, setSelectedRouteStoreIds] = useState<string[]>([]);
-  const [routeOriginMode, setRouteOriginMode] = useState<"company" | "current">("company");
-  const [currentLocationOrigin, setCurrentLocationOrigin] = useState("");
-  const [currentLocationMessage, setCurrentLocationMessage] = useState("");
-  const [deliveryProofs, setDeliveryProofs] = useState<Record<string, DeliveryProof[]>>(() => readLocalJson(localStoreKeys.deliveryProofs, {}));
-  const isVehicleScoped = selectedVehicleId !== "all";
-  const selectedDriver = selectedVehicle?.driver || "배송차 선택 필요";
-  const orderedStores = [...stores].sort((a, b) => a.order - b.order);
-  const orderedStoreIds = orderedStores.map((store) => store.id).join("|");
-  const selectedRouteIdSet = new Set(selectedRouteStoreIds);
-  const selectedRouteStoresAll = orderedStores.filter((store) => selectedRouteIdSet.has(store.id));
-  const routeBatchCount = Math.max(1, Math.ceil(selectedRouteStoresAll.length / tmapWaypointLimit));
-  const activeRouteBatchIndex = Math.min(routeBatchIndex, routeBatchCount - 1);
-  const routeBatchStart = activeRouteBatchIndex * tmapWaypointLimit;
-  const selectedRouteStores = selectedRouteStoresAll.slice(routeBatchStart, routeBatchStart + tmapWaypointLimit);
-  const activeRouteIdSet = new Set(selectedRouteStores.map((store) => store.id));
-  const selectedRouteTotals = getStoreTotals(selectedRouteStores);
-  const routeDistanceKm = routeSequence?.totalDistanceKm ?? selectedRouteTotals.distanceKm;
-  const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? selectedRouteTotals.durationMinutes;
-  const routeRevenue = selectedRouteTotals.expectedRevenue;
-  const routeRoadPointCount = routeSequence ? countFiniteRoutePoints(routeSequence.path) : 0;
-  const tmapLegCount = routeSequence?.legs.filter((leg) => leg.provider === "tmap").length || 0;
-  const inactiveSelectedCount = Math.max(0, selectedRouteStoresAll.length - selectedRouteStores.length);
-  const routeCandidateStores = isVehicleScoped
-    ? orderedStores.filter((store) => {
-        const keyword = routeQuery.trim().toLowerCase();
-        if (!keyword) return true;
-        return `${store.name} ${store.address || ""} ${store.region} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword);
-      })
-    : [];
-  const routeSelectedStore = orderedStores.find((store) => store.id === routeSelectedStoreId) || routeCandidateStores[0] || orderedStores[0];
-  const originMarker = markers.find((marker) => marker.tone === "origin");
-  const routeOriginAddress = routeOriginMode === "current" && currentLocationOrigin ? currentLocationOrigin : originMarker?.address || "";
-  const routeOriginLabel = routeOriginMode === "current" && currentLocationOrigin ? "현위치 출발" : "회사 출발지";
-  // 티맵 계산이 이미 좌표를 구했다면(routeSequence.stopPoints) 매장별 길찾기가 다시 지오코딩하지
-  // 않고 그 좌표를 그대로 재사용하도록 주소 -> 좌표 맵을 만들어둡니다.
-  const routeStopPointByAddress = new Map<string, GeoPoint | null>(
-    (routeSequence?.stops || []).map((address, index) => [address, routeSequence?.stopPoints?.[index] || null])
-  );
-  const sequencedRouteStores = routeSequence?.stops.length
-    ? routeSequence.stops
-        .map((address) => selectedRouteStores.find((store) => getRouteStopAddress(store) === address))
-        .filter((store): store is StoreRow => Boolean(store))
-    : selectedRouteStores;
-  const routeMapMarkers = [
-    ...(originMarker
-      ? [
-          {
-            ...originMarker,
-            label: "출발",
-            name: routeOriginLabel
-          }
-        ]
-      : []),
-    ...sequencedRouteStores.map((store, index) => {
-      const marker = markers.find((item) => item.id === store.id);
-      return {
-        address: marker?.address || store.address || store.region,
-        id: store.id,
-        label: String(index + 1),
-        name: `${index + 1}. ${store.name}`,
-        tone: "customer" as const,
-        x: marker?.x ?? store.markerX,
-        y: marker?.y ?? store.markerY
-      };
-    })
-  ];
+export type QuoteSubject = {
+  address?: string;
+  customerId?: string;
+  industry?: string;
+  leadId?: string;
+  menuNotes?: string;
+  name: string;
+  outboundNotes?: string[];
+  phone?: string;
+  reviewCount?: number;
+  instagramUrl?: string;
+};
+type QuoteRow = { id: string; item: string; qty: number; unitPrice: number };
+export type QuoteDraft = {
+  menuNotes: string;
+  rows: QuoteRow[];
+  savedAt: string;
+  subject: QuoteSubject;
+};
+const QUOTE_ITEM_COUNT_OPTIONS = [10, 20, 30] as const;
+type QuoteItemCount = (typeof QUOTE_ITEM_COUNT_OPTIONS)[number];
 
-  useEffect(() => {
-    setRouteSequence(null);
-    setRouteBatchIndex(0);
-    if (!isVehicleScoped) {
-      setSelectedRouteStoreIds([]);
-      setRouteSelectedStoreId("");
-      return;
-    }
-    setSelectedRouteStoreIds(orderedStores.slice(0, tmapWaypointLimit).map((store) => store.id));
-    setRouteSelectedStoreId(orderedStores[0]?.id || "");
-  }, [isVehicleScoped, orderedStoreIds, selectedVehicleId]);
+// 업종별로 식자재 유통사가 통상 공급하는 품목 카테고리를 초안으로 깔아줍니다. 단가는 거래처마다
+// 달라 0으로 비워두고, 담당자가 실제 협상가로 채워 넣는 것을 전제로 합니다(가짜 단가를 넣지 않음).
+const INDUSTRY_QUOTE_TEMPLATES: Record<string, string[]> = {
+  "한식": ["쌀 20kg", "돼지고기 앞다리살", "대파", "양파", "고춧가루", "식용유 18L", "국간장"],
+  "고기/구이": ["삼겹살", "목살", "소고기(구이용)", "쌈채소 세트", "된장", "숯"],
+  "곱창/막창": ["소곱창(손질)", "막창(손질)", "대창", "깻잎", "부추", "양념장 베이스"],
+  "분식": ["떡볶이떡", "어묵", "튀김가루", "라면사리", "순대", "쫄면"],
+  "카페/디저트": ["원두 1kg", "우유 1L", "생크림", "시럽류", "박력분 20kg", "일회용 컵"],
+  "일식": ["초밥용 쌀 20kg", "간장 18L", "와사비", "김(초밥용)", "냉동 생선류", "무순"],
+  "중식": ["면류(생면)", "굴소스", "두반장", "돼지고기 삼겹살", "청경채", "식용유 18L"],
+  "프랜차이즈/배달": ["냉동육(닭/패티)", "튀김유 18L", "번/도우", "포장 용기", "소스류"],
+  "주점": ["안주용 육류", "건어물", "채소 세트", "음료·주류 부재료"],
+  "양식": ["파스타면", "올리브유", "치즈류", "육류(스테이크용)", "토마토소스"],
+  "뷔페/단체급식": ["쌀 20kg (대량)", "육류 세트", "채소 세트(대량)", "국·찌개용 육수", "일회용품"]
+};
+const COMMON_QUOTE_TEMPLATE_ITEMS = [
+  "쌀 20kg",
+  "대파",
+  "양파",
+  "마늘",
+  "고춧가루",
+  "식용유 18L",
+  "진간장",
+  "국간장",
+  "설탕",
+  "소금",
+  "후추",
+  "참기름",
+  "된장",
+  "고추장",
+  "냉동 돼지고기",
+  "냉동 닭고기",
+  "계란",
+  "두부",
+  "콩나물",
+  "양배추",
+  "상추",
+  "깻잎",
+  "무",
+  "감자",
+  "당근",
+  "버섯류",
+  "소스류",
+  "육수 베이스",
+  "포장 용기",
+  "위생 장갑"
+];
 
-  useEffect(() => {
-    setRouteSequence(null);
-    setRouteBatchIndex((current) => Math.min(current, Math.max(0, Math.ceil(selectedRouteStoreIds.length / tmapWaypointLimit) - 1)));
-  }, [selectedRouteStoreIds]);
+// 거래처의 업종(industry) 값이 비어 있거나 "미분류"일 때, 이미 확보된 리뷰 키워드·리뷰 요약·메뉴
+// 요약 텍스트에서 업종을 추정합니다. 정확한 값이 있으면 그걸 그대로 쓰고, 이건 어디까지나
+// 마지막 보정 수단입니다(잘못 추정되면 사용자가 상세 화면에서 업종을 직접 입력해 덮어쓸 수 있음).
+const INDUSTRY_KEYWORD_RULES: Array<{ industry: string; keywords: string[] }> = [
+  { industry: "곱창/막창", keywords: ["곱창", "막창", "대창"] },
+  { industry: "고기/구이", keywords: ["삼겹살", "고깃집", "정육", "숯불", "구이"] },
+  { industry: "분식", keywords: ["분식", "떡볶이", "김밥"] },
+  { industry: "한식", keywords: ["한식", "백반", "국밥", "찌개", "한정식"] },
+  { industry: "카페/디저트", keywords: ["카페", "커피", "디저트", "베이커리", "빵집"] },
+  { industry: "일식", keywords: ["일식", "초밥", "스시", "라멘", "이자카야"] },
+  { industry: "중식", keywords: ["중식", "짜장", "짬뽕", "마라"] },
+  { industry: "양식", keywords: ["양식", "파스타", "스테이크", "피자"] },
+  { industry: "주점", keywords: ["주점", "호프", "포차", "술집"] },
+  { industry: "프랜차이즈/배달", keywords: ["치킨", "배달전문", "패스트푸드", "버거"] },
+  { industry: "뷔페/단체급식", keywords: ["뷔페", "단체급식", "구내식당"] }
+];
 
-  useEffect(() => {
-    onSummaryChange({
-      distanceKm: routeDistanceKm,
-      durationMinutes: routeDurationMinutes,
-      expectedRevenue: routeRevenue,
-      selectedCount: selectedRouteStores.length
-    });
-  }, [onSummaryChange, routeDistanceKm, routeDurationMinutes, routeRevenue, selectedRouteStores.length]);
+function inferIndustryFromText(...texts: Array<string | undefined>): string | undefined {
+  const haystack = texts.filter(Boolean).join(" ");
+  if (!haystack) return undefined;
+  const rule = INDUSTRY_KEYWORD_RULES.find((candidate) => candidate.keywords.some((keyword) => haystack.includes(keyword)));
+  return rule?.industry;
+}
 
-  useEffect(() => saveLocalJson(localStoreKeys.deliveryProofs, deliveryProofs), [deliveryProofs]);
+/** 카드 뱃지·견적서 초안이 함께 쓰는 "실제로 보여줄 업종" 계산입니다. */
+function resolveDisplayIndustry(store: {
+  industry?: string;
+  menuSummary?: string;
+  name?: string;
+  reviewKeywords?: string[];
+  reviewSummary?: string;
+}): string {
+  if (store.industry && store.industry !== "미분류") return store.industry;
+  const inferred = inferIndustryFromText(store.menuSummary, store.reviewSummary, store.reviewKeywords?.join(" "), store.name);
+  return inferred || store.industry || "미분류";
+}
 
-  if (!sourceReady) {
-    return (
-      <section className="min-h-[620px] rounded-b-xl bg-[#f6f8fb] p-4">
-        <OperationalEmptyState
-          actionHref={dataRegistrationHref}
-          actionLabel="거래처 마스터 등록"
-          description="배송차별 경유 코스는 DB에 저장된 거래처 주소, 좌표, 담당자 배정값을 기준으로 계산합니다. 먼저 거래처 마스터를 등록한 뒤 배송차를 선택하세요."
-          title="경유 코스 계산을 시작하려면 DB 거래처 원장이 필요합니다."
-        />
-      </section>
-    );
+function getQuoteTemplateItems(industry?: string) {
+  return Array.from(new Set([...(industry && INDUSTRY_QUOTE_TEMPLATES[industry] ? INDUSTRY_QUOTE_TEMPLATES[industry] : []), ...COMMON_QUOTE_TEMPLATE_ITEMS]));
+}
+
+function nearestQuoteItemCount(count: number): QuoteItemCount {
+  if (count > 20) return 30;
+  if (count > 10) return 20;
+  return 10;
+}
+
+function buildQuoteDraftRows(industry?: string, count: QuoteItemCount = 10): QuoteRow[] {
+  const items = getQuoteTemplateItems(industry).slice(0, count);
+  return items.map((item, index) => ({ id: `draft-${index}`, item, qty: 1, unitPrice: 0 }));
+}
+
+function resizeQuoteRows(currentRows: QuoteRow[], industry: string | undefined, count: QuoteItemCount) {
+  const templateRows = buildQuoteDraftRows(industry, count);
+  if (currentRows.length >= count) return currentRows.slice(0, count);
+  const usedItems = new Set(currentRows.map((row) => row.item.trim()).filter(Boolean));
+  const additions = templateRows
+    .filter((row) => !usedItems.has(row.item))
+    .slice(0, count - currentRows.length)
+    .map((row, index) => ({ ...row, id: `draft-added-${Date.now()}-${index}` }));
+  return [...currentRows, ...additions].slice(0, count);
+}
+
+export function quoteDraftId(subject: QuoteSubject) {
+  return subject.leadId || subject.customerId || subject.name;
+}
+
+export function readQuoteDraft(subject: QuoteSubject): QuoteDraft | null {
+  const drafts = readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {});
+  const draft = drafts[quoteDraftId(subject)];
+  if (!draft || !Array.isArray(draft.rows)) return null;
+  return draft;
+}
+
+function saveQuoteDraftToLocal(subject: QuoteSubject, draft: QuoteDraft) {
+  const drafts = readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {});
+  saveLocalJson(localStoreKeys.quoteDrafts, { ...drafts, [quoteDraftId(subject)]: draft });
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(QUOTE_DRAFT_UPDATED_EVENT, { detail: { id: quoteDraftId(subject) } }));
+}
+
+function deleteQuoteDraftFromLocal(subject: QuoteSubject) {
+  const drafts = readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {});
+  const next = { ...drafts };
+  delete next[quoteDraftId(subject)];
+  saveLocalJson(localStoreKeys.quoteDrafts, next);
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(QUOTE_DRAFT_UPDATED_EVENT, { detail: { id: quoteDraftId(subject) } }));
+}
+
+export function normalizeLeadSearchToken(value: string) {
+  return value.toLowerCase().replace(/[@._\-\s]/g, "");
+}
+
+const SIDO_PREFIX_PATTERN =
+  /^(서울특별시|서울|부산광역시|부산|대구광역시|대구|인천광역시|인천|광주광역시|광주|대전광역시|대전|울산광역시|울산|세종특별자치시|세종|경기도|경기|강원특별자치도|강원도|강원|충청북도|충북|충청남도|충남|전북특별자치도|전라북도|전북|전라남도|전남|경상북도|경북|경상남도|경남|제주특별자치도|제주)\s*/;
+
+/** 도로명주소 문자열에서 시군구/동을 뽑아 지도 리드를 지역별로 묶는 데 씁니다(2026-08-24 피드백:
+ * "시군구, 동 구분하여 리드 구분을 하게끔 만들것" — 네이버 부동산의 지역 드릴다운 참고). 정확한
+ * 행정구역 API 없이 문자열 패턴만으로 추출하는 근사치라, 시/군/구가 겹치는 드문 표기(고양시
+ * 일산동구 등)는 시 단위까지만 잡힐 수 있습니다 — 그 정도 오차는 지도 위 대략적인 지역 구분
+ * 용도로는 괜찮다고 판단했습니다. */
+function parseLeadRegion(address?: string): { dong: string; sigungu: string } {
+  const trimmed = (address || "").trim();
+  if (!trimmed) return { dong: "", sigungu: "" };
+
+  // 동/읍/면/가 명은 도로명주소 맨 끝 괄호 안에 병기되는 경우가 많습니다:
+  // "... 88 1층 (성수동1가)", "... 102동 205호 (마장동, 라봄 성동)".
+  const parenMatch = trimmed.match(/\(([^()]*)\)\s*$/);
+  const dongRaw = parenMatch?.[1]?.split(",")[0]?.trim() || "";
+  const dong = /(동|리|가)\d*$/.test(dongRaw) ? dongRaw : "";
+
+  const withoutSido = trimmed.replace(SIDO_PREFIX_PATTERN, "").trim();
+  const firstToken = withoutSido.split(/\s+/)[0] || "";
+  const sigungu = /(시|군|구)$/.test(firstToken) ? firstToken : "";
+
+  return { dong, sigungu };
+}
+
+export function normalizeInstagramHandleValue(value: string | undefined) {
+  const rawValue = (value || "").trim();
+  if (!rawValue) return "";
+
+  const urlMatch = rawValue.match(/instagram\.com\/([^/?#]+)/i);
+  if (urlMatch?.[1]) {
+    const handle = decodeURIComponent(urlMatch[1]).replace(/^@/, "").trim();
+    const reservedPaths = new Set(["accounts", "direct", "explore", "p", "reel", "reels", "stories"]);
+    if (!handle || reservedPaths.has(handle.toLowerCase())) return "";
+    return `@${handle}`;
   }
 
-  const toggleRouteStore = (storeId: string) => {
-    setSelectedRouteStoreIds((current) => {
-      if (current.includes(storeId)) return current.filter((id) => id !== storeId);
-      return [...current, storeId];
-    });
-  };
-  const selectDefaultRouteStores = () => {
-    setRouteBatchIndex(0);
-    setSelectedRouteStoreIds(orderedStores.slice(0, tmapWaypointLimit).map((store) => store.id));
-  };
-  const selectAllRouteStores = () => {
-    setRouteBatchIndex(0);
-    setSelectedRouteStoreIds(orderedStores.map((store) => store.id));
-  };
-  const clearRouteStores = () => {
-    setRouteSequence(null);
-    setRouteBatchIndex(0);
-    setSelectedRouteStoreIds([]);
-  };
-  const goToPreviousRouteBatch = () => {
-    setRouteSequence(null);
-    setRouteBatchIndex((current) => Math.max(0, current - 1));
-  };
-  const goToNextRouteBatch = () => {
-    setRouteSequence(null);
-    setRouteBatchIndex((current) => Math.min(routeBatchCount - 1, current + 1));
-  };
-  const openRouteStore = (storeId: string) => {
-    setRouteSelectedStoreId(storeId);
-  };
-  const useCurrentLocationAsOrigin = () => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setCurrentLocationMessage("이 브라우저에서는 현위치 기능을 사용할 수 없습니다.");
-      return;
-    }
-
-    setCurrentLocationMessage("현위치를 확인 중입니다.");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = roundToSix(position.coords.latitude);
-        const lng = roundToSix(position.coords.longitude);
-        setCurrentLocationOrigin(`${lat},${lng}`);
-        setRouteOriginMode("current");
-        setRouteSequence(null);
-        setCurrentLocationMessage("현위치를 출발 기준으로 설정했습니다.");
-      },
-      () => {
-        setRouteOriginMode("company");
-        setCurrentLocationMessage("현위치 권한을 받을 수 없어 회사 출발지를 사용합니다.");
-      },
-      { enableHighAccuracy: true, maximumAge: 60000, timeout: 8000 }
-    );
-  };
-  const saveDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
-    let persisted = false;
-    const memo = `${proof.memo}\n\n배송 상태: ${deliveryStatusLabel(proof.deliveryStatus)}\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
-
-    try {
-      const noteRequest = fetch("/api/customer-operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "note",
-          customerId: storeId,
-          memo,
-          nextAction: proof.messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
-          noteType: "delivery"
-        })
-      });
-      const attachmentRequest = proof.file
-        ? uploadDeliveryProofFile(storeId, proof.file, proof.fileName || "배송완료 증빙")
-        : fetch("/api/customer-operations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "attachment",
-              attachmentType: "delivery_proof",
-              customerId: storeId,
-              fileUrl: "",
-              mimeType: proof.fileName.toLowerCase().match(/\.(mp4|mov|webm)$/) ? "video/*" : "image/*",
-              title: proof.fileName || "배송완료 증빙"
-            })
-          });
-      const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]);
-
-      persisted = noteResponse.ok && attachmentResponse.ok;
-    } catch {
-      persisted = false;
-    }
-
-    setDeliveryProofs((current) => ({
-      ...current,
-      [storeId]: [
-        {
-          ...proof,
-          persisted,
-          recordedAt: new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }),
-          storeId
-        },
-        ...(current[storeId] || [])
-      ]
-    }));
-  };
-
-  return (
-    <section className={`grid min-h-[480px] flex-1 grid-cols-1 overflow-hidden rounded-b-xl bg-[#f6f8fb] xl:min-h-0 ${routePanelCollapsed ? "xl:grid-cols-[280px_minmax(0,1fr)_56px]" : "xl:grid-cols-[280px_minmax(0,1fr)_400px]"}`}>
-      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
-        <div className="border-b border-slate-200/80 px-4 py-3">
-          <p className="text-sm font-black text-slate-950">경유 코스</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 매장을 계산합니다.</p>
-        </div>
-        <div className="border-b border-slate-200/80 p-3">
-          <div className="maju-panel bg-slate-50 p-3">
-            <p className="text-xs font-black text-slate-500">실사용 순서</p>
-            <div className="mt-3 grid gap-2">
-              <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
-              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 매장 선택" />
-              <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0 && !routeSequence} done={Boolean(routeSequence)} label="티맵 도로 계산" />
-              <RouteWorkStep active={Boolean(routeSequence)} done={Boolean(routeSequence)} label="코스 확인" />
-            </div>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-3">
-          <button
-            className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === "all" ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-            onClick={() => onSelectVehicle("all")}
-            type="button"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-black text-slate-950">전체 매장 보기</p>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
-            </div>
-            <p className="mt-1 text-xs font-bold text-slate-500">전체 위치 확인용 · 경유 계산은 차량 선택 후 진행</p>
-          </button>
-          {vehicles.map((vehicle) => (
-            <button
-              className={`w-full rounded-md border p-3 text-left transition ${selectedVehicleId === vehicle.id ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-              key={vehicle.id}
-              onClick={() => onSelectVehicle(vehicle.id)}
-              type="button"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">{vehicle.stops.length}곳</span>
-              </div>
-              <p className="mt-1 text-xs font-bold text-slate-500">{vehicle.driver} · {vehicle.area}</p>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <div className="relative h-[620px] min-h-0 min-w-0 bg-slate-100 xl:h-full">
-        <div className="h-full min-h-0 [&>div]:h-full">
-          <KakaoAddressMap
-            focusedMarkerId={routeSelectedStoreId || selectedStoreId || undefined}
-            mapClassName="h-full min-h-[620px] rounded-none border-0 xl:min-h-0"
-            markers={routeMapMarkers}
-            onMarkerClick={(marker) => {
-              if (!marker.id || marker.tone === "origin") return;
-              openRouteStore(marker.id);
-              onPreviewStore(marker.id);
-            }}
-            routePath={routeSequence?.path || []}
-            showList={false}
-          />
-        </div>
-        {routeSelectedStoreId && routeSelectedStore ? (
-          <StoreQuickCard
-            onClose={() => setRouteSelectedStoreId("")}
-            onOpenDetail={() => onSelectStore(routeSelectedStore.id)}
-            originAddress={routeOriginAddress}
-            store={routeSelectedStore}
-          />
-        ) : null}
-      </div>
-
-      <aside className="min-h-0 border-l border-slate-200/80 bg-white">
-        {routePanelCollapsed ? (
-          <div className="flex h-full flex-col items-center gap-3 px-2 py-3">
-            <button
-              aria-label="경유 코스 패널 열기"
-              className="maju-button-secondary h-10 w-10 px-0"
-              onClick={() => setRoutePanelCollapsed(false)}
-              type="button"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </button>
-            <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">경유 코스</div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{selectedRouteStores.length}</span>
-          </div>
-        ) : (
-          <div className="flex h-full min-h-0 flex-col">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
-              <div className="min-w-0">
-                  <p className="text-sm font-black text-slate-950">{selectedDriver} 경유 순서</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                  선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · 경유 {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
-                </p>
-              </div>
-              <button
-                aria-label="경유 코스 패널 접기"
-                className="maju-button-secondary h-9 w-9 shrink-0 px-0"
-                onClick={() => setRoutePanelCollapsed(true)}
-                type="button"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              <div className="border-b border-slate-200/80 p-3">
-                <div className="maju-panel mb-3 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-black text-slate-950">출발 기준</p>
-                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        회사 출발지 또는 현재 위치에서 바로 경유 계산을 시작할 수 있습니다.
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{routeOriginLabel}</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-                        routeOriginMode === "company" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
-                      }`}
-                      onClick={() => {
-                        setRouteOriginMode("company");
-                        setRouteSequence(null);
-                      }}
-                      type="button"
-                    >
-                      회사 출발지
-                    </button>
-                    <button
-                      className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-                        routeOriginMode === "current" ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-blue-50 text-blue-800 hover:bg-white"
-                      }`}
-                      onClick={useCurrentLocationAsOrigin}
-                      type="button"
-                    >
-                      현위치 출발
-                    </button>
-                  </div>
-                  <p className="mt-2 truncate text-xs font-bold text-slate-500" title={routeOriginAddress || currentLocationMessage}>
-                    {currentLocationMessage || (routeOriginMode === "current" ? routeOriginAddress || "현위치를 먼저 확인하세요." : originMarker?.address || "회사 출발지 확인 필요")}
-                  </p>
-                </div>
-                <div className="mb-3 grid grid-cols-3 gap-2">
-                  <RouteMetric label="계산 대상" value={`${selectedRouteStores.length}곳`} />
-                  <RouteMetric label={routeSequence ? "티맵 경유 거리" : "출발지-매장 거리합"} value={`${routeDistanceKm.toLocaleString()}km`} />
-                  <RouteMetric label={routeSequence ? "티맵 경유 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
-                </div>
-                <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
-                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-blue-800" : "text-amber-800"}`}>
-                    {routeSequence ? "티맵 계산 완료" : isVehicleScoped && selectedRouteStores.length ? "티맵 계산 대기" : isVehicleScoped ? "경유지 선택 필요" : "배송차 선택 필요"}
-                  </p>
-                  <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : isVehicleScoped && selectedRouteStores.length ? "text-blue-700" : "text-amber-800"}`}>
-                    {routeSequence
-                      ? `현재 묶음 ${selectedRouteStores.length}곳의 도로 경로를 지도에 반영했습니다.`
-                      : isVehicleScoped && selectedRouteStores.length
-                        ? `${activeRouteBatchIndex + 1}묶음 ${selectedRouteStores.length}곳을 계산할 준비가 됐습니다. 버튼을 눌러 도로 기준 경유 거리와 시간을 갱신하세요.`
-                        : isVehicleScoped
-                          ? "아래 매장 목록에서 경유지를 추가하세요."
-                          : "왼쪽에서 배송차를 선택하면 해당 차량의 매장만 경유 계산 대상으로 표시됩니다."}
-                  </p>
-                </div>
-                {isVehicleScoped ? (
-                  <RouteSequenceAction
-                    buttonLabel={`${activeRouteBatchIndex + 1}묶음 티맵 계산`}
-                    destinations={selectedRouteStores.map((store) => getRouteStopAddress(store)).filter(Boolean)}
-                    onSequenceChange={setRouteSequence}
-                    originAddress={routeOriginAddress}
-                    showMap={false}
-                  />
-                ) : null}
-                {routeSequence && sequencedRouteStores.length ? (
-                  <FullRouteNavigateAction originLabel={routeOriginLabel} originPoint={routeSequence.originPoint} stores={sequencedRouteStores} stopPointByAddress={routeStopPointByAddress} />
-                ) : null}
-                {routeSelectedStore ? (
-                  <DeliveryProofPanel
-                    onSave={(proof) => saveDeliveryProof(routeSelectedStore.id, proof)}
-                    proofs={deliveryProofs[routeSelectedStore.id] || []}
-                    store={routeSelectedStore}
-                  />
-                ) : null}
-              </div>
-              <div className="space-y-2 border-b border-slate-200/80 p-3">
-                <label className="relative block">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className="maju-search-field h-10 w-full bg-slate-50 pl-9 pr-3"
-                    onChange={(event) => setRouteQuery(event.target.value)}
-                    placeholder="경유 매장 검색..."
-                    value={routeQuery}
-                  />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button className="maju-button-primary h-8 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
-                    기본 15곳 선택
-                  </button>
-                  <button className="maju-button-secondary h-8 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={selectAllRouteStores} type="button">
-                    전체 선택
-                  </button>
-                  <button className="maju-button-secondary h-8 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={clearRouteStores} type="button">
-                    선택 해제
-                  </button>
-                  <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-700">
-                    {activeRouteBatchIndex + 1}/{routeBatchCount}묶음 · 계산 {selectedRouteStores.length}곳
-                  </span>
-                  {inactiveSelectedCount ? <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-600">다른 묶음 {inactiveSelectedCount}곳</span> : null}
-                </div>
-                {routeBatchCount > 1 ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className="maju-button-secondary h-8 disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={activeRouteBatchIndex === 0}
-                      onClick={goToPreviousRouteBatch}
-                      type="button"
-                    >
-                      이전 15곳
-                    </button>
-                    <button
-                      className="maju-button-secondary h-8 disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={activeRouteBatchIndex >= routeBatchCount - 1}
-                      onClick={goToNextRouteBatch}
-                      type="button"
-                    >
-                      다음 15곳
-                    </button>
-                  </div>
-                ) : null}
-                <div className="maju-filter-box bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-500">
-                  티맵 경유지 제한 때문에 실제 도로 계산은 최대 {tmapWaypointLimit}곳씩 나눠 처리합니다.
-                </div>
-              </div>
-              <div className="border-b border-slate-200 bg-slate-50/80 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-black text-slate-950">선택한 경유지</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">현재 묶음 {selectedRouteStores.length}곳을 티맵 계산에 사용합니다.</p>
-                  </div>
-                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
-                    {activeRouteBatchIndex + 1}/{routeBatchCount}
-                  </span>
-                </div>
-                {selectedRouteStores.length ? (
-                  <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
-                    {selectedRouteStores.map((store, index) => (
-                      <button
-                        className={`w-full rounded-md border p-3 text-left transition hover:bg-white ${
-                          store.id === routeSelectedStore?.id ? "border-slate-900 bg-white shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white/80"
-                        }`}
-                        key={store.id}
-                        onClick={() => openRouteStore(store.id)}
-                        type="button"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-700 text-xs font-black text-white shadow-sm">{routeBatchStart + index + 1}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
-                            <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
-                            <span className="mt-2 block text-xs font-bold text-slate-400">
-                              출발지 기준 {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 flex-col items-end gap-2">
-                            <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                            <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                              <NavigateMenu
-                                compact
-                                destinationAddress={getRouteStopAddress(store)}
-                                destinationName={store.name}
-                                knownDestinationPoint={routeStopPointByAddress.get(getRouteStopAddress(store))}
-                                knownOriginPoint={routeSequence?.originPoint}
-                                originAddress={routeOriginAddress}
-                              />
-                              <span
-                                className="maju-button-secondary px-2 py-1 text-[11px]"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  toggleRouteStore(store.id);
-                                }}
-                              >
-                                해제
-                              </span>
-                            </span>
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="maju-empty-state bg-white p-4">
-                    <p className="text-sm font-black text-slate-700">선택한 경유지가 없습니다.</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">아래 매장 목록에서 추가 버튼을 누르세요.</p>
-                  </div>
-                )}
-                {inactiveSelectedCount ? (
-                  <div className="mt-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-500 ring-1 ring-inset ring-slate-200">
-                    다른 묶음에 대기 중인 경유지 {inactiveSelectedCount}곳이 있습니다. 다음 15곳 버튼으로 이어서 계산합니다.
-                  </div>
-                ) : null}
-              </div>
-              <div className="p-3">
-                {routeSequence?.legs.length ? (
-                  <div className={`mb-3 rounded-md border p-3 ${routeRoadPointCount ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                    <p className={`text-xs font-black ${routeRoadPointCount ? "text-emerald-800" : "text-amber-800"}`}>
-                      {routeRoadPointCount ? "티맵 경유 경로 반영됨" : "거리·시간 계산됨 · 도로 경로 좌표 없음"}
-                    </p>
-                    <p className={`mt-1 text-xs font-bold leading-5 ${routeRoadPointCount ? "text-emerald-700" : "text-amber-800"}`}>
-                      경유지 {routeSequence.stops.length}곳 · 실도로 {tmapLegCount}/{routeSequence.legs.length}구간 · 경유 코스 {routeSequence.totalDistanceKm.toLocaleString()}km · {formatMinutes(routeSequence.totalDurationMinutes)} · 도로 좌표 {routeRoadPointCount.toLocaleString()}개
-                    </p>
-                    {tmapLegCount < routeSequence.legs.length ? <p className="mt-1 text-xs font-bold leading-5 text-amber-800">일부 구간은 티맵 주소 지오코딩이 실패해 도로선 없이 기초 거리값만 반영됐습니다.</p> : null}
-                  </div>
-                ) : null}
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-black text-slate-950">{isVehicleScoped ? "매장 선택" : "배송차 선택 필요"}</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">
-                      {isVehicleScoped ? "매장을 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다." : "왼쪽에서 배송차를 선택하면 해당 차량의 매장이 표시됩니다."}
-                    </p>
-                  </div>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{routeCandidateStores.length}곳</span>
-                </div>
-                <div className="space-y-2">
-                  {routeCandidateStores.length ? (
-                    routeCandidateStores.map((store, index) => {
-                    const selectedForRoute = selectedRouteIdSet.has(store.id);
-                    const activeForRoute = activeRouteIdSet.has(store.id);
-                    const selectedOrder = selectedRouteStoreIds.indexOf(store.id) + 1;
-                    return (
-                    <button
-                      className={`w-full rounded-md border p-3 text-left transition hover:bg-slate-50 ${
-                        store.id === routeSelectedStore?.id
-                          ? "border-slate-900 bg-slate-50"
-                          : activeForRoute
-                            ? "border-slate-300 bg-slate-50/80"
-                            : selectedForRoute
-                              ? "border-slate-300 bg-slate-50"
-                              : "border-slate-200 bg-white"
-                      }`}
-                      key={store.id}
-                      onClick={() => openRouteStore(store.id)}
-                      type="button"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${
-                            activeForRoute ? "bg-teal-700 text-white" : selectedForRoute ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {selectedForRoute ? selectedOrder : index + 1}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
-                          <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
-                          <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {store.distanceKm?.toLocaleString() || "-"}km · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
-                        </span>
-                        <span className="flex shrink-0 flex-col items-end gap-2">
-                          <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                          {activeForRoute ? (
-                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">계산</span>
-                          ) : selectedForRoute ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">대기</span>
-                          ) : null}
-                          <span
-                            className={`rounded-md px-2 py-1 text-[11px] font-black ${
-                              selectedForRoute ? "bg-teal-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"
-                            }`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleRouteStore(store.id);
-                            }}
-                          >
-                            {selectedForRoute ? "해제" : "추가"}
-                          </span>
-                        </span>
-                      </div>
-                    </button>
-                  );
-                    })
-                  ) : (
-                    <div className="maju-empty-state bg-white p-4">
-                      <p className="text-sm font-black text-slate-700">{isVehicleScoped ? "조건에 맞는 매장이 없습니다." : "배송차를 먼저 선택하세요."}</p>
-                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        {isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </aside>
-    </section>
-  );
+  const plainValue = rawValue.replace(/^@/, "").trim();
+  if (/^[a-z0-9._]{2,30}$/i.test(plainValue)) return `@${plainValue}`;
+  return "";
 }
 
-function DirectoryStat({ label, tone = "slate", value }: { readonly label: string; readonly tone?: "rose" | "slate"; readonly value: string }) {
+export function getLeadInstagramHandle(lead: PermitLeadItem) {
+  return normalizeInstagramHandleValue(lead.instagramUrl);
+}
+
+// 2026-08-24 피드백("인스타 id 검색이 잘 안되고 있어")의 원인: 예전에는 실제 저장된 인스타 ID가
+// 없는 리드도 상호명에서 글자만 뽑아 "@추정아이디"를 만들어 표시/검색에 썼습니다. 이 추정값은
+// 실제 계정과 무관해서, 사용자가 진짜 아이디로 검색해도 안 걸리고, 클릭해도 엉뚱한(혹은 존재하지
+// 않는) 계정으로 연결되는 문제가 있었습니다. 이제 실제로 저장된 ID만 "확인됨"으로 표시/검색하고,
+// 없으면 명확히 "검색 필요" 상태로 보여줍니다.
+export function getLeadInstagramSearchUrl(lead: PermitLeadItem) {
+  const handle = getLeadInstagramHandle(lead);
+  if (handle) return `https://www.instagram.com/${encodeURIComponent(handle.replace(/^@/, ""))}/`;
+  return `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent([lead.businessName, lead.address].filter(Boolean).join(" "))}`;
+}
+
+export function getLeadInstagramSearchTokens(lead: PermitLeadItem) {
+  const handle = getLeadInstagramHandle(lead);
+  if (!handle) return [];
+  return [lead.instagramUrl || "", handle, handle.replace(/^@/, ""), normalizeLeadSearchToken(handle)].filter(Boolean);
+}
+
+export function permitLeadActionLabel(actionType: string) {
+  if (actionType === "call") return "전화";
+  if (actionType === "dm") return "DM";
+  if (actionType === "visit") return "방문";
+  if (actionType === "hold") return "보류";
+  if (actionType === "exclude") return "제외";
+  if (actionType === "quote") return "견적 요청";
+  if (actionType === "convert") return "거래처 전환";
+  return actionType;
+}
+
+export function getLeadConfidence(lead: PermitLeadItem) {
+  const reasons: string[] = [];
+  let score = 45;
+  if (lead.isActive) {
+    score += 12;
+    reasons.push("사업자 상태 정상");
+  }
+  if (lead.phone) {
+    score += 12;
+    reasons.push("연락처 있음");
+  }
+  if (lead.address) {
+    score += 8;
+    reasons.push("주소 확인");
+  }
+  if (lead.grade === "A") {
+    score += 10;
+    reasons.push("A등급 리드");
+  } else if (lead.grade === "B") {
+    score += 6;
+    reasons.push("B등급 리드");
+  }
+  if (lead.leadPeriod === "today") {
+    score += 8;
+    reasons.push("오늘 신규");
+  } else if (lead.leadPeriod === "week") {
+    score += 5;
+    reasons.push("이번 주 신규");
+  }
+  if ((lead.keywordVolume || 0) > 0) {
+    score += 5;
+    reasons.push("검색량 데이터 있음");
+  }
+  if ((lead.reviewCount || 0) > 0) {
+    score += 4;
+    reasons.push(`리뷰 ${lead.reviewCount}건`);
+  }
+  if (lead.isDuplicate || lead.excludeReason) score -= 20;
+
+  const bounded = Math.max(0, Math.min(100, score));
+  const label = bounded >= 82 ? "높음" : bounded >= 68 ? "보통" : "확인 필요";
+  return { label, reasons: reasons.slice(0, 4), score: bounded };
+}
+
+function permitLeadGradeWeight(grade: PermitLeadItem["grade"]) {
+  if (grade === "A") return 3;
+  if (grade === "B") return 2;
+  if (grade === "C") return 1;
+  return 0;
+}
+
+function getPermitLeadOpenDateTime(lead: PermitLeadItem) {
+  const value = getPermitLeadOpenDate(lead);
+  if (!value) return 0;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getPermitLeadSalesPriorityScore(lead: PermitLeadItem & { distanceKm?: number }) {
+  let score = getLeadConfidence(lead).score;
+  if (lead.phone) score += 18;
+  if (getLeadInstagramHandle(lead)) score += 12;
+  if (typeof lead.rating === "number") score += 5;
+  if (typeof lead.reviewCount === "number" && lead.reviewCount > 0) score += Math.min(10, Math.ceil(Math.log10(lead.reviewCount + 1) * 4));
+  if (typeof lead.keywordVolume === "number" && lead.keywordVolume > 0) score += Math.min(10, Math.ceil(lead.keywordVolume / 20));
+  const routeFitScore = lead.scoreBreakdown?.route_fit_score ?? 0;
+  if (routeFitScore > 0) score += routeFitScore;
+  if (typeof lead.distanceKm === "number") {
+    if (lead.distanceKm <= 3) score += 10;
+    else if (lead.distanceKm <= 8) score += 6;
+    else if (lead.distanceKm <= 15) score += 3;
+  }
+  return score;
+}
+
+function sortPermitLeadsForSales<T extends PermitLeadItem & { distanceKm?: number }>(leads: T[]): T[] {
+  return [...leads].sort((a, b) => {
+    const salesPriorityDelta = getPermitLeadSalesPriorityScore(b) - getPermitLeadSalesPriorityScore(a);
+    if (salesPriorityDelta) return salesPriorityDelta;
+    const gradeDelta = permitLeadGradeWeight(b.grade) - permitLeadGradeWeight(a.grade);
+    if (gradeDelta) return gradeDelta;
+    const distanceA = typeof a.distanceKm === "number" ? a.distanceKm : Number.POSITIVE_INFINITY;
+    const distanceB = typeof b.distanceKm === "number" ? b.distanceKm : Number.POSITIVE_INFINITY;
+    if (distanceA !== distanceB) return distanceA - distanceB;
+    const openDateDelta = getPermitLeadOpenDateTime(b) - getPermitLeadOpenDateTime(a);
+    if (openDateDelta) return openDateDelta;
+    return a.businessName.localeCompare(b.businessName, "ko");
+  });
+}
+
+export function buildOutboundItemNotes(industry?: string) {
+  const rows = buildQuoteDraftRows(industry);
+  if (!rows.length) return ["업종 확인 후 주력 품목 5개 선정", "현재 사용 단가표 확인", "월 사용량 기준 견적 작성"];
+  return rows.slice(0, 5).map((row) => row.item);
+}
+
+export function buildLeadDmScript(lead: PermitLeadItem) {
+  const items = buildOutboundItemNotes(lead.industryPrimary).slice(0, 4).join(", ");
+  return `안녕하세요, ${lead.businessName} 대표님. 식자재 납품/단가 비교 제안드리고 싶어 연락드립니다. ${lead.industryPrimary} 업종 기준으로 ${items} 품목을 먼저 맞춰보고, 현재 사용 중인 품목과 비교 견적을 간단히 정리해드릴 수 있습니다. 괜찮으시면 메뉴판이나 주력 메뉴 기준으로 1차 제안서 보내드리겠습니다.`;
+}
+
+function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteRow[], menuNotes: string, total: number) {
+  const items = rows
+    .filter((row) => row.item.trim())
+    .slice(0, 8)
+    .map((row, index) => {
+      const qtyText = row.qty > 1 ? ` ${row.qty}개` : "";
+      const priceText = row.unitPrice ? ` · ${row.unitPrice.toLocaleString()}원` : "";
+      return `${index + 1}. ${row.item}${qtyText}${priceText}`;
+    })
+    .join("\n");
+  return [
+    `[${companyName}] ${subject.name} 납품 제안`,
+    subject.industry ? `업종: ${subject.industry}` : "",
+    subject.address ? `주소: ${subject.address}` : "",
+    subject.phone ? `연락처: ${subject.phone}` : "",
+    menuNotes ? `메모: ${menuNotes}` : "",
+    "",
+    "추천 품목",
+    items || "- 품목을 추가해주세요.",
+    "",
+    total ? `합계 약 ${total.toLocaleString()}원` : "단가는 상담 후 안내드립니다.",
+    "",
+    "확인해보시고 편하게 연락 주세요."
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+export function getPermitLeadTableAction(lead: PermitLeadItem): { intent: PermitLeadActionIntent; label: string; mode: "detail" | "quote"; primary: boolean } {
+  if (lead.status === "견적 발송" || lead.status === "재연락 예정") return { intent: "followup", label: "후속 기록", mode: "detail", primary: true };
+  if (lead.status === "견적 요청") return { intent: "", label: "견적 작성", mode: "quote", primary: true };
+  if (lead.nextAction === "오늘 바로 전화") return { intent: "call", label: "통화 기록", mode: "detail", primary: true };
+  if (lead.nextAction === "오늘 DM 발송") return { intent: "dm", label: "DM 기록", mode: "detail", primary: true };
+  if (lead.nextAction === "정보 보강") return { intent: "info", label: "정보 확인", mode: "detail", primary: false };
+  return { intent: "", label: "상세 보기", mode: "detail", primary: false };
+}
+
+export function getPermitLeadQuoteSubject(lead: PermitLeadItem): QuoteSubject {
+  return {
+    address: lead.address,
+    industry: lead.industryPrimary,
+    instagramUrl: lead.instagramUrl,
+    leadId: lead.id,
+    name: lead.businessName,
+    outboundNotes: buildOutboundItemNotes(lead.industryPrimary),
+    phone: lead.phone,
+    reviewCount: lead.reviewCount
+  };
+}
+
+/** 지도 위 리드 반경 검색 결과 마커를 클릭했을 때 뜨는 간단 카드입니다. StoreQuickCard보다 가볍습니다. */
+// 2026-08-30 피드백("배송차, 매니저 추천도 같이 뜨면 좋을 듯") 대응: 새 가짜 거리 계산을 만들지
+// 않고, 이미 있는 신호만 써서 추천합니다. 1순위는 서버가 실제 좌표 거리로 계산해준
+// lead.nearestAnchor(반경 검색 결과에만 존재)의 담당자, 2순위는 주소 끝 괄호 안 "동" 이름이 같은
+// 등록 거래처들 중 가장 많이 배정된 담당자입니다. 둘 다 없으면 추천을 만들어내지 않고 비웁니다
+// (단가를 자동으로 채우지 않는 것과 같은 원칙 — 근거 없는 추천은 하지 않습니다).
+function extractDistrictToken(address?: string): string {
+  if (!address) return "";
+  const parenMatch = address.match(/\(([^)]+)\)\s*$/);
+  if (parenMatch) return parenMatch[1].trim();
+  const dongMatch = address.match(/([가-힣0-9]+(?:동|읍|면))/);
+  return dongMatch ? dongMatch[1] : "";
+}
+
+function getRecommendedDelivery(
+  lead: { address?: string; nearestAnchor?: { id: string; name: string } | null },
+  stores: StoreRow[]
+): { basis: string; driver: string; vehicle: string } | null {
+  const anchorStore = lead.nearestAnchor ? stores.find((store) => store.id === lead.nearestAnchor!.id) : undefined;
+  if (anchorStore?.deliveryDriver) {
+    return { basis: `근접 거래처 "${anchorStore.name}" 기준`, driver: anchorStore.deliveryDriver, vehicle: anchorStore.deliveryVehicleName || "" };
+  }
+
+  const district = extractDistrictToken(lead.address);
+  if (!district) return null;
+  const sameDistrictStores = stores.filter((store) => store.deliveryDriver && extractDistrictToken(store.address) === district);
+  if (!sameDistrictStores.length) return null;
+
+  const driverCounts = new Map<string, { count: number; vehicle: string }>();
+  sameDistrictStores.forEach((store) => {
+    const key = store.deliveryDriver!;
+    const current = driverCounts.get(key);
+    driverCounts.set(key, { count: (current?.count || 0) + 1, vehicle: store.deliveryVehicleName || current?.vehicle || "" });
+  });
+  const [topDriver, topInfo] = Array.from(driverCounts.entries()).sort((a, b) => b[1].count - a[1].count)[0];
+  return { basis: `같은 "${district}" 거래처 ${topInfo.count}곳 기준`, driver: topDriver, vehicle: topInfo.vehicle };
+}
+
+function PermitLeadMapQuickCard({
+  allStores,
+  headerOffsetPx,
+  lead,
+  leftPanelCollapsed,
+  onClose,
+  onConverted,
+  onDismiss,
+  onOpenQuote,
+  onRestore
+}: {
+  /** 배송담당자·배송차 추천(getRecommendedDelivery)에 씁니다. */
+  readonly allStores: StoreRow[];
+  /** StoreQuickCard와 동일한 목적 — 검색 헤더 높이에 맞춰 카드가 가려지지 않게 합니다. */
+  readonly headerOffsetPx?: number;
+  readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
+  readonly leftPanelCollapsed?: boolean;
+  readonly onClose: () => void;
+  readonly onConverted: () => void;
+  readonly onDismiss: (lead: PermitLeadItem) => void | Promise<void>;
+  readonly onOpenQuote: (lead: PermitLeadItem) => void;
+  readonly onRestore: (lead: PermitLeadItem) => void | Promise<void>;
+}) {
+  const [isConverting, setIsConverting] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [message, setMessage] = useState("");
+  const [addressCopied, setAddressCopied] = useState(false);
+  const [dmCopied, setDmCopied] = useState(false);
+  // 카드를 사용자가 자유롭게 끌어서 옮길 수 있게 합니다(2026-08-24 피드백: "리드 카드를 사용자가
+  // 자유롭게 움직일 수 있도록 만들어"). 기존 절대 위치(positionClassName) 위에 transform으로만
+  // 오프셋을 얹어, 리드가 바뀌어도 기본 위치 로직은 그대로 유지합니다.
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    setDragOffset({ x: 0, y: 0 });
+  }, [lead?.id]);
+
+  if (!lead) return null;
+
+  const isDismissed = lead.status === "제외";
+  const routeFit = lead.scoreBreakdown?.route_fit_score ?? 0;
+  const isNearAnchor = routeFit >= 11;
+  const isOpeningSoon = lead.leadPeriod === "today" || lead.leadPeriod === "week";
+  const instagramUrl = getLeadInstagramSearchUrl(lead);
+  const instagramHandle = getLeadInstagramHandle(lead);
+  const confidence = getLeadConfidence(lead);
+  const recommendedDelivery = getRecommendedDelivery(lead, allStores);
+  // 2026-09-01 피드백: "리드들의 카드내에 지도 이모티콘이 없네" — 저장된 naverPlaceUrl/kakaoPlaceUrl/
+  // googlePlaceUrl은 추천 점수 갱신을 돌리기 전까지 비어 있어, 그때까지는 링크가 아예 안 보였습니다.
+  // 거래처 카드(PlaceLinkRow)와 동일하게 값이 없거나 일반 검색 링크면 상호명+주소 검색 링크로
+  // 폴백해 항상 3개 링크가 뜨도록 합니다.
+  const leadPlaceSearchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
+  const savedLeadNaverPlaceUrl = lead.naverPlaceUrl?.trim();
+  const leadNaverPlaceUrl = !savedLeadNaverPlaceUrl || isGenericNaverSearchLink(savedLeadNaverPlaceUrl) ? leadPlaceSearchLinks.naverPlaceUrl : savedLeadNaverPlaceUrl;
+  const leadKakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || leadPlaceSearchLinks.kakaoPlaceUrl;
+  const leadGooglePlaceUrl = lead.googlePlaceUrl?.trim() || leadPlaceSearchLinks.googleMapUrl;
+  const formattedBusinessNumber = lead.businessNumber ? formatBusinessRegistrationNumber(lead.businessNumber) : "";
+  const priorityReasons = Array.from(new Set([...confidence.reasons, ...lead.nextActionReasons])).slice(0, 4);
+  const salesPriorityScore = getPermitLeadSalesPriorityScore(lead);
+  const phoneHref = lead.phone ? `tel:${lead.phone.replace(/[^0-9+]/g, "")}` : "";
+
+  async function copyAddress() {
+    if (!lead?.address) return;
+    try {
+      await navigator.clipboard.writeText(lead.address);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1500);
+    } catch {
+      setMessage("복사 권한이 없어 직접 선택해서 복사해주세요.");
+    }
+  }
+
+  async function copyDmScript() {
+    if (!lead) return;
+    try {
+      await navigator.clipboard.writeText(buildLeadDmScript(lead));
+      setDmCopied(true);
+      window.setTimeout(() => setDmCopied(false), 1500);
+    } catch {
+      setMessage("복사 권한이 없어 DM 문안을 직접 선택해 복사해주세요.");
+    }
+  }
+
+  function onDragHandleMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startOffset = dragOffset;
+    const handleMove = (moveEvent: globalThis.MouseEvent) => {
+      setDragOffset({ x: startOffset.x + (moveEvent.clientX - startX), y: startOffset.y + (moveEvent.clientY - startY) });
+    };
+    const handleUp = () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }
+
+  async function dismiss() {
+    if (!lead) return;
+    setIsDismissing(true);
+    try {
+      await onDismiss(lead);
+    } finally {
+      setIsDismissing(false);
+    }
+  }
+
+  async function restore() {
+    if (!lead) return;
+    setIsRestoring(true);
+    try {
+      await onRestore(lead);
+    } finally {
+      setIsRestoring(false);
+    }
+  }
+
+  async function convert() {
+    if (!lead) return;
+    setIsConverting(true);
+    setMessage("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage(payload?.message || "거래처 전환에 실패했습니다.");
+        return;
+      }
+      onConverted();
+    } catch {
+      setMessage("네트워크 오류로 전환하지 못했습니다.");
+    } finally {
+      setIsConverting(false);
+    }
+  }
+
+  const positionClassName = `left-4 w-[min(320px,calc(100%-32px))] ${
+    leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(320px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(320px,calc(100%-352px))]"
+  }`;
+
   return (
-    <div className="maju-stat-card px-4 py-3">
-      <p className="maju-muted-label">{label}</p>
-      <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    <div
+      className={`absolute top-4 xl:top-[var(--quick-card-top,5rem)] z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
+      style={{
+        ["--quick-card-top" as string]: headerOffsetPx ? `${headerOffsetPx + 12}px` : undefined,
+        transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`
+      } as React.CSSProperties}
+    >
+      <button
+        className="flex w-full cursor-grab items-center justify-center gap-1 border-b border-slate-100 bg-slate-50 py-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+        onMouseDown={onDragHandleMouseDown}
+        title="드래그해서 카드 위치를 옮길 수 있습니다."
+        type="button"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{lead.businessName}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
+            {typeof lead.distanceKm === "number" ? (
+              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
+            ) : null}
+            {isOpeningSoon ? (
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">개업 임박</span>
+            ) : null}
+            {isNearAnchor ? (
+              <span className="flex items-center gap-0.5 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-black text-cyan-700 ring-1 ring-inset ring-cyan-100">
+                <Star className="h-2.5 w-2.5 fill-cyan-600 text-cyan-600" />
+                기거래처 근접
+              </span>
+            ) : null}
+            {isDismissed ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-600">숨김</span> : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {isDismissed ? (
+            <button
+              aria-label="복구"
+              className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-teal-50 hover:text-teal-700 disabled:opacity-50"
+              disabled={isRestoring}
+              onClick={() => void restore()}
+              title="숨김 해제 · 복구"
+              type="button"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              aria-label="관심 없음 · 숨김 처리"
+              className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+              disabled={isDismissing}
+              onClick={() => void dismiss()}
+              title="관심 없음 · 숨김 처리"
+              type="button"
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button aria-label="닫기" className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2.5">
+        <div className="flex items-start gap-1">
+          <p className="flex min-w-0 flex-1 gap-2 text-[13px] font-bold leading-5 text-slate-600">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+            <span className="line-clamp-2">{lead.address || "주소 확인 필요"}</span>
+          </p>
+          {lead.address ? (
+            <button
+              aria-label="주소 복사"
+              className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
+              onClick={() => void copyAddress()}
+              title="주소 복사"
+              type="button"
+            >
+              {addressCopied ? <Check className="h-3.5 w-3.5 text-teal-600" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] font-bold text-slate-500">
+          <span className="flex min-w-0 items-center gap-1">
+            <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate">{lead.phone || "연락처 미확인"}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1">
+            <CalendarDays className="h-3 w-3 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate">{getPermitLeadOpenDate(lead) || "개시일 미확인"}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1">
+            <UserRound className="h-3 w-3 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate">{lead.representativeName || "대표자 미확인"}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1">
+            <Gauge className="h-3 w-3 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate">{lead.status || "상태 미확인"}</span>
+          </span>
+          <span className="col-span-2 flex min-w-0 items-center gap-1 font-black text-teal-700">
+            <Target className="h-3 w-3 shrink-0 text-teal-600" />
+            <span className="min-w-0 flex-1 truncate">영업점수 {salesPriorityScore}점 · {confidence.label}</span>
+          </span>
+          {typeof lead.rating === "number" ? (
+            <span className="flex min-w-0 items-center gap-1">
+              <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+              <span className="min-w-0 flex-1 truncate">
+                {lead.rating.toFixed(1)}
+                {typeof lead.reviewCount === "number" ? ` (${lead.reviewCount.toLocaleString()})` : ""}
+              </span>
+            </span>
+          ) : null}
+          {typeof lead.keywordVolume === "number" ? (
+            <span className="flex min-w-0 items-center gap-1">
+              <Search className="h-3 w-3 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1 truncate">검색량 {lead.keywordVolume.toLocaleString()}</span>
+            </span>
+          ) : null}
+        </div>
+        {lead.nearestAnchor ? (
+          <p className="mt-1.5 text-[11px] font-bold text-slate-400">기준 거래처: {lead.nearestAnchor.name}</p>
+        ) : null}
+        {recommendedDelivery ? (
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-teal-700">
+            <Truck className="h-3 w-3 shrink-0" />
+            <span className="min-w-0 truncate">
+              추천 배송: {recommendedDelivery.driver}
+              {recommendedDelivery.vehicle ? ` · ${recommendedDelivery.vehicle}` : ""}
+              <span className="font-semibold text-slate-400"> ({recommendedDelivery.basis})</span>
+            </span>
+          </p>
+        ) : null}
+        <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+          <div className="grid grid-cols-2 gap-1.5 text-[11px] font-bold text-slate-500">
+            <span className="min-w-0 truncate">
+              사업자 {formattedBusinessNumber || "미확인"}
+            </span>
+            <span className="min-w-0 truncate text-teal-700">
+              {lead.nextAction || getPermitLeadTableAction(lead).label}
+            </span>
+            <span className="col-span-2 min-w-0 truncate text-slate-400">
+              서류 사업자등록증·적재위치 보강 필요
+            </span>
+          </div>
+          {priorityReasons.length ? (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {priorityReasons.map((reason) => (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600" key={reason}>
+                  {reason}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {lead.reviewCount || lead.rating || lead.keywordVolume ? (
+            <p className="mt-1.5 line-clamp-2 text-[11px] font-bold leading-4 text-slate-500">
+              외부 신호 · 평점 {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"} · 리뷰 {typeof lead.reviewCount === "number" ? lead.reviewCount.toLocaleString() : "-"} · 검색{" "}
+              {typeof lead.keywordVolume === "number" ? lead.keywordVolume.toLocaleString() : "-"}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[11px] font-bold text-amber-600">외부 리뷰·검색량 보강 전입니다.</p>
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1">
+          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadNaverPlaceUrl} rel="noreferrer" target="_blank">
+            네이버
+          </a>
+          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadKakaoPlaceUrl} rel="noreferrer" target="_blank">
+            카카오맵
+          </a>
+          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadGooglePlaceUrl} rel="noreferrer" target="_blank">
+            구글
+          </a>
+          {instagramHandle ? (
+            <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
+              인스타그램
+            </a>
+          ) : null}
+        </div>
+        {message ? <p className="mt-1.5 text-[11px] font-bold text-rose-600">{message}</p> : null}
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {phoneHref ? (
+            <a className="maju-button-secondary h-8 justify-center text-xs" href={phoneHref}>
+              <Phone className="h-3.5 w-3.5" />
+              전화
+            </a>
+          ) : (
+            <span className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-slate-100 bg-slate-50 px-2 text-xs font-black text-slate-400">
+              <Phone className="h-3.5 w-3.5" />
+              전화
+            </span>
+          )}
+          <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => void copyDmScript()} type="button">
+            {dmCopied ? <Check className="h-3.5 w-3.5" /> : <MessageSquareText className="h-3.5 w-3.5" />}
+            {dmCopied ? "복사됨" : "DM 문안"}
+          </button>
+          <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
+            견적서 작성
+          </button>
+          <button className="maju-button-primary h-8 justify-center text-xs disabled:opacity-60" disabled={isConverting} onClick={() => void convert()} type="button">
+            {isConverting ? "전환 중..." : "거래처로 전환"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function OperationalEmptyState({
+/** 업종/메뉴 정보를 바탕으로 견적서 초안을 만드는 공용 드로어입니다. 신규 리드 카드·거래처 카드
+ * 어디서나 열 수 있고, 저장은 하지 않고 화면에서 편집 후 엑셀로 내려받는 v1입니다. */
+function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly companyName?: string; readonly onClose: () => void; readonly subject: QuoteSubject }) {
+  const draftKey = quoteDraftId(subject);
+  const initialDraft = readQuoteDraft(subject);
+  const [rows, setRows] = useState<QuoteRow[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry));
+  const [itemCount, setItemCount] = useState<QuoteItemCount>(() => nearestQuoteItemCount(initialDraft?.rows.length || 10));
+  const [menuNotes, setMenuNotes] = useState(initialDraft?.menuNotes || subject.menuNotes || "");
+  const [quoteMessage, setQuoteMessage] = useState("");
+  const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
+
+  useEffect(() => {
+    const draft = readQuoteDraft(subject);
+    setRows(draft?.rows || buildQuoteDraftRows(subject.industry));
+    setItemCount(nearestQuoteItemCount(draft?.rows.length || 10));
+    setMenuNotes(draft?.menuNotes || subject.menuNotes || "");
+    setSavedAt(draft?.savedAt || "");
+    setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
+  }, [draftKey, subject]);
+
+  function updateRow(id: string, patch: Partial<QuoteRow>) {
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+  function addRow() {
+    setRows((current) => {
+      const next = [...current, { id: `row-${Date.now()}`, item: "", qty: 1, unitPrice: 0 }];
+      setItemCount(nearestQuoteItemCount(next.length));
+      return next;
+    });
+  }
+  function removeRow(id: string) {
+    setRows((current) => {
+      const next = current.filter((row) => row.id !== id);
+      setItemCount(nearestQuoteItemCount(next.length));
+      return next;
+    });
+  }
+  function applyItemCount(count: QuoteItemCount) {
+    setItemCount(count);
+    setRows((current) => resizeQuoteRows(current, subject.industry, count));
+  }
+
+  const total = rows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0);
+  const shareText = buildQuoteShareText(companyName, subject, rows, menuNotes, total);
+
+  async function downloadQuoteExcel() {
+    const writeXlsxFileModule = await import("write-excel-file/browser");
+    const headerRow = ["품목명·규격", "수량", "단가", "공급가액"].map((value) => ({ fontWeight: "bold" as const, value }));
+    const dataRows = rows.map((row) => [
+      { value: row.item },
+      { value: row.qty },
+      { value: row.unitPrice },
+      { value: row.qty * row.unitPrice }
+    ]);
+    const totalRow = [{ value: "합계" }, { value: "" }, { value: "" }, { value: total }];
+    await writeXlsxFileModule
+      .default([headerRow, ...dataRows, totalRow], { sheet: "견적서" })
+      .toFile(`${subject.name}_견적서.xlsx`);
+  }
+
+  async function copyQuoteText() {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setQuoteMessage("제안서 문안을 복사했습니다.");
+    } catch {
+      setQuoteMessage("복사 권한이 없어 직접 선택해서 복사해주세요.");
+    }
+  }
+
+  function saveQuoteDraft() {
+    const nextSavedAt = new Date().toISOString();
+    saveQuoteDraftToLocal(subject, {
+      menuNotes,
+      rows,
+      savedAt: nextSavedAt,
+      subject
+    });
+    setSavedAt(nextSavedAt);
+    setQuoteMessage("이 브라우저에 제안서 초안을 저장했습니다.");
+  }
+
+  function resetQuoteDraft() {
+    deleteQuoteDraftFromLocal(subject);
+    setRows(buildQuoteDraftRows(subject.industry, itemCount));
+    setMenuNotes(subject.menuNotes || "");
+    setSavedAt("");
+    setQuoteMessage("저장된 초안을 지우고 추천 품목으로 다시 시작합니다.");
+  }
+
+  function printQuoteDraft() {
+    const printableRows = rows
+      .filter((row) => row.item.trim())
+      .map(
+        (row) =>
+          `<tr><td>${escapeHtml(row.item)}</td><td>${row.qty}</td><td>${row.unitPrice ? row.unitPrice.toLocaleString() : "-"}</td><td>${(row.qty * row.unitPrice).toLocaleString()}</td></tr>`
+      )
+      .join("");
+    const printWindow = window.open("", "_blank", "width=860,height=1000");
+    if (!printWindow) {
+      setQuoteMessage("팝업이 차단되어 인쇄 화면을 열지 못했습니다.");
+      return;
+    }
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(subject.name)} 제안서</title><style>
+      body{font-family:Arial,'Malgun Gothic',sans-serif;margin:40px;color:#0f172a}
+      h1{font-size:26px;margin:0 0 8px} .meta{color:#475569;font-size:13px;line-height:1.7;margin-bottom:24px}
+      .box{border:1px solid #dbe3ef;border-radius:12px;padding:16px;margin:16px 0;background:#f8fafc}
+      table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+      th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left} th{background:#f1f5f9}
+      .total{text-align:right;font-weight:800;margin-top:16px}.footer{margin-top:32px;color:#64748b;font-size:12px}
+    </style></head><body>
+      <h1>${escapeHtml(subject.name)} 제안서</h1>
+      <div class="meta">${subject.industry ? `업종: ${escapeHtml(subject.industry)}<br/>` : ""}${subject.address ? `주소: ${escapeHtml(subject.address)}<br/>` : ""}${subject.phone ? `연락처: ${escapeHtml(subject.phone)}<br/>` : ""}</div>
+      <div class="box"><strong>메뉴/리뷰 메모</strong><br/>${escapeHtml(menuNotes || "현장 확인 후 업데이트")}</div>
+      <table><thead><tr><th>품목명·규격</th><th>수량</th><th>단가</th><th>공급가액</th></tr></thead><tbody>${printableRows || "<tr><td colspan='4'>추천 품목을 추가하세요.</td></tr>"}</tbody></table>
+      <p class="total">합계 ${total.toLocaleString()}원</p>
+      <p class="footer">MAJU Intelligence · 현장 상담용 초안입니다. 실제 단가와 납품 조건은 협의 후 확정합니다.</p>
+    </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    setQuoteMessage("인쇄 화면을 열었습니다. PDF 저장은 인쇄 창에서 선택하세요.");
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
+      <div className="h-full w-full max-w-lg overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">견적서 초안</p>
+            <h3 className="mt-1 truncate text-lg font-black text-slate-950">{subject.name}</h3>
+            {subject.industry ? <p className="mt-0.5 text-xs font-bold text-slate-500">{subject.industry} 업종 추천 품목으로 초안을 채웠습니다.</p> : null}
+          </div>
+          <button aria-label="닫기" className="maju-button-secondary h-8 w-8 shrink-0 px-0" onClick={onClose} type="button">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <div className="rounded-xl border border-teal-100 bg-teal-50/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-black text-teal-900">아웃바운드 제안 흐름</p>
+              {savedAt ? (
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">
+                  저장됨 {new Date(savedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(subject.outboundNotes?.length ? subject.outboundNotes : buildOutboundItemNotes(subject.industry)).slice(0, 5).map((note) => (
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100" key={note}>
+                  {note}
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] font-semibold leading-5 text-teal-800">
+              메뉴판·리뷰 확인 후 자주 쓰는 품목만 남기고, 단가를 입력한 뒤 DM 문안 복사 또는 PDF 저장으로 현장 영업에 사용합니다.
+            </p>
+          </div>
+
+          <div>
+            <p className="mb-1 text-xs font-black text-slate-700">메뉴 메모 (아는 만큼 적어두면 다음에 참고할 수 있어요)</p>
+            <textarea
+              className="h-16 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
+              onChange={(event) => setMenuNotes(event.target.value)}
+              placeholder="예: 김치찌개, 된장찌개, 제육볶음 등"
+              value={menuNotes}
+            />
+          </div>
+
+          <div className="rounded-lg border border-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2 py-2">
+              <p className="text-[11px] font-black text-slate-600">추천 품목 {rows.length}개</p>
+              <div className="flex overflow-hidden rounded-md border border-slate-200 bg-white">
+                {QUOTE_ITEM_COUNT_OPTIONS.map((count) => (
+                  <button
+                    className={`h-7 px-2.5 text-[11px] font-black transition ${
+                      itemCount === count ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                    key={count}
+                    onClick={() => applyItemCount(count)}
+                    type="button"
+                  >
+                    {count}개
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="max-h-[360px] overflow-auto">
+              <table className="w-full border-separate border-spacing-0 text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-black text-slate-500 shadow-[0_1px_0_#e2e8f0]">
+                  <tr>
+                    <th className="border-b border-slate-200 px-2 py-2">품목명·규격</th>
+                    <th className="w-14 border-b border-slate-200 px-2 py-2">수량</th>
+                    <th className="w-24 border-b border-slate-200 px-2 py-2">단가</th>
+                    <th className="w-10 border-b border-slate-200 px-2 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr className="border-b border-slate-100 last:border-0" key={row.id}>
+                      <td className="px-2 py-1.5">
+                        <input
+                          className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs font-bold outline-none focus:border-teal-300"
+                          onChange={(event) => updateRow(row.id, { item: event.target.value })}
+                          placeholder="예: 쌀 20kg"
+                          value={row.item}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold outline-none focus:border-teal-300"
+                          onChange={(event) => updateRow(row.id, { qty: Number(event.target.value) || 0 })}
+                          type="number"
+                          value={row.qty}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold outline-none focus:border-teal-300"
+                          onChange={(event) => updateRow(row.id, { unitPrice: Number(event.target.value) || 0 })}
+                          type="number"
+                          value={row.unitPrice}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button aria-label="삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => removeRow(row.id)} type="button">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button className="flex w-full items-center justify-center gap-1.5 border-t border-slate-200 py-2 text-xs font-black text-teal-700 hover:bg-teal-50/50" onClick={addRow} type="button">
+              <Plus className="h-3.5 w-3.5" />
+              품목 추가
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+            <span className="text-xs font-black text-slate-600">합계</span>
+            <span className="text-sm font-black text-slate-950">{total.toLocaleString()}원</span>
+          </div>
+
+          <div>
+            <p className="mb-1 text-xs font-black text-slate-700">DM/문자 제안 문안</p>
+            <textarea
+              className="h-28 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold leading-5 text-slate-700 outline-none focus:border-teal-300"
+              onChange={() => undefined}
+              readOnly
+              value={shareText}
+            />
+          </div>
+
+          <div className="sticky bottom-0 -mx-4 space-y-2 border-t border-slate-200 bg-white/95 p-4 shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur">
+            <button className="maju-button-primary w-full" onClick={() => void downloadQuoteExcel()} type="button">
+              <Download className="h-4 w-4" />
+              엑셀로 다운로드
+            </button>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button className="maju-button-secondary justify-center text-xs" onClick={() => void copyQuoteText()} type="button">
+                <Copy className="h-4 w-4" />
+                문안 복사
+              </button>
+              <button className="maju-button-secondary justify-center text-xs" onClick={saveQuoteDraft} type="button">
+                <CheckCircle2 className="h-4 w-4" />
+                초안 저장
+              </button>
+              <button className="maju-button-secondary justify-center text-xs" onClick={printQuoteDraft} type="button">
+                <FileImage className="h-4 w-4" />
+                PDF/인쇄
+              </button>
+            </div>
+            <button className="w-full rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs font-black text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600" onClick={resetQuoteDraft} type="button">
+              저장 초안 초기화
+            </button>
+            {quoteMessage ? <p className="rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{quoteMessage}</p> : null}
+            <p className="text-[11px] font-semibold text-slate-400">
+              단가는 자동으로 채워지지 않습니다. 실제 협상가를 직접 입력한 뒤 다운로드하거나 PDF로 저장하세요.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const PERMIT_PERIOD_OPTIONS: Array<{ label: string; value: "all" | PermitLeadPeriod }> = [
+  { label: "전체 기간", value: "all" },
+  { label: "오늘 신규", value: "today" },
+  { label: "이번 주 신규", value: "week" },
+  { label: "이번 달 신규", value: "month" },
+  { label: "최근 90일", value: "recent" }
+];
+export const PERMIT_PERIOD_BADGE_LABEL: Record<PermitLeadPeriod, string> = {
+  today: "오늘 신규",
+  week: "이번 주 신규",
+  month: "이번 달 신규",
+  recent: "최근 90일"
+};
+export const PERMIT_ACTION_OPTIONS = ["오늘 바로 전화", "오늘 DM 발송", "전화·DM 검토", "정보 보강", "제외 검토"];
+
+// 2026-08-28 피드백 대응(아직 점수 계산 안 된 리드가 그냥 낮은 등급으로 보임): 리뷰수·평점·검색량
+// 보강이 한 번도 실행되지 않은 리드는 grade가 null이라도 "실제로 낮은 등급"이 아니라 "아직 채점
+// 전"입니다. 세 값이 모두 없으면(0도 아니고 아예 미기록) 보강 전으로 간주합니다.
+export function isPermitLeadUnscored(lead: Pick<PermitLeadItem, "reviewCount" | "rating" | "keywordVolume">) {
+  return lead.reviewCount == null && lead.rating == null && lead.keywordVolume == null;
+}
+
+export function permitGradeToneClassName(grade: PermitLeadItem["grade"], unscored?: boolean) {
+  if (grade === "A") return "bg-emerald-100 text-emerald-800";
+  if (grade === "B") return "bg-blue-100 text-blue-800";
+  if (grade === "C") return "bg-slate-100 text-slate-700";
+  if (unscored) return "bg-amber-50 text-amber-600";
+  return "bg-slate-50 text-slate-400";
+}
+
+function permitLeadCompanyId() {
+  return typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") || "" : "";
+}
+
+export function withPermitLeadCompanyQuery(path: string) {
+  const companyId = permitLeadCompanyId();
+  if (!companyId) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
+}
+
+export function getPermitLeadOpenDate(lead: Pick<PermitLeadItem, "openDate" | "permitDate">) {
+  const value = lead.openDate || lead.permitDate || "";
+  const match = value.match(/\d{4}-\d{2}-\d{2}/);
+  return match?.[0] || "";
+}
+
+export function isPermitLeadInOpenDateFilter(
+  lead: Pick<PermitLeadItem, "openDate" | "permitDate">,
+  mode: LeadOpenDateFilterMode,
+  year: string,
+  month: string,
+  startDate: string,
+  endDate: string
+) {
+  if (mode === "all") return true;
+  const openDate = getPermitLeadOpenDate(lead);
+  if (mode === "missing") return !openDate;
+  if (!openDate) return false;
+  if (mode === "year") return Boolean(year) && openDate.startsWith(`${year}-`);
+  if (mode === "month") return Boolean(month) && openDate.startsWith(month);
+  if (!startDate && !endDate) return true;
+  if (startDate && openDate < startDate) return false;
+  if (endDate && openDate > endDate) return false;
+  return true;
+}
+
+export function formatLeadOpenDateFilterLabel(mode: LeadOpenDateFilterMode, year: string, month: string, startDate: string, endDate: string) {
+  if (mode === "all") return "개시일 전체";
+  if (mode === "missing") return "개시일 미확인";
+  if (mode === "year") return year ? `${year}년 개시` : "연도 선택 필요";
+  if (mode === "month") return month ? `${month} 개시` : "월 선택 필요";
+  if (!startDate && !endDate) return "직접 기간";
+  if (startDate && endDate) return `${startDate} ~ ${endDate}`;
+  if (startDate) return `${startDate} 이후`;
+  return `${endDate} 이전`;
+}
+
+// 인허가 데이터 표준 컬럼명(공공데이터포털 기준)과 흔히 쓰는 변형을 함께 인식합니다.
+const PERMIT_HEADER_ALIASES: Record<string, string[]> = {
+  businessName: ["사업장명", "상호명", "업체명", "거래처명"],
+  businessNumber: ["사업자번호", "사업자등록번호"],
+  representativeName: ["대표자명", "대표자"],
+  permitStatus: ["영업상태명", "상세영업상태명", "영업상태"],
+  permitDate: ["인허가일자", "인허가일"],
+  openDate: ["개업일자", "개업일"],
+  address: ["도로명전체주소", "소재지전체주소", "지번주소", "도로명주소", "주소"],
+  phone: ["소재지전화", "전화번호", "연락처"],
+  jurisdiction: ["개방자치단체명", "관할기관"],
+  industry: ["업태구분명", "업종명", "위생업태명", "업종"]
+};
+
+function normalizePermitHeaderText(text: string) {
+  return text.replace(/[\s()（）]/g, "").toLowerCase();
+}
+
+function matchPermitHeaderField(header: string): string | null {
+  const normalized = normalizePermitHeaderText(header);
+  for (const [field, aliases] of Object.entries(PERMIT_HEADER_ALIASES)) {
+    if (aliases.some((alias) => normalizePermitHeaderText(alias) === normalized)) return field;
+  }
+  return null;
+}
+
+export async function parsePermitExcelFile(file: File) {
+  // 엑셀 읽기 라이브러리는 업로드 버튼을 눌렀을 때만 불러옵니다(초기 번들 크기 절약).
+  const { readSheet } = await import("read-excel-file/browser");
+  const rows = (await readSheet(file, 1)) as unknown[][];
+  const headerIndex = rows.findIndex((row) => row.some((cell) => String(cell ?? "").trim()));
+  if (headerIndex < 0) return { rows: [] as Record<string, string>[], unmatchedHeaders: [] as string[] };
+
+  const headers = rows[headerIndex].map((cell) => String(cell ?? "").trim());
+  const fieldByColumn = headers.map((header) => (header ? matchPermitHeaderField(header) : null));
+  const unmatchedHeaders = Array.from(new Set(headers.filter((header, index) => header && !fieldByColumn[index])));
+
+  const parsedRows = rows
+    .slice(headerIndex + 1)
+    .map((row) => {
+      const record: Record<string, string> = {};
+      fieldByColumn.forEach((field, index) => {
+        if (!field) return;
+        const cell = row[index];
+        const value = cell instanceof Date ? cell.toISOString().slice(0, 10) : String(cell ?? "").trim();
+        if (value) record[field] = value;
+      });
+      return record;
+    })
+    .filter((record) => record.businessName);
+
+  return { rows: parsedRows, unmatchedHeaders };
+}
+
+export type PermitUploadResult = {
+  duplicates: number;
+  excludedInactive: number;
+  excludedNonTarget: number;
+  inserted: number;
+  skippedNoName: number;
+  total: number;
+  updated: number;
+};
+
+export type GovSyncResult = {
+  configured: boolean;
+  fetched: number;
+  ingest: PermitUploadResult;
+};
+
+export type SeoulSyncResult = {
+  configured: boolean;
+  fetched: number;
+  ingest: PermitUploadResult;
+};
+
+export type PermitLeadSourceStatus = {
+  enrichment?: {
+    googleReviews?: boolean;
+    keywordVolume?: boolean;
+  };
+  sources?: {
+    govRestaurant?: boolean;
+    seoulRestaurant?: boolean;
+    kakaoKeywordSearch?: boolean;
+  };
+  // 2026-08-28 피드백 대응(리드 야간 동기화가 실패해도 화면에 표시가 없음)
+  syncStatus?: {
+    gov: { lastAt: string | null; status: string | null; message: string | null };
+    seoul: { lastAt: string | null; status: string | null; message: string | null };
+    kakaoKeyword: { lastAt: string | null; status: string | null; message: string | null };
+  } | null;
+};
+
+// 2026-08-31 피드백: "영업리드(신규리드, 개업일자 아님)도 키워드 검색량으로 영업순위를 알아야
+// 한다" — 개업일자와 무관하게 이미 운영 중인 매장까지 카카오 로컬 키워드 검색으로 찾아오는
+// "영업리드 탐색" 기능의 타입입니다.
+export type CompanyLeadSearchRegion = {
+  id: string;
+  companyId: string;
+  label: string;
+  latitude?: number;
+  longitude?: number;
+  createdAt: string;
+};
+
+export type KakaoKeywordLeadSweepResult = {
+  configured: boolean;
+  anchorsUsed: number;
+  callsMade: number;
+  candidatesFound: number;
+  ingest: PermitUploadResult;
+};
+
+export type NearbyPermitLeadResult = {
+  anchorCount: number;
+  leads: Array<PermitLeadItem & { distanceKm: number; nearestAnchor: { id: string; name: string } | null }>;
+  radiusKm: number;
+  unresolvedAnchorCount: number;
+  unresolvedLeadCount: number;
+};
+
+/**
+ * "신규 리드" 탭입니다. 지도 홈 안의 내부 탭으로, 사업자 인허가 신규 데이터를 CRM 표로 보여주고
+ * (표가 기본, 지도는 보조), 업로드·엑셀 다운로드·기존 거래처 반경 안 "리드 탐색"(AI 영업 세일즈)을
+ * 한 화면에서 처리합니다. 별도 페이지가 아니라 지도 홈의 데이터를 그대로 씁니다.
+ */
+const PermitLeadsView = dynamic(() => import("./permit-leads-view").then((module) => module.PermitLeadsView), {
+  loading: () => (
+    <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      리드 화면을 불러오는 중입니다…
+    </div>
+  ),
+  ssr: false
+});
+
+const TodayCourseView = dynamic(() => import("./today-course-view").then((module) => module.TodayCourseView), {
+  loading: () => (
+    <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      코스 화면을 불러오는 중입니다…
+    </div>
+  ),
+  ssr: false
+});
+
+export function DirectoryStat({
+  active = false,
+  label,
+  onClick,
+  title,
+  tone = "slate",
+  value
+}: {
+  readonly active?: boolean;
+  readonly label: string;
+  readonly onClick?: () => void;
+  readonly title?: string;
+  readonly tone?: "rose" | "slate";
+  readonly value: string;
+}) {
+  const content = (
+    <>
+      <p className="maju-muted-label">{label}</p>
+      <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
+    </>
+  );
+  // 2026-09-01 피드백: "해당 카드를 누르면, 아래 거래처들이 필터가 되면 좋을 것 같아" — KPI 카드를
+  // 눌러 바로 아래 목록을 그 조건으로 필터링할 수 있게 클릭 가능한 버튼 형태를 추가로 지원합니다.
+  if (onClick) {
+    return (
+      <button
+        className={`maju-stat-card w-full px-4 py-3 text-left transition hover:border-teal-300 hover:shadow-sm ${
+          active ? "border-teal-400 ring-1 ring-inset ring-teal-300" : ""
+        }`}
+        onClick={onClick}
+        title={title}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="maju-stat-card px-4 py-3" title={title}>
+      {content}
+    </div>
+  );
+}
+
+export function OperationalEmptyState({
   actionHref,
   actionLabel,
   description,
@@ -2324,8 +6463,8 @@ function OperationalEmptyState({
   readonly title: string;
 }) {
   return (
-    <div className="grid h-full min-h-[520px] place-items-center px-5 text-center">
-      <div className="max-w-xl rounded-xl border border-dashed border-teal-200 bg-teal-50/60 px-6 py-8 shadow-[0_8px_22px_rgba(15,118,110,0.08)]">
+    <div className="grid h-full min-h-[520px] place-items-center px-4 text-center">
+      <div className="max-w-xl rounded-xl border border-dashed border-teal-200 bg-teal-50/60 px-4 py-8 shadow-[0_8px_22px_rgba(15,118,110,0.08)]">
         <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-white text-teal-700 shadow-sm ring-1 ring-inset ring-teal-100">
           <Store className="h-5 w-5" />
         </div>
@@ -2339,231 +6478,44 @@ function OperationalEmptyState({
   );
 }
 
-function DeliveryProofPanel({
-  onSave,
-  proofs,
-  store
-}: {
-  readonly onSave: (proof: DeliveryProofInput) => Promise<void>;
-  readonly proofs: DeliveryProof[];
-  readonly store: StoreRow;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [deliveryStatus, setDeliveryStatus] = useState<DeliveryProof["deliveryStatus"]>("arrived");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
-  const [memo, setMemo] = useState("");
-  const [messageChannel, setMessageChannel] = useState<DeliveryProof["messageChannel"]>("kakao");
-  const [copyMessage, setCopyMessage] = useState("");
-  const ownerMessage = createDeliveryOwnerMessage(store, memo, deliveryStatus, fileName);
-
-  const saveProof = async () => {
-    setIsSaving(true);
-    setSaveMessage("");
-    await onSave({
-      deliveryStatus,
-      file,
-      fileName: fileName || "현장 사진 미첨부",
-      memo: ownerMessage,
-      messageChannel
-    });
-    setSaveMessage(file ? "배송완료 사진/영상과 메모를 저장했습니다." : "배송완료 메모를 저장했습니다. 사진은 나중에 추가할 수 있습니다.");
-    setFile(null);
-    setFileName("");
-    setIsSaving(false);
-    setMemo("");
-  };
-  const copyOwnerMessage = async () => {
-    try {
-      await navigator.clipboard.writeText(ownerMessage);
-      setCopyMessage("점주 발송 문구를 복사했습니다.");
-    } catch {
-      setCopyMessage("복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
-    }
-  };
-
-  return (
-      <div className="maju-panel mt-3 border-blue-100 bg-blue-50/70 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
-            <Camera className="h-4 w-4 text-blue-700" />
-            배송완료 증빙
-          </p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-            {store.name} 도착 후 사진을 남기고 점주님께 발송할 알림을 준비합니다.
-          </p>
-        </div>
-        <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">{proofs.length}건</span>
-      </div>
-        <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-blue-200 bg-white px-3 py-3 text-left transition hover:border-blue-400 hover:bg-blue-50">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
-          <Plus className="h-4 w-4" />
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-black text-slate-900">{fileName || "도착 사진/영상 선택"}</span>
-          <span className="mt-1 block text-xs font-bold text-slate-500">실제 발송 API 연결 전까지는 파일명과 발송 대기 상태를 기록합니다.</span>
-        </span>
-        <input
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={(event) => {
-            const nextFile = event.target.files?.[0] || null;
-            setFile(nextFile);
-            setFileName(nextFile?.name || "");
-          }}
-          type="file"
-        />
-      </label>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {[
-          { label: "카톡 발송 대기", value: "kakao" },
-          { label: "문자 발송 대기", value: "sms" }
-        ].map((item) => (
-          <button
-            className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-              messageChannel === item.value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-            key={item.value}
-            onClick={() => setMessageChannel(item.value as DeliveryProof["messageChannel"])}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {[
-          { label: "도착완료", value: "arrived" },
-          { label: "부분배송", value: "partial" },
-          { label: "이슈발생", value: "issue" }
-        ].map((item) => (
-          <button
-            className={`h-9 rounded-md border px-2 text-xs font-black transition ${
-              deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-            key={item.value}
-            onClick={() => setDeliveryStatus(item.value as DeliveryProof["deliveryStatus"])}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <textarea
-        className="mt-3 min-h-20 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-        onChange={(event) => setMemo(event.target.value)}
-        placeholder="추가 메모 예: 요청하신 냉장고 앞에 적재했습니다."
-        value={memo}
-      />
-      <div className="maju-panel mt-3 border-blue-100 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
-          <button
-            className="maju-button-secondary h-8 px-2.5"
-            onClick={copyOwnerMessage}
-            type="button"
-          >
-            <Copy className="h-3.5 w-3.5" />
-            복사
-          </button>
-        </div>
-        <p className="mt-2 whitespace-pre-line rounded-md bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
-        {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
-      </div>
-      <button
-        className="maju-button-blue mt-2 w-full bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-        disabled={isSaving}
-        onClick={saveProof}
-        type="button"
-      >
-        <MessageSquareText className="h-3.5 w-3.5" />
-        {isSaving ? "저장 중" : "배송완료 기록 저장"}
-      </button>
-      {saveMessage ? <p className="mt-2 text-xs font-bold leading-5 text-blue-700">{saveMessage}</p> : null}
-      {proofs.length ? (
-        <div className="mt-3 space-y-2">
-          {proofs.slice(0, 3).map((proof) => (
-            <div className="rounded-md border border-blue-100 bg-white p-2" key={`${proof.recordedAt}-${proof.fileName}`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-xs font-black text-slate-900">{proof.fileName}</p>
-                <span className={`rounded px-2 py-0.5 text-[11px] font-black ${proof.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                  {proof.persisted ? "DB 저장" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] font-black text-blue-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
-              <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
-              <p className="mt-1 text-[11px] font-bold text-slate-400">{proof.recordedAt}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-async function uploadDeliveryProofFile(storeId: string, file: File, title: string) {
-  const formData = new FormData();
-  formData.append("attachmentType", "delivery_proof");
-  formData.append("customerId", storeId);
-  formData.append("file", file);
-  formData.append("title", title);
-
-  return fetch("/api/customer-attachments/upload", {
-    method: "POST",
-    body: formData
-  });
-}
-
-function createDeliveryOwnerMessage(store: StoreRow, memo: string, status: DeliveryProof["deliveryStatus"], fileName: string) {
-  const statusText = deliveryStatusLabel(status);
-  const baseMemo = memo.trim() || (status === "arrived" ? "요청하신 위치에 배송 적재 완료했습니다." : status === "partial" ? "일부 품목은 현장 상황 확인 후 별도 안내드리겠습니다." : "배송 중 확인이 필요한 사항이 있어 안내드립니다.");
-  const proofText = fileName ? `\n증빙자료: ${fileName}` : "";
-
-  return `[MAJU 배송 안내]\n${store.name} ${statusText}\n${baseMemo}${proofText}`;
-}
-
-function deliveryStatusLabel(status: DeliveryProof["deliveryStatus"]) {
-  if (status === "partial") return "부분배송";
-  if (status === "issue") return "이슈발생";
-  return "도착완료";
-}
-
-function getRouteStopAddress(store: StoreRow) {
+export function getRouteStopAddress(store: StoreRow) {
   return store.address || store.region;
-}
-
-function countFiniteRoutePoints(path: RouteSequence["path"]) {
-  return path.filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)).length;
 }
 
 function StoreDetail({
   areaOptions,
   attachments,
   driverOptions,
+  fuelPrices,
   history,
+  onAddDriver,
+  onAddVehicle,
   onClose,
   onClearHistory,
   onDeleteHistory,
   onSaveAttachment,
-  onSaveLoadingMedia,
+  onUpdateRelationshipStatus,
   onUpdateStore,
   onWriteHistory,
-  store
+  store,
+  vehicleOptions
 }: {
   readonly areaOptions: string[];
   readonly attachments: StoreAttachment;
   readonly driverOptions: string[];
+  readonly fuelPrices: FuelPriceByType;
   readonly history: StoreHistoryItem[];
+  readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
+  readonly onAddVehicle: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
   readonly onClose: () => void;
   readonly onClearHistory: (storeId: string) => void;
   readonly onDeleteHistory: (storeId: string, historyId: string) => void;
   readonly onSaveAttachment: (slot: "bankbookCopy" | "businessCertificate", file: AttachmentFile) => void;
-  readonly onSaveLoadingMedia: (files: AttachmentFile[]) => void;
+  readonly onUpdateRelationshipStatus: (storeId: string, status: string, note?: string) => Promise<{ persisted: boolean } | void>;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => Promise<{ persisted: boolean } | void>;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   readonly store: StoreRow;
+  readonly vehicleOptions: string[];
 }) {
   const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
@@ -2574,21 +6526,40 @@ function StoreDetail({
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
   const [draftBusinessHours, setDraftBusinessHours] = useState(store.businessHours || "");
   const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
+  // 출입방법(열쇠/카드/비밀번호/숨김위치)·비밀번호(2026-08-24 피드백: "거래처의 출입방법과 비밀번호를
+  // 저장해야해. 놓친 것 같아 ... 열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등 넣어야해").
+  const [draftAccessMethodType, setDraftAccessMethodType] = useState(store.accessMethodType || "");
+  const [draftAccessNote, setDraftAccessNote] = useState(store.accessNote || "");
+  const [draftAccessPassword, setDraftAccessPassword] = useState(store.accessPassword || "");
+  const [showDraftAccessPassword, setShowDraftAccessPassword] = useState(false);
+  const [draftReviewSummary, setDraftReviewSummary] = useState(store.reviewSummary || "");
+  const [draftReviewKeywords, setDraftReviewKeywords] = useState((store.reviewKeywords || []).join(", "));
+  const [draftReviewSource, setDraftReviewSource] = useState(store.reviewSource || "");
   const [draftDeliveryArea, setDraftDeliveryArea] = useState(store.deliveryArea || store.region);
   const [draftDeliveryDriver, setDraftDeliveryDriver] = useState(store.deliveryDriver || "");
+  const [draftDeliveryVehicleName, setDraftDeliveryVehicleName] = useState(store.deliveryVehicleName || "");
   const [draftEmail, setDraftEmail] = useState(store.email);
   const [draftGrade, setDraftGrade] = useState<RevenueGrade>(store.grade);
   const [draftIndustry, setDraftIndustry] = useState(store.industry);
   const [draftName, setDraftName] = useState(store.name);
   const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
   const [draftPhone, setDraftPhone] = useState(store.phone);
+  const [draftRelationshipStatus, setDraftRelationshipStatus] = useState(store.relationshipStatus || "거래중");
   const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
   const [historyMemo, setHistoryMemo] = useState("");
   const [ocrSuggestion, setOcrSuggestion] = useState<BusinessOcrSuggestion | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingRelationshipStatus, setIsSavingRelationshipStatus] = useState(false);
+  const [relationshipStatusError, setRelationshipStatusError] = useState("");
   const [savedAt, setSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [isSyncingReviews, setIsSyncingReviews] = useState(false);
+  const [reviewSyncMessage, setReviewSyncMessage] = useState("");
+  const [pasteReviewSource, setPasteReviewSource] = useState("네이버");
+  const [pasteReviewText, setPasteReviewText] = useState("");
+  const [isSummarizingPaste, setIsSummarizingPaste] = useState(false);
+  const [pasteSummaryMessage, setPasteSummaryMessage] = useState("");
   const activeOcrSuggestion = ocrSuggestion || (attachments.businessCertificate ? createBusinessOcrSuggestion(store, attachments.businessCertificate.name) : null);
   const businessNumberValid = isValidBusinessRegistrationNumber(draftBusinessNumber);
   const saveDraft = async () => {
@@ -2611,8 +6582,18 @@ function StoreDetail({
       businessStatus: draftBusinessStatus,
       businessHours: draftBusinessHours,
       menuSummary: draftMenuSummary,
+      accessMethodType: draftAccessMethodType,
+      accessNote: draftAccessNote,
+      accessPassword: draftAccessPassword,
+      reviewSummary: draftReviewSummary,
+      reviewKeywords: draftReviewKeywords
+        .split(",")
+        .map((keyword) => keyword.trim())
+        .filter(Boolean),
+      reviewSource: draftReviewSource,
       deliveryArea: draftDeliveryArea,
       deliveryDriver: draftDeliveryDriver,
+      deliveryVehicleName: draftDeliveryVehicleName,
       email: draftEmail,
       expectedRevenue: Number(draftRevenue) || store.expectedRevenue,
       grade: draftGrade,
@@ -2622,7 +6603,7 @@ function StoreDetail({
       phone: draftPhone,
       representativeName: draftRepresentativeName
       });
-      const persistedLabel = result?.persisted === false ? "DB 저장 미확인" : "DB 저장 완료";
+      const persistedLabel = result?.persisted === false ? "저장 미확인" : "저장 완료";
       setSavedAt(`${persistedLabel} · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
@@ -2630,13 +6611,107 @@ function StoreDetail({
       setIsSaving(false);
     }
   };
+  // 구글 리뷰를 지금 바로 다시 수집합니다(공식 Places API). 서버에 즉시 저장되므로, 성공하면 이
+  // 폼의 입력값도 그 결과로 갱신해 사용자가 바로 확인할 수 있게 합니다.
+  const syncGoogleReviews = async () => {
+    setIsSyncingReviews(true);
+    setReviewSyncMessage("");
+    try {
+      const companyId = permitLeadCompanyId();
+      const response = await fetch(`/api/customers/${store.id}/sync-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(companyId ? { companyId } : {})
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        updated?: boolean;
+        result?: { summary?: string; keywords?: string[]; source?: string };
+      } | null;
+      if (!response.ok) {
+        setReviewSyncMessage(payload?.message || "리뷰 새로고침에 실패했습니다.");
+        return;
+      }
+      if (payload?.updated && payload.result) {
+        setDraftReviewSummary(payload.result.summary || "");
+        setDraftReviewKeywords((payload.result.keywords || []).join(", "));
+        setDraftReviewSource(payload.result.source || "");
+        setReviewSyncMessage(`구글 리뷰 반영 완료 · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
+      } else {
+        setReviewSyncMessage(payload?.message || "구글에서 리뷰를 찾지 못했습니다.");
+      }
+    } catch (error) {
+      setReviewSyncMessage(error instanceof Error ? error.message : "리뷰 새로고침 중 오류가 발생했습니다.");
+    } finally {
+      setIsSyncingReviews(false);
+    }
+  };
+  // 네이버·카카오 리뷰는 자동으로 가져오지 않습니다(설계 문서 참고). 담당자가 링크를 열어 직접
+  // 읽고 복사해온 텍스트만 받아서, 그 텍스트를 AI(규칙 기반 요약기)로 즉시 요약·키워드화합니다.
+  const summarizePastedReviews = async () => {
+    if (!pasteReviewText.trim()) {
+      setPasteSummaryMessage("붙여넣은 리뷰 텍스트가 없습니다.");
+      return;
+    }
+    setIsSummarizingPaste(true);
+    setPasteSummaryMessage("");
+    try {
+      const companyId = permitLeadCompanyId();
+      const response = await fetch(`/api/customers/${store.id}/summarize-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(companyId ? { companyId } : {}),
+          rawText: pasteReviewText,
+          source: pasteReviewSource
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        result?: { summary?: string; keywords?: string[]; source?: string };
+      } | null;
+      if (!response.ok || !payload?.result) {
+        setPasteSummaryMessage(payload?.message || "리뷰 요약에 실패했습니다.");
+        return;
+      }
+      setDraftReviewSummary(payload.result.summary || "");
+      setDraftReviewKeywords((payload.result.keywords || []).join(", "));
+      setDraftReviewSource(payload.result.source || pasteReviewSource);
+      setPasteSummaryMessage(`요약 반영 완료 · ${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`);
+    } catch (error) {
+      setPasteSummaryMessage(error instanceof Error ? error.message : "리뷰 요약 중 오류가 발생했습니다.");
+    } finally {
+      setIsSummarizingPaste(false);
+    }
+  };
+
+  const toggleRelationshipStatus = async () => {
+    const nextStatus = draftRelationshipStatus === "거래종료" ? "거래중" : "거래종료";
+    if (nextStatus === "거래종료" && !window.confirm(`${draftName}을(를) 거래 종료로 표시할까요? 이후 대시보드·이탈 위험 알림·경로 계획에서 제외됩니다.`)) return;
+
+    setIsSavingRelationshipStatus(true);
+    setRelationshipStatusError("");
+    try {
+      await onUpdateRelationshipStatus(store.id, nextStatus);
+      setDraftRelationshipStatus(nextStatus);
+    } catch (error) {
+      setRelationshipStatusError(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSavingRelationshipStatus(false);
+    }
+  };
 
   return (
     <>
-      <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/20" onClick={onClose} type="button" />
+      <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/45" onClick={onClose} type="button" />
       <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="maju-card-header border-b px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
+        <header className="maju-card-header border-b px-4 py-4">
+          {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):
+              오른쪽 버튼 3개(거래 종료로 표시·히스토리 열기·변경 저장)가 shrink-0라 절대 안 줄어들고,
+              제목 영역만 min-w-0로 계속 줄어들다가 좁은 화면에서 한두 글자 폭까지 눌려 한글이
+              한 글자씩 줄바꿈되던 문제입니다. sm 미만에서는 제목과 버튼 줄을 아예 위아래로
+              나누어 서로의 폭을 침범하지 않게 합니다. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
@@ -2646,14 +6721,30 @@ function StoreDetail({
                 <span className={businessNumberValid ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700" : "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700"}>
                   {businessNumberValid ? "사업자번호 유효" : "사업자번호 확인"}
                 </span>
+                {draftRelationshipStatus === "거래종료" ? (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
+                ) : null}
               </div>
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
+              {relationshipStatusError ? <p className="mt-2 text-xs font-black text-rose-600">{relationshipStatusError}</p> : null}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap shrink-0 items-center gap-2">
+              <button
+                className={
+                  draftRelationshipStatus === "거래종료"
+                    ? "maju-button-secondary inline-flex h-9 items-center gap-2 px-3 text-sm"
+                    : "inline-flex h-9 items-center gap-2 rounded-md border border-rose-200 bg-white px-3 text-sm font-black text-rose-700 transition hover:bg-rose-50"
+                }
+                disabled={isSavingRelationshipStatus}
+                onClick={toggleRelationshipStatus}
+                type="button"
+              >
+                {isSavingRelationshipStatus ? "저장 중..." : draftRelationshipStatus === "거래종료" ? "거래 재개로 표시" : "거래 종료로 표시"}
+              </button>
               <Link
                 className="maju-button-secondary inline-flex h-9 items-center gap-2 px-3 text-sm"
                 href={`/crm/timeline?customerId=${encodeURIComponent(store.id)}`}
@@ -2676,14 +6767,14 @@ function StoreDetail({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
           <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <EditRow label="매장명" onChange={setDraftName} value={draftName} />
+                  <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
                   <BusinessNumberEditRow onChange={setDraftBusinessNumber} valid={businessNumberValid} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
-                  <EditRow label="연락처" onChange={setDraftPhone} value={draftPhone} />
+                  <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumberInput(value))} value={draftPhone} />
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
@@ -2721,15 +6812,183 @@ function StoreDetail({
                     ]}
                     value={draftGrade}
                   />
-                  <InfoRow label="매출정보" value="거래원장 업로드 기준 업데이트 예정" />
-                  <SelectRow label="담당자" onChange={setDraftDeliveryDriver} options={driverOptions.map((driver) => ({ label: driver, value: driver }))} value={draftDeliveryDriver} />
+                  <InfoRow label="매출정보" value="거래원장 기준" />
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">담당자</span>
+                    <DriverSelectField driverOptions={driverOptions} onAddDriver={onAddDriver} onChange={setDraftDeliveryDriver} value={draftDeliveryDriver} />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">배송차</span>
+                    <DriverSelectField
+                      driverOptions={vehicleOptions}
+                      entityLabel="배송차"
+                      onAddDriver={onAddVehicle}
+                      onChange={setDraftDeliveryVehicleName}
+                      value={draftDeliveryVehicleName}
+                    />
+                  </label>
                   <SelectRow label="배송권역" onChange={setDraftDeliveryArea} options={areaOptions.map((area) => ({ label: area, value: area }))} value={draftDeliveryArea} />
+                </div>
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-black text-slate-500">외부 거래처 정보</p>
+                  <PlaceLinkRow store={store} />
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection title="담당자 연락처">
+                <CustomerContactsSection customerId={store.id} />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="리뷰 요약 · 키워드 (AI)">
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2 maju-filter-box border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs font-bold leading-5 text-slate-600">
+                      구글 리뷰는 공식 API로 자동 수집됩니다. 네이버플레이스·카카오맵 리뷰는 아직 자동 수집이 없어 아래에 직접 남겨두면 거래처 카드에 표시됩니다.
+                    </p>
+                    <button
+                      className="shrink-0 rounded-md border border-teal-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isSyncingReviews}
+                      onClick={syncGoogleReviews}
+                      type="button"
+                    >
+                      {isSyncingReviews ? "수집 중…" : "구글 리뷰 새로고침"}
+                    </button>
+                  </div>
+                  {reviewSyncMessage ? <p className="text-[11px] font-bold text-teal-600">{reviewSyncMessage}</p> : null}
+                  <div className="maju-filter-box space-y-2 border-slate-200 bg-white px-3 py-3">
+                    <p className="text-xs font-black text-slate-500">
+                      네이버·카카오 리뷰 붙여넣기 — 위 "외부 거래처 정보"의 링크를 열어 리뷰를 확인한 뒤, 리뷰 텍스트를 복사해서 아래에 붙여넣고 버튼을 누르면 AI가 즉시 요약합니다.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 rounded-md border border-slate-200 px-2 text-xs font-bold outline-none focus:border-teal-300"
+                        onChange={(event) => setPasteReviewSource(event.target.value)}
+                        value={pasteReviewSource}
+                      >
+                        <option value="네이버">네이버</option>
+                        <option value="카카오">카카오</option>
+                        <option value="기타">기타</option>
+                      </select>
+                      <button
+                        className="shrink-0 rounded-md border border-teal-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isSummarizingPaste}
+                        onClick={summarizePastedReviews}
+                        type="button"
+                      >
+                        {isSummarizingPaste ? "요약 중…" : "AI 요약 생성"}
+                      </button>
+                    </div>
+                    <textarea
+                      className="min-h-20 w-full rounded-md border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setPasteReviewText(event.target.value)}
+                      placeholder="네이버·카카오 리뷰 원문을 여기에 붙여넣으세요 (여러 개면 줄바꿈으로 구분)"
+                      value={pasteReviewText}
+                    />
+                    {pasteSummaryMessage ? <p className="text-[11px] font-bold text-teal-600">{pasteSummaryMessage}</p> : null}
+                  </div>
+                  {draftReviewKeywords.split(",").map((keyword) => keyword.trim()).filter(Boolean).length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {draftReviewKeywords
+                        .split(",")
+                        .map((keyword) => keyword.trim())
+                        .filter(Boolean)
+                        .map((keyword) => (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700" key={keyword}>
+                            #{keyword}
+                          </span>
+                        ))}
+                    </div>
+                  ) : null}
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">키워드 뱃지 (쉼표로 구분)</span>
+                    <input
+                      className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
+                      onChange={(event) => setDraftReviewKeywords(event.target.value)}
+                      placeholder="예: 친절해요, 재료가 신선해요, 회전율 빠름"
+                      value={draftReviewKeywords}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">AI 리뷰 요약</span>
+                    <textarea
+                      className="min-h-24 w-full rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setDraftReviewSummary(event.target.value)}
+                      placeholder="리뷰 전반의 분위기를 2~3문장으로 요약해두세요."
+                      value={draftReviewSummary}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">출처</span>
+                    <input
+                      className="h-9 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
+                      onChange={(event) => setDraftReviewSource(event.target.value)}
+                      placeholder="예: 네이버플레이스"
+                      value={draftReviewSource}
+                    />
+                  </label>
+                  {store.reviewsUpdatedAt ? <p className="text-[11px] font-bold text-slate-400">마지막 업데이트: {new Date(store.reviewsUpdatedAt).toLocaleString("ko-KR")}</p> : null}
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection defaultOpen title="출입방법">
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-bold leading-5 text-slate-500">
+                    배송 기사님이 현장에서 어떻게 들어가는지 남겨두세요. 열쇠·카드는 어디에 있는지, 비밀번호는 값을 함께 적어두면 헷갈리지 않습니다.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ACCESS_METHOD_TYPE_OPTIONS.map(({ icon: OptionIcon, label }) => (
+                      <button
+                        className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-black transition ${
+                          draftAccessMethodType === label
+                            ? "border-teal-600 bg-teal-700 text-white"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                        key={label}
+                        onClick={() => setDraftAccessMethodType((current) => (current === label ? "" : label))}
+                        type="button"
+                      >
+                        <OptionIcon className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">위치/방법 설명</span>
+                    <textarea
+                      className="min-h-16 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                      onChange={(event) => setDraftAccessNote(event.target.value)}
+                      placeholder="예: 화단 옆 돌 밑에 보조키, 경비실에 카드 맡겨둠, 정문 도어락"
+                      value={draftAccessNote}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="text-xs font-black text-slate-500">비밀번호</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
+                        onChange={(event) => setDraftAccessPassword(event.target.value)}
+                        placeholder="도어락 비밀번호 등"
+                        type={showDraftAccessPassword ? "text" : "password"}
+                        value={draftAccessPassword}
+                      />
+                      <button
+                        aria-label={showDraftAccessPassword ? "비밀번호 숨기기" : "비밀번호 표시"}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                        onClick={() => setShowDraftAccessPassword((value) => !value)}
+                        type="button"
+                      >
+                        {showDraftAccessPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </label>
+                  {/* 적재위치 사진도 바로 아래 "첨부자료"에서 함께 보이므로(2026-08-24 피드백: "출입방법은
+                  적재위치 사진도 보여주면 사용성이 높아짐"), 출입방법 섹션을 그 바로 위에 붙여둡니다. */}
                 </div>
               </CollapsibleSection>
 
               <CollapsibleSection defaultOpen title="첨부자료">
                 <div className="mt-4 space-y-3">
-                  <LoadingMediaBox files={attachments.loadingPositionMedia || []} onSave={onSaveLoadingMedia} />
+                  <LoadingPositionAttachmentBox customerId={store.id} customerName={store.name} />
                   <AttachmentBox
                     description="업로드하면 OCR 후보값을 읽어 기본정보와 비교합니다."
                     file={attachments.businessCertificate}
@@ -2806,7 +7065,9 @@ function StoreDetail({
                             삭제
                           </button>
                         </div>
-                        <p className="mt-1 text-sm font-bold leading-5 text-slate-700">{item.memo}</p>
+                        <p className="mt-1 text-sm font-bold leading-5 text-slate-700">
+                          <LinkifiedText text={item.memo} />
+                        </p>
                       </div>
                     ))
                   ) : (
@@ -2816,11 +7077,34 @@ function StoreDetail({
               </CollapsibleSection>
               <CollapsibleSection defaultOpen title="배송·방문 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={`${store.distanceKm?.toLocaleString() || "-"}km`} />
+                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={formatDistanceKmLabel(store.distanceKm)} />
                   <MetricRow icon={<Clock className="h-4 w-4" />} label="출발지 기준 시간" value={formatMinutes(store.durationMinutes || 0)} />
                   <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
                   <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
                 </div>
+                {(() => {
+                  const pricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
+                  const oneWayCost = estimateFuelCostWon(store.distanceKm || 0, pricePerLiter);
+                  const roundTripCost = oneWayCost * 2;
+                  const ratio = deliveryCostRatio(roundTripCost, store.expectedRevenue);
+                  const worth = deliveryWorthLabel(ratio);
+                  if (!oneWayCost) {
+                    return <p className="mt-2 text-xs font-bold text-slate-400">유가 정보를 불러오는 중이거나 거리 계산이 필요해 예상 물류비를 계산할 수 없습니다.</p>;
+                  }
+                  return (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-black text-slate-500">예상 물류비 (편도 {oneWayCost.toLocaleString()}원 · 왕복 {roundTripCost.toLocaleString()}원)</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${worth.toneClassName}`}>{worth.label}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] font-bold leading-4 text-slate-400">
+                        {ratio === null
+                          ? "예상매출을 등록하면 왕복 물류비가 매출의 몇 %인지 참고용으로 계산해드립니다."
+                          : `왕복 물류비가 예상 월매출의 약 ${(ratio * 100).toFixed(1)}% 수준입니다 (10~15% 이내면 적정, 참고용 추정치).`}
+                      </p>
+                    </div>
+                  );
+                })()}
               </CollapsibleSection>
 
               <CollapsibleSection title="AI 추천 근거">
@@ -2839,77 +7123,422 @@ function StoreDetail({
   );
 }
 
+const CONTACT_ROLE_PRESETS = ["대표", "실장", "부장", "매니저", "담당자"];
+
+function CustomerContactsSection({ customerId }: { readonly customerId: string }) {
+  const [contacts, setContacts] = useState<CustomerContactItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [unsupported, setUnsupported] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [addError, setAddError] = useState("");
+  const [draftRole, setDraftRole] = useState(CONTACT_ROLE_PRESETS[0]);
+  const [draftName, setDraftName] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
+  const [draftBirthDate, setDraftBirthDate] = useState("");
+  const [draftMemo, setDraftMemo] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editBirthDate, setEditBirthDate] = useState("");
+  const [editMemo, setEditMemo] = useState("");
+  const [rowBusyId, setRowBusyId] = useState("");
+
+  const loadContacts = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "연락처를 불러오지 못했습니다.");
+      setContacts(Array.isArray(data?.contacts) ? data.contacts : []);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "연락처를 불러오지 못했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [customerId]);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  const addContact = async () => {
+    if (!draftName.trim()) {
+      setAddError("담당자 이름을 입력하세요.");
+      return;
+    }
+    setIsAdding(true);
+    setAddError("");
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: draftRole || "담당자",
+          name: draftName.trim(),
+          phone: draftPhone.trim(),
+          birthDate: draftBirthDate,
+          memo: draftMemo.trim()
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 400 && typeof data?.message === "string" && data.message.includes("마이그레이션")) setUnsupported(true);
+        throw new Error(data?.message || "연락처 저장에 실패했습니다.");
+      }
+      setDraftName("");
+      setDraftPhone("");
+      setDraftBirthDate("");
+      setDraftMemo("");
+      setDraftRole(CONTACT_ROLE_PRESETS[0]);
+      if (data?.message) setAddError(data.message);
+      await loadContacts();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "연락처 저장에 실패했습니다.");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const startEdit = (contact: CustomerContactItem) => {
+    setEditingId(contact.id);
+    setEditRole(contact.role);
+    setEditName(contact.name);
+    setEditPhone(contact.phone || "");
+    setEditBirthDate(contact.birthDate || "");
+    setEditMemo(contact.memo || "");
+  };
+
+  const saveEdit = async (contactId: string) => {
+    if (!editName.trim()) return;
+    setRowBusyId(contactId);
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: editRole || "담당자",
+          name: editName.trim(),
+          phone: editPhone.trim(),
+          birthDate: editBirthDate,
+          memo: editMemo.trim()
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "연락처 수정에 실패했습니다.");
+      setEditingId("");
+      await loadContacts();
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "연락처 수정에 실패했습니다.");
+    } finally {
+      setRowBusyId("");
+    }
+  };
+
+  const removeContact = async (contactId: string) => {
+    if (!window.confirm("이 연락처를 삭제할까요?")) return;
+    setRowBusyId(contactId);
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "삭제에 실패했습니다.");
+      await loadContacts();
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "삭제에 실패했습니다.");
+    } finally {
+      setRowBusyId("");
+    }
+  };
+
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="maju-filter-box border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">
+        대표 연락처 외에 실장·부장·매니저 등 이 거래처의 추가 담당자를 등록해두면 방문·주문 확인 시 참고할 수 있습니다.
+      </p>
+
+      {loadError ? <p className="text-xs font-black text-rose-600">{loadError}</p> : null}
+
+      {unsupported ? (
+        <p className="maju-filter-box border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
+          다중 연락처 기능을 사용하려면 관리자가 customer_contacts 테이블 마이그레이션을 먼저 실행해야 합니다.
+        </p>
+      ) : null}
+
+      {isLoading ? (
+        <InlineLoading label="담당자 목록을 불러오는 중입니다..." />
+      ) : contacts.length ? (
+        <div className="space-y-2">
+          {contacts.map((contact) => (
+            <div className="maju-stat-card p-3" key={contact.id}>
+              {editingId === contact.id ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setEditRole(event.target.value)} placeholder="직책" value={editRole} />
+                  <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditName(event.target.value)} placeholder="이름" value={editName} />
+                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumberInput(event.target.value))} placeholder="연락처" value={editPhone} />
+                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditBirthDate(event.target.value)} type="date" value={editBirthDate} />
+                  <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditMemo(event.target.value)} placeholder="메모" value={editMemo} />
+                  <button className="maju-button-primary h-9 px-3 text-xs" disabled={rowBusyId === contact.id} onClick={() => saveEdit(contact.id)} type="button">
+                    {rowBusyId === contact.id ? "저장 중..." : "저장"}
+                  </button>
+                  <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => setEditingId("")} type="button">
+                    취소
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{contact.role}</span>
+                  <span className="shrink-0 text-sm font-black text-slate-950">{contact.name}</span>
+                  {contact.phone ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500">
+                      <Phone className="h-3.5 w-3.5" />
+                      {contact.phone}
+                    </span>
+                  ) : null}
+                  {contact.birthDate ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {contact.birthDate}
+                    </span>
+                  ) : null}
+                  {contact.memo ? <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{contact.memo}</span> : null}
+                  <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                    <button aria-label="연락처 수정" className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100" onClick={() => startEdit(contact)} type="button">
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                    <button
+                      aria-label="연락처 삭제"
+                      className="grid h-8 w-8 place-items-center rounded-md text-rose-500 hover:bg-rose-50"
+                      disabled={rowBusyId === contact.id}
+                      onClick={() => removeContact(contact.id)}
+                      type="button"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="maju-empty-state p-3 text-sm font-bold text-slate-400">등록된 추가 담당자가 없습니다.</p>
+      )}
+
+      <datalist id="contact-role-presets">
+        {CONTACT_ROLE_PRESETS.map((role) => (
+          <option key={role} value={role} />
+        ))}
+      </datalist>
+
+      <div className="maju-filter-box border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setDraftRole(event.target.value)} placeholder="직책" value={draftRole} />
+          <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftName(event.target.value)} placeholder="담당자 이름" value={draftName} />
+          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumberInput(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
+          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold text-slate-500 outline-none focus:border-teal-300 focus:text-slate-950" onChange={(event) => setDraftBirthDate(event.target.value)} type="date" value={draftBirthDate} />
+          <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftMemo(event.target.value)} placeholder="메모(선택)" value={draftMemo} />
+          <button className="maju-button-primary inline-flex h-9 shrink-0 items-center gap-1.5 px-3 text-sm" disabled={isAdding} onClick={addContact} type="button">
+            <Plus className="h-4 w-4" />
+            {isAdding ? "추가 중..." : "담당자 추가"}
+          </button>
+        </div>
+        {addError ? <p className="mt-1.5 text-xs font-black text-rose-600">{addError}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 function CollapsibleSection({ children, defaultOpen = false, title }: { readonly children: ReactNode; readonly defaultOpen?: boolean; readonly title: string }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <section className="maju-section-card">
-      <button className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left" onClick={() => setOpen((value) => !value)} type="button">
+      <button className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left" onClick={() => setOpen((value) => !value)} type="button">
         <span className="text-sm font-black text-slate-900">{title}</span>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open ? <div className="border-t border-slate-200 px-5 pb-5">{children}</div> : null}
+      {open ? <div className="border-t border-slate-200 px-4 pb-5">{children}</div> : null}
     </section>
   );
 }
 
-function LoadingMediaBox({ files, onSave }: { readonly files: AttachmentFile[]; readonly onSave: (files: AttachmentFile[]) => void }) {
+type CustomerOperationsAttachmentsPayload = { attachments?: Array<LoadingPositionMediaItem & { attachmentType: string }> };
+
+// 2026-08-26 효율화: 거래처를 선택하면 퀵카드 미리보기(QuickCardAccessPhotoPreview)와 상세 패널의
+// 첨부자료 박스(LoadingPositionAttachmentBox)가 거의 동시에 마운트되어, 같은 customerId로 같은
+// /api/customer-operations를 각자 따로 호출하고 있었습니다. 아직 응답이 오지 않은 "진행 중" 요청만
+// 공유해 중복 호출을 막고, 응답이 오면 즉시 캐시를 비워 업로드 후 새로고침 같은 이후 호출은 항상
+// 최신 데이터를 다시 받아오게 합니다.
+const customerOperationsInFlight = new Map<string, Promise<CustomerOperationsAttachmentsPayload | null>>();
+
+function fetchCustomerOperationsAttachments(customerId: string): Promise<CustomerOperationsAttachmentsPayload | null> {
+  const existing = customerOperationsInFlight.get(customerId);
+  if (existing) return existing;
+
+  const promise = fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null)
+    .finally(() => {
+      customerOperationsInFlight.delete(customerId);
+    });
+
+  customerOperationsInFlight.set(customerId, promise);
+  return promise;
+}
+
+// 지도 퀵카드는 공간이 좁아 전체 업로드 박스(LoadingPositionAttachmentBox) 대신 최근 3장만 조회
+// 전용으로 가볍게 보여줍니다(2026-08-24 피드백: "출입방법은 적재위치 사진도 보여주면 사용성이
+// 높아짐"). 사진이 없으면 카드에 빈 칸을 남기지 않도록 아무것도 렌더링하지 않습니다.
+function QuickCardAccessPhotoPreview({ customerId }: { readonly customerId: string }) {
+  const [items, setItems] = useState<LoadingPositionMediaItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCustomerOperationsAttachments(customerId).then((payload) => {
+      if (cancelled) return;
+      setItems(
+        (payload?.attachments || [])
+          .filter((item) => item.attachmentType === "loading_position" && !item.mimeType?.startsWith("video"))
+          .slice(0, 3)
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  if (!items.length) return null;
+
   return (
-    <div className="rounded-md border border-blue-300 bg-blue-50/60 p-4">
+    <div className="mt-1.5 flex gap-1">
+      {items.map((item) => (
+        <img
+          alt={item.title}
+          className="h-10 w-10 shrink-0 rounded object-cover ring-1 ring-inset ring-teal-100"
+          key={item.id}
+          loading="lazy"
+          src={item.fileUrl}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly customerId: string; readonly customerName: string }) {
+  const [items, setItems] = useState<LoadingPositionMediaItem[]>([]);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
+
+  async function loadItems() {
+    setLoadState("loading");
+    const payload = await fetchCustomerOperationsAttachments(customerId);
+    if (!payload) {
+      setLoadState("error");
+      return;
+    }
+    setItems((payload.attachments || []).filter((item) => item.attachmentType === "loading_position"));
+    setLoadState("ready");
+  }
+
+  async function uploadFiles(fileList: FileList | null) {
+    const files = Array.from(fileList || []);
+    if (!files.length || saveState === "saving") return;
+
+    const oversizedFiles = files.filter((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
+    if (oversizedFiles.length) {
+      setSaveState("error");
+      setSaveError(
+        oversizedFiles.length === 1
+          ? `${oversizedFiles[0].name} 용량이 ${formatUploadSizeMb(oversizedFiles[0].size)}로 최대 50MB를 초과합니다.`
+          : `${oversizedFiles.length}개 파일이 최대 50MB를 초과해 업로드할 수 없습니다: ${oversizedFiles.map((file) => file.name).join(", ")}`
+      );
+      return;
+    }
+
+    setSaveError("");
+    setSaveState("saving");
+
+    // 2026-08-31 에러 처리/복원력 감사 후속: 예전에는 파일 하나가 실패하면 그 자리에서 멈춰
+    // 나머지 파일은 시도조차 하지 않고 조용히 버려졌습니다. 이제 모든 파일을 끝까지 시도하고,
+    // 실패한 파일이 있으면 몇 개가 성공했는지와 실패한 파일 이름을 함께 보여줍니다.
+    const failedFileNames: string[] = [];
+    let successCount = 0;
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("customerId", customerId);
+      formData.append("attachmentType", "loading_position");
+      formData.append("title", `배송 적재위치 - ${customerName}`);
+
+      const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
+      if (!response?.ok) {
+        failedFileNames.push(file.name);
+        continue;
+      }
+      successCount += 1;
+    }
+
+    if (failedFileNames.length) {
+      setSaveState("error");
+      setSaveError(
+        successCount
+          ? `${successCount}/${files.length}개 업로드 완료, 실패: ${failedFileNames.join(", ")} (다시 시도해주세요)`
+          : `업로드에 실패했습니다: ${failedFileNames.join(", ")}`
+      );
+    } else {
+      setSaveState("idle");
+    }
+    await loadItems();
+  }
+
+  useEffect(() => {
+    loadItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
+
+  return (
+    <div className="rounded-md border border-slate-300 bg-slate-50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-600 text-white">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
             <FileImage className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">배송 적재위치 사진/영상</p>
-              <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-200">{files.length}개</span>
+              <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">배송 필수</span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">{items.length}개</span>
             </div>
-            <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">기사님이 출고 전 확인하는 핵심 자료입니다. 적재 위치, 입구, 냉장/냉동 구분 사진과 짧은 영상을 여러 개 저장할 수 있습니다.</p>
+            <p className="mt-1 max-w-xl text-xs font-bold leading-5 text-slate-500">
+              기사님이 출고 전 확인하는 핵심 자료입니다. 가장 최근 자료가 현재 기준이며, 이전 자료는 잠금 표시로 계속 보존됩니다.
+            </p>
           </div>
         </div>
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-black text-white shadow-sm hover:bg-blue-700">
-          <Plus className="h-4 w-4" />
-          추가
-          <input
-            accept="image/*,video/*"
-            className="sr-only"
-            multiple
-            onChange={(event) => {
-              const selectedFiles = Array.from(event.target.files || []);
-              if (!selectedFiles.length) return;
-              Promise.all(
-                selectedFiles.map(
-                  (selectedFile) =>
-                    new Promise<AttachmentFile>((resolve) => {
-                      const mediaType = selectedFile.type.startsWith("video/") ? "video" : "image";
-                      const reader = new FileReader();
-                      reader.onload = () => resolve({ dataUrl: String(reader.result || ""), mediaType, name: selectedFile.name });
-                      reader.readAsDataURL(selectedFile);
-                    })
-                )
-              ).then(onSave);
-              event.target.value = "";
-            }}
-            type="file"
-          />
-        </label>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            aria-label="적재위치 자료 새로고침"
+            className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-500"
+            onClick={loadItems}
+            type="button"
+          >
+            <RefreshCw className={`h-4 w-4 ${loadState === "loading" ? "animate-spin" : ""}`} />
+          </button>
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-black text-white shadow-sm hover:bg-teal-800">
+            {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {saveState === "saving" ? "업로드 중" : "추가"}
+            <input accept="image/*,video/*" className="sr-only" multiple onChange={(event) => uploadFiles(event.target.files)} type="file" />
+          </label>
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {files.length ? (
-          files.map((file, index) => (
-            <MediaPreview file={file} key={`${file.name}-${index}`} />
-          ))
-        ) : (
-          <div className="col-span-full grid h-28 place-items-center rounded-md border border-dashed border-blue-200 bg-white text-center">
-            <div>
-              <p className="text-xs font-black text-slate-600">아직 업로드된 적재위치 자료가 없습니다.</p>
-              <p className="mt-1 text-[11px] font-bold text-slate-400">오른쪽 + 버튼으로 사진/영상을 추가하세요.</p>
-            </div>
-          </div>
-        )}
+      {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveError}</p> : null}
+      <div className="mt-4">
+        <LoadingPositionGallery
+          emptyMessage="아직 업로드된 적재위치 자료가 없습니다. 오른쪽 + 버튼으로 사진/영상을 추가하세요."
+          items={items}
+        />
       </div>
     </div>
   );
@@ -2948,7 +7577,7 @@ function BusinessOcrPanel({
   const suggestionNumberValid = isValidBusinessRegistrationNumber(suggestion.businessRegistrationNumber);
 
   return (
-    <div className="rounded-md border border-blue-200 bg-blue-50/70 p-4">
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2959,7 +7588,7 @@ function BusinessOcrPanel({
           </div>
           <p className="mt-1 text-xs font-bold text-slate-500">사업자등록증에서 읽은 후보값입니다. 기존 값과 비교 후 반영하세요.</p>
         </div>
-        <button className="h-9 rounded-md bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!suggestionNumberValid} onClick={onApply} type="button">
+        <button className="h-9 rounded-md bg-teal-700 px-3 text-xs font-black text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!suggestionNumberValid} onClick={onApply} type="button">
           기본정보에 반영
         </button>
       </div>
@@ -2998,16 +7627,16 @@ function AttachmentBox({
   readonly onSave: (file: AttachmentFile) => void;
 }) {
   return (
-    <div className={`rounded-md border p-4 ${important ? "border-blue-300 bg-blue-50/60" : "border-slate-200 bg-white"}`}>
+    <div className={`rounded-md border p-4 ${important ? "border-slate-300 bg-slate-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${important ? "bg-blue-600 text-white" : "bg-white text-slate-400"}`}>
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${important ? "bg-teal-700 text-white" : "bg-white text-slate-400"}`}>
             <FileImage className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">{label}</p>
-              {important ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">중요</span> : null}
+              {important ? <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">중요</span> : null}
             </div>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
           </div>
@@ -3146,10 +7775,10 @@ function Kpi({
   }[tone];
 
   return (
-    <div className={`relative min-w-0 overflow-hidden border-r border-slate-200/80 px-4 py-2.5 last:border-r-0 ${backgroundClass}`}>
+    <div className={`relative min-w-0 overflow-hidden border-r border-b border-slate-200/80 px-2.5 py-2 last:border-r-0 sm:px-4 sm:py-2.5 ${backgroundClass}`}>
       <span className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
-      <p className="truncate text-[11px] font-black text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-[20px] font-black leading-none ${valueClass}`}>{value}</p>
+      <p className="truncate text-[10px] font-black text-slate-500 sm:text-[11px]">{label}</p>
+      <p className={`mt-1 truncate text-[15px] font-black leading-none sm:text-[20px] ${valueClass}`}>{value}</p>
       {helper ? <p className="mt-1.5 truncate text-[10px] font-bold text-slate-400">{helper}</p> : null}
     </div>
   );
@@ -3164,6 +7793,7 @@ function RouteBasisStrip({
   mapReadyStoreCount,
   missingAddressCount,
   routePlan,
+  sourceReady,
   visibleMapReadyStoreCount
 }: {
   readonly allStoreCount: number;
@@ -3174,14 +7804,15 @@ function RouteBasisStrip({
   readonly mapReadyStoreCount: number;
   readonly missingAddressCount: number;
   readonly routePlan: RoutePlan;
+  readonly sourceReady: boolean;
   readonly visibleMapReadyStoreCount: number;
 }) {
-  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 매장 주소 정상";
-  const sourceLabel = routePlan.source === "supabase" ? "거래처 연결됨" : "거래처 연결 대기";
-  const sourceHelper = routePlan.source === "supabase" ? "저장된 거래처 기준" : "거래처 등록 또는 연결 확인 필요";
-  const sourceReady = routePlan.source === "supabase";
-  const distanceValue = sourceReady ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "등록 후 계산";
-  const durationValue = sourceReady ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "등록 후 계산";
+  const addressStatus = missingAddressCount > 0 ? `${missingAddressCount.toLocaleString()}곳 주소 보완 필요` : "전체 거래처 주소 정상";
+  const routeReady = routePlan.source === "supabase";
+  const sourceLabel = routeReady ? "코스 연결됨" : sourceReady ? "원장 기준 표시" : "거래처 연결 대기";
+  const sourceHelper = routeReady ? "저장된 코스·거래처 기준" : sourceReady ? "거래처 원장 마커 기준" : "거래처 등록 또는 연결 확인 필요";
+  const distanceValue = routeReady || allStoreTotals.distanceKm > 0 ? `${(routePlan.totalDistanceKm || allStoreTotals.distanceKm).toLocaleString()}km` : "티맵 계산 전";
+  const durationValue = routeReady || allStoreTotals.durationMinutes > 0 ? formatMinutes(routePlan.totalDurationMinutes || allStoreTotals.durationMinutes) : "티맵 계산 전";
 
   return (
     <section className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 xl:flex-row xl:items-center">
@@ -3197,11 +7828,11 @@ function RouteBasisStrip({
         ) : null}
       </div>
       <div className="grid min-w-0 flex-1 overflow-hidden rounded-md border border-slate-200 bg-white sm:grid-cols-2 2xl:grid-cols-5">
-        <RouteBasisMetric label="DB 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
+        <RouteBasisMetric label="원장 기준" value={sourceLabel} helper={sourceHelper} tone={sourceReady ? "ready" : "warning"} />
         <RouteBasisMetric label="지도 표시" value={`${mapReadyStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={addressStatus} tone={missingAddressCount > 0 ? "warning" : "ready"} />
-        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 매장 합산" tone={sourceReady ? "default" : "warning"} />
-        <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={sourceReady ? "default" : "warning"} />
-        <RouteBasisMetric label="현재 화면 매장" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · 매출 ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
+        <RouteBasisMetric label="출발지 단건 거리합" value={distanceValue} helper="회사 출발지 → 각 거래처 합산" tone={routeReady || allStoreTotals.distanceKm > 0 ? "default" : "warning"} />
+        <RouteBasisMetric label="출발지 단건 시간합" value={durationValue} helper="경유 최적화 전 기준값" tone={routeReady || allStoreTotals.durationMinutes > 0 ? "default" : "warning"} />
+        <RouteBasisMetric label="현재 화면 거래처" value={`${currentStoreCount.toLocaleString()}/${allStoreCount.toLocaleString()}곳`} helper={`지도 ${visibleMapReadyStoreCount.toLocaleString()}곳 · 매출 ${currentTotals.expectedRevenue.toLocaleString()}만원`} />
       </div>
     </section>
   );
@@ -3223,7 +7854,7 @@ function RouteBasisMetric({ helper, label, tone = "default", value }: { readonly
   );
 }
 
-function RouteMetric({ label, value }: { readonly label: string; readonly value: string }) {
+export function RouteMetric({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2">
       <p className="truncate text-[11px] font-black text-slate-400">{label}</p>
@@ -3232,10 +7863,10 @@ function RouteMetric({ label, value }: { readonly label: string; readonly value:
   );
 }
 
-function RouteWorkStep({ active, done, label }: { active: boolean; done: boolean; label: string }) {
+export function RouteWorkStep({ active, done, label }: { active: boolean; done: boolean; label: string }) {
   return (
-    <div className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${done ? "border-emerald-200 bg-white text-emerald-800" : active ? "border-blue-200 bg-white text-blue-800" : "border-slate-200 bg-white text-slate-500"}`}>
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${done ? "bg-emerald-600 text-white" : active ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>
+    <div className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${done ? "border-emerald-200 bg-white text-emerald-800" : active ? "border-slate-300 bg-white text-slate-900" : "border-slate-200 bg-white text-slate-500"}`}>
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${done ? "bg-emerald-600 text-white" : active ? "bg-teal-700 text-white" : "bg-slate-200 text-slate-500"}`}>
         {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
       </span>
       <span className="text-xs font-black">{label}</span>
@@ -3286,7 +7917,12 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
         businessRegistrationNumber: details.businessNumber || "",
         businessStatus: normalizeStoreBusinessStatus(details.businessStatus),
         deliveryArea: (store as RoutePlanStop & { deliveryArea?: string }).deliveryArea || store.region,
-        deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || defaultDriverByIndex(index),
+        // 2026-08-24 피드백("삭제가 계속 안되네") 근본 원인 수정: 담당자가 없는 거래처에 순서대로
+        // "김배송 매니저" 같은 가짜 이름을 붙이던 defaultDriverByIndex 폴백을 없앴습니다. 이 폴백 때문에
+        // 담당자를 정상적으로 지워도(delivery_manager를 null로 저장해도) 새로고침하자마자 같은 순서로
+        // 같은 가짜 이름이 다시 생겨, 화면에서는 "삭제가 안 되는 것"처럼 보였습니다. 이제 담당자가 없으면
+        // 빈 값 그대로 두고, createDeliveryVehiclesFromStores에서 "미배정" 그룹 하나로 모아 보여줍니다.
+        deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || "",
         email: store.email || "",
         grade: getRevenueGrade(store.expectedRevenue),
         industry: store.industry || "미분류",
@@ -3296,6 +7932,47 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
         openingDate: store.openingDate || "",
         phone: store.phone || "",
         representativeName: store.representativeName || ""
+      };
+    });
+}
+
+function createStoreRowsFromLedgerMarkers(existingMarkers: KakaoMapMarker[]): StoreRow[] {
+  return existingMarkers
+    .filter((marker) => marker.tone === "lead" && marker.id && marker.address)
+    .map((marker, index) => {
+      const { expectedRevenue, name } = parseLedgerMarkerName(marker.name);
+      const region = getRegionFromAddress(marker.address || "");
+
+      return {
+        id: marker.id || `ledger-marker-${index + 1}`,
+        accountCopyStatus: "missing",
+        address: marker.address || "",
+        bankAccount: "",
+        birthDate: "",
+        businessCertificateStatus: "missing",
+        businessRegistrationNumber: "",
+        businessStatus: "unknown",
+        deliveryArea: region,
+        // 위 createStoreRows와 동일한 이유로 가짜 담당자 이름 생성을 제거했습니다.
+        deliveryDriver: "",
+        distanceKm: 0,
+        durationMinutes: 0,
+        email: "",
+        expectedRevenue,
+        grade: normalizeRevenueGrade(marker.grade) || getRevenueGrade(expectedRevenue),
+        industry: "미분류",
+        markerX: marker.x,
+        markerY: marker.y,
+        memo: "거래처 원장 기준으로 지도에 표시 중",
+        name,
+        openingDate: "",
+        order: index + 1,
+        phone: "",
+        region,
+        relationshipStatus: "관리중",
+        representativeName: "",
+        score: 80,
+        status: "today"
       };
     });
 }
@@ -3315,9 +7992,14 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
         businessRegistrationNumber: details.businessRegistrationNumber || details.businessNumber || "",
         businessStatus: normalizeStoreBusinessStatus(details.businessStatus),
         deliveryArea: vehicle.area,
-        deliveryDriver: vehicle.driver,
+        // 배송차 하나에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우),
+        // vehicle.driver(대표 담당자)로 덮어쓰지 않고 이 거래처에 실제 배정된 담당자를 그대로 씁니다.
+        deliveryDriver: store.deliveryDriver || vehicle.driver,
         deliveryVehicleId: vehicle.id,
-        deliveryVehicleName: vehicle.name,
+        // 배송차는 담당자와 독립적으로 거래처별로 지정할 수 있습니다. 거래처에 직접 지정된 배송차
+        // 이름(store.deliveryVehicle, 서버에 저장된 값)이 있으면 그 값을 우선 보여주고, 아직 지정한
+        // 적 없는 거래처는 예전처럼 담당자 기준 자동 그룹명(vehicle.name)을 그대로 보여줍니다.
+        deliveryVehicleName: store.deliveryVehicle || vehicle.name,
         email: store.email || details.email || "",
         grade: getRevenueGrade(store.expectedRevenue),
         industry: store.industry || details.industry || "미분류",
@@ -3330,6 +8012,26 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
       };
     })
   );
+}
+
+function parseLedgerMarkerName(value: string) {
+  const [rawName, rawRevenue] = value.split("· 월 ");
+  const expectedRevenue = Number((rawRevenue || "").replace(/[^0-9]/g, ""));
+
+  return {
+    expectedRevenue: Number.isFinite(expectedRevenue) && expectedRevenue > 0 ? expectedRevenue : 0,
+    name: rawName.trim() || value
+  };
+}
+
+function getRegionFromAddress(address: string) {
+  const parts = address.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).join(" ") || "미분류";
+}
+
+function normalizeRevenueGrade(value: string | undefined): RevenueGrade | undefined {
+  if (value === "A" || value === "B" || value === "C") return value;
+  return undefined;
 }
 
 function findMarkerForStore(existingMarkers: KakaoMapMarker[], store: Pick<RoutePlanStop, "address" | "id" | "name">) {
@@ -3353,10 +8055,14 @@ function toCustomerPayload(store: StoreRow) {
     deliveryKm: Number(store.distanceKm || 0),
     deliveryManager: store.deliveryDriver || "",
     deliveryMinutes: Number(store.durationMinutes || 0),
+    deliveryVehicle: store.deliveryVehicleName || "",
     deliveryZone: store.deliveryArea || store.region,
     email: store.email,
     industry: store.industry,
     loadingPosition: store.memo || "",
+    accessMethodType: store.accessMethodType,
+    accessNote: store.accessNote,
+    accessPassword: store.accessPassword,
     businessHours: store.businessHours || "",
     menuSummary: store.menuSummary || "",
     monthlyRevenue: Number(store.expectedRevenue || 0),
@@ -3364,33 +8070,93 @@ function toCustomerPayload(store: StoreRow) {
     phone: store.phone,
     region: store.region,
     representativeName: store.representativeName,
-    visitCount: Number(store.order || 0)
+    reviewSummary: store.reviewSummary,
+    reviewKeywords: store.reviewKeywords,
+    reviewSource: store.reviewSource,
+    visitCount: Number(store.order || 0),
+    // 동시 편집 감지(낙관적 동시성 제어)용: 이 화면이 마지막으로 읽은 updated_at을 그대로 실어
+    // 보내, 그 사이 다른 사람이 먼저 저장했는지 서버가 확인할 수 있게 합니다. updateStore()가
+    // 저장 성공/실패에 따라 항상 최신 값으로 갱신해둡니다.
+    expectedUpdatedAt: store.updatedAt
   };
 }
 
-function createDeliveryVehiclesFromStores(stores: StoreRow[], vehicleFuelTypes?: Record<string, "gasoline" | "diesel">): DeliveryVehicle[] {
+/**
+ * 배송차(코스 계산·연료비·지도 필터에 쓰이는 "배송차 목록")를 실제 배차 기준으로 묶습니다.
+ * 담당자와 배송차는 이제 서로 독립된 값이라, 거래처에 직접 지정된 배송차 이름(deliveryVehicleName)이
+ * 있으면 그 이름으로 묶고, 아직 지정하지 않은 거래처는 예전처럼 담당자 이름을 임시 배송차로 써서
+ * 묶습니다(담당자 1인당 트럭 1대라는 기존 기본값). 한 배송차에 담당자가 여러 명 섞여 있을 수 있어
+ * (같은 트럭을 나눠 쓰는 경우), 그 배송차의 "담당자" 표시값은 거래처 수가 가장 많은 담당자로 대표합니다.
+ */
+function createDeliveryVehiclesFromStores(
+  stores: StoreRow[],
+  vehicleFuelTypes?: Record<string, "gasoline" | "diesel">,
+  extraVehicles: string[] = [],
+  extraDrivers: string[] = []
+): DeliveryVehicle[] {
   const groups = new Map<string, StoreRow[]>();
+  const explicitVehicleKeys = new Set<string>();
+  // 2026-08-24 피드백("삭제가 계속 안되네") 근본 원인 수정: 예전에는 담당자가 없는 거래처를
+  // defaultDriverByIndex(순서 기반 "김배송 매니저" 등 가짜 이름)로 채워 넣고, 그 가짜 이름을 그대로
+  // 배송차 그룹 키로 썼습니다. 그래서 실제로 담당자를 지웠어도(서버 값은 null) 새로고침하면 같은
+  // 순서의 거래처가 같은 가짜 이름을 다시 받아 똑같은 배송차가 재생성되어 "삭제가 안 되는 것"처럼
+  // 보였습니다. 이제 담당자·배송차가 둘 다 없는 거래처는 가짜 이름을 붙이지 않고 이 고정 키 하나로
+  // 모아 "미배정" 그룹 한 개로만 보여줍니다. 실제로 저장된 배송차가 아니므로 삭제·편집 대상도 아닙니다.
+  const UNASSIGNED_KEY = "__unassigned__";
 
-  stores.forEach((store, index) => {
-    const driver = store.deliveryDriver || defaultDriverByIndex(index);
+  stores.forEach((store) => {
+    const driver = store.deliveryDriver || "";
     const area = store.deliveryArea || store.region || "미분류";
-    groups.set(driver, [...(groups.get(driver) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
+    // routeSeedStores(서버 원본 데이터)에는 deliveryVehicleName이 아니라 deliveryVehicle 필드로
+    // 값이 들어옵니다(RoutePlanStop.deliveryVehicle). deliveryVehicleName은 createDeliveryStoreRows가
+    // 그룹핑 이후 화면 표시용으로 파생시키는 필드라 여기서는 아직 존재하지 않아, 이 값으로 확인하면
+    // 항상 비어 있어 그룹핑이 담당자 기준 자동 그룹으로만 폴백해버립니다.
+    const vehicleKey = store.deliveryVehicle || driver || UNASSIGNED_KEY;
+    if (store.deliveryVehicle) explicitVehicleKeys.add(vehicleKey);
+    groups.set(vehicleKey, [...(groups.get(vehicleKey) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
   });
 
-  return Array.from(groups.entries()).map(([driver, stops], index) => {
+  // 아직 거래처가 배정되지 않은, 방금 추가한 배송차도 빈 그룹으로 목록에 나타나야 합니다.
+  extraVehicles.forEach((vehicleName) => {
+    explicitVehicleKeys.add(vehicleName);
+    if (!groups.has(vehicleName)) groups.set(vehicleName, []);
+  });
+
+  // extraDrivers("새 담당자·배송차 추가"로 등록한, 아직 거래처가 없는 담당자)는 배송차 "이름"이 아니라
+  // 담당자 이름이라 explicitVehicleKeys에는 넣지 않습니다 — 그래야 아래에서 배송차 이름은 자동
+  // 채번("배송 N호차")되고, 담당자 표시값만 이 이름을 그대로 씁니다. 이미 실제 거래처가 있어 groups에
+  // 존재하는 담당자면 건드리지 않습니다(중복 빈 그룹 방지).
+  extraDrivers.forEach((driverName) => {
+    if (!groups.has(driverName)) groups.set(driverName, []);
+  });
+
+  // "미배정" 그룹은 항상 목록 맨 뒤에 오도록 정렬합니다 — 그래야 실제 배송차 자동 번호("배송 1호차",
+  // "배송 2호차"...)가 미배정 그룹이 어디 끼어드는지에 따라 밀리지 않습니다.
+  const sortedEntries = Array.from(groups.entries()).sort(
+    ([a], [b]) => (a === UNASSIGNED_KEY ? 1 : 0) - (b === UNASSIGNED_KEY ? 1 : 0)
+  );
+
+  let autoVehicleNumber = 0;
+  return sortedEntries.map(([vehicleKey, stops]) => {
     const orderedStops = stops.map((stop, stopIndex) => ({
       ...stop,
       order: stopIndex + 1
     }));
+    const isUnassigned = vehicleKey === UNASSIGNED_KEY;
+    const isExplicitVehicle = explicitVehicleKeys.has(vehicleKey);
+    const representativeDriver = isUnassigned ? "" : mostFrequentDriver(orderedStops) || (isExplicitVehicle ? "" : vehicleKey);
+    if (!isUnassigned) autoVehicleNumber += 1;
+    const vehicleName = isUnassigned ? "미배정" : isExplicitVehicle ? vehicleKey : `배송 ${autoVehicleNumber}호차`;
 
     return {
       addresses: orderedStops.map((stop) => stop.address || stop.region),
       area: summarizeVehicleArea(orderedStops),
-      driver,
+      driver: representativeDriver,
       expectedRevenue: orderedStops.reduce((total, stop) => total + Number(stop.expectedRevenue || 0), 0),
-      fuelType: vehicleFuelTypes?.[driver] || "diesel",
-      id: `vehicle-${index + 1}`,
-      name: `배송 ${index + 1}호차`,
+      fuelType: vehicleFuelTypes?.[representativeDriver] || "diesel",
+      id: isUnassigned ? "vehicle-unassigned" : `vehicle-${autoVehicleNumber}`,
+      isUnassigned,
+      name: vehicleName,
       stops: orderedStops,
       totalDistanceKm: roundToOneDecimal(orderedStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
       totalDurationMinutes: orderedStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
@@ -3398,14 +8164,29 @@ function createDeliveryVehiclesFromStores(stores: StoreRow[], vehicleFuelTypes?:
   });
 }
 
+// 한 배송차 그룹 안에 담당자가 여러 명 섞여 있을 때, 거래처 수가 가장 많은 담당자를 대표로 고릅니다.
+function mostFrequentDriver(stops: StoreRow[]): string {
+  const counts = new Map<string, number>();
+  stops.forEach((stop) => {
+    if (!stop.deliveryDriver) return;
+    counts.set(stop.deliveryDriver, (counts.get(stop.deliveryDriver) || 0) + 1);
+  });
+
+  let best = "";
+  let bestCount = 0;
+  counts.forEach((count, driver) => {
+    if (count > bestCount) {
+      best = driver;
+      bestCount = count;
+    }
+  });
+  return best;
+}
+
 function summarizeVehicleArea(stops: StoreRow[]) {
   const areas = Array.from(new Set(stops.map((stop) => stop.deliveryArea || stop.region).filter(Boolean))).slice(0, 3);
   if (areas.length === 0) return "미분류";
   return areas.join("·");
-}
-
-function defaultDriverByIndex(index: number) {
-  return ["김배송 매니저", "박배송 매니저", "이배송 매니저", "최배송 매니저", "정배송 매니저", "한배송 매니저", "오배송 매니저", "서배송 매니저", "신배송 매니저", "문배송 매니저"][index % 10];
 }
 
 function createVehicleMarkerMeta(vehicles: DeliveryVehicle[]) {
@@ -3432,7 +8213,11 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
         label: mode === "vehicle" ? vehicle?.label || "?" : store.grade,
         markerColor: mode === "vehicle" ? vehicle?.color : undefined,
         name: mode === "vehicle" ? `${store.deliveryVehicleName || "배송차 미지정"} · ${store.name}` : store.name,
-        tone: "lead" as const,
+        // 이전에는 여기가 "lead"로 잘못 표시되어 있어서, 지도 탭의 onMarkerClick이 등록된
+        // 거래처 마커를 신규 리드로 오인해 setPreviewLeadId를 호출했습니다. leadRadiusResult가
+        // 없을 때는(기본 상태) 그 조건도 항상 거짓이라 아무 카드도 뜨지 않았던 것이 "마커
+        // 선택하면 카드가 안 보임" 버그의 실제 원인이었습니다.
+        tone: "customer" as const,
         x: store.markerX,
         y: store.markerY
       };
@@ -3440,6 +8225,143 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
   );
 
   return mergeMarkers(originWithId ? [originWithId, ...storeMarkers] : storeMarkers);
+}
+
+function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: Map<string, StoreRow>): KakaoMapMarker[] {
+  return locations
+    .filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng))
+    .map((location) => {
+      const label = (location.deliveryVehicle || location.driverName || "차량").replace(/\s+/g, " ").slice(0, 8);
+      const checkedAt = location.lastLocationAt ? new Date(location.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "시간 미확인";
+      const accuracyText = Number.isFinite(location.accuracyMeters) ? ` · 오차 ${Math.round(location.accuracyMeters || 0)}m` : "";
+      const statusText = getVehicleMarkerStatusText(location);
+      const currentStore = location.currentCustomerId ? storeById.get(location.currentCustomerId) : undefined;
+      const currentStoreText = currentStore ? ` · 작업 ${currentStore.name}` : "";
+      return {
+        address: `${statusText}${currentStoreText}${accuracyText}`,
+        id: `vehicle-${location.id}`,
+        label,
+        lat: location.lat,
+        lng: location.lng,
+        markerColor: location.isStale ? "#64748b" : "#0f766e",
+        name: `${location.driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
+        tone: "vehicle" as const,
+        x: 50,
+        y: 50
+      };
+    });
+}
+
+function createLocationRoutePath(events: StaffLocationEvent[]) {
+  const path: Array<{ lat: number; lng: number }> = [];
+  let previous: StaffLocationEvent | null = null;
+  events.forEach((event) => {
+    if (!isReliableLocationEvent(event)) {
+      previous = null;
+      path.push({ lat: Number.NaN, lng: Number.NaN });
+      return;
+    }
+    if (previous) {
+      const gapMinutes = (new Date(event.recordedAt).getTime() - new Date(previous.recordedAt).getTime()) / 60000;
+      const segmentKm = haversineKm(previous.lat, previous.lng, event.lat, event.lng);
+      const speedKmh = gapMinutes > 0 ? (segmentKm / gapMinutes) * 60 : 0;
+      if (gapMinutes > 5 || speedKmh > 120) path.push({ lat: Number.NaN, lng: Number.NaN });
+    }
+    path.push({ lat: event.lat, lng: event.lng });
+    previous = event;
+  });
+  return path;
+}
+
+function summarizeLocationEvents(events: StaffLocationEvent[]) {
+  let distanceKm = 0;
+  let gapCount = 0;
+  let ignoredCount = 0;
+  let previous: StaffLocationEvent | null = null;
+  events.forEach((event) => {
+    if (!isReliableLocationEvent(event)) {
+      ignoredCount += 1;
+      previous = null;
+      return;
+    }
+    if (!previous) {
+      previous = event;
+      return;
+    }
+    const gapMinutes = (new Date(event.recordedAt).getTime() - new Date(previous.recordedAt).getTime()) / 60000;
+    const segmentKm = haversineKm(previous.lat, previous.lng, event.lat, event.lng);
+    const speedKmh = gapMinutes > 0 ? (segmentKm / gapMinutes) * 60 : 0;
+    if (gapMinutes > 5) {
+      gapCount += 1;
+    } else if (speedKmh > 120) {
+      ignoredCount += 1;
+    } else {
+      distanceKm += segmentKm;
+    }
+    previous = event;
+  });
+  const first = events[0]?.recordedAt ? new Date(events[0].recordedAt).getTime() : 0;
+  const last = events[events.length - 1]?.recordedAt ? new Date(events[events.length - 1].recordedAt).getTime() : 0;
+  return {
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    durationMinutes: first && last ? Math.max(0, Math.round((last - first) / 60000)) : 0,
+    gapCount,
+    ignoredCount
+  };
+}
+
+function isReliableLocationEvent(event: StaffLocationEvent) {
+  return Number.isFinite(event.lat) && Number.isFinite(event.lng) && (!Number.isFinite(event.accuracyMeters) || Number(event.accuracyMeters) <= 150);
+}
+
+function summarizeCompletionOrder(completions: DeliveryCompletionEvent[]) {
+  const planned = completions.filter((completion) => Number.isFinite(completion.plannedOrder));
+  if (!planned.length) return { label: "-" };
+  const matched = planned.filter((completion) => completion.plannedOrder === completion.actualOrder).length;
+  return { label: `${matched}/${planned.length}` };
+}
+
+function getVehicleStatusLabel(vehicle: StaffVehicleLocation) {
+  if (vehicle.isStale) return "지연";
+  if (vehicle.status === "paused") return "대기";
+  if (vehicle.status === "offline") return "종료";
+  return "활성";
+}
+
+function formatVehicleLocationAge(lastLocationAt?: string) {
+  if (!lastLocationAt) return "";
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(lastLocationAt).getTime()) / 60000));
+  if (minutes < 1) return "방금";
+  if (minutes < 60) return `${minutes}분 전`;
+  return `${Math.floor(minutes / 60)}시간 전`;
+}
+
+function getVehicleMarkerStatusText(vehicle: StaffVehicleLocation) {
+  if (vehicle.isStale) return "위치 지연";
+  if (vehicle.status === "paused") return "화면 대기";
+  if (vehicle.status === "offline") return "위치 종료";
+  return "실시간 위치";
+}
+
+function getCompletionOrderLabel(completion: DeliveryCompletionEvent) {
+  if (!completion.plannedOrder) return "계획 미지정";
+  if (completion.plannedOrder === completion.actualOrder) return `계획 ${completion.plannedOrder} 일치`;
+  return `계획 ${completion.plannedOrder}`;
+}
+
+function getCompletionOrderClass(completion: DeliveryCompletionEvent) {
+  if (!completion.plannedOrder) return "bg-white text-slate-500 ring-slate-200";
+  if (completion.plannedOrder === completion.actualOrder) return "bg-teal-50 text-teal-800 ring-teal-100";
+  return "bg-amber-50 text-amber-800 ring-amber-100";
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function spreadMarkers(markers: KakaoMapMarker[]) {
@@ -3459,7 +8381,7 @@ function spreadMarkers(markers: KakaoMapMarker[]) {
   });
 }
 
-function clamp(value: number, min: number, max: number) {
+export function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
@@ -3516,6 +8438,24 @@ function isValidBusinessRegistrationNumber(value: string) {
   return getBusinessRegistrationCheckDigit(digits.slice(0, 9)) === Number(digits[9]);
 }
 
+// 휴대폰(010 등, 3-4-4)과 서울(02)/지역 번호를 입력 자릿수에 맞춰 실시간으로 하이픈 처리합니다.
+function formatPhoneNumberInput(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
+  if (!digits) return "";
+
+  if (digits.startsWith("02")) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
+
 function getBusinessRegistrationCheckDigit(firstNineDigits: string) {
   const digits = normalizeBusinessRegistrationNumber(firstNineDigits).slice(0, 9).padEnd(9, "0");
   const weights = [1, 3, 7, 1, 3, 7, 1, 3, 5];
@@ -3533,9 +8473,25 @@ function countGrades(stores: StoreRow[]) {
   );
 }
 
-function applyStoreEdits(stores: StoreRow[], edits: Record<string, StoreEdit>) {
+function shouldApplyStoreEdit(store: StoreRow, edit: StoreEdit | undefined, savedAt?: number) {
+  if (!edit || !savedAt) return false;
+
+  const serverUpdatedAt = "updatedAt" in store ? Date.parse(String(store.updatedAt || "")) : Number.NaN;
+  const editServerUpdatedAt = edit.updatedAt ? Date.parse(edit.updatedAt) : Number.NaN;
+  if (Number.isFinite(serverUpdatedAt) && Number.isFinite(editServerUpdatedAt) && serverUpdatedAt !== editServerUpdatedAt) {
+    return false;
+  }
+  if (Number.isFinite(serverUpdatedAt) && serverUpdatedAt - savedAt > 2_000) {
+    return false;
+  }
+
+  return true;
+}
+
+function applyStoreEdits(stores: StoreRow[], edits: Record<string, StoreEdit>, savedAtById: Record<string, number> = {}) {
   return stores.map((store) => {
     const edit = edits[store.id];
+    if (!shouldApplyStoreEdit(store, edit, savedAtById[store.id])) return store;
     const expectedRevenue = edit?.expectedRevenue ?? store.expectedRevenue;
     return {
       ...store,
@@ -3553,13 +8509,45 @@ function applyVehicleEdits(vehicles: DeliveryVehicle[], edits: Record<string, Ve
   }));
 }
 
+// 2026-08-27 피드백("배송담당자 필터랑 거래처 상세 필터랑 데이터가 안맞아") 원인 수정:
+// createDeliveryVehiclesFromStores는 routeSeedStores(서버에서 막 받아온 원본 데이터)만 보고 배송차
+// 그룹을 계산합니다. 개별 거래처 편집(storeEdits)으로 담당자·배송차를 바꿔도 이 그룹핑은 재계산되지
+// 않아서, 거래처 상세에는 새 담당자·배송차 이름이 보이는데 지도 필터가 참조하는 deliveryVehicleId는
+// 여전히 편집 전 그룹에 묶여 있었습니다 — 그래서 특정 배송차로 필터링한 목록과 그 안 거래처의 상세
+// 정보가 서로 다른 담당자를 가리키는 것처럼 보였습니다. 배송차 그룹을 만들기 전에 편집된 담당자·배송차
+// 값을 먼저 원본 필드에 반영해서, 그룹핑 단계부터 최신 값을 쓰도록 합니다.
+function applyStoreEditsForVehicleGrouping(stores: StoreRow[], edits: Record<string, StoreEdit>, savedAtById: Record<string, number> = {}): StoreRow[] {
+  return stores.map((store) => {
+    const edit = edits[store.id];
+    if (!shouldApplyStoreEdit(store, edit, savedAtById[store.id]) || (edit.deliveryDriver === undefined && edit.deliveryVehicleName === undefined)) return store;
+    return {
+      ...store,
+      deliveryDriver: edit.deliveryDriver !== undefined ? edit.deliveryDriver : store.deliveryDriver,
+      // createDeliveryVehiclesFromStores는 deliveryVehicleName이 아니라 deliveryVehicle 필드로 그룹
+      // 키를 정합니다(서버 원본 필드명, 위 함수의 주석 참고). 편집값을 같은 필드에 반영해야 재그룹핑에
+      // 실제로 반영됩니다.
+      deliveryVehicle: edit.deliveryVehicleName !== undefined ? edit.deliveryVehicleName : store.deliveryVehicle
+    };
+  });
+}
+
 function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {
-  const drivers = Array.from(new Set(vehicles.map((vehicle) => vehicle.driver).filter(Boolean))).sort();
+  // 배송차 안에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우), 배송차의 대표
+  // 담당자(vehicle.driver)만 모으면 일부 담당자를 놓칠 수 있습니다. 각 배송차에 실제로 배정된
+  // 모든 거래처의 담당자를 함께 모아 정확한 담당자 목록을 만듭니다.
+  const driverSet = new Set<string>();
+  vehicles.forEach((vehicle) => {
+    if (vehicle.driver) driverSet.add(vehicle.driver);
+    vehicle.stops.forEach((stop) => {
+      if (stop.deliveryDriver) driverSet.add(stop.deliveryDriver);
+    });
+  });
+  const drivers = Array.from(driverSet).sort();
   const areas = Array.from(new Set(vehicles.map((vehicle) => vehicle.area).filter(Boolean))).sort();
   return { areas, drivers };
 }
 
-function readLocalJson<T>(key: string, fallback: T): T {
+export function readLocalJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
     const raw = window.localStorage.getItem(key);
@@ -3569,7 +8557,7 @@ function readLocalJson<T>(key: string, fallback: T): T {
   }
 }
 
-function saveLocalJson(key: string, value: unknown) {
+export function saveLocalJson(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
@@ -3578,7 +8566,16 @@ function saveLocalJson(key: string, value: unknown) {
   }
 }
 
-function getStoreTotals(stores: StoreRow[]) {
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+export function getStoreTotals(stores: StoreRow[]) {
   return {
     distanceKm: roundToOneDecimal(stores.reduce((total, store) => total + Number(store.distanceKm || 0), 0)),
     durationMinutes: stores.reduce((total, store) => total + Number(store.durationMinutes || 0), 0),
@@ -3586,19 +8583,50 @@ function getStoreTotals(stores: StoreRow[]) {
   };
 }
 
-function formatMinutes(minutes: number) {
+export function formatMinutes(minutes: number) {
   if (!minutes) return "-";
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
 }
 
-function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {
+// 2026-08-24 피드백("전체 거래처 0km가 되네")에 대응한 헬퍼입니다. distanceKm은 아직 거리 계산을
+// 한 번도 돌리지 않은 거래처는 그냥 숫자 0으로 채워져 있는데, 기존 코드는 `distanceKm?.toLocaleString()
+// || "-"`로 표시해서 — 0은 falsy가 아니라 (0).toLocaleString()이 "0"이라는 truthy 문자열을 반환하는
+// 바람에 "0km"로 그대로 찍혔습니다. 실제로는 "0km 떨어져 있다"가 아니라 "아직 계산 안 됨"이므로,
+// 값이 없을 때는 명확하게 안내 문구를 보여줍니다.
+export function formatDistanceKmLabel(distanceKm: number | undefined) {
+  if (!distanceKm) return "거리 확인 필요";
+  return `${distanceKm.toLocaleString()}km`;
+}
+
+export function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {
   if (!Number.isFinite(distanceKm) || distanceKm <= 0) return 0;
   if (!Number.isFinite(pricePerLiter) || pricePerLiter <= 0) return 0;
   if (!Number.isFinite(mileageKmPerLiter) || mileageKmPerLiter <= 0) return 0;
 
   return Math.round((distanceKm / mileageKmPerLiter) * pricePerLiter);
+}
+
+/**
+ * "물류비가 얼마나 나와야 배송 갈 만한가"에 대한 대략적인 기준(2026-08-27 요청)입니다. 왕복
+ * 유류비가 그 거래처의 예상 월매출에서 차지하는 비중으로 계산합니다 — 한 번의 왕복 배송 비용이
+ * 월매출 전체의 몇 %인지를 보면, 매출 규모 대비 거리가 과도한 곳을 가려낼 수 있습니다(실제로는
+ * 한 달에 여러 번 배송하므로 이 비율은 보수적인 상한값입니다). 임계값은 일반적인 식자재 유통
+ * 물류비 비중(매출의 10~15% 내외)을 참고한 대략적인 기준이라 절대적인 기준은 아닙니다.
+ */
+export function deliveryCostRatio(roundTripFuelCostWon: number, monthlyRevenueManwon: number) {
+  const monthlyRevenueWon = monthlyRevenueManwon * 10000;
+  if (!Number.isFinite(monthlyRevenueWon) || monthlyRevenueWon <= 0) return null;
+  if (!Number.isFinite(roundTripFuelCostWon) || roundTripFuelCostWon <= 0) return 0;
+  return roundTripFuelCostWon / monthlyRevenueWon;
+}
+
+export function deliveryWorthLabel(ratio: number | null): { label: string; toneClassName: string } {
+  if (ratio === null) return { label: "매출 확인 필요", toneClassName: "bg-slate-100 text-slate-600" };
+  if (ratio <= 0.05) return { label: "배송 효율적", toneClassName: "bg-emerald-100 text-emerald-800" };
+  if (ratio <= 0.15) return { label: "적정 범위", toneClassName: "bg-amber-100 text-amber-800" };
+  return { label: "재검토 필요", toneClassName: "bg-rose-100 text-rose-800" };
 }
 
 function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
@@ -3628,12 +8656,27 @@ function roundToOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
 }
 
-function roundToSix(value: number) {
+// 거래처 출입방법 종류(2026-08-24 피드백: "열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등
+// 넣어야해"). 자유 텍스트도 허용하되(과거 데이터·기타 케이스), 현장에서 가장 자주 쓰는 4가지는
+// 버튼 한 번으로 바로 고를 수 있게 합니다.
+const ACCESS_METHOD_TYPE_OPTIONS: Array<{ icon: LucideIcon; label: string }> = [
+  { icon: KeyRound, label: "열쇠" },
+  { icon: CreditCard, label: "카드" },
+  { icon: Lock, label: "비밀번호" },
+  { icon: MapPinned, label: "숨김위치" },
+  { icon: Store, label: "기타" }
+];
+
+function getAccessMethodIcon(type?: string): LucideIcon {
+  return ACCESS_METHOD_TYPE_OPTIONS.find((option) => option.label === type)?.icon || KeyRound;
+}
+
+export function roundToSix(value: number) {
   return Math.round(value * 1000000) / 1000000;
 }
 
-function gradeBadgeClass(grade: RevenueGrade) {
-  if (grade === "A") return "rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-black text-white";
-  if (grade === "B") return "rounded-full bg-slate-700 px-2.5 py-1 text-xs font-black text-white";
-  return "rounded-full bg-slate-500 px-2.5 py-1 text-xs font-black text-white";
+export function gradeBadgeClass(grade: RevenueGrade) {
+  if (grade === "A") return "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800 ring-1 ring-inset ring-emerald-200";
+  if (grade === "B") return "rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800 ring-1 ring-inset ring-blue-200";
+  return "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200";
 }

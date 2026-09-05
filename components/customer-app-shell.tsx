@@ -5,16 +5,22 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
+  Building2,
+  CheckCircle2,
+  FileSpreadsheet,
   LogOut,
   MapPinned,
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
-  Settings
+  Settings,
+  Sparkles,
+  Smartphone
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
-import { customerNavigationGroups, CustomerWorkspaceKey, flattenCustomerNavigationItems, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
+import { customerNavigationGroups, CustomerWorkspaceKey, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 
 type CustomerAppShellProps = {
   readonly active: CustomerWorkspaceKey;
@@ -37,11 +43,12 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const pathname = usePathname();
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
-  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 운영 화면";
-  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200";
+  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
+  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-700 text-white ring-1 ring-inset ring-teal-700";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
-  const settingsLabel = mode === "admin-preview" ? "고객사 관리" : "출발지 설정";
+  const settingsLabel = mode === "admin-preview" ? "고객사" : "출발지";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
+  const compactMapHome = fullBleed && hidePageTitle;
   const scopedHref = (href: string) => {
     if (mode !== "admin-preview" || !previewCompanyId) return href;
     if (href === "/dashboard/settings") return "/admin/companies";
@@ -54,7 +61,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
-  const activeNavigationItem = flattenCustomerNavigationItems(visibleNavigationGroups).find((item) => item.active === active);
+  const flowSteps = getOperationalFlowSteps(active);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -72,34 +79,95 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     };
   }, [mode, workspaceRole]);
 
+  // xl:overflow-y-auto(hidden 대신) — 내부 패널들이 각자 자기 높이를 정확히 계산해 스크롤하는 게
+  // 기본이지만, 콘텐츠가 예상보다 늘어나는 경우(새 버튼 줄 추가, 검색 결과가 많을 때 등)에 대비한
+  // 안전망입니다. overflow-hidden이면 내부 계산이 어긋났을 때 그 초과분이 어떤 스크롤로도 닿지
+  // 않는 채로 화면 밖에 잘려나가는데, auto로 두면 평소엔 티 안 나다가(내용이 딱 맞으면 스크롤바
+  // 자체가 안 생김) 예외적으로 넘칠 때만 페이지 스크롤로 마지막 탈출구가 생깁니다(2026-08-23,
+  // "스크롤이 안 되는 경우가 있다" 피드백 대응).
   return (
-    <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-hidden" : ""}`}>
-      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-200 bg-white shadow-[8px_0_24px_rgba(15,23,42,0.04)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+    <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-y-auto" : ""}`}>
+      {/* xl:grid-rows-[minmax(0,1fr)] — CSS Grid의 암묵적 행은 기본이 auto(내용 기준) 높이라, h-full을
+          줘도 자식(section)의 내용이 부모보다 크면 행 자체가 늘어나 버립니다(2026-08-23, "스크롤이
+          안 되는 경우가 있다" 피드백 — main의 overflow-hidden이 그 초과분을 화면 밖으로 그냥
+          잘라버려서 어떤 스크롤로도 닿지 않는 영역이 생겼던 원인). minmax(0,1fr)로 행을 컨테이너
+          높이에 고정해야 section이 실제로 h-full만큼만 받고, 그 안의 xl:overflow-y-auto가 넘치는
+          내용을 스크롤로 보여줄 수 있습니다. */}
+      <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full xl:grid-rows-[minmax(0,1fr)]" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
+        <aside className="border-b border-slate-200 bg-white shadow-[6px_0_22px_rgba(15,23,42,0.035)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col">
-            <div className="border-b border-slate-200/80 p-4">
-              <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
-                <Link className={`flex min-w-0 items-center gap-3 ${collapsed ? "justify-center" : ""}`} href={scopedHref("/dashboard")}>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]">M</span>
-                  {!collapsed ? (
+            <div className={`border-b border-slate-200/80 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
+              {collapsed ? (
+                <>
+                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
+                  </Link>
+                  <button
+                    aria-label="사이드바 펼치기"
+                    className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
+                    onClick={() => setCollapsed((value) => !value)}
+                    type="button"
+                  >
+                    <PanelLeftOpen className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <div className="flex w-full items-center justify-between gap-2">
+                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-black">MAJU Map OS</span>
+                      <span className="block truncate text-sm font-black">MAJU Intelligence</span>
                       <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
                     </span>
-                  ) : null}
-                </Link>
-                <button
-                  aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-                  className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
-                  onClick={() => setCollapsed((value) => !value)}
-                  type="button"
-                >
-                  {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-                </button>
-              </div>
+                  </Link>
+                  <button
+                    aria-label="사이드바 접기"
+                    className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
+                    onClick={() => setCollapsed((value) => !value)}
+                    type="button"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
 
             <nav className="flex-1 space-y-4 overflow-auto p-3">
+              {!collapsed ? (
+                <section className="rounded-lg border border-teal-100 bg-teal-50/55 p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-black text-teal-900">오늘 운영 흐름</p>
+                    <Badge className="bg-white px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-100">
+                      {flowSteps.findIndex((step) => step.active) + 1 || 1}/{flowSteps.length}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    {flowSteps.map((step, index) => {
+                      const Icon = step.icon;
+                      return (
+                        <Link
+                          key={step.label}
+                          className={`group flex min-h-10 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition ${
+                            step.active
+                              ? "border-teal-300 bg-white text-teal-900 shadow-[0_8px_18px_rgba(15,118,110,0.10)]"
+                              : "border-white/70 bg-white/70 text-slate-600 hover:border-teal-200 hover:bg-white hover:text-teal-900"
+                          }`}
+                          href={scopedHref(step.href)}
+                          title={step.helper}
+                        >
+                          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${step.active ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-teal-50 group-hover:text-teal-700"}`}>
+                            {step.active ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-[11px] font-black">{index + 1}. {step.label}</span>
+                            <span className="block truncate text-[10px] font-bold opacity-75">{step.helper}</span>
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
               {visibleNavigationGroups.map((group) => (
                 <div key={group.label}>
                   {!collapsed ? <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p> : null}
@@ -116,15 +184,15 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                               href={scopedHref(firstChild.href)}
                               title={item.label}
                             >
-                              {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-teal-600" /> : null}
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-teal-700" : "text-slate-400"}`} />
+                              {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-white" : "text-slate-400"}`} />
                             </Link>
                           );
                         }
                         return (
                           <div key={`${group.label}-${item.label}`}>
-                            <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-black ${groupSelected ? "text-teal-700" : "text-slate-700"}`}>
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-teal-700" : "text-slate-400"}`} />
+                            <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-black ${groupSelected ? "text-slate-950" : "text-slate-700"}`}>
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-slate-900" : "text-slate-400"}`} />
                               <span className="min-w-0 flex-1 truncate">{item.label}</span>
                             </div>
                             <div className="ml-[26px] space-y-1 border-l border-slate-200 pl-2.5">
@@ -136,7 +204,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                                     className={`maju-nav-item relative py-1.5 text-[13px] ${childSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
                                     href={scopedHref(child.href)}
                                   >
-                                    {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-teal-600" /> : null}
+                                    {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-white/80" /> : null}
                                     <span className="min-w-0 flex-1 truncate">{child.label}</span>
                                   </Link>
                                 );
@@ -157,10 +225,10 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                           href={itemHref}
                           title={collapsed ? item.label : undefined}
                         >
-                          {selected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-teal-600" /> : null}
-                          <item.icon className={`h-4 w-4 ${selected ? "text-teal-700" : "text-slate-400"}`} />
+                          {selected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
+                          <item.icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white px-1.5 py-0 text-[10px] text-teal-700 ring-1 ring-inset ring-teal-200" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
+                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-[10px] text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
                         </Link>
                       );
                     })}
@@ -169,23 +237,47 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ))}
             </nav>
 
-            {!collapsed ? (
-              <div className="border-t border-slate-200/80 bg-white p-3">
-                <div className="rounded-lg border border-teal-100 bg-teal-50 p-3">
-                  <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">현재 작업</p>
-                  <p className="mt-1 truncate text-sm font-black text-slate-950">{activeNavigationItem?.label || activeWorkspaceLabel}</p>
-                  <p className="mt-1 line-clamp-2 text-[11px] font-bold leading-5 text-slate-600">
-                    {activeNavigationItem?.description || "지도에서 거래처 위치와 출발지 기준 업무를 이어갑니다."}
-                  </p>
+            <div className={`border-t border-slate-200/80 bg-white ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
+              {collapsed ? (
+                <>
+                  {mode === "customer" ? (
+                    <Link aria-label="작업공간 전환" className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href="/workspaces" title="작업공간 전환">
+                      <Building2 className="h-4 w-4" />
+                    </Link>
+                  ) : null}
+                  <Link aria-label={settingsLabel} className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                    <Settings className="h-4 w-4" />
+                  </Link>
+                </>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-950">{companyName}</p>
+                    {userName ? <p className="truncate text-xs font-bold text-slate-500">{userName}님</p> : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {mode === "customer" ? (
+                      // 2026-08-31 완성도 감사 대응: 다중 워크스페이스 계정이 로그인 직후가 아니면
+                      // 다른 회사/개인 공간으로 전환할 방법이 없어(로그아웃 후 재로그인해야 함) 추가.
+                      // /workspaces는 워크스페이스가 1개뿐이면 자동으로 지도 홈으로 돌려보내므로,
+                      // 항상 노출해도 안전합니다.
+                      <Link aria-label="작업공간 전환" className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href="/workspaces" title="작업공간 전환">
+                        <Building2 className="h-4 w-4" />
+                      </Link>
+                    ) : null}
+                    <Link aria-label={settingsLabel} className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                      <Settings className="h-4 w-4" />
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              )}
+            </div>
           </div>
         </aside>
 
-        <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:flex-col" : ""}`}>
-          <header className={`sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white shadow-sm ${fullBleed ? "xl:static" : ""}`}>
-            <div className={`flex flex-col gap-3 px-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between ${hidePageTitle ? "py-2.5" : "py-4"}`}>
+        <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:min-h-0 xl:flex-col" : ""}`}>
+          <header className={`${compactMapHome ? "hidden" : "sticky top-0 z-20"} shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.035)] ${fullBleed ? "xl:static" : ""}`}>
+            <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -193,34 +285,41 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                     {mode === "customer" ? <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{roleLabel}</Badge> : null}
                     {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
-                  <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
-                  {subtitle ? <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p> : null}
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
+                    {subtitle ? <InfoTooltip text={subtitle} /> : null}
+                  </div>
                 </div>
               ) : (
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
-                    <span className="text-sm font-black text-slate-900">{activeWorkspaceLabel}</span>
-                    {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
-                  </div>
-                  <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{title}</p>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
+                  <span className="text-sm font-black text-slate-900">{activeWorkspaceLabel}</span>
+                  {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                 </div>
               )}
               <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
                 <Link
-                  className="maju-button-secondary h-9 shrink-0 px-3 text-sm"
+                  className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none"
                   href={settingsHref}
+                  title={settingsLabel}
                 >
                   <MapPinned className="h-4 w-4" />
-                  {settingsLabel}
+                  <span className="hidden 2xl:inline">{settingsLabel}</span>
                 </Link>
                 <Link
-                  className="maju-button-blue h-9 shrink-0 px-3 text-sm"
+                  className="maju-button-primary h-8 shrink-0 px-2.5 text-xs shadow-none"
                   href={scopedHref("/assistant")}
+                  title="AI 영업"
                 >
                   <MessageSquareText className="h-4 w-4" />
-                  AI 도우미
+                  <span className="hidden 2xl:inline">AI</span>
                 </Link>
+                {mode === "customer" ? (
+                  <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="모바일로 보기">
+                    <Smartphone className="h-4 w-4" />
+                    <span className="hidden 2xl:inline">모바일</span>
+                  </Link>
+                ) : null}
                 {rightAction}
                 {mode === "customer" ? <CustomerAccountActions /> : null}
               </div>
@@ -228,7 +327,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
           </header>
 
           {mode === "admin-preview" ? (
-            <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-6 ${fullBleed ? "shrink-0" : ""}`}>
+            <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-4 ${fullBleed ? "shrink-0" : ""}`}>
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-black text-amber-900">관리자 미리보기 모드</p>
@@ -236,15 +335,15 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                     현재 화면은 고객사 운영 화면을 관리자 권한으로 확인하는 모드입니다. 계정, 권한, 고객사 생성·수정은 어드민에서 관리하세요.
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Link
-                    className="inline-flex h-8 items-center justify-center rounded-md bg-amber-900 px-3 text-xs font-black text-white transition hover:bg-amber-950"
+                    className="inline-flex min-h-11 items-center justify-center rounded-md bg-amber-900 px-3 text-xs font-black text-white transition hover:bg-amber-950"
                     href="/admin/companies"
                   >
                     고객사 관리로 돌아가기
                   </Link>
                   <Link
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-amber-200 bg-white px-3 text-xs font-black text-amber-900 transition hover:bg-amber-100"
+                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-amber-200 bg-white px-3 text-xs font-black text-amber-900 transition hover:bg-amber-100"
                     href="/admin"
                   >
                     어드민 홈
@@ -254,14 +353,14 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             </div>
           ) : null}
 
-          <div className={fullBleed ? "flex flex-col px-4 py-3 sm:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-3" : "px-4 py-4 sm:px-6"}>{children}</div>
+          <div className={fullBleed ? "flex flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "px-4 py-4 sm:px-4"}>{children}</div>
         </section>
       </div>
     </main>
   );
 }
 
-function CustomerAccountActions() {
+function CustomerAccountActions({ compact = false }: { readonly compact?: boolean }) {
   async function logout() {
     await fetch("/api/customer/logout", { method: "POST" });
     window.location.href = "/dashboard/login";
@@ -269,12 +368,13 @@ function CustomerAccountActions() {
 
   return (
     <button
-      className="maju-button-secondary h-9 shrink-0 px-3 text-sm hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+      className={`maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 ${compact ? "justify-center" : ""}`}
       onClick={logout}
+      title="로그아웃"
       type="button"
     >
       <LogOut className="h-4 w-4" />
-      로그아웃
+      <span className={compact ? "" : "hidden 2xl:inline"}>로그아웃</span>
     </button>
   );
 }
@@ -288,4 +388,37 @@ function isCurrentNavItem(pathname: string | null, href: string) {
 
 function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {
   return getCustomerWorkspaceLabel(active);
+}
+
+function getOperationalFlowSteps(active: CustomerWorkspaceKey) {
+  return [
+    {
+      active: active === "dashboard" || active === "routes",
+      helper: "지도·코스",
+      href: "/dashboard",
+      icon: MapPinned,
+      label: "지도"
+    },
+    {
+      active: active === "data",
+      helper: "원장 입력",
+      href: "/",
+      icon: FileSpreadsheet,
+      label: "등록"
+    },
+    {
+      active: active === "customers" || active === "customers-summary" || active === "data-management",
+      helper: "정보 보완",
+      href: "/crm/timeline",
+      icon: Building2,
+      label: "관리"
+    },
+    {
+      active: active === "revenue" || active === "assistant" || active === "report",
+      helper: "영업 실행",
+      href: "/revenue/pipeline",
+      icon: Sparkles,
+      label: "성장"
+    }
+  ];
 }

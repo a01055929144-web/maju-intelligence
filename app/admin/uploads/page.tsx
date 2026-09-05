@@ -22,7 +22,7 @@ export default async function AdminUploadsPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="uploads" badge="Operations" session={session} subtitle="거래처 마스터와 매출 거래내역의 적재 상태, 품질, 리포트 생성 여부를 확인합니다" title="업로드/분석 이력" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Metric icon={FileSpreadsheet} label="최근 업로드" value={`${uploads.length.toLocaleString()}건`} />
           <Metric icon={Rows3} label="처리 행 수" value={processedRows.toLocaleString()} />
@@ -61,7 +61,7 @@ export default async function AdminUploadsPage() {
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
             {[
-              ["저장 여부", "업로드 후 이 화면에 이력이 생기면 DB 저장 흐름이 동작한 것입니다."],
+              ["저장 여부", "업로드 후 이 화면에 이력이 생기면 저장 흐름이 동작한 것입니다."],
               ["품질 점수", "주소/지역/필수 컬럼 완성도가 낮으면 매핑과 원본 파일을 다시 확인합니다."],
               ["중복 건수", "사업자번호 또는 거래처명+주소 기준으로 중복 후보를 확인합니다."]
             ].map(([title, description]) => (
@@ -80,7 +80,7 @@ export default async function AdminUploadsPage() {
 function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <Card className="shadow-none">
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
         <p className="text-xs font-bold text-muted-foreground">{label}</p>
         <p className="mt-1 text-3xl font-black">{value}</p>

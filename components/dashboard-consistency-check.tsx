@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 type ConsistencyCheck = {
@@ -18,7 +18,7 @@ type ConsistencyPayload = {
   latencyMs?: number;
   ok?: boolean;
   recommendations?: string[];
-  source?: "sample" | "supabase" | string;
+  source?: "empty" | "supabase" | string;
   summary?: {
     consistencyScore?: number;
     dashboardCustomers?: number;
@@ -101,7 +101,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const okCount = checks.filter((check) => check.ok).length;
   const isSupabase = payload?.source === "supabase";
   const isHealthy = Boolean(payload?.ok && isSupabase);
-  const sourceLabel = isSupabase ? "Supabase 실데이터" : payload?.source ? "DB 거래처 원장 미연결" : "확인 중";
+  const sourceLabel = isSupabase ? "실서버 원장" : payload?.source ? "거래처 원장 미연결" : "확인 중";
   const checkedAt = payload?.checkedAt ? new Date(payload.checkedAt).toLocaleString("ko-KR") : "-";
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const dataRegistrationHref = `/${query}`;
@@ -109,28 +109,62 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const duplicateCustomerExamples = payload?.summary?.duplicateCustomerExamples || [];
   const routeProviderCounts = payload?.summary?.routeProviderCounts || {};
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
-  const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
+  const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
   const routeHref = `/dashboard${query}`;
   const revenueHref = `/revenue/transactions${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
   const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;
   const hasPayload = Boolean(payload);
+  const masterCustomers = payload?.summary?.masterCustomers || 0;
+  const dashboardCustomers = payload?.summary?.dashboardCustomers || 0;
+  const routeStops = payload?.summary?.routeStops || 0;
+  const mappableRouteStops = payload?.summary?.mappableRouteStops || 0;
+  const missingAddressCustomers = payload?.summary?.missingAddressCustomers || 0;
+  const businessStatusNeedsCheckCustomers = payload?.summary?.businessStatusNeedsCheckCustomers || 0;
+  const salesTransactionCount = payload?.summary?.salesTransactionCount || 0;
+  const salesMatchRate = payload?.summary?.salesMatchRate ?? 100;
+  const coreItems = [
+    {
+      helper: masterCustomers === dashboardCustomers ? "원장·대시보드 일치" : `대시보드 ${dashboardCustomers.toLocaleString()}곳`,
+      label: "거래처 기준",
+      tone: isSupabase && masterCustomers === dashboardCustomers ? "good" : "warn",
+      value: hasPayload ? `${masterCustomers.toLocaleString()}곳` : "-"
+    },
+    {
+      helper: hasPayload ? `지도 가능 ${mappableRouteStops.toLocaleString()}곳 · 실도로 ${cachedRouteCount.toLocaleString()}곳` : "코스 기준 확인 중",
+      label: "지도·코스",
+      tone: routeStops && routeStops === masterCustomers ? "good" : routeStops ? "warn" : "bad",
+      value: hasPayload ? `${routeStops.toLocaleString()}곳` : "-"
+    },
+    {
+      helper: `주소 ${missingAddressCustomers.toLocaleString()} · 사업자 ${businessStatusNeedsCheckCustomers.toLocaleString()}`,
+      label: "보완 필요",
+      tone: missingAddressCustomers + businessStatusNeedsCheckCustomers > 0 ? "warn" : "good",
+      value: hasPayload ? `${(missingAddressCustomers + businessStatusNeedsCheckCustomers).toLocaleString()}건` : "-"
+    },
+    {
+      helper: salesTransactionCount ? `${salesTransactionCount.toLocaleString()}건 거래내역` : "매출 원장 대기",
+      label: "매출 매칭",
+      tone: salesTransactionCount && salesMatchRate < 90 ? "warn" : salesTransactionCount ? "good" : "warn",
+      value: salesTransactionCount ? `${salesMatchRate}%` : "-"
+    }
+  ] satisfies Array<{ helper: string; label: string; tone: "bad" | "good" | "warn"; value: string }>;
   const fixItems = hasPayload
     ? buildFixItems({
         consistencyScore,
         businessNumberMissingCustomers: payload?.summary?.businessNumberMissingCustomers || 0,
-        businessStatusNeedsCheckCustomers: payload?.summary?.businessStatusNeedsCheckCustomers || 0,
-        dashboardCustomers: payload?.summary?.dashboardCustomers || 0,
+        businessStatusNeedsCheckCustomers,
+        dashboardCustomers,
         dataRegistrationHref,
         isSupabase,
-        masterCustomers: payload?.summary?.masterCustomers || 0,
-        missingAddressCustomers: payload?.summary?.missingAddressCustomers || 0,
+        masterCustomers,
+        missingAddressCustomers,
         routeCoverage,
-        routeStops: payload?.summary?.routeStops || 0,
+        routeStops,
         revenueHref,
-        salesMatchRate: payload?.summary?.salesMatchRate ?? 100,
-        salesTransactionCount: payload?.summary?.salesTransactionCount || 0,
+        salesMatchRate,
+        salesTransactionCount,
         salesTruncated: Boolean(payload?.summary?.salesTruncated),
         salesUnmatchedCustomerCount: payload?.summary?.salesUnmatchedCustomerCount || 0,
         timelineHref,
@@ -150,7 +184,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
             </Badge>
             <Badge className="border border-slate-200 bg-white text-slate-600">{sourceLabel}</Badge>
           </div>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드·히스토리·코스의 DB 기준을 확인합니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">대시보드·원장·코스 기준 점검</p>
         </div>
         <button
           className="maju-button-secondary shrink-0 disabled:cursor-not-allowed disabled:opacity-60"
@@ -163,15 +197,11 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         </button>
       </div>
 
-      <div className="grid gap-3 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
-          <StatusTile label="DB 원장" value={formatCount(payload?.summary?.masterCustomers, "곳")} />
-          <StatusTile label="대시보드" value={formatCount(payload?.summary?.dashboardCustomers, "곳")} />
-          <StatusTile label="코스 매장" value={formatCount(payload?.summary?.routeStops, "곳")} />
-          <StatusTile label="주소 보완" value={formatCount(payload?.summary?.missingAddressCustomers, "곳")} />
-          <StatusTile label="사업자 확인" value={formatCount(payload?.summary?.businessStatusNeedsCheckCustomers, "곳")} />
-          <StatusTile label="실도로 계산" value={formatCount(payload ? cachedRouteCount : undefined, "곳")} />
-          <StatusTile label="도로 미계산" value={formatCount(payload ? roadPendingRouteCount : undefined, "곳")} />
+      <div className="grid gap-3 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
+          {coreItems.map((item) => (
+            <CoreConsistencyTile helper={item.helper} key={item.label} label={item.label} tone={item.tone} value={item.value} />
+          ))}
         </div>
 
         <div className="maju-stat-card bg-slate-50/70">
@@ -183,7 +213,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         </div>
       </div>
 
-      <div className="grid gap-3 border-t border-slate-100 px-5 py-4 lg:grid-cols-2">
+      <div className="grid gap-3 border-t border-slate-100 px-4 py-4 lg:grid-cols-2">
         <ScoreBar
           description={`${okCount}/${Math.max(checks.length, 1)}개 기준 통과`}
           label="데이터 기준 일치율"
@@ -199,9 +229,9 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
       </div>
 
       {error ? (
-        <div className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm font-bold text-amber-900">{error}</div>
+        <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">{error}</div>
       ) : (
-        <div className="grid gap-3 border-t border-slate-100 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-3 border-t border-slate-100 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-2 md:grid-cols-2">
             {checks.map((check) => (
               <div key={check.label} className={`maju-stat-card ${check.ok ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
@@ -216,7 +246,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
               </div>
             ))}
             {!checks.length ? (
-              <div className="maju-empty-state p-3 text-sm font-bold text-slate-500">
+              <div className="maju-empty-state flex items-center justify-center gap-1.5 p-3 text-sm font-bold text-slate-500">
+                {loading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
                 {loading ? "데이터 점검 결과를 불러오는 중입니다." : "표시할 점검 결과가 없습니다."}
               </div>
             ) : null}
@@ -369,9 +400,9 @@ function buildFixItems({
 
   items.push({
     href: dataRegistrationHref,
-    label: isSupabase ? "Supabase DB 원장 조회가 정상입니다." : "DB 원장이 연결되지 않으면 대시보드, 히스토리, 코스 숫자를 확정할 수 없습니다.",
+    label: isSupabase ? "Supabase 원장 조회가 정상입니다." : "저장 원장이 연결되지 않으면 대시보드, 히스토리, 코스 숫자를 확정할 수 없습니다.",
     status: isSupabase ? "정상" : "필수",
-    title: "DB 연결",
+    title: "저장 연결",
     tone: isSupabase ? "good" : "bad"
   });
 
@@ -379,8 +410,8 @@ function buildFixItems({
     href: dataRegistrationHref,
     label:
       dashboardCustomers === masterCustomers
-        ? "대시보드와 DB 원장의 전체 매장 수가 같습니다."
-        : `대시보드 ${dashboardCustomers.toLocaleString()}곳, DB 원장 ${masterCustomers.toLocaleString()}곳으로 다릅니다.`,
+        ? "대시보드와 저장 원장의 전체 매장 수가 같습니다."
+        : `대시보드 ${dashboardCustomers.toLocaleString()}곳, 저장 원장 ${masterCustomers.toLocaleString()}곳으로 다릅니다.`,
     status: dashboardCustomers === masterCustomers ? "일치" : "확인",
     title: "거래처 수 일치",
     tone: dashboardCustomers === masterCustomers ? "good" : "warn"
@@ -424,7 +455,7 @@ function buildFixItems({
   if (salesTransactionCount > 0 && salesUnmatchedCustomerCount > 0) {
     items.push({
       href: revenueHref,
-      label: `매출-거래처 매칭 ${salesMatchRate}%, 미매칭 ${salesUnmatchedCustomerCount.toLocaleString()}곳입니다. 매출 거래내역에서 거래처를 직접 연결하세요.`,
+      label: `매출-거래처 매칭 ${salesMatchRate}% · 미매칭 ${salesUnmatchedCustomerCount.toLocaleString()}곳`,
       status: `${salesMatchRate}%`,
       title: "매출-거래처 매칭",
       tone: salesMatchRate >= 90 ? "warn" : "bad"
@@ -434,7 +465,7 @@ function buildFixItems({
   if (salesTruncated) {
     items.push({
       href: revenueHref,
-      label: "매출 원장이 최근 1,000건 기준으로 표시 중입니다. 매출 거래내역 원장 테이블의 '더 불러오기'로 나머지를 이어서 확인하세요.",
+      label: "최근 1,000건 우선 표시 중입니다. 원장 테이블에서 더 불러오세요.",
       status: "일부",
       title: "매출 원장 표시 범위",
       tone: "warn"
@@ -485,14 +516,29 @@ function getFixPriority(tone: FixItem["tone"]) {
   return 2;
 }
 
-function StatusTile({ label, value }: { readonly label: string; readonly value: string }) {
+function CoreConsistencyTile({
+  helper,
+  label,
+  tone,
+  value
+}: {
+  readonly helper: string;
+  readonly label: string;
+  readonly tone: "bad" | "good" | "warn";
+  readonly value: string;
+}) {
+  const toneClassName =
+    tone === "good"
+      ? "border-emerald-100 bg-emerald-50/70 text-emerald-900"
+      : tone === "warn"
+        ? "border-amber-200 bg-amber-50/70 text-amber-900"
+        : "border-rose-200 bg-rose-50/70 text-rose-900";
+
   return (
-    <div className="maju-stat-card">
-      <p className="maju-muted-label flex items-center gap-1.5">
-        <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
+    <div className={`rounded-lg border px-3 py-3 ${toneClassName}`}>
+      <p className="text-[11px] font-black uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-xl font-black leading-tight">{value}</p>
+      <p className="mt-1 truncate text-xs font-bold opacity-75" title={helper}>{helper}</p>
     </div>
   );
 }
@@ -526,9 +572,4 @@ function ScoreBar({
       </div>
     </div>
   );
-}
-
-function formatCount(value: number | undefined, suffix: string) {
-  if (value === undefined) return "-";
-  return `${value.toLocaleString()}${suffix}`;
 }

@@ -39,8 +39,8 @@ export default async function AdminPage() {
       description: "Supabase, Storage, 지도·경로 API 환경을 점검합니다.",
       href: "/admin/system",
       label: "시스템 상태",
-      ready: dashboard.source !== "sample",
-      value: dashboard.source === "sample" ? "확인 필요" : "연결됨"
+      ready: dashboard.source === "supabase",
+      value: dashboard.source === "supabase" ? "연결됨" : "확인 필요"
     }
   ];
 
@@ -48,7 +48,7 @@ export default async function AdminPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <div className="grid gap-3 lg:grid-cols-3">
           {adminSignals.map((signal) => (
             <AdminSignalCard key={signal.label} {...signal} />
@@ -58,7 +58,7 @@ export default async function AdminPage() {
         <div className="grid gap-4 md:grid-cols-4">
           {overview.map(([label, value, Icon]) => (
             <Card key={label as string} className="shadow-none">
-              <CardContent className="p-5">
+              <CardContent className="p-4">
                 <Icon className="mb-4 h-5 w-5 text-primary" />
                 <p className="text-xs font-bold text-muted-foreground">{label as string}</p>
                 <p className="mt-1 text-3xl font-black">{value as string}</p>
@@ -90,7 +90,7 @@ export default async function AdminPage() {
               label="1. 고객사 관리"
             />
             <AdminActionCard
-              description="거래처 마스터와 매출 거래원장이 실제 DB에 쌓였는지 확인합니다."
+              description="거래처 마스터와 매출 거래원장이 실서버에 쌓였는지 확인합니다."
               href="/admin/uploads"
               icon={UploadCloud}
               label="2. 업로드 이력 확인"
@@ -166,7 +166,7 @@ export default async function AdminPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5 text-primary" />
-                Health Score 가중치
+                회사 건강도 가중치
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -213,7 +213,7 @@ export default async function AdminPage() {
                 업로드/분석 이력
               </CardTitle>
               <Link
-                className="inline-flex h-9 w-fit items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
+                className="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
                 href="/admin/uploads"
               >
                 전체 이력 보기
@@ -243,7 +243,7 @@ export default async function AdminPage() {
                   <p className="text-lg font-black text-primary">{item.healthScore}</p>
                 </div>
                 <Link
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
                   href={`/reports/${item.reportId || "latest"}`}
                 >
                   리포트 보기

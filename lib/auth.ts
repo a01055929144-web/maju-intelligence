@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
-import { createHash, timingSafeEqual } from "crypto";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
-import { getAuthCredentials, getCustomerLoginCredentials } from "./store";
+import { getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin } from "./store";
+import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
 export type AdminSession = {
@@ -18,6 +19,7 @@ export type CustomerSession = {
   email: string;
   role: "owner" | "member";
   name: string;
+  userId?: string;
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
 };
@@ -29,6 +31,7 @@ const DEFAULT_ADMIN_PASSWORD = "maju-admin-2026";
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
 const DEFAULT_CUSTOMER_PASSWORD = "maju-owner-2026";
 const DEFAULT_CUSTOMER_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
+const LONG_LIVED_SESSION_SECONDS = 60 * 60 * 24 * 365 * 10;
 
 function getSecret() {
   if (process.env.ADMIN_SESSION_SECRET) return process.env.ADMIN_SESSION_SECRET;
@@ -167,7 +170,13 @@ export async function validateAdminCredentials(email: string, password: string):
   }
 
   if (email.trim().toLowerCase() !== adminEmail.toLowerCase()) return null;
-  if (password !== adminPassword) return null;
+  if (!(await verifyPassword(password, adminPassword))) return null;
+
+  // 2026-08-26 보안 수정: 평문으로 저장돼 있던 비밀번호는 로그인에 성공한 바로 이 시점에 해시로
+  // 전환해 저장합니다(레이지 마이그레이션) — 비밀번호를 다시 입력받지 않고도 자연스럽게 전환됩니다.
+  if (!isHashedPassword(adminPassword)) {
+    await updateAdminPasswordHash(await hashPassword(password)).catch(() => null);
+  }
 
   return {
     appRole: "maju_super_admin",
@@ -187,18 +196,36 @@ export async function validateCustomerCredentials(email: string, password: strin
   if (process.env.NODE_ENV === "production" && isDevelopmentCustomerCredential(customerEmail, customerPassword)) {
     return null;
   }
+  if (credentials.companyStatus && !["active", "fallback"].includes(credentials.companyStatus)) {
+    return null;
+  }
+  if (credentials.userStatus && credentials.userStatus !== "active") {
+    return null;
+  }
 
   if (email.trim().toLowerCase() !== customerEmail.toLowerCase()) return null;
-  if (password !== customerPassword) return null;
+  if (!(await verifyPassword(password, customerPassword))) return null;
+
+  // 2026-08-26 보안 수정: 위 관리자 로그인과 동일하게, 평문 비밀번호는 로그인 성공 시 즉시 해시로
+  // 전환해 저장합니다.
+  if (credentials.credentialSource !== "app_users" && !isHashedPassword(customerPassword)) {
+    await updateCustomerPasswordHash(customerEmail, await hashPassword(password)).catch(() => null);
+  }
+  if (credentials.userId) {
+    await updateCustomerUserLastLogin(credentials.userId, "password").catch(() => null);
+  }
+
+  const workspaceRole = normalizeWorkspaceRole(credentials.workspaceRole || "owner");
 
   return {
     appRole: "customer_user",
     companyId: credentials.customerCompanyId || process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
     companyName: credentials.companyName,
     email: customerEmail,
-    role: "owner",
+    role: workspaceRole === "owner" ? "owner" : "member",
     name: credentials.ownerName || credentials.companyName,
-    workspaceRole: normalizeWorkspaceRole("owner"),
+    userId: credentials.userId,
+    workspaceRole,
     workspaceType: "company"
   };
 }
@@ -214,15 +241,19 @@ export async function setAdminSession(session: AdminSession) {
   });
 }
 
-export async function setCustomerSession(session: CustomerSession) {
+export async function setCustomerSession(session: CustomerSession, maxAgeSeconds = 60 * 60 * 8) {
   const cookieStore = await cookies();
   cookieStore.set(CUSTOMER_COOKIE_NAME, encodeSession(session), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 8
+    maxAge: maxAgeSeconds
   });
+}
+
+export function getLongLivedCustomerSessionSeconds() {
+  return LONG_LIVED_SESSION_SECONDS;
 }
 
 export async function clearAdminSession() {
@@ -233,4 +264,47 @@ export async function clearAdminSession() {
 export async function clearCustomerSession() {
   const cookieStore = await cookies();
   cookieStore.delete(CUSTOMER_COOKIE_NAME);
+}
+
+const OAUTH_STATE_COOKIE = "maju_oauth_state";
+
+/**
+ * 2026-08-26 보안 수정(P0-6): 카카오/네이버/구글 로그인의 `state` 파라미터는 지금까지 초대 코드를
+ * 그대로 실어 보내는 용도로만 쓰이고 CSRF 방지용 검증은 없었습니다. 여기서는 실제로 검증 가능한
+ * 임의의 nonce를 발급해 짧은 수명의 httpOnly 쿠키에 저장하고, 콜백에서 그 쿠키 값과 대조합니다.
+ * 초대 코드(또는 "personal")는 `${nonce}.${payload}` 형태로 nonce 뒤에 그대로 실어 보내 기존 동작을
+ * 유지합니다.
+ */
+export async function createOAuthState(payload: string): Promise<string> {
+  const nonce = randomBytes(16).toString("hex");
+  const cookieStore = await cookies();
+  cookieStore.set(OAUTH_STATE_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 10
+  });
+  return `${nonce}.${payload}`;
+}
+
+export async function consumeOAuthState(state: string): Promise<{ ok: boolean; payload: string }> {
+  const cookieStore = await cookies();
+  const expectedNonce = cookieStore.get(OAUTH_STATE_COOKIE)?.value || "";
+  cookieStore.delete(OAUTH_STATE_COOKIE);
+
+  const separatorIndex = state.indexOf(".");
+  if (separatorIndex === -1) return { ok: false, payload: "" };
+
+  const nonce = state.slice(0, separatorIndex);
+  const payload = state.slice(separatorIndex + 1);
+  if (!expectedNonce || !nonce) return { ok: false, payload };
+
+  const nonceBuffer = Buffer.from(nonce);
+  const expectedBuffer = Buffer.from(expectedNonce);
+  if (nonceBuffer.length !== expectedBuffer.length || !timingSafeEqual(nonceBuffer, expectedBuffer)) {
+    return { ok: false, payload };
+  }
+
+  return { ok: true, payload };
 }

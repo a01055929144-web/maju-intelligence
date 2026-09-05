@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setCustomerSession } from "@/lib/auth";
-import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace } from "@/lib/store";
+import { consumeOAuthState, getCustomerSession, setCustomerSession } from "@/lib/auth";
+import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkOAuthIdentityToUser } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +28,14 @@ type KakaoUserResponse = {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code") || "";
-  const state = request.nextUrl.searchParams.get("state") || "";
-  const inviteCode = state === "personal" ? "" : state;
+  const rawState = request.nextUrl.searchParams.get("state") || "";
+  const { ok: stateOk, payload: statePayload } = await consumeOAuthState(rawState);
+  const isConnect = stateOk && statePayload.startsWith("connect:");
+  const inviteCode = stateOk && statePayload !== "personal" && !isConnect ? statePayload : "";
 
+  if (!stateOk) {
+    return redirectJoin(request.url, "", "invalid_oauth_state");
+  }
   if (!code) {
     return redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
@@ -53,6 +58,23 @@ export async function GET(request: NextRequest) {
       name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname
     };
 
+    if (isConnect) {
+      const session = await getCustomerSession();
+      const userId = statePayload.replace("connect:", "");
+      if (!session?.userId || session.userId !== userId) {
+        return NextResponse.redirect(new URL("/dashboard/settings?auth=invalid_session", request.url));
+      }
+      await linkOAuthIdentityToUser({
+        avatarUrl: kakaoProfile.avatarUrl,
+        email: kakaoProfile.email,
+        name: kakaoProfile.name,
+        provider: "kakao",
+        providerUserId: kakaoProfile.kakaoUserId,
+        userId
+      });
+      return NextResponse.redirect(new URL("/dashboard/settings?auth=connected", request.url));
+    }
+
     const result = inviteCode
       ? await acceptStaffKakaoInvitation({
           ...kakaoProfile,
@@ -60,13 +82,14 @@ export async function GET(request: NextRequest) {
         })
       : await createPersonalKakaoWorkspace(kakaoProfile);
 
-    setCustomerSession({
+    await setCustomerSession({
       appRole: "customer_user",
       companyId: result.companyId,
       companyName: result.companyName,
       email: result.email,
       name: result.name,
       role: inviteCode ? "member" : "owner",
+      userId: result.userId,
       workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
       workspaceType: inviteCode ? "company" : "personal"
     });

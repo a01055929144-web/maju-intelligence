@@ -9,7 +9,8 @@ export type WorkspaceCapability =
   | "manage_routes"
   | "manage_sales"
   | "view_reports"
-  | "capture_field_updates";
+  | "capture_field_updates"
+  | "manage_billing";
 
 export const workspaceRoleLabels: Record<WorkspaceRole, string> = {
   driver: "배송기사",
@@ -24,15 +25,18 @@ export const workspaceTypeLabels: Record<WorkspaceType, string> = {
   personal: "개인 워크스페이스"
 };
 
-// Roles are currently used for display, filtering, and manager-side organization only.
-// The product direction is not to block day-to-day work by role yet, so every role keeps
-// the same operational capabilities until the customer explicitly enables permission limits.
+// Roles are mostly used for display, filtering, and manager-side organization rather than
+// blocking day-to-day work. The exceptions (added 2026-08-26, P1 "직원 초대 권한 세분화" and
+// 2026-09-01 결제 기능 추가): manage_members — inviting, editing, or deactivating other staff —
+// and manage_billing —카드 등록/변경, 결제 이력 조회 — are limited to owner/manager, since both
+// touch either 계정 구성 or 돈이 오가는 부분이라 일반 직원(영업/배송기사)까지 열어둘 이유가 없습니다.
+// All other capabilities stay open to every role, matching the existing product direction.
 const roleCapabilities: Record<WorkspaceRole, WorkspaceCapability[]> = {
   owner: allWorkspaceCapabilities(),
   manager: allWorkspaceCapabilities(),
-  sales: allWorkspaceCapabilities(),
-  driver: allWorkspaceCapabilities(),
-  member: allWorkspaceCapabilities()
+  sales: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members" && capability !== "manage_billing"),
+  driver: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members" && capability !== "manage_billing"),
+  member: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members" && capability !== "manage_billing")
 };
 
 export function normalizeWorkspaceRole(role?: string | null): WorkspaceRole {
@@ -49,5 +53,14 @@ export function canUseWorkspaceFeature(role: string | null | undefined, capabili
 }
 
 function allWorkspaceCapabilities(): WorkspaceCapability[] {
-  return ["manage_company", "manage_members", "manage_customers", "manage_routes", "manage_sales", "view_reports", "capture_field_updates"];
+  return [
+    "manage_company",
+    "manage_members",
+    "manage_customers",
+    "manage_routes",
+    "manage_sales",
+    "view_reports",
+    "capture_field_updates",
+    "manage_billing"
+  ];
 }

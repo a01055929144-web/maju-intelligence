@@ -2,14 +2,17 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, ClipboardList, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation } from "@/lib/store";
+import { SortableTh } from "@/components/sortable-th";
+import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
+import { useTableSort } from "@/lib/use-table-sort";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type Props = {
   initialCompanies: ManagedCompanyAccount[];
-  source: "sample" | "supabase";
+  source: "empty" | "supabase";
 };
 
 const emptyCompany: ManagedCompanyAccountInput = {
@@ -21,13 +24,22 @@ const emptyCompany: ManagedCompanyAccountInput = {
   customerEmail: "",
   customerPassword: ""
 };
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [companies, setCompanies] = useState(initialCompanies);
   const [selectedId, setSelectedId] = useState(initialCompanies[0]?.id || "new");
   const [query, setQuery] = useState("");
   const [companyFilter, setCompanyFilter] = useState<"all" | "active" | "needs-setup" | "paused">("all");
+  const [companyPage, setCompanyPage] = useState(1);
+  const [companyPageSize, setCompanyPageSize] = useState<ListPageSize>(30);
   const [form, setForm] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
+  // 2026-08-27 에러 처리/복원력 감사 후속: 고객사 생성/수정 폼은 로그인 이메일·비밀번호까지 포함해
+  // 필드가 많고, 저장 전까지는 서버에 반영되지 않습니다. 마지막으로 불러온(또는 저장된) 값과 현재
+  // 값을 비교해 실제로 뭔가 고쳤을 때만 이탈 경고를 띄웁니다.
+  const [formBaseline, setFormBaseline] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
+  useUnsavedChangesWarning(JSON.stringify(form) !== JSON.stringify(formBaseline));
   const [showPassword, setShowPassword] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -35,6 +47,11 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [inviteMessage, setInviteMessage] = useState("");
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [updatingStaffId, setUpdatingStaffId] = useState("");
+  const [directForm, setDirectForm] = useState({ employeeName: "", employeeEmail: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
+  const [directMessage, setDirectMessage] = useState("");
+  const [creatingDirect, setCreatingDirect] = useState(false);
+  const [directResult, setDirectResult] = useState<DirectStaffAccountResult | null>(null);
+  const [copiedField, setCopiedField] = useState<"email" | "password" | "">("");
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -51,11 +68,19 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       return matchesKeyword && matchesFilter;
     });
   }, [companies, companyFilter, query]);
+  const companyTotalPages = Math.max(1, Math.ceil(filteredCompanies.length / companyPageSize));
+  const currentCompanyPage = Math.min(companyPage, companyTotalPages);
+  const pagedCompanies = useMemo(() => {
+    const start = (currentCompanyPage - 1) * companyPageSize;
+    return filteredCompanies.slice(start, start + companyPageSize);
+  }, [companyPageSize, currentCompanyPage, filteredCompanies]);
+  const companyPageStart = filteredCompanies.length ? (currentCompanyPage - 1) * companyPageSize + 1 : 0;
+  const companyPageEnd = Math.min(filteredCompanies.length, currentCompanyPage * companyPageSize);
 
   function selectCompany(company: ManagedCompanyAccount) {
     setSelectedId(company.id);
     setMessage("");
-    setForm({
+    const next = {
       id: company.id,
       name: company.name,
       businessType: company.businessType,
@@ -64,13 +89,16 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       status: company.status,
       customerEmail: company.customerEmail,
       customerPassword: company.customerPassword
-    });
+    };
+    setForm(next);
+    setFormBaseline(next);
   }
 
   function startNewCompany() {
     setSelectedId("new");
     setMessage("");
     setForm(emptyCompany);
+    setFormBaseline(emptyCompany);
   }
 
   function update<K extends keyof ManagedCompanyAccountInput>(key: K, value: ManagedCompanyAccountInput[K]) {
@@ -101,7 +129,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       return exists ? prev.map((company) => (company.id === saved.id ? { ...company, ...saved } : company)) : [saved, ...prev];
     });
     setSelectedId(saved.id);
-    setForm({
+    const savedForm = {
       id: saved.id,
       name: saved.name,
       businessType: saved.businessType,
@@ -110,8 +138,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       status: saved.status,
       customerEmail: saved.customerEmail,
       customerPassword: saved.customerPassword
-    });
-    setMessage(payload.persisted ? "고객사와 로그인 계정이 DB에 저장되었습니다." : "고객사 정보가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    };
+    setForm(savedForm);
+    setFormBaseline(savedForm);
+    setMessage(payload.persisted ? "고객사와 로그인 계정 저장이 완료되었습니다." : "고객사 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function createInvite() {
@@ -151,7 +181,53 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       )
     );
     setInviteForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크가 DB에 저장되었습니다." : "초대 링크가 화면에 생성되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 카카오 가입 초대 링크 저장이 완료되었습니다." : "초대 링크가 화면에 생성되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function createDirectAccount() {
+    if (!selectedCompany) return;
+    if (!directForm.employeeName.trim()) {
+      setDirectMessage("직원 이름을 입력해주세요.");
+      return;
+    }
+
+    setCreatingDirect(true);
+    setDirectMessage("");
+    setDirectResult(null);
+
+    const response = await fetch("/api/admin/staff-accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: selectedCompany.id,
+        employeeName: directForm.employeeName,
+        employeeEmail: directForm.employeeEmail,
+        employeePhone: directForm.employeePhone,
+        role: directForm.role
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    setCreatingDirect(false);
+
+    if (!response.ok) {
+      setDirectMessage(payload?.message || "직원 계정 생성에 실패했습니다.");
+      return;
+    }
+
+    const result = payload as DirectStaffAccountResult;
+    setDirectResult(result);
+    setDirectForm({ employeeName: "", employeeEmail: "", employeePhone: "", role: "driver" });
+    setDirectMessage(result.persisted ? "" : "계정이 화면에 생성되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function copyDirectResultField(field: "email" | "password", value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField((current) => (current === field ? "" : current)), 1500);
+    } catch {
+      setDirectMessage("클립보드 복사에 실패했습니다. 직접 선택해 복사해주세요.");
+    }
   }
 
   async function updateStaffInvitation(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -188,7 +264,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           : company
       )
     );
-    setInviteMessage(payload.persisted ? "직원 업무 구분/상태가 DB에 저장되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. DB 저장 상태는 시스템 점검에서 확인하세요.");
+    setInviteMessage(payload.persisted ? "직원 업무 구분/상태 저장이 완료되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -211,11 +287,11 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
         <AdminSummaryCard icon={Building2} label="운영 고객사" value={`${activeCompanies.toLocaleString()}곳`} helper={`전체 ${companies.length.toLocaleString()}곳`} />
         <AdminSummaryCard icon={Users} label="총 거래처" value={`${totalCustomers.toLocaleString()}곳`} helper="회사별 분리 저장" />
         <AdminSummaryCard icon={ReceiptText} label="매출 거래행" value={`${totalSalesRows.toLocaleString()}건`} helper="거래원장 누적" />
-        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "DB 연결" : "저장 확인 필요"} />
+        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "저장 연결" : "저장 확인 필요"} />
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-primary">
               <ClipboardList className="h-5 w-5" />
@@ -229,10 +305,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           <div className="grid grid-cols-3 gap-2 text-center">
             <AdminQueueMetric label="준비 미흡" value={`${needsSetupCompanies}곳`} tone="warning" />
             <AdminQueueMetric label="운영중" value={`${activeCompanies}곳`} />
-            <AdminQueueMetric label="DB 상태" value={source === "supabase" ? "연결" : "확인"} tone={source === "supabase" ? "default" : "warning"} />
+            <AdminQueueMetric label="저장 상태" value={source === "supabase" ? "연결" : "확인"} tone={source === "supabase" ? "default" : "warning"} />
           </div>
         </div>
-        <div className="grid gap-3 p-5 lg:grid-cols-4">
+        <div className="grid gap-3 p-4 lg:grid-cols-4">
           {adminActionQueue.map(({ company, missingCheck, readiness }) => (
             <button
               key={company.id}
@@ -258,7 +334,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </button>
           ))}
           {!adminActionQueue.length ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 lg:col-span-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 lg:col-span-4">
               <p className="font-black text-emerald-900">모든 고객사가 운영 준비 기준을 충족했습니다.</p>
               <p className="mt-1 text-sm font-bold text-emerald-700">신규 업로드 실패, 출발지 변경, 계정 변경 요청만 수시로 확인하면 됩니다.</p>
             </div>
@@ -275,7 +351,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               <p className="text-2xl font-black">{companies.length}곳</p>
             </div>
             <Badge className={source === "supabase" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>
-              {source === "supabase" ? "DB 연결" : "저장 확인 필요"}
+              {source === "supabase" ? "저장 연결" : "저장 확인 필요"}
             </Badge>
           </div>
           <div className="mt-4 flex gap-2">
@@ -285,7 +361,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 className="h-10 w-full rounded-md border border-input bg-white pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 placeholder="회사명, 이메일 검색"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setCompanyPage(1);
+                }}
               />
             </label>
             <Button type="button" onClick={startNewCompany}>
@@ -294,15 +373,56 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </Button>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <CompanyFilterButton active={companyFilter === "all"} count={companies.length} label="전체" onClick={() => setCompanyFilter("all")} />
-            <CompanyFilterButton active={companyFilter === "active"} count={activeCompanies} label="운영중" onClick={() => setCompanyFilter("active")} />
-            <CompanyFilterButton active={companyFilter === "needs-setup"} count={needsSetupCompanies} label="준비 미흡" onClick={() => setCompanyFilter("needs-setup")} tone="warning" />
-            <CompanyFilterButton active={companyFilter === "paused"} count={pausedCompanies} label="중지" onClick={() => setCompanyFilter("paused")} />
+            <CompanyFilterButton active={companyFilter === "all"} count={companies.length} label="전체" onClick={() => { setCompanyFilter("all"); setCompanyPage(1); }} />
+            <CompanyFilterButton active={companyFilter === "active"} count={activeCompanies} label="운영중" onClick={() => { setCompanyFilter("active"); setCompanyPage(1); }} />
+            <CompanyFilterButton active={companyFilter === "needs-setup"} count={needsSetupCompanies} label="준비 미흡" onClick={() => { setCompanyFilter("needs-setup"); setCompanyPage(1); }} tone="warning" />
+            <CompanyFilterButton active={companyFilter === "paused"} count={pausedCompanies} label="중지" onClick={() => { setCompanyFilter("paused"); setCompanyPage(1); }} />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2">
+            <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-muted-foreground">
+              보기
+              <select
+                className="h-6 border-0 bg-transparent p-0 text-xs font-black text-foreground outline-none focus:ring-0"
+                onChange={(event) => {
+                  setCompanyPageSize(Number(event.target.value) as ListPageSize);
+                  setCompanyPage(1);
+                }}
+                value={companyPageSize}
+              >
+                {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}개
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-muted-foreground">
+              {companyPageStart.toLocaleString()}-{companyPageEnd.toLocaleString()} / {filteredCompanies.length.toLocaleString()}곳
+            </span>
+            <button
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentCompanyPage <= 1}
+              onClick={() => setCompanyPage((page) => Math.max(1, page - 1))}
+              type="button"
+            >
+              이전
+            </button>
+            <span className="text-xs font-black text-muted-foreground">
+              {currentCompanyPage.toLocaleString()} / {companyTotalPages.toLocaleString()}
+            </span>
+            <button
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentCompanyPage >= companyTotalPages}
+              onClick={() => setCompanyPage((page) => Math.min(companyTotalPages, page + 1))}
+              type="button"
+            >
+              다음
+            </button>
           </div>
         </div>
 
         <div className="max-h-[680px] space-y-2 overflow-y-auto p-3">
-          {filteredCompanies.map((company) => (
+          {pagedCompanies.map((company) => (
             <button
               key={company.id}
               className={`w-full rounded-lg border p-4 text-left transition ${
@@ -343,7 +463,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </button>
           ))}
           {!filteredCompanies.length ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
               <p className="text-sm font-black text-slate-800">조건에 맞는 고객사가 없습니다.</p>
               <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">검색어 또는 운영 필터를 바꾸거나 신규 고객사를 등록하세요.</p>
             </div>
@@ -352,7 +472,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       </aside>
 
       <section className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <div>
             <Badge className="mb-2 bg-slate-100 text-slate-700">{selectedCompany ? "선택 고객사" : "신규 고객사"}</Badge>
             <h2 className="text-2xl font-black">{selectedCompany?.name || "새 고객사 등록"}</h2>
@@ -363,7 +483,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           <Building2 className="h-8 w-8 text-primary" />
         </div>
 
-        <form className="space-y-6 p-5" onSubmit={handleSubmit}>
+        <form className="space-y-6 p-4" onSubmit={handleSubmit}>
           {selectedCompany ? (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -401,6 +521,77 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 </div>
               </div>
             </div>
+          ) : null}
+
+          {selectedCompany ? (
+            <section className="rounded-lg border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-4">
+                <div>
+                  <p className="flex items-center gap-2 font-black text-slate-950">
+                    <UserPlus className="h-4 w-4 text-primary" />
+                    직원 계정 즉시 생성
+                  </p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">
+                    직원의 카카오 가입을 기다리지 않고, 대표님이 그 자리에서 로그인 계정(이메일 + 임시 비밀번호)을 바로 만들어 전달할 수 있습니다.
+                  </p>
+                </div>
+                <Badge className="bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">즉시 발급</Badge>
+              </div>
+              <div className="grid gap-3 p-4 md:grid-cols-[1fr_1fr_140px_150px_auto] md:items-end">
+                <Field label="직원명" required value={directForm.employeeName} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeName: value }))} />
+                <Field label="로그인 이메일 (미입력 시 자동 생성)" type="email" value={directForm.employeeEmail} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeEmail: value }))} />
+                <Field label="연락처" value={directForm.employeePhone} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeePhone: value }))} />
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-bold text-muted-foreground">역할</span>
+                  <select
+                    className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    value={directForm.role}
+                    onChange={(event) => setDirectForm((prev) => ({ ...prev, role: event.target.value as StaffInvitation["role"] }))}
+                  >
+                    <option value="driver">배송기사</option>
+                    <option value="sales">영업직원</option>
+                    <option value="manager">현장관리자</option>
+                    <option value="member">일반직원</option>
+                  </select>
+                </label>
+                <Button className="h-11" disabled={creatingDirect} onClick={createDirectAccount} type="button">
+                  <UserPlus className="h-4 w-4" />
+                  {creatingDirect ? "생성 중" : "계정 생성"}
+                </Button>
+              </div>
+              {directMessage ? (
+                <p className={directMessage.includes("실패") ? "mx-4 mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" : "mx-4 mb-4 rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary"}>
+                  {directMessage}
+                </p>
+              ) : null}
+              {directResult ? (
+                <div className="mx-4 mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-black text-emerald-900">
+                    {directResult.name}님 계정이 생성되었습니다. 아래 정보를 안전한 방법으로 전달해주세요 — 이 화면을 벗어나면 비밀번호는 다시 볼 수 없습니다.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black text-muted-foreground">로그인 이메일</p>
+                        <p className="truncate font-mono text-sm font-bold text-slate-900">{directResult.email}</p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={() => copyDirectResultField("email", directResult.email)}>
+                        {copiedField === "email" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black text-muted-foreground">임시 비밀번호</p>
+                        <p className="truncate font-mono text-sm font-bold text-slate-900">{directResult.temporaryPassword}</p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={() => copyDirectResultField("password", directResult.temporaryPassword)}>
+                        {copiedField === "password" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           ) : null}
 
           {selectedCompany ? (
@@ -524,43 +715,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   최근 {selectedCompany.recentUploads.length}건
                 </span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
-                  <thead>
-                    <tr className="text-left text-xs font-black text-slate-500">
-                      <th className="border-b border-slate-100 px-4 py-3">파일명</th>
-                      <th className="border-b border-slate-100 px-4 py-3">상태</th>
-                      <th className="border-b border-slate-100 px-4 py-3 text-right">처리 행</th>
-                      <th className="border-b border-slate-100 px-4 py-3 text-right">품질</th>
-                      <th className="border-b border-slate-100 px-4 py-3 text-right">중복</th>
-                      <th className="border-b border-slate-100 px-4 py-3">업로드 시점</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedCompany.recentUploads.map((upload) => (
-                      <tr key={upload.id} className="font-bold text-slate-800">
-                        <td className="border-b border-slate-100 px-4 py-3">{upload.filename}</td>
-                        <td className="border-b border-slate-100 px-4 py-3">
-                          <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
-                            {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
-                          </span>
-                        </td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.rows.toLocaleString()}</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.qualityScore}%</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.duplicateCount.toLocaleString()}</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{upload.createdAt}</td>
-                      </tr>
-                    ))}
-                    {!selectedCompany.recentUploads.length ? (
-                      <tr>
-                        <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={6}>
-                          아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
+              <RecentCompanyUploadsTable uploads={selectedCompany.recentUploads} />
             </div>
           ) : null}
 
@@ -620,25 +775,25 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                 회사 ID: <span className="font-mono font-bold text-slate-700">{form.id}</span>
               </span>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/dashboard?companyId=${encodeURIComponent(form.id)}`}
               >
                 고객사 대시보드
               </Link>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/crm/timeline?companyId=${encodeURIComponent(form.id)}`}
               >
                 이 고객사 거래처 보기
               </Link>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/?companyId=${encodeURIComponent(form.id)}`}
               >
                 매출/거래처 업로드
               </Link>
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
                 href={`/revenue/transactions?companyId=${encodeURIComponent(form.id)}`}
               >
                 매출 원장 보기
@@ -843,6 +998,78 @@ function DataMetric({
       <Icon className="mb-3 h-4 w-4 text-primary" />
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className={`${compact ? "text-sm leading-5" : "text-2xl"} mt-1 font-black text-slate-950`}>{value}</p>
+    </div>
+  );
+}
+
+// 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어" —
+// 정렬 상태(useState)를 이 표에만 두려고 별도 컴포넌트로 뽑았습니다.
+function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistoryItem[] }) {
+  type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
+  const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<UploadHistoryItem, UploadSortKey>(uploads, {
+    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    duplicateCount: (a, b) => a.duplicateCount - b.duplicateCount,
+    filename: (a, b) => a.filename.localeCompare(b.filename, "ko"),
+    qualityScore: (a, b) => a.qualityScore - b.qualityScore,
+    rows: (a, b) => a.rows - b.rows,
+    status: (a, b) => a.status.localeCompare(b.status)
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
+        <thead>
+          <tr className="text-left text-xs font-black text-slate-500">
+            <SortableTh active={sortKey === "filename"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="파일명" onClick={() => toggleSort("filename")} />
+            <SortableTh active={sortKey === "status"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="상태" onClick={() => toggleSort("status")} />
+            <SortableTh
+              active={sortKey === "rows"}
+              className="border-b border-slate-100 px-4 py-3 text-right"
+              direction={sortDirection}
+              label="처리 행"
+              onClick={() => toggleSort("rows")}
+            />
+            <SortableTh
+              active={sortKey === "qualityScore"}
+              className="border-b border-slate-100 px-4 py-3 text-right"
+              direction={sortDirection}
+              label="품질"
+              onClick={() => toggleSort("qualityScore")}
+            />
+            <SortableTh
+              active={sortKey === "duplicateCount"}
+              className="border-b border-slate-100 px-4 py-3 text-right"
+              direction={sortDirection}
+              label="중복"
+              onClick={() => toggleSort("duplicateCount")}
+            />
+            <SortableTh active={sortKey === "createdAt"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="업로드 시점" onClick={() => toggleSort("createdAt")} />
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.map((upload) => (
+            <tr key={upload.id} className="font-bold text-slate-800">
+              <td className="border-b border-slate-100 px-4 py-3">{upload.filename}</td>
+              <td className="border-b border-slate-100 px-4 py-3">
+                <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
+                  {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
+                </span>
+              </td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.rows.toLocaleString()}</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.qualityScore}%</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.duplicateCount.toLocaleString()}</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{upload.createdAt}</td>
+            </tr>
+          ))}
+          {!uploads.length ? (
+            <tr>
+              <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={6}>
+                아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
     </div>
   );
 }

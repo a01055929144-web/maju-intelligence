@@ -51,13 +51,13 @@ export function Report({
   return (
     <section className="space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-md border border-slate-200 bg-white p-5">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <Badge className="mb-4 bg-blue-50 text-blue-700">MAJU AI Report</Badge>
-              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} 회사 진단 리포트</h1>
+              <Badge className="mb-4 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">MAJU AI 리포트</Badge>
+              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} AI 리포트</h1>
               <p className="mt-2 text-sm font-semibold text-slate-500">
-                {isSalesReport ? "매출 거래내역 업데이트" : "거래처 마스터 등록"} 기준 · 거래처 {analysis.customers}곳 · 거래지역 {analysis.regions}개 · 분석 완료
+                {isSalesReport ? "매출 원장 업데이트" : "거래처 등록"} 기준 · 거래처 {analysis.customers}곳 · 거래지역 {analysis.regions}개 · 분석 완료
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -82,7 +82,7 @@ export function Report({
 
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             <ResultMetric label="처리 데이터" value={`${meta.rows.toLocaleString()}행`} />
-            <ResultMetric label="저장 상태" value={meta.persisted ? "DB 저장" : "저장 확인 필요"} />
+            <ResultMetric label="저장 상태" value={meta.persisted ? "저장 완료" : "저장 확인 필요"} />
             <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "확인 필요"} />
             <ResultMetric label="잠재매출" value={`월 ${analysis.potentialRevenue.toLocaleString()}만원`} />
           </div>
@@ -98,10 +98,10 @@ export function Report({
           />
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold text-slate-500">Company Health Score</p>
+              <p className="text-xs font-bold text-slate-500">회사 건강도</p>
               <div className="mt-3 flex items-end gap-2">
                 <span className="text-6xl font-black text-teal-700">{analysis.health.total}</span>
                 <span className="pb-2 text-sm font-black text-slate-500">점</span>
@@ -161,7 +161,7 @@ export function Report({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                AI 제안 요약
+                추천 액션 요약
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -235,7 +235,7 @@ function ReportDataBasisCard({
   routeHref: string;
   rows: number;
 }) {
-  const sourceLabel = isSalesReport ? "매출 거래내역" : "거래처 마스터";
+  const sourceLabel = isSalesReport ? "매출 원장" : "거래처 등록";
   const basisRows = [
     {
       label: "리포트 기준 데이터",
@@ -249,13 +249,13 @@ function ReportDataBasisCard({
     },
     {
       label: "운영 신뢰도",
-      value: persisted ? "DB 저장 확인" : "저장 확인 필요",
-      description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 DB 저장 상태를 먼저 확인해야 DB 반영 데이터로 볼 수 있습니다."
+      value: persisted ? "저장 완료" : "저장 확인 필요",
+      description: persisted ? `${rows.toLocaleString()}행 처리 · 품질 ${qualityScore || 0}% 기준으로 리포트를 생성했습니다.` : "분석 미리보기는 가능하지만 저장 상태를 먼저 확인해야 운영 데이터로 볼 수 있습니다."
     }
   ];
   const checkLinks = [
     {
-      description: "대표가 보는 KPI와 Health Score가 DB 저장값 기준으로 갱신됐는지 확인합니다.",
+      description: "대표가 보는 KPI와 회사 건강도가 저장값 기준으로 갱신됐는지 확인합니다.",
       href: dashboardHref,
       label: "대시보드",
       value: "KPI 확인"
@@ -285,7 +285,7 @@ function ReportDataBasisCard({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-black text-blue-950">리포트 데이터 기준</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">대표가 보는 점수는 등록된 데이터 종류와 DB 저장 상태를 기준으로 해석해야 합니다.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">대표가 보는 점수는 등록된 데이터 종류와 저장 상태를 기준으로 해석해야 합니다.</p>
         </div>
         <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {persisted ? "운영 반영 가능" : "저장 확인 필요"}
@@ -304,7 +304,7 @@ function ReportDataBasisCard({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-black text-slate-950">저장 후 반영 확인 순서</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 완료 후 아래 4개 화면이 같은 회사와 같은 DB 기준으로 보이면 반영이 완료된 상태입니다.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장 완료 후 아래 4개 화면이 같은 회사 기준으로 보이면 반영이 완료된 상태입니다.</p>
           </div>
           <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
             {persisted ? "확인 가능" : "저장 확인 후"}

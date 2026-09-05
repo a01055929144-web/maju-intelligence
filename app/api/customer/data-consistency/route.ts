@@ -68,16 +68,16 @@ export async function GET(request: NextRequest) {
   const businessNumberMissingCount = isSupabaseSource ? customerMaster.customers.filter((customer) => !customer.businessNumber?.trim()).length : 0;
   const visitCount = timeline.length;
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
-  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
+  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.unknown || 0);
 
   const checks: ConsistencyCheck[] = [
     {
       detail: isSupabaseSource
         ? "Supabase 거래처 원장을 기준으로 대시보드, 히스토리, 코스를 계산합니다."
-        : "DB 거래처 원장이 아직 연결되지 않았습니다. 데이터 등록과 Supabase 연결 상태를 확인하세요.",
+        : "거래처 원장이 아직 연결되지 않았습니다. 데이터 등록과 Supabase 연결 상태를 확인하세요.",
       label: "데이터 저장소",
       ok: isSupabaseSource,
-      value: isSupabaseSource ? "Supabase 실데이터" : "DB 원장 미연결"
+      value: isSupabaseSource ? "실서버 원장" : "원장 미연결"
     },
     {
       detail: "대시보드의 전체 거래처 수와 거래처 원장 수가 같은 기준인지 확인합니다.",
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
       value: customerMaster.truncated ? "일부만 표시됨(더 불러오기 가능)" : "전체 표시"
     },
     {
-      detail: "매출 원장은 최근 거래 기준으로 한 번에 최대 1,000건까지 불러옵니다. 매출 거래내역 > 원장 테이블 하단의 '더 불러오기'로 나머지를 이어서 불러오세요.",
+      detail: "매출 원장은 최근 거래 기준으로 한 번에 최대 1,000건까지 불러옵니다. 매출 원장 > 테이블 하단의 '더 불러오기'로 나머지를 이어서 불러오세요.",
       label: "매출 원장 전체 로드",
       ok: !sales.truncated,
       value: sales.truncated ? "일부만 표시됨(더 불러오기 가능)" : "전체 표시"
@@ -236,13 +236,13 @@ function buildRecommendations({
 }) {
   const items: string[] = [];
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
-  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.sample || 0) + Number(routeProviderCounts.unknown || 0);
+  const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.unknown || 0);
 
   if (!isSupabaseSource) {
-    items.push("운영 거래처 원장이 연결되지 않았습니다. 데이터 등록에서 거래처 마스터를 저장하고 Supabase 환경변수 연결을 먼저 확인하세요.");
+    items.push("운영 거래처 원장이 연결되지 않았습니다. 데이터 등록에서 거래처를 저장하고 Supabase 연결 상태를 먼저 확인하세요.");
   }
   if (dashboardCount !== masterCount) {
-    items.push("대시보드 수치와 거래처 원장 수가 다릅니다. 최신 거래처 마스터 업로드 또는 DB 저장 상태를 확인하세요.");
+    items.push("대시보드 수치와 거래처 원장 수가 다릅니다. 최신 거래처 등록 또는 저장 상태를 확인하세요.");
   }
   if (dashboardCount > 0 && masterCount > 0 && dashboardCount === masterCount) {
     items.push("거래처 수는 일치합니다. 다음은 주소, 사업자번호, 담당자, 배송권역 필수값 누락 여부를 점검하세요.");
@@ -283,7 +283,7 @@ function buildRecommendations({
     items.push("매출 원장의 모든 거래처가 거래처 원장과 매칭되었습니다. 등급·리포트 산정에 안전하게 반영됩니다.");
   }
   if (salesTruncated) {
-    items.push("매출 원장이 최근 1,000건 기준으로 먼저 표시되고 있습니다. 매출 거래내역 > 원장 테이블 하단의 '더 불러오기'로 나머지 거래내역을 이어서 확인하세요.");
+    items.push("매출 원장이 최근 1,000건 기준으로 먼저 표시되고 있습니다. 매출 원장 > 테이블 하단의 '더 불러오기'로 나머지 거래내역을 이어서 확인하세요.");
   }
   if (duplicateGroupCount > 0) {
     items.push(`같은 상호명이 서로 다른 레코드로 쪼개진 것으로 보이는 거래처가 ${duplicateGroupCount.toLocaleString()}건 있습니다. 거래처 히스토리에서 주소 표기를 확인하고 하나로 정리하세요.`);

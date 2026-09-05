@@ -30,7 +30,7 @@ export default async function AdminSystemPage() {
   const launchGates = [
     {
       description: databaseReady ? "Supabase 테이블 연결과 카운트 확인이 완료되었습니다." : "Supabase 환경변수와 schema.sql 적용, 테이블 카운트를 확인하세요.",
-      label: "DB 저장",
+      label: "저장 상태",
       ready: databaseReady
     },
     {
@@ -49,8 +49,8 @@ export default async function AdminSystemPage() {
       ready: deployReady
     },
     {
-      description: operationDataReady ? "정제 거래처 데이터가 DB에 적재되어 있습니다." : "거래처 마스터를 업로드하거나 수기 등록 후 정제 테이블을 확인하세요.",
-      label: "DB 반영 데이터",
+      description: operationDataReady ? "정제 거래처 데이터가 저장되어 있습니다." : "거래처 마스터를 업로드하거나 수기 등록 후 정제 테이블을 확인하세요.",
+      label: "운영 데이터",
       ready: operationDataReady
     }
   ];
@@ -91,9 +91,9 @@ export default async function AdminSystemPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="system" badge="System Check" session={session} subtitle="실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다" title="운영 설정 점검" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <Card className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
-          <CardContent className="p-5">
+          <CardContent className="p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
                 <Badge className={system.readyForOperations ? "mb-3 bg-primary text-primary-foreground" : "mb-3 bg-amber-100 text-amber-900"}>
@@ -101,7 +101,7 @@ export default async function AdminSystemPage() {
                 </Badge>
                 <h2 className="text-2xl font-black">운영 준비 상태</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  관리자, 고객사, DB 저장, 첨부자료, 경로 계산에 필요한 설정을 기준으로 실제 운영 가능 여부를 점검합니다.
+                  관리자, 고객사, 저장 상태, 첨부자료, 경로 계산에 필요한 설정을 기준으로 실제 운영 가능 여부를 점검합니다.
                 </p>
               </div>
               <div className="w-full rounded-md border border-border bg-white p-4 lg:w-72">
@@ -340,7 +340,7 @@ export default async function AdminSystemPage() {
                   최근 감사 로그
                 </CardTitle>
                 <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 DB 반영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
+                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
                 </p>
               </div>
               <Badge className={auditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
@@ -389,7 +389,7 @@ export default async function AdminSystemPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-md border border-dashed border-border bg-muted/35 p-5">
+              <div className="rounded-md border border-dashed border-border bg-muted/35 p-4">
                 <p className="text-sm font-black text-slate-900">아직 표시할 감사 로그가 없습니다.</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   거래처 마스터나 매출 거래내역을 저장하면 업로드 분석 기록이 이곳에 남습니다. 운영 전환 후에는 고객사별 변경 이력을 여기서 확인합니다.
@@ -498,7 +498,7 @@ export default async function AdminSystemPage() {
               ["Data", "거래처 마스터 엑셀 업로드 후 업로드 이력 확인"],
               ["Data", "매출 거래원장 업로드 후 매출 원장 화면 확인"],
               ["Route", "출발지 주소와 TMAP API로 실제 경유 계산 확인"],
-              ["Report", "AI 리포트가 선택 고객사 companyId 기준으로 열리는지 확인"]
+              ["Report", "운영 리포트가 선택 고객사 companyId 기준으로 열리는지 확인"]
             ].map(([group, item]) => (
               <div key={item} className="flex items-start gap-3 rounded-md border border-border bg-muted/35 p-3 text-sm font-bold">
                 <Badge className="mt-0.5 shrink-0 bg-slate-100 text-slate-700">{group}</Badge>
@@ -719,7 +719,7 @@ function LaunchGateCard({ description, label, ready }: { description: string; la
 function Metric({ icon: Icon, label, value }: { icon: typeof Database; label: string; value: string }) {
   return (
     <Card className="shadow-none">
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
         <p className="text-xs font-bold text-muted-foreground">{label}</p>
         <p className="mt-1 text-3xl font-black">{value}</p>

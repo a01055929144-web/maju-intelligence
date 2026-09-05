@@ -44,7 +44,7 @@ export default async function ReportDetailPage({
     {
       label: "핵심 거래권",
       title: topRegion ? `${topRegion.region} ${topRegion.count}개 거래처` : "거래권 확인 필요",
-      body: topRegion ? `${topRegion.region} 비중이 가장 높습니다. 기존 강점 지역의 밀도를 유지하면서 인접 지역으로 확장하세요.` : "거래처 마스터 업로드 후 핵심 거래권을 확인할 수 있습니다."
+      body: topRegion ? `${topRegion.region} 비중이 가장 높습니다. 기존 강점 지역의 밀도를 유지하면서 인접 지역으로 확장하세요.` : "거래처 등록 후 핵심 거래권을 확인할 수 있습니다."
     },
     {
       label: "확장 여지",
@@ -82,7 +82,7 @@ export default async function ReportDetailPage({
       label: "신규영업",
       score: report.health.newSales,
       title: "매출/거래처 업데이트",
-      description: "거래처 마스터와 매출 거래내역을 갱신해 등급과 추천 리드를 재계산합니다."
+      description: "거래처와 매출 원장을 갱신해 등급과 추천 리드를 재계산합니다."
     },
     {
       href: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
@@ -119,14 +119,14 @@ export default async function ReportDetailPage({
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle={`거래처 ${report.customers}개 · 거래지역 ${report.regions}개 · 월 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
+      subtitle={`거래처 ${report.customers}개 · 지역 ${report.regions}개 · 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
       title="AI 리포트"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-6">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-4">
         <Card className="border-slate-200 bg-white shadow-sm">
-          <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+          <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
             <div>
               <Badge className="mb-3 bg-teal-700 text-white">{report.companyName}</Badge>
               <h2 className="text-xl font-black leading-tight text-slate-950">우선 작업: {primaryAction.title}</h2>
@@ -146,7 +146,7 @@ export default async function ReportDetailPage({
               <div className="mt-3 grid gap-2">
                 <ReportRunMetric label="회사 건강도" value={`${report.health.total}점`} />
                 <ReportRunMetric label="우선 보완 항목" value={primaryAction.label} />
-                <ReportRunMetric label="리포트 신뢰도" value={`${dataConfidence}%`} />
+                <ReportRunMetric label="데이터 신뢰도" value={`${dataConfidence}%`} />
               </div>
             </div>
           </CardContent>
@@ -174,7 +174,7 @@ export default async function ReportDetailPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <HeartPulse className="h-5 w-5 text-primary" />
-                Company Health Score
+                회사 건강도
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -243,7 +243,7 @@ export default async function ReportDetailPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
-                리포트 신뢰도
+                데이터 신뢰도
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -253,7 +253,7 @@ export default async function ReportDetailPage({
               </div>
               <Progress value={dataConfidence} />
               <p className="mt-3 text-xs font-semibold leading-5 text-muted-foreground">
-                거래처 수, 거래지역 수, 매출 데이터 존재 여부를 기준으로 산정합니다. 매출 거래원장과 사업자 자료가 늘수록 리포트 품질이 올라갑니다.
+                거래처, 지역, 매출 원장 기준입니다. 자료가 늘수록 리포트 품질이 올라갑니다.
               </p>
             </CardContent>
           </Card>
@@ -319,7 +319,7 @@ export default async function ReportDetailPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-primary" />
-              AI 상세 제안
+              실행 제안
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -358,7 +358,7 @@ function ReportBasisPanel({
     { label: "거래지역", value: `${regions.toLocaleString()}개`, helper: "White Space 기준" },
     { label: "평균 배송거리", value: `${avgDeliveryKm.toFixed(1)}km`, helper: "출발지·주소 기준" },
     { label: "잠재 매출", value: `${potentialRevenue.toLocaleString()}만원`, helper: "리드 추천 기준" },
-    { label: "리포트 신뢰도", value: `${dataConfidence}%`, helper: `건강도 ${healthScore}점` }
+    { label: "데이터 신뢰도", value: `${dataConfidence}%`, helper: `건강도 ${healthScore}점` }
   ];
   const actions = [
     { href: withCompanyQuery("/crm/timeline"), label: "거래처 원장 보완" },
@@ -368,13 +368,13 @@ function ReportBasisPanel({
 
   return (
     <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
-          <p className="maju-section-title">운영 기준 데이터</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">AI 리포트가 참조한 거래처, 지역, 배송, 매출 기준값입니다.</p>
+          <p className="maju-section-title">진단 기준</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">거래처, 지역, 배송, 매출 기준값입니다.</p>
         </div>
         <p className="text-xs font-bold leading-5 text-slate-600">
-          리포트 점수는 확정 판단이 아니라 운영 우선순위입니다. 거래처 기본정보, 매출 원장, 배송 코스가 보완될수록 진단 품질이 올라갑니다.
+          점수는 확정 판단이 아니라 운영 우선순위입니다. 기본정보, 매출 원장, 배송 코스가 보완될수록 품질이 올라갑니다.
         </p>
         <div className="flex flex-wrap gap-2">
           {actions.map((action) => (
@@ -400,11 +400,11 @@ function ReportBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
-    <Card className="shadow-none">
-      <CardContent className="p-5">
+    <Card className="min-w-0 shadow-none">
+      <CardContent className="min-w-0 p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-3xl font-black">{value}</p>
+        <p className="truncate text-xs font-bold text-muted-foreground">{label}</p>
+        <p className="mt-1 truncate text-2xl font-black">{value}</p>
       </CardContent>
     </Card>
   );

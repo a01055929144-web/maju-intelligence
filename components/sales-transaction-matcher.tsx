@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Search } from "lucide-react";
+import { Link2, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 type UnmatchedGroup = {
@@ -111,7 +111,7 @@ export function SalesTransactionMatcher({
       </div>
 
       {message ? (
-        <div className={`px-5 py-2 text-xs font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+        <div className={`px-4 py-2 text-xs font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
           {message.text}
         </div>
       ) : null}
@@ -153,11 +153,14 @@ export function SalesTransactionMatcher({
                 </div>
                 <div className="mt-2 max-h-52 space-y-1 overflow-auto">
                   {loadingCustomers ? (
-                    <p className="px-2 py-3 text-xs font-bold text-slate-400">거래처 목록을 불러오는 중입니다.</p>
+                    <p className="flex items-center gap-1.5 px-2 py-3 text-xs font-bold text-slate-400">
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                      거래처 목록을 불러오는 중입니다.
+                    </p>
                   ) : filteredCustomers.length ? (
                     filteredCustomers.map((customer) => (
                       <button
-                        className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-xs font-bold text-slate-700 hover:bg-teal-50 disabled:opacity-50"
+                        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-xs font-bold text-slate-700 hover:bg-teal-50 disabled:opacity-50"
                         disabled={submittingKey === group.customerKey}
                         key={customer.id}
                         onClick={() => void submitMatch(group.customerKey, customer.id, customer.customerName)}

@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace";
+import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { scopeChurnRiskCustomersForSession, scopeCustomerMasterForSession, scopeRoutePlanForSession, scopeStaffVehicleLocationsForSession } from "@/lib/customer-data-scope";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getTodayRoutePlan } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
@@ -17,19 +18,28 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes] = await Promise.all([
+  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId),
     getCustomerMaster(companyId),
     getCompanyOriginAddress(companyId),
     getChurnRiskCustomers(companyId).catch(() => []),
-    getDeliveryVehicleFuelTypes(companyId).catch(() => ({}))
+    getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
+    getStaffVehicleLocations(companyId).catch(() => [])
   ]);
-  const hasOperationalCustomerMaster = customerMaster.source === "supabase";
-  const churnRiskCustomerIds = new Set(churnRiskCustomers.map((customer) => customer.customerId));
+  const scopedCustomerMaster = scopeCustomerMasterForSession(customerMaster, customerSession);
+  const scopedRoutePlan = scopeRoutePlanForSession(routePlan, customerSession);
+  const scopedStaffVehicleLocations = scopeStaffVehicleLocationsForSession(staffVehicleLocations, customerSession);
+  const scopedChurnRiskCustomers = scopeChurnRiskCustomersForSession(churnRiskCustomers, scopedCustomerMaster.customers, customerSession);
+  const hasOperationalCustomerMaster = scopedCustomerMaster.source === "supabase";
+  // 2026-08-31 피드백 대응: 회원가입 단계는 물류 출발지 주소를 받지 않아, 고객사가 회사 설정에서
+  // 직접 채우기 전까지는 모든 배송/영업 거리 계산이 조용히 기본값(마주식자재 창고 주소)으로
+  // 이뤄집니다. 고객사 화면에서는 이를 알아챌 방법이 없었으므로 배너로 알립니다.
+  const showOriginAddressBanner = Boolean(customerSession) && !company.originAddress?.trim();
+  const churnRiskCustomerIds = new Set(scopedChurnRiskCustomers.map((customer) => customer.customerId));
   const baseMapMarkers = hasOperationalCustomerMaster
-    ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
-    : createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
+    ? createCustomerLedgerMapMarkers(originAddress, scopedCustomerMaster.customers)
+    : createRouteMapMarkers(originAddress, scopedRoutePlan.groups.flatMap((group) => group.stops));
   const mapMarkers = baseMapMarkers.map((marker) =>
     marker.id && churnRiskCustomerIds.has(marker.id)
       ? { ...marker, markerColor: CHURN_RISK_MARKER_COLOR, name: `이탈 위험 · ${marker.name}` }
@@ -53,8 +63,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       <section className="mx-auto flex w-full max-w-[1760px] flex-col xl:h-full xl:min-h-0">
         <SalesRouteMapWorkspace
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
+          churnRiskCustomers={scopedChurnRiskCustomers}
+          companyName={customerSession?.companyName || company.name}
           mapMarkers={mapMarkers}
-          routePlan={routePlan}
+          routePlan={scopedRoutePlan}
+          showOriginAddressBanner={showOriginAddressBanner}
+          staffVehicleLocations={scopedStaffVehicleLocations}
           timelineHref={timelineHref}
           vehicleFuelTypes={vehicleFuelTypes}
         />

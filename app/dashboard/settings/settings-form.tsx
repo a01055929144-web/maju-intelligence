@@ -11,9 +11,15 @@ import { CompanySettings } from "@/lib/store";
 export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [form, setForm] = useState({
     businessType: initial.businessType,
+    deliveryCompleteMessage: initial.deliveryCompleteMessage || "요청하신 위치에 배송 적재 완료했습니다.",
+    deliveryIssueMessage: initial.deliveryIssueMessage || "배송 중 확인이 필요한 사항이 있어 안내드립니다.",
+    deliveryPartialMessage: initial.deliveryPartialMessage || "일부 품목은 확인 후 별도 안내드리겠습니다.",
     name: initial.name,
+    notificationPhone: initial.notificationPhone || "",
+    notificationSenderName: initial.notificationSenderName || initial.name,
     originAddress: initial.originAddress,
     ownerName: initial.ownerName,
+    smsSenderPhone: initial.smsSenderPhone || "",
     telegramChatId: initial.telegramChatId || ""
   });
   const [message, setMessage] = useState("");
@@ -23,7 +29,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [telegramTesting, setTelegramTesting] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
   const hasCompanyName = Boolean(form.name.trim());
-  const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim())].filter(Boolean).length;
+  const hasNotificationPhone = Boolean(form.notificationPhone.trim());
+  const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim()), hasNotificationPhone].filter(Boolean).length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,8 +69,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <p className="maju-section-title">운영 기준값 상태</p>
               <p className="mt-1 maju-muted-label normal-case tracking-normal">지도, 배송코스, 거래처 히스토리에서 공통으로 사용하는 회사 기준입니다.</p>
             </div>
-            <Badge className={completedItems >= 3 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-              {completedItems}/3 완료
+            <Badge className={completedItems >= 4 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+              {completedItems}/4 완료
             </Badge>
           </div>
           <div className="grid md:grid-cols-3">
@@ -82,8 +89,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <OperationSignal
               icon={<ClipboardCheck className="h-4 w-4" />}
               label="운영 준비도"
-              ok={completedItems >= 3}
-              value={`${completedItems}/3 완료`}
+              ok={completedItems >= 4}
+              value={`${completedItems}/4 완료`}
             />
           </div>
         </section>
@@ -117,7 +124,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               회사 계정과 최초 회사 등록은 MAJU 관리자가 생성합니다. 고객사는 운영에 필요한 기준값만 설정에서 수정합니다.
             </p>
           </div>
-          <div className="space-y-4 p-5">
+          <div className="space-y-4 p-4">
             <label className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">회사명</span>
               <input
@@ -154,6 +161,64 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 placeholder="예: 경기도 하남시 초이로 133 1층"
               />
             </label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground">문자 문의번호</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  inputMode="tel"
+                  onChange={(event) => setForm({ ...form, notificationPhone: event.target.value })}
+                  placeholder="예: 010-0000-0000"
+                  value={form.notificationPhone}
+                />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-muted-foreground">문자 표시명</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setForm({ ...form, notificationSenderName: event.target.value })}
+                  placeholder={form.name || "회사명"}
+                  value={form.notificationSenderName}
+                />
+              </label>
+            </div>
+            <label className="space-y-1.5">
+              <span className="text-xs font-bold text-muted-foreground">SOLAPI 발신번호 메모</span>
+              <input
+                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                inputMode="tel"
+                onChange={(event) => setForm({ ...form, smsSenderPhone: event.target.value })}
+                placeholder="실제 발신은 Vercel SOLAPI_SENDER_PHONE 기준"
+                value={form.smsSenderPhone}
+              />
+              <p className="text-xs font-semibold leading-5 text-slate-500">공용 SOLAPI 발신번호와 고객사 문의번호를 분리해 관리합니다. 점주에게 보이는 문의번호는 위 문자 문의번호입니다.</p>
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black text-slate-950">배송 알림 기본 문구</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-500">현장 직원 메모가 없을 때 상태별로 자동 사용됩니다.</p>
+                </div>
+                <Badge className="bg-white text-teal-800 ring-1 ring-inset ring-teal-100">고객사 수정 가능</Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <MessageTemplateField
+                  label="도착완료"
+                  onChange={(value) => setForm({ ...form, deliveryCompleteMessage: value })}
+                  value={form.deliveryCompleteMessage}
+                />
+                <MessageTemplateField
+                  label="부분배송"
+                  onChange={(value) => setForm({ ...form, deliveryPartialMessage: value })}
+                  value={form.deliveryPartialMessage}
+                />
+                <MessageTemplateField
+                  label="이슈발생"
+                  onChange={(value) => setForm({ ...form, deliveryIssueMessage: value })}
+                  value={form.deliveryIssueMessage}
+                />
+              </div>
+            </div>
             <label className="space-y-1.5">
               <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
                 <Bell className="h-3.5 w-3.5" />
@@ -177,9 +242,15 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                   {telegramTesting ? "발송 중..." : "테스트 발송"}
                 </Button>
               </div>
-              <p className="text-xs font-semibold leading-5 text-slate-400">
-                21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다. 봇을 그룹에 초대한 뒤 chat_id를 저장하고 테스트 발송으로 확인하세요.
-              </p>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
+                <p>21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다. 설정 방법:</p>
+                <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+                  <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
+                  <li>그룹 chat_id를 확인합니다 — 그룹에 아무 메시지나 보낸 뒤, 브라우저에서 <code className="rounded bg-white px-1 py-0.5">https://api.telegram.org/bot(봇 토큰)/getUpdates</code>에 접속하면 <code className="rounded bg-white px-1 py-0.5">chat.id</code> 값(그룹은 보통 -로 시작하는 숫자)을 확인할 수 있습니다. 봇 토큰은 MAJU 담당자에게 문의하세요.</li>
+                  <li>위 입력칸에 chat_id를 저장한 뒤 "테스트 발송"으로 실제 도착을 확인합니다.</li>
+                </ol>
+                <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 chat_id가 바뀌면 알림이 조용히 끊깁니다 — 주기적으로 테스트 발송으로 확인해주세요.</p>
+              </div>
               {telegramTestMessage ? (
                 <p className={`text-xs font-bold ${telegramTestMessage.includes("실패") || telegramTestMessage.includes("먼저") ? "text-rose-600" : "text-emerald-700"}`}>
                   {telegramTestMessage}
@@ -211,7 +282,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <p className="mt-1 text-sm font-black text-foreground">{hasOrigin ? form.originAddress : "출발지 주소를 입력해주세요"}</p>
           </div>
         </div>
-        <div className="space-y-4 p-5 text-sm leading-6 text-muted-foreground">
+        <div className="space-y-4 p-4 text-sm leading-6 text-muted-foreground">
           <WorkflowItem
             icon={<Database className="h-4 w-4" />}
             title="고객사 계정"
@@ -261,11 +332,24 @@ function BasisCard({ icon, title, description }: { icon: ReactNode; title: strin
 
 function OperationSignal({ icon, label, ok, value }: { icon: ReactNode; label: string; ok: boolean; value: string }) {
   return (
-    <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r last:md:border-r-0">
+    <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r last:md:border-r-0">
       <div className={ok ? "text-teal-700" : "text-amber-600"}>{icon}</div>
       <p className="mt-3 text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-black text-foreground">{value}</p>
     </div>
+  );
+}
+
+function MessageTemplateField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  return (
+    <label className="space-y-1.5">
+      <span className="text-xs font-bold text-muted-foreground">{label}</span>
+      <textarea
+        className="min-h-[84px] w-full resize-none rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold leading-5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
   );
 }
 
@@ -283,7 +367,7 @@ function WorkflowItem({ icon, title, description }: { icon: ReactNode; title: st
 
 function QuickLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link className="inline-flex h-10 items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-foreground transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800" href={href}>
+    <Link className="inline-flex min-h-11 items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-foreground transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800" href={href}>
       {label}
       <Route className="h-4 w-4 text-primary" />
     </Link>

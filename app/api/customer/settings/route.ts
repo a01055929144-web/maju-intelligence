@@ -19,9 +19,15 @@ export async function PATCH(request: Request) {
   try {
     const result = await updateCompanySettings(session.companyId, {
       businessType: body.businessType,
+      deliveryCompleteMessage: body.deliveryCompleteMessage,
+      deliveryIssueMessage: body.deliveryIssueMessage,
+      deliveryPartialMessage: body.deliveryPartialMessage,
       name: body.name,
+      notificationPhone: body.notificationPhone,
+      notificationSenderName: body.notificationSenderName,
       originAddress: body.originAddress,
       ownerName: body.ownerName,
+      smsSenderPhone: body.smsSenderPhone,
       telegramChatId: body.telegramChatId
     });
 

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { type Ref, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { CustomerWorkspaceTabs } from "@/components/customer-workspace-tabs";
+import { LinkifiedText } from "@/components/linkified-text";
+import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 
 type TimelineItem = {
@@ -29,6 +30,8 @@ type DbSummary = {
 type CustomerView = {
   id?: string;
   address: string;
+  bankAccountFileUrl?: string;
+  businessLicenseFileUrl?: string;
   businessNumber?: string;
   businessStatus?: string;
   customerName: string;
@@ -80,6 +83,8 @@ type AddressSearchResult = {
 
 type CustomerDetailTab = "ledger" | "history";
 type OperationFilter = "all" | "address-missing" | "business-check" | "business-number-missing" | "contact-missing" | "loading-missing" | "manager-missing";
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 const resultLabels: Record<string, string> = {
   visited: "방문 완료",
@@ -91,13 +96,13 @@ const resultLabels: Record<string, string> = {
 };
 
 const customerDetailTabs: Array<{ description: string; helper: string; icon: typeof Building2; id: CustomerDetailTab; label: string; shortLabel: string }> = [
-  { description: "사업자정보, 배송 담당자, 첨부자료를 관리합니다.", helper: "사업자·주소·적재위치", icon: Building2, id: "ledger", label: "원장·첨부", shortLabel: "기본정보" },
-  { description: "상담 메모와 영업 방문 기록을 누적합니다.", helper: "메모·방문·다음 액션", icon: FileText, id: "history", label: "메모·방문", shortLabel: "이력관리" }
+  { description: "사업자정보, 배송 기준값, 첨부자료를 한 번에 관리합니다.", helper: "사업자·주소·적재위치", icon: Building2, id: "ledger", label: "거래처 원장", shortLabel: "원장" },
+  { description: "상담 메모, 방문 기록, 다음 액션을 시간순으로 누적합니다.", helper: "메모·방문·다음 액션", icon: FileText, id: "history", label: "활동 기록", shortLabel: "기록" }
 ];
 
 const defaultDbSummary: DbSummary = {
-  description: "DB 상태를 확인 중입니다. DB 거래처 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
-  label: "DB 확인 중",
+  description: "저장 상태를 확인 중입니다. 거래처 원장이 확인되기 전까지 거래처 목록은 비워 둡니다.",
+  label: "원장 확인 중",
   normalizedCustomers: null,
   tone: "fallback",
   visitResults: null
@@ -169,20 +174,15 @@ function syncSelectedCustomerUrl(customerId: string | undefined) {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
-// Tailwind's JIT scanner needs complete, literal class strings (a template-interpolated
-// `xl:grid-cols-[${...}]` is invisible to it), so both collapsed states are spelled out here.
-function customerListGridColsClassName(listCollapsed: boolean) {
-  return listCollapsed ? "xl:grid-cols-[220px_minmax(0,1fr)]" : "xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]";
-}
-
 export default function CrmTimelinePage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
+  const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [timelineSource, setTimelineSource] = useState<"empty" | "supabase">("empty");
   const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
   const [dbError, setDbError] = useState("");
-  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "sample" | "error">("loading");
+  const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "empty" | "error">("loading");
   const [selectedIndex, setSelectedIndex] = useState(0);
   // 거래처 검색·목록 사이드바가 항상 펼쳐져 있으면 옆의 선택 거래처 상세(원장/첨부자료)가 계속
   // 좁게 눌려 보였습니다. 거래처를 고르면 자동으로 목록을 접어 상세가 전체 폭을 쓰도록 하고,
@@ -191,6 +191,8 @@ export default function CrmTimelinePage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
   const [operationFilter, setOperationFilter] = useState<OperationFilter>("all");
+  const [customerPage, setCustomerPage] = useState(1);
+  const [customerPageSize, setCustomerPageSize] = useState<ListPageSize>(30);
 
   useEffect(() => {
     let active = true;
@@ -206,10 +208,10 @@ export default function CrmTimelinePage() {
       })
       .catch((error) => {
         if (!active) return;
-        setDbError(error instanceof Error ? error.message : "DB 상태 API 호출 실패");
+        setDbError(error instanceof Error ? error.message : "원장 상태 API 호출 실패");
         setDbSummary({
-          description: "DB 상태 API 호출에 실패했습니다. DB 거래처 원장 연결 상태를 먼저 확인해야 합니다.",
-          label: "DB 확인 실패",
+          description: "원장 상태 API 호출에 실패했습니다. 거래처 원장 연결 상태를 먼저 확인해야 합니다.",
+          label: "원장 확인 실패",
           normalizedCustomers: null,
           tone: "fallback",
           visitResults: null
@@ -237,7 +239,7 @@ export default function CrmTimelinePage() {
       .then((payload) => {
         if (!active) return;
         if (payload?.source !== "supabase") {
-          setCustomerSource(payload?.source === "sample" ? "sample" : "error");
+          setCustomerSource(payload?.source === "empty" ? "empty" : "error");
           setCustomers([]);
           setSelectedIndex(0);
           return;
@@ -328,6 +330,7 @@ export default function CrmTimelinePage() {
   }
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
   const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<{ mimeType: string; title: string; url: string } | null>(null);
   const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [newMemo, setNewMemo] = useState("");
@@ -414,17 +417,6 @@ export default function CrmTimelinePage() {
   }, [selectedCustomer?.id]);
 
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
-  const expectedRevenue = timeline.reduce((total, item) => total + item.expectedRevenue, 0);
-  const hasOperationalLedger = customerSource === "supabase";
-  const ledgerStatusLabel =
-    customerSource === "loading"
-      ? "원장 확인 중"
-      : hasOperationalLedger
-        ? "DB 거래처 원장 연결"
-        : "DB 거래처 원장 미연결";
-  const ledgerStatusDescription = hasOperationalLedger
-    ? "Supabase 거래처 원장 기준으로 목록과 상세를 표시합니다."
-    : "데이터 등록에서 거래처 마스터를 저장하면 이 화면에 실제 원장이 표시됩니다.";
   const filteredCustomers = useMemo(() => {
     const keyword = customerSearch.trim().toLowerCase();
 
@@ -450,6 +442,13 @@ export default function CrmTimelinePage() {
         return matchesGrade && matchesOperation && matchesKeyword;
       });
   }, [customerSearch, customers, gradeFilter, operationFilter]);
+  const customerTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / customerPageSize));
+  const pagedCustomers = useMemo(() => {
+    const start = (customerPage - 1) * customerPageSize;
+    return filteredCustomers.slice(start, start + customerPageSize);
+  }, [customerPage, customerPageSize, filteredCustomers]);
+  const customerPageStart = filteredCustomers.length ? (customerPage - 1) * customerPageSize + 1 : 0;
+  const customerPageEnd = Math.min(filteredCustomers.length, customerPage * customerPageSize);
   const addressMissingCount = customers.filter((customer) => !customer.address).length;
   const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
   const businessNumberMissingCount = customers.filter((customer) => !customer.businessNumber).length;
@@ -471,6 +470,14 @@ export default function CrmTimelinePage() {
       (customer) => customer.id !== selectedCustomer.id && customer.customerName.trim().replace(/\s+/g, "").toLowerCase() === key
     );
   }, [customers, selectedCustomer.customerName, selectedCustomer.id]);
+
+  useEffect(() => {
+    setCustomerPage((current) => Math.min(Math.max(current, 1), customerTotalPages));
+  }, [customerTotalPages]);
+
+  useEffect(() => {
+    setCustomerPage(1);
+  }, [customerPageSize, customerSearch, gradeFilter, operationFilter]);
 
   function jumpToCustomer(customerId: string | undefined) {
     if (!customerId) return;
@@ -511,11 +518,40 @@ export default function CrmTimelinePage() {
     }
   }
   const activeCleanupLabel = operationFilterLabel(operationFilter);
-  const needsAttentionCustomers = customers.filter((customer) => customerOperationalIssues(customer).length > 0);
-  const readyCustomerCount = customers.length - needsAttentionCustomers.length;
   const loadingPositionAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "loading_position").length;
-  const businessCertificateAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length;
-  const bankAccountAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length;
+  // 사업자등록증·통장사본은 첨부자료함(customer_attachments) 외에도 데이터 등록의 OCR 저장 경로로
+  // 거래처 원장에 직접 저장될 수 있어(businessLicenseFileUrl/bankAccountFileUrl), 두 경로를 모두 인식합니다.
+  const businessCertificateAttachments =
+    customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length || (selectedCustomer.businessLicenseFileUrl ? 1 : 0);
+  const bankAccountAttachments =
+    customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length || (selectedCustomer.bankAccountFileUrl ? 1 : 0);
+  const masterFileAttachments = [
+    !customerAttachments.some((attachment) => attachment.attachmentType === "business_license") && selectedCustomer.businessLicenseFileUrl
+      ? {
+          id: "master-business-license",
+          attachmentType: "business_license",
+          createdAt: "데이터 등록 시 저장",
+          fileUrl: selectedCustomer.businessLicenseFileUrl,
+          mimeType: guessMimeType(selectedCustomer.businessLicenseFileUrl),
+          storagePath: "",
+          title: "사업자등록증"
+        }
+      : null,
+    !customerAttachments.some((attachment) => attachment.attachmentType === "bank_account") && selectedCustomer.bankAccountFileUrl
+      ? {
+          id: "master-bank-account",
+          attachmentType: "bank_account",
+          createdAt: "데이터 등록 시 저장",
+          fileUrl: selectedCustomer.bankAccountFileUrl,
+          mimeType: guessMimeType(selectedCustomer.bankAccountFileUrl),
+          storagePath: "",
+          title: "통장사본"
+        }
+      : null
+  ].filter((row): row is { id: string; attachmentType: string; createdAt: string; fileUrl: string; mimeType: string; storagePath: string; title: string } =>
+    Boolean(row)
+  );
+  const combinedAttachments = [...customerAttachments, ...masterFileAttachments];
   const attachmentChecklist = [
     {
       count: loadingPositionAttachments,
@@ -566,7 +602,7 @@ export default function CrmTimelinePage() {
       title: "필수 첨부자료"
     },
     {
-      description: customerNotes.length ? "최근 메모가 DB 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
+      description: customerNotes.length ? "최근 메모가 저장 이력으로 관리됩니다." : `${selectedCustomer.memoCount}건 기준 이력이 표시됩니다.`,
       ok: customerNotes.length > 0 || selectedCustomer.memoCount > 0,
       title: "메모 히스토리"
     }
@@ -581,12 +617,14 @@ export default function CrmTimelinePage() {
   const nextActionCount = customerNotes.filter((note) => note.nextAction).length;
   const latestNote = customerNotes[0];
   const deliveryProofAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "delivery_proof").length;
+  const deliveryMessageNotes = customerNotes.filter((note) => note.noteType === "delivery_message").length;
   const fieldRecordSummary = {
     attachmentCount: customerAttachments.length,
+    deliveryMessageCount: deliveryMessageNotes,
     deliveryProofCount: deliveryProofAttachments,
     loadingPositionCount: loadingPositionAttachments,
     memoCount: historyCount,
-    recentMemoAt: latestNote?.createdAt || "DB 이력 대기",
+    recentMemoAt: latestNote?.createdAt || "이력 대기",
     visitCount: selectedCustomer.visitCount
   };
   const draftBusinessNumberChanged = Boolean(
@@ -594,7 +632,11 @@ export default function CrmTimelinePage() {
       normalizeBusinessRegistrationNumber(draftCustomer.businessNumber || "") !== normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber || "")
   );
   const draftBusinessNumberValid = !draftCustomer?.businessNumber || isValidBusinessRegistrationNumber(draftCustomer.businessNumber || "");
-  const canSaveCustomer = !isSaving && (!draftBusinessNumberChanged || draftBusinessNumberValid);
+  // 2026-08-27 피드백("사업자번호를 모를 수도 있으니깐 일단 생성과 변경 저장이 가능토록해") 반영:
+  // 체크섬 검증은 참고용 안내로만 보여주고, 저장 자체는 막지 않습니다. 실제 현장에서는 등록 시점에
+  // 사업자번호를 모르거나 나중에 확인해야 하는 거래처가 많아, 번호 형식이 의심스러워도 우선 저장할
+  // 수 있어야 합니다(회사 자체 가입 화면의 엄격한 검증과는 별개 기준입니다).
+  const canSaveCustomer = !isSaving;
 
   function applyOperationFilter(nextFilter: OperationFilter) {
     const resolvedFilter = operationFilter === nextFilter ? "all" : nextFilter;
@@ -672,10 +714,6 @@ export default function CrmTimelinePage() {
 
   async function saveCustomer() {
     if (!draftCustomer) return;
-    if (draftBusinessNumberChanged && !draftBusinessNumberValid) {
-      setSaveMessage("사업자번호가 유효하지 않습니다. 10자리 번호와 체크값을 확인하세요.");
-      return;
-    }
     setIsSaving(true);
     setSaveMessage("");
 
@@ -701,7 +739,9 @@ export default function CrmTimelinePage() {
           phone: draftCustomer.phone,
           region: draftCustomer.region,
           representativeName: draftCustomer.representativeName,
-          validateBusinessNumber: draftBusinessNumberChanged && Boolean(draftCustomer.businessNumber),
+          // 사업자번호를 몰라 임시값을 넣거나 나중에 정정하는 경우가 흔해, 저장 자체는 항상 허용합니다
+          // (검증은 위 helper 텍스트로만 참고 안내).
+          validateBusinessNumber: false,
           visitCount: draftCustomer.visitCount,
           companyId: getAdminCompanyIdFromUrl()
         })
@@ -728,12 +768,12 @@ export default function CrmTimelinePage() {
       setIsEditing(!movedToNext && !completedCleanupFilter && operationFilter !== "all");
       setSaveMessage(
         payload?.persisted === false
-          ? "거래처 정보가 화면에 반영되었습니다. DB 저장 상태는 관리자 시스템 점검에서 확인하세요."
+          ? "거래처 정보가 화면에 반영되었습니다. 저장 상태는 관리자 시스템 점검에서 확인하세요."
           : movedToNext
             ? "저장되었습니다. 같은 보완 조건의 다음 거래처로 이동했습니다."
             : completedCleanupFilter
               ? "저장되었습니다. 현재 보완 필터의 남은 거래처가 없어 전체 목록으로 돌아갑니다."
-            : "거래처 정보가 DB에 저장되었습니다."
+            : "거래처 정보 저장이 완료되었습니다."
       );
     } catch (error) {
       setSaveMessage(error instanceof Error ? error.message : "저장 중 오류가 발생했습니다.");
@@ -803,10 +843,14 @@ export default function CrmTimelinePage() {
       }
 
       const closedCount = Array.isArray(payload?.closed) ? payload.closed.length : 0;
+      // 2026-08-28 피드백 대응(국세청 API 장애가 "정상 조회됨"으로 보임): apiFailures가 있으면
+      // 장애로 조회를 못한 건수가 있다는 걸 명확히 알리고(해당 건은 기존 상태 그대로 유지됨),
+      // "N곳 갱신"이라는 성공 문구만 보고 전부 정상 처리된 것으로 착각하지 않게 합니다.
+      const apiFailures = Number(payload?.apiFailures || 0);
       setBulkBusinessStatusMessage(
         `${payload?.checked || 0}곳 조회, ${payload?.updated || 0}곳 갱신${closedCount ? ` · 폐업 확인 ${closedCount}곳` : ""}${
           payload?.skippedNoBusinessNumber ? ` · 사업자번호 없음 ${payload.skippedNoBusinessNumber}곳 제외` : ""
-        }`
+        }${apiFailures ? ` · ⚠ 국세청 API 장애로 ${apiFailures}곳은 조회하지 못해 기존 상태를 유지했습니다` : ""}`
       );
 
       const refreshed = await fetch(withCompanyQuery("/api/customers"), { cache: "no-store" });
@@ -867,49 +911,33 @@ export default function CrmTimelinePage() {
     }
   }
 
-  async function saveAttachment() {
-    if (!selectedCustomer?.id || !newAttachmentTitle.trim()) return;
+  // 파일을 선택하는 즉시 업로드합니다. 예전에는 파일 선택 후 별도로 "첨부자료 등록" 버튼을
+  // 한 번 더 눌러야 저장됐는데, 그 두 번째 클릭이 눈에 잘 띄지 않아 파일을 선택하고도
+  // "등록 대기" 상태로 남는 문제가 있었습니다.
+  async function uploadAttachmentFiles(files: File[]) {
+    if (!selectedCustomer?.id || !files.length) return;
     setIsAttachmentSaving(true);
     setAttachmentMessage("");
 
     try {
+      const titleBase = newAttachmentTitle.trim() || attachmentTitleFromType(newAttachmentType);
       const uploadedAttachments: CustomerAttachmentView[] = [];
       let hasTemporaryResult = false;
 
-      if (newAttachmentFiles.length) {
-        for (let index = 0; index < newAttachmentFiles.length; index += 1) {
-          const file = newAttachmentFiles[index];
-          const formData = new FormData();
-          formData.append("attachmentType", newAttachmentType);
-          formData.append("companyId", getAdminCompanyIdFromUrl());
-          formData.append("customerId", selectedCustomer.id);
-          formData.append("file", file);
-          formData.append("title", newAttachmentFiles.length > 1 ? `${newAttachmentTitle} ${index + 1}` : newAttachmentTitle);
-          const response = await fetch("/api/customer-attachments/upload", {
-            method: "POST",
-            body: formData
-          });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);
-          if (payload?.attachment) uploadedAttachments.push(payload.attachment);
-          if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
-        }
-      } else {
-        const response = await fetch("/api/customer-operations", {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const formData = new FormData();
+        formData.append("attachmentType", newAttachmentType);
+        formData.append("companyId", getAdminCompanyIdFromUrl());
+        formData.append("customerId", selectedCustomer.id);
+        formData.append("file", file);
+        formData.append("title", files.length > 1 ? `${titleBase} ${index + 1}` : titleBase);
+        const response = await fetch("/api/customer-attachments/upload", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "attachment",
-            attachmentType: newAttachmentType,
-            companyId: getAdminCompanyIdFromUrl(),
-            customerId: selectedCustomer.id,
-            fileUrl: newAttachmentUrl,
-            mimeType: guessMimeType(newAttachmentUrl),
-            title: newAttachmentTitle
-          })
+          body: formData
         });
         const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
+        if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);
         if (payload?.attachment) uploadedAttachments.push(payload.attachment);
         if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
       }
@@ -917,7 +945,55 @@ export default function CrmTimelinePage() {
       if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
       setAttachmentMessage(
         hasTemporaryResult
-          ? `${uploadedAttachments.length || 1}건이 화면에 임시 반영됐습니다. 실제 파일 저장은 Supabase Storage 설정을 확인해야 합니다.`
+          ? `${uploadedAttachments.length || files.length}건이 목록에 반영됐습니다. 파일 저장소 연결 상태를 확인하세요.`
+          : `${uploadedAttachments.length || files.length}건의 첨부자료가 거래처 원장에 자동 저장됐습니다.`
+      );
+      setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
+      setNewAttachmentFiles([]);
+    } catch (error) {
+      setAttachmentMessage(error instanceof Error ? error.message : "첨부자료 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsAttachmentSaving(false);
+    }
+  }
+
+  async function saveAttachment() {
+    if (!selectedCustomer?.id || !newAttachmentTitle.trim()) return;
+
+    if (newAttachmentFiles.length) {
+      await uploadAttachmentFiles(newAttachmentFiles);
+      return;
+    }
+
+    setIsAttachmentSaving(true);
+    setAttachmentMessage("");
+
+    try {
+      const uploadedAttachments: CustomerAttachmentView[] = [];
+      let hasTemporaryResult = false;
+
+      const response = await fetch("/api/customer-operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "attachment",
+          attachmentType: newAttachmentType,
+          companyId: getAdminCompanyIdFromUrl(),
+          customerId: selectedCustomer.id,
+          fileUrl: newAttachmentUrl,
+          mimeType: guessMimeType(newAttachmentUrl),
+          title: newAttachmentTitle
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
+      if (payload?.attachment) uploadedAttachments.push(payload.attachment);
+      if (payload?.uploaded === false || payload?.persisted === false) hasTemporaryResult = true;
+
+      if (uploadedAttachments.length) setCustomerAttachments((current) => [...uploadedAttachments, ...current]);
+      setAttachmentMessage(
+        hasTemporaryResult
+          ? `${uploadedAttachments.length || 1}건이 목록에 반영됐습니다. 파일 저장소 연결 상태를 확인하세요.`
           : `${uploadedAttachments.length || 1}건의 첨부자료가 거래처 원장에 저장됐습니다.`
       );
       setNewAttachmentTitle(attachmentTitleFromType(newAttachmentType));
@@ -933,129 +1009,76 @@ export default function CrmTimelinePage() {
   return (
     <CustomerAppShell
       active="customers"
-      companyName={isAdminPreview ? "선택 고객사" : "마주식자재"}
+      companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="등록된 거래처를 검색해 상세 정보와 운영 상태를 바로 수정합니다."
+      subtitle="검색, 상세 수정, 메모·첨부 관리"
       title="거래처 관리"
-      userName={isAdminPreview ? "관리자" : "정두영"}
+      userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <CustomerWorkspaceTabs />
-      <section className="mx-auto grid max-w-[1560px] gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="xl:sticky xl:top-24 xl:self-start">
-          <WorkspaceSectionNav
-            items={[
-              { active: true, badge: hasOperationalLedger ? "DB" : "필요", description: "전체 거래처, 등급, 보완 상태를 먼저 확인합니다.", href: "#customer-ledger-summary", icon: Building2, label: "전체 현황" },
-              { description: "검색, 등급, 사업자·주소·적재위치 보완 필터입니다.", href: "#customer-ledger-list", icon: Search, label: "거래처 검색·필터" },
-              { description: "선택 거래처의 사업자정보와 배송 기준값을 바로 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "거래처 편집" },
-              { description: "상담 메모, 방문 기록, 첨부자료를 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "메모·첨부" }
-            ]}
-            title="거래처 관리"
-          />
-        </div>
+      <section className="mx-auto max-w-[1560px]">
+        <WorkspaceSectionNav
+          items={[
+            { active: true, description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: "#customer-ledger-list", icon: Search, label: "목록" },
+            { description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "원장" },
+            { description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "기록" }
+          ]}
+          title="거래처 관리"
+        />
 
         <div className="min-w-0 space-y-4">
-        <div className="maju-section-card scroll-mt-28" id="customer-ledger-summary">
-          <SectionHeader
-            eyebrow="지도 작업공간"
-            title="거래처 전체 현황"
-            description="지도 홈이 사용하는 거래처 기준값입니다. 개별 거래처 수정은 아래 검색 후 상세 편집에서 진행합니다."
-          />
-          <div className="p-3">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(4,minmax(0,1fr))]">
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="maju-muted-label">원장 상태</p>
-                <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
-                <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{dbSummary.label}</p>
-              </div>
-              <SummaryCard helper={hasOperationalLedger ? `정제 ${formatDbCount(dbSummary.normalizedCustomers)}` : "거래처 마스터 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
-              <SummaryCard helper="매출 기준 우수 거래처" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
-              <SummaryCard helper="검색·필터 적용 결과" label="현재 목록" value={`${filteredCustomers.length}곳`} tone="blue" />
-              <SummaryCard helper={hasOperationalLedger ? `방문 결과 ${formatDbCount(dbSummary.visitResults)}` : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
-            </div>
-            <div className={`mt-2 flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${hasOperationalLedger ? "border-emerald-100 bg-emerald-50/70" : "border-amber-200 bg-amber-50/80"}`}>
-              <p className={`text-xs font-black ${hasOperationalLedger ? "text-emerald-900" : "text-amber-900"}`}>{ledgerStatusLabel}</p>
-              <p className={`truncate text-xs font-bold ${hasOperationalLedger ? "text-emerald-800" : "text-amber-800"}`}>{ledgerStatusDescription}</p>
-            </div>
-            {dbError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">DB/API 확인 메시지: {dbError}</p> : null}
-            {!hasCustomers ? (
-              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-black text-amber-900">
-                  {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "실제 거래처 원장 데이터가 아직 연결되지 않았습니다."}
-                </p>
-                <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                  데이터 등록에서 거래처 마스터를 저장하면 지도 홈과 거래처 원장이 같은 DB 기준으로 연결됩니다.
-                </p>
-                <Link className="maju-button-primary mt-3" href={withCompanyQuery("/?type=customer-master")}>
-                  거래처 마스터 등록하기
-                </Link>
-              </div>
-            ) : null}
-            <CustomerLedgerBasisPanel
-              addressMissingCount={addressMissingCount}
-              businessNumberMissingCount={businessNumberMissingCount}
-              customerCount={customers.length}
-              filteredCount={filteredCustomers.length}
-              loadingReadyCount={customers.filter((customer) => Boolean(customer.loadingPosition)).length}
-              managerMissingCount={managerMissingCount}
-              managerCount={new Set(customers.map((customer) => customer.deliveryManager).filter(Boolean)).size}
-              memoCount={customers.reduce((sum, customer) => sum + customer.memoCount, 0)}
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="maju-panel p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">거래처 운영 현황</Badge>
-                <p className="text-base font-black text-slate-950">보완이 필요한 거래처를 먼저 정리하세요</p>
-                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">사업자 상태, 연락처, 배송주소, 적재위치 기준으로 원장 완성도를 봅니다.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <MiniLedgerMetric label="운영 가능" value={`${readyCustomerCount.toLocaleString()}곳`} tone="ready" />
-                <MiniLedgerMetric label="보완 필요" value={`${needsAttentionCustomers.length.toLocaleString()}곳`} tone="warning" />
-              </div>
-            </div>
-          </div>
-          <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-4 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
-            <span>
-              <span className="block text-sm font-black">거래처 데이터 보완</span>
-              <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
-            </span>
-            <Plus className="h-5 w-5" />
-          </Link>
-        </div>
-
         <div className="maju-section-card scroll-mt-28" id="customer-ledger-list">
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
-            description="검색과 필터로 거래처를 찾고, 선택한 거래처의 원장을 오른쪽에서 관리합니다."
+            description="거래처를 선택하면 오른쪽에서 원장을 편집합니다."
           />
+          <div className="grid gap-2 border-t border-slate-200/80 bg-white p-3 sm:grid-cols-3">
+            {[
+              { label: "1. 거래처 선택", value: `${filteredCustomers.length.toLocaleString()}곳`, icon: Search },
+              { label: "2. 원장 확인", value: selectedCustomer.customerName || "미선택", icon: Building2 },
+              { label: "3. 첨부·메모", value: `${combinedAttachments.length.toLocaleString()}건 · ${historyCount.toLocaleString()}건`, icon: FileText }
+            ].map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2"
+                  key={item.label}
+                >
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md ${index === 1 ? "bg-teal-700 text-white" : "bg-white text-teal-700 ring-1 ring-inset ring-teal-100"}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-black text-slate-500">{item.label}</span>
+                    <span className="mt-0.5 block truncate text-sm font-black text-slate-950">{item.value}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
           {/*
             검색·필터 사이드바(360~400px)가 거래처 상세(원장/첨부자료) 그리드 옆에 항상 펼쳐져 있으면,
             상세 쪽에 실제로 남는 폭이 좁아져 안의 정보가 눌려 보였습니다. 거래처를 고르면 목록을
             자동으로 접어서 상세가 전체 폭을 쓰게 하고, 필요할 때만 다시 펼치도록 했습니다.
           */}
-          <div className={`grid gap-4 border-t border-slate-200/80 bg-slate-50/50 p-4 ${customerListGridColsClassName(listCollapsed)}`}>
+          <div className="space-y-4 border-t border-slate-200/80 bg-slate-50/50 p-4">
             {listCollapsed ? (
               <button
                 aria-label="거래처 검색·목록 펼치기"
-                className="maju-section-card flex items-center gap-2 px-3 py-3 text-left transition hover:bg-slate-50 xl:sticky xl:top-4 xl:flex-col xl:items-start xl:gap-3"
+                className="maju-section-card flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50"
                 onClick={() => setListCollapsed(false)}
                 type="button"
               >
-                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
-                  <PanelLeftOpen className="h-4 w-4 text-slate-500" />
-                  거래처 검색·목록
-                </span>
-                <span className="text-xs font-bold text-slate-500">
-                  {selectedCustomer.customerName} 선택됨 · {filteredCustomers.length}/{customers.length}곳
+                <PanelLeftOpen className="h-4 w-4 shrink-0 text-slate-500" />
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-black text-slate-950">거래처 검색·목록</span>
+                  <span className="text-xs font-bold text-slate-500">
+                    {selectedCustomer.customerName} 선택됨 · {filteredCustomers.length}/{customers.length}곳
+                  </span>
                 </span>
               </button>
             ) : (
-            <aside className="maju-section-card xl:sticky xl:top-4 xl:max-h-[calc(100vh-120px)]">
+            <aside className="maju-section-card">
               <div className="border-b border-slate-200/80 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1076,6 +1099,7 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
               <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
+                <p className="maju-muted-label px-0.5 pb-1.5">검색</p>
                 <label className="maju-search-field">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
@@ -1085,75 +1109,44 @@ export default function CrmTimelinePage() {
                     value={customerSearch}
                   />
                 </label>
-                <div className="maju-filter-box mt-3">
-                  <p className="maju-muted-label px-2 pb-1">매출 등급</p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {(["all", "A", "B", "C"] as const).map((grade) => (
-                      <button
-                        className={`h-9 rounded-md border text-xs font-black transition ${
-                          gradeFilter === grade
-                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)]"
-                            : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
-                        }`}
-                        key={grade}
-                        onClick={() => setGradeFilter(grade)}
-                        type="button"
-                      >
-                        {grade === "all" ? "전체" : `${grade}등급`}
-                      </button>
-                    ))}
+                <div className="mt-3 border-t border-slate-200/80 pt-3">
+                  <p className="maju-muted-label px-0.5 pb-1.5">빠른 필터</p>
+                  <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-3">
+                    <CustomerFilterButton active={operationFilter === "all"} count={customers.length} label="전체" onClick={clearOperationFilter} />
+                    <CustomerFilterButton active={operationFilter === "business-check"} count={businessCheckCount} label="사업자 확인" onClick={() => applyOperationFilter("business-check")} tone="danger" />
+                    <CustomerFilterButton active={operationFilter === "loading-missing"} count={loadingMissingCount} label="적재위치" onClick={() => applyOperationFilter("loading-missing")} tone="warning" />
                   </div>
-                </div>
-                <div className="maju-filter-box mt-3">
-                  <p className="maju-muted-label px-2 pb-1">운영 상태</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <CustomerFilterButton
-                      active={operationFilter === "address-missing"}
-                      count={addressMissingCount}
-                      label="주소 미등록"
-                      onClick={() => applyOperationFilter("address-missing")}
-                      tone="danger"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "business-number-missing"}
-                      count={businessNumberMissingCount}
-                      label="사업자번호 미등록"
-                      onClick={() => applyOperationFilter("business-number-missing")}
-                      tone="warning"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "business-check"}
-                      count={businessCheckCount}
-                      label="사업자 확인"
-                      onClick={() => applyOperationFilter("business-check")}
-                      tone="danger"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "loading-missing"}
-                      count={loadingMissingCount}
-                      label="적재위치 미등록"
-                      onClick={() => applyOperationFilter("loading-missing")}
-                      tone="warning"
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "contact-missing"}
-                      count={contactMissingCount}
-                      label="연락처 미등록"
-                      onClick={() => applyOperationFilter("contact-missing")}
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "manager-missing"}
-                      count={managerMissingCount}
-                      label="담당자 미지정"
-                      onClick={() => applyOperationFilter("manager-missing")}
-                    />
-                    <CustomerFilterButton
-                      active={operationFilter === "all"}
-                      count={customers.length}
-                      label="운영 전체"
-                      onClick={clearOperationFilter}
-                    />
+                  <div className="maju-filter-box mt-3">
+                    <p className="maju-muted-label px-2 pb-1">매출 등급</p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(["all", "A", "B", "C"] as const).map((grade) => (
+                        <button
+                          className={`h-9 rounded-md border text-xs font-black transition ${
+                            gradeFilter === grade
+                              ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                              : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                          }`}
+                          key={grade}
+                          onClick={() => setGradeFilter(grade)}
+                          type="button"
+                        >
+                          {grade === "all" ? "전체" : `${grade}등급`}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  <details className="maju-filter-box mt-3">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-1 text-xs font-black text-slate-500">
+                      상세 보완 필터
+                      <Badge className="bg-slate-100 text-slate-600">{addressMissingCount + businessNumberMissingCount + contactMissingCount + managerMissingCount}건</Badge>
+                    </summary>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <CustomerFilterButton active={operationFilter === "address-missing"} count={addressMissingCount} label="주소 미등록" onClick={() => applyOperationFilter("address-missing")} tone="danger" />
+                      <CustomerFilterButton active={operationFilter === "business-number-missing"} count={businessNumberMissingCount} label="사업자번호" onClick={() => applyOperationFilter("business-number-missing")} tone="warning" />
+                      <CustomerFilterButton active={operationFilter === "contact-missing"} count={contactMissingCount} label="연락처" onClick={() => applyOperationFilter("contact-missing")} />
+                      <CustomerFilterButton active={operationFilter === "manager-missing"} count={managerMissingCount} label="담당자" onClick={() => applyOperationFilter("manager-missing")} />
+                    </div>
+                  </details>
                 </div>
                 <BusinessStatusControlPanel
                   checkableCount={businessStatusCheckableCount}
@@ -1206,67 +1199,122 @@ export default function CrmTimelinePage() {
                 {bulkManagerMessage ? <p className="text-[11px] font-bold text-teal-800">{bulkManagerMessage}</p> : null}
               </div>
             ) : null}
-            <div className="max-h-[560px] space-y-2 overflow-auto p-3 xl:max-h-[calc(100vh-520px)] xl:min-h-[360px]">
-              {filteredCustomers.map(({ customer, index }) => {
+            {filteredCustomers.length ? (
+              <div className="space-y-2 border-b border-slate-200/80 bg-white px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-500">
+                    보기
+                    <select
+                      className="h-6 border-0 bg-transparent p-0 text-[11px] font-black text-slate-900 outline-none focus:ring-0"
+                      onChange={(event) => setCustomerPageSize(Number(event.target.value) as ListPageSize)}
+                      value={customerPageSize}
+                    >
+                      {LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}개
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-500">
+                    {customerPageStart.toLocaleString()}-{customerPageEnd.toLocaleString()} / {filteredCustomers.length.toLocaleString()}곳
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={customerPage <= 1}
+                    onClick={() => setCustomerPage((page) => Math.max(1, page - 1))}
+                    type="button"
+                  >
+                    이전
+                  </button>
+                  <span className="px-1 text-[11px] font-black text-slate-400">
+                    {customerPage.toLocaleString()} / {customerTotalPages.toLocaleString()}
+                  </span>
+                  <button
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={customerPage >= customerTotalPages}
+                    onClick={() => setCustomerPage((page) => Math.min(customerTotalPages, page + 1))}
+                    type="button"
+                  >
+                    다음
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {filteredCustomers.length ? (
+              <div className="grid grid-cols-[20px_minmax(0,1fr)_44px_64px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                <input
+                  aria-label="현재 페이지 전체 선택"
+                  checked={pagedCustomers.some(({ customer }) => Boolean(customer.id)) && pagedCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
+                  className="h-3.5 w-3.5 shrink-0"
+                  onChange={(event) => {
+                    const pageIds = pagedCustomers.map(({ customer }) => customer.id).filter((id): id is string => Boolean(id));
+                    setBulkSelectedIds((current) => {
+                      if (event.target.checked) return new Set([...Array.from(current), ...pageIds]);
+                      const next = new Set(current);
+                      pageIds.forEach((id) => next.delete(id));
+                      return next;
+                    });
+                  }}
+                  type="checkbox"
+                />
+                <span>상호명</span>
+                <span className="text-center">등급</span>
+                <span className="text-right">상태</span>
+              </div>
+            ) : null}
+            <div className="divide-y divide-slate-100">
+              {pagedCustomers.map(({ customer, index }) => {
                 const issues = customerOperationalIssues(customer);
-                const readyScore = Math.round(((4 - issues.length) / 4) * 100);
+                const selected = index === selectedIndex;
                 return (
                   <div
                     key={`${customer.customerName}-${customer.address}`}
-                    className={`flex w-full gap-2 rounded-md border p-3 transition ${
-                      index === selectedIndex ? "border-slate-900 bg-slate-50 shadow-sm ring-1 ring-slate-900/5" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    className={`grid grid-cols-[20px_minmax(0,1fr)_44px_64px] items-center gap-2 px-3 py-2 transition ${
+                      selected ? "bg-slate-50" : "bg-white hover:bg-slate-50"
                     }`}
                   >
                     {customer.id ? (
                       <input
                         aria-label={`${customer.customerName} 일괄 선택`}
                         checked={bulkSelectedIds.has(customer.id)}
-                        className="mt-1 h-3.5 w-3.5 shrink-0"
+                        className="h-3.5 w-3.5 shrink-0"
                         onChange={() => toggleBulkSelected(customer.id as string)}
                         type="checkbox"
                       />
-                    ) : null}
+                    ) : (
+                      <span />
+                    )}
                     <button
-                      className="min-w-0 flex-1 text-left"
+                      className="min-w-0 text-left"
                       onClick={() => {
                         setSelectedIndex(index);
                         setListCollapsed(true);
                       }}
                       type="button"
                     >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-950">{customer.customerName}</p>
-                        <p className="mt-1 truncate text-xs font-bold text-slate-500">{customer.region} · {customer.address}</p>
-                      </div>
-                      <Badge className={gradeClassName(customer.grade)}>{customer.grade}</Badge>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-black text-slate-400">원장 완성도 {readyScore}%</span>
-                      <Badge className={issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}>
-                        {issues.length ? `${issues[0]} 필요` : "운영 가능"}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                      <span className="rounded bg-slate-100 px-2 py-1">{customer.industry}</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryKm}km</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">{customer.monthlyRevenue}만원</span>
-                      <span className="rounded bg-slate-100 px-2 py-1">{customer.deliveryManager}</span>
-                    </div>
+                      <span className="block truncate text-sm font-black text-slate-950">{customer.customerName}</span>
+                      <span className="block truncate text-[11px] font-bold text-slate-400">{customer.region}</span>
                     </button>
+                    <Badge className={`justify-self-center px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                    <Badge className={`justify-self-end px-1.5 py-0 text-[10px] ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                      {issues.length ? "보완" : "가능"}
+                    </Badge>
                   </div>
                 );
               })}
               {!filteredCustomers.length ? (
-                <div className="maju-empty-state">
+                <div className="maju-empty-state m-4">
                   <p className="text-sm font-black text-slate-700">{hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}</p>
                   <p className="mt-1 text-xs font-bold text-slate-400">
-                    {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처 마스터를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
+                    {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
                   </p>
                 </div>
               ) : null}
               {customersTruncated ? (
-                <div className="space-y-1.5 pt-1">
+                <div className="space-y-1.5 p-3">
                   <button
                     className="maju-button-secondary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isLoadingMoreCustomers}
@@ -1283,10 +1331,9 @@ export default function CrmTimelinePage() {
             )}
 
           <div className="min-w-0 space-y-4">
-            <div className="maju-section-card scroll-mt-28 p-5" id="customer-ledger-detail">
+            <div className="maju-section-card scroll-mt-28 p-4" id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <Badge className="mb-3 bg-slate-100 text-slate-700">선택 거래처</Badge>
                   <h2 className="truncate text-[26px] font-black leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
@@ -1323,11 +1370,11 @@ export default function CrmTimelinePage() {
                     </div>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
+                <div className="flex flex-wrap gap-2">
+                  <div className="inline-flex h-11 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
                     <button
                       aria-label="이전 거래처"
-                      className="grid h-full w-8 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      className="grid h-full w-11 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                       disabled={!previousFilteredCustomer}
                       onClick={() => moveFilteredSelection("previous")}
                       type="button"
@@ -1339,7 +1386,7 @@ export default function CrmTimelinePage() {
                     </span>
                     <button
                       aria-label="다음 거래처"
-                      className="grid h-full w-8 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      className="grid h-full w-11 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                       disabled={!nextFilteredCustomer}
                       onClick={() => moveFilteredSelection("next")}
                       type="button"
@@ -1434,33 +1481,27 @@ export default function CrmTimelinePage() {
             <div className="maju-section-card scroll-mt-28" id="customer-ledger-history">
               <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                  <p className="maju-muted-label">거래처 상세 탭</p>
+                  <p className="maju-muted-label">선택 거래처 작업</p>
                   <p className="mt-1 truncate text-sm font-black text-slate-950">{customerDetailTabs.find((tab) => tab.id === detailTab)?.description}</p>
                 </div>
-                <div className="grid w-full gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_1px_0_rgba(15,23,42,0.03)] sm:w-auto sm:grid-cols-2">
+                <div className="flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] lg:w-auto">
                   {customerDetailTabs.map((tab) => {
                     const Icon = tab.icon;
                     const selected = detailTab === tab.id;
                     return (
                       <button
-                        className={`group relative min-w-[170px] overflow-hidden rounded-lg border px-3 py-3 text-left transition ${
+                        className={`group flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-md border px-3 text-sm font-black transition ${
                           selected
-                            ? "border-teal-700 bg-teal-700 text-white shadow-[0_10px_22px_rgba(15,118,110,0.18)]"
-                            : "border-slate-200 bg-white text-slate-600 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
+                            ? "border-teal-700 bg-teal-700 text-white shadow-sm"
+                            : "border-transparent bg-white text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"
                         }`}
                         key={tab.id}
                         onClick={() => setDetailTab(tab.id)}
+                        title={`${tab.label} · ${tab.helper}`}
                         type="button"
                       >
-                        {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-white/80" /> : null}
-                        <span className="flex items-center gap-2 text-sm font-black">
-                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${selected ? "bg-white/15" : "bg-slate-100 group-hover:bg-white"}`}>
-                            <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
-                          </span>
-                          {tab.label}
-                        </span>
-                        <span className={`mt-2 block truncate text-[11px] font-bold ${selected ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>{tab.shortLabel}</span>
-                        <span className={`mt-1 block truncate text-[10px] font-black ${selected ? "text-white/60" : "text-slate-500"}`}>{tab.helper}</span>
+                        <Icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+                        <span className="truncate">{tab.label}</span>
                       </button>
                     );
                   })}
@@ -1468,18 +1509,11 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {/*
-              이 그리드는 좌측 260px 내비게이션 + 260px 거래처 목록 사이드바 안에 중첩돼 있어서, 화면이
-              2xl(1536px) 이상이어도 실제로 남는 폭은 훨씬 좁을 수 있습니다. 이전에 xl/2xl 뷰포트 기준
-              고정 2단 그리드(minmax(0,1fr)_minmax(440px,0.42fr))를 썼을 때 폭이 좁아지면 왼쪽 칸이
-              극단적으로 눌려 보이는 문제가 있었습니다(위 EditableField 폼과 같은 원인). 실제 남는 폭
-              기준으로 칸 수가 스스로 조절되도록 auto-fit으로 바꿨습니다.
-            */}
-            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] gap-4">
+            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-3">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wide text-blue-600">Customer Ledger</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-teal-700">거래처 원장</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">기본정보 / 배송정보</h3>
                   </div>
                   {isEditing ? (
@@ -1501,9 +1535,9 @@ export default function CrmTimelinePage() {
                 ) : null}
                 {isEditing && draftCustomer ? (
                   <div className="p-4">
-                    <div className="maju-panel border-blue-100 bg-blue-50/60 p-3">
+                    <div className="maju-panel border-teal-100 bg-teal-50/60 p-3">
                       <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-                        <MapPin className="h-4 w-4 text-blue-700" />
+                        <MapPin className="h-4 w-4 text-teal-700" />
                         주소 API 검색
                       </div>
                       <div className="mt-3 flex flex-col gap-2 lg:flex-row">
@@ -1533,19 +1567,19 @@ export default function CrmTimelinePage() {
                           {isAddressSearching ? "검색 중" : "주소 검색"}
                         </button>
                       </div>
-                      {addressSearchMessage ? <p className="mt-2 text-xs font-black text-blue-700">{addressSearchMessage}</p> : null}
+                      {addressSearchMessage ? <p className="mt-2 text-xs font-black text-teal-700">{addressSearchMessage}</p> : null}
                       {addressResults.length ? (
                         <div className="mt-3 max-h-56 space-y-2 overflow-auto">
                           {addressResults.map((result) => (
                             <button
-                              className="maju-filter-box w-full bg-white p-3 text-left hover:border-blue-300 hover:bg-blue-50"
+                              className="maju-filter-box w-full bg-white p-3 text-left hover:border-teal-300 hover:bg-teal-50"
                               key={`${result.address}-${result.longitude}-${result.latitude}`}
                               onClick={() => selectAddress(result)}
                               type="button"
                             >
                               <span className="block text-sm font-black text-slate-950">{result.address}</span>
                               {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-1 block text-xs font-bold text-slate-500">지번 {result.jibunAddress}</span> : null}
-                              <span className="mt-1 block text-xs font-black text-blue-700">
+                              <span className="mt-1 block text-xs font-black text-teal-700">
                                 {result.region || "지역 자동 추출"} {result.postalCode ? `· 우편번호 ${result.postalCode}` : ""}
                               </span>
                             </button>
@@ -1553,32 +1587,29 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    {/*
-                      이 폼은 좌측 260px 내비게이션 + 400px 검색 사이드바 + 우측 440px 첨부자료 패널까지
-                      한 화면에 3중으로 중첩된 뷰포트 기준(xl/2xl) 그리드 안에 들어있습니다. 화면 자체는
-                      2xl(1536px) 이상이어도, 이 폼에 실제로 남는 폭은 그 중첩 때문에 훨씬 좁아질 수 있어서
-                      "뷰포트 기준" md:grid-cols-2/2xl:grid-cols-3처럼 고정 컬럼 수를 강제하면 남은 폭이
-                      좁을 때 칸이 극단적으로 눌려 보이는 문제가 있었습니다. 실제 남은 폭 기준으로
-                      칸 수가 스스로 조절되도록 auto-fit으로 바꿨습니다.
-                    */}
-                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-3 gap-y-3">
+                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-3 gap-y-3">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
                           draftBusinessNumberChanged
                             ? draftBusinessNumberValid
                               ? `${formatBusinessRegistrationNumber(draftCustomer.businessNumber || "")} 검증 완료`
-                              : "유효하지 않은 사업자번호입니다."
+                              : "형식이 확인되지 않았지만 저장은 가능합니다. 나중에 정확한 번호로 수정해 주세요."
                             : "기존 번호 유지"
                         }
-                        helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "danger" : draftBusinessNumberChanged ? "success" : "muted"}
+                        helperTone={draftBusinessNumberChanged && !draftBusinessNumberValid ? "muted" : draftBusinessNumberChanged ? "success" : "muted"}
                         label="사업자번호"
                         value={draftCustomer.businessNumber || ""}
                         inputRef={businessNumberInputRef}
-                        onChange={(value) => updateDraft("businessNumber", value)}
+                        onChange={(value) => updateDraft("businessNumber", formatBusinessNumberInput(value))}
                       />
                       <EditableField label="대표자명" value={draftCustomer.representativeName || ""} onChange={(value) => updateDraft("representativeName", value)} />
-                      <EditableField label="연락처" value={draftCustomer.phone || ""} inputRef={phoneInputRef} onChange={(value) => updateDraft("phone", value)} />
+                      <EditableField
+                        label="연락처"
+                        value={draftCustomer.phone || ""}
+                        inputRef={phoneInputRef}
+                        onChange={(value) => updateDraft("phone", formatPhoneNumberInput(value))}
+                      />
                       <EditableField label="이메일" value={draftCustomer.email || ""} onChange={(value) => updateDraft("email", value)} />
                       <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
                       <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
@@ -1623,7 +1654,7 @@ export default function CrmTimelinePage() {
 
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header px-4 py-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-emerald-600">Field Assets</p>
+                  <p className="text-xs font-black uppercase tracking-wide text-teal-700">첨부자료</p>
                   <h3 className="mt-1 text-base font-black text-slate-950">첨부자료 / 적재위치</h3>
                 </div>
                 <div className="p-4">
@@ -1637,9 +1668,14 @@ export default function CrmTimelinePage() {
                   />
                   <AttachmentChecklistPanel checklist={attachmentChecklist} />
                   <div className="maju-section-card mt-4 overflow-hidden">
-                    <div className="maju-card-header px-3 py-3">
-                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
-                      <p className="mt-1 text-sm font-black text-slate-950">적재위치, 사업자등록증, 통장사본을 같은 거래처 원장에 보관합니다.</p>
+                    <div className="maju-card-header flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
+                        <p className="mt-1 text-sm font-black text-slate-950">파일 업로드와 외부 URL 등록을 구분해서 저장합니다.</p>
+                      </div>
+                      <Badge className="w-fit bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
+                        파일 선택 즉시 저장
+                      </Badge>
                     </div>
                     <div className="grid gap-3 p-3">
                       <div className="grid gap-3 md:grid-cols-2">
@@ -1669,54 +1705,65 @@ export default function CrmTimelinePage() {
                           />
                         </label>
                       </div>
-                      <label className="grid gap-1.5">
-                        <span className="text-xs font-black text-slate-500">파일 링크</span>
-                        <input
-                          className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                          onChange={(event) => setNewAttachmentUrl(event.target.value)}
-                          placeholder="외부 URL이 있으면 붙여넣고, 없으면 아래에서 파일을 선택하세요."
-                          value={newAttachmentUrl}
-                        />
-                      </label>
-                      <label className="maju-panel flex min-h-24 cursor-pointer items-center gap-3 border-dashed border-blue-200 bg-blue-50/60 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
-                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-700 text-white">
-                          <Plus className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-slate-950">
-                            {newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 선택됨` : "사진·PDF·영상을 직접 선택"}
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,.8fr)]">
+                        <label className="maju-panel flex min-h-28 cursor-pointer items-center gap-3 border-dashed border-teal-200 bg-teal-50/60 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
+                            <Plus className="h-4 w-4" />
                           </span>
-                          <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
-                            배송 적재위치는 여러 장의 사진이나 짧은 영상으로 남기면 현장 전달이 가장 정확합니다. 파일당 최대 50MB.
-                          </span>
-                          {newAttachmentFiles.length ? (
-                            <span className="mt-2 flex flex-wrap gap-1">
-                              {newAttachmentFiles.slice(0, 4).map((file) => (
-                                <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-blue-100" key={`${file.name}-${file.size}`}>
-                                  {file.name}
-                                </span>
-                              ))}
-                              {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-black text-slate-950">
+                              {isAttachmentSaving ? "업로드 중..." : newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 저장 중` : "+ 파일 업로드"}
                             </span>
-                          ) : null}
-                        </span>
-                        <input
-                          accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
-                          className="hidden"
-                          multiple
-                          onChange={(event) => setNewAttachmentFiles(Array.from(event.target.files || []))}
-                          type="file"
-                        />
-                      </label>
-                      <button
-                        className="maju-button-primary inline-flex h-11 items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-300"
-                        disabled={!newAttachmentTitle.trim() || (!newAttachmentUrl.trim() && !newAttachmentFiles.length) || isAttachmentSaving}
-                        onClick={saveAttachment}
-                        type="button"
-                      >
-                        <Plus className="h-4 w-4" />
-                        {isAttachmentSaving ? "등록 중" : "첨부자료 등록"}
-                      </button>
+                            <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
+                              사진, PDF, 영상을 선택하면 거래처 원장에 바로 저장됩니다. 파일당 최대 50MB.
+                            </span>
+                            {newAttachmentFiles.length ? (
+                              <span className="mt-2 flex flex-wrap gap-1">
+                                {newAttachmentFiles.slice(0, 4).map((file) => (
+                                  <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-teal-100" key={`${file.name}-${file.size}`}>
+                                    {file.name}
+                                  </span>
+                                ))}
+                                {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
+                              </span>
+                            ) : null}
+                          </span>
+                          <input
+                            accept="image/png,image/jpeg,image/webp,application/pdf,video/mp4,video/quicktime"
+                            className="hidden"
+                            disabled={isAttachmentSaving}
+                            multiple
+                            onChange={(event) => {
+                              const files = Array.from(event.target.files || []);
+                              event.target.value = "";
+                              if (!files.length) return;
+                              setNewAttachmentFiles(files);
+                              uploadAttachmentFiles(files);
+                            }}
+                            type="file"
+                          />
+                        </label>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-black text-slate-500">외부 URL로 등록</span>
+                            <input
+                              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                              onChange={(event) => setNewAttachmentUrl(event.target.value)}
+                              placeholder="이미 업로드된 파일 URL"
+                              value={newAttachmentUrl}
+                            />
+                          </label>
+                          <button
+                            className="maju-button-secondary mt-2 inline-flex h-10 w-full items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                            disabled={!newAttachmentTitle.trim() || !newAttachmentUrl.trim() || isAttachmentSaving}
+                            onClick={saveAttachment}
+                            type="button"
+                          >
+                            <LinkIcon className="h-4 w-4" />
+                            {isAttachmentSaving ? "등록 중" : "URL 등록"}
+                          </button>
+                        </div>
+                      </div>
                       {attachmentMessage ? (
                         <p className={`rounded-md border px-3 py-2 text-xs font-bold leading-5 ${
                           attachmentMessage.includes("저장됐습니다")
@@ -1733,25 +1780,27 @@ export default function CrmTimelinePage() {
                   <div className="maju-section-card mt-4 overflow-hidden">
                     <div className="maju-card-header flex items-center justify-between gap-3 px-3 py-2">
                       <p className="text-xs font-black text-slate-500">등록된 첨부자료</p>
-                      <Badge className="bg-slate-100 text-slate-700">{customerAttachments.length}건</Badge>
+                      <Badge className="bg-slate-100 text-slate-700">{combinedAttachments.length}건</Badge>
                     </div>
                     <div className="grid gap-0">
-                      {customerAttachments.length ? (
-                        customerAttachments.map((attachment) => (
+                      {combinedAttachments.length ? (
+                        combinedAttachments.map((attachment) => (
                           <AttachmentRow
                             key={attachment.id}
                             icon={attachment.attachmentType === "loading_position" ? PackageCheck : FileText}
                             label={attachmentLabel(attachment.attachmentType, attachment.title)}
+                            mimeType={attachment.mimeType || guessMimeType(attachment.fileUrl)}
                             storagePath={attachment.storagePath}
                             url={attachment.fileUrl}
                             value={attachment.createdAt}
+                            onPreview={setPreviewAttachment}
                           />
                         ))
                       ) : (
                         <>
-                          <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="등록 대기" />
-                          <AttachmentRow icon={FileText} label="사업자등록증" value="OCR 검수 대기" />
-                          <AttachmentRow icon={FileText} label="통장사본" value="등록 대기" />
+                          <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="미등록 · 자료 추가에서 업로드" />
+                          <AttachmentRow icon={FileText} label="사업자등록증" value="미등록 · OCR 또는 파일 업로드" />
+                          <AttachmentRow icon={FileText} label="통장사본" value="미등록 · 파일 업로드" />
                         </>
                       )}
                     </div>
@@ -1760,11 +1809,11 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(420px,1fr))] gap-4">
+            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-4">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wide text-violet-600">History</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-teal-700">활동 기록</p>
                     <h3 className="mt-1 text-base font-black text-slate-950">메모 히스토리</h3>
                     <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 시간순으로 누적합니다.</p>
                   </div>
@@ -1839,13 +1888,15 @@ export default function CrmTimelinePage() {
                           <Badge className="bg-slate-100 text-slate-700">{noteTypeLabel(note.noteType)}</Badge>
                           <span className="text-xs font-bold text-slate-400">{note.createdAt}</span>
                         </div>
-                        <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{note.memo}</p>
+                        <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
+                          <LinkifiedText text={note.memo} />
+                        </p>
                         {note.nextAction ? <p className="mt-2 text-xs font-black text-blue-700">다음 액션: {note.nextAction}</p> : null}
                       </div>
                     ))
                   ) : (
-                    <div className="maju-empty-state m-4 p-5">
-                      <p className="text-sm font-black text-slate-700">아직 DB 메모가 없습니다.</p>
+                    <div className="maju-empty-state m-4">
+                      <p className="text-sm font-black text-slate-700">아직 저장된 메모가 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         상담 내용, 배송 특이사항, 대표 요청사항을 저장하면 이곳에 시간순으로 쌓입니다. 기존 메모 기록은 {selectedCustomer.memoCount}건입니다.
                       </p>
@@ -1862,7 +1913,7 @@ export default function CrmTimelinePage() {
                   <h3 className="text-base font-black text-slate-950">최근 액션</h3>
                   <p className="mt-1 text-sm font-medium leading-6 text-slate-500">메모 저장, 방문 결과, 견적 요청이 거래처 기준으로 누적됩니다.</p>
                 </div>
-                <div className="max-h-[620px] space-y-3 overflow-auto bg-slate-50/60 p-3 xl:max-h-[calc(100vh-360px)]">
+                <div className="space-y-3 bg-slate-50/60 p-3">
                   {timeline.length ? (
                     timeline.map((item) => (
                       <div key={item.id} className="maju-stat-card p-3">
@@ -1881,10 +1932,10 @@ export default function CrmTimelinePage() {
                       </div>
                     ))
                   ) : (
-                    <div className="maju-empty-state m-4 p-5">
+                    <div className="maju-empty-state m-4">
                       <p className="text-sm font-black text-slate-800">아직 실제 방문/액션 기록이 없습니다.</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 DB에 저장된 데이터만 표시합니다.
+                        왼쪽 메모 히스토리에서 첫 메모를 저장하면 이 영역에 바로 표시됩니다. 방문/액션 기록은 저장된 데이터만 표시합니다.
                       </p>
                     </div>
                   )}
@@ -1896,6 +1947,7 @@ export default function CrmTimelinePage() {
         </div>
         </div>
       </section>
+      {previewAttachment ? <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} /> : null}
     </CustomerAppShell>
   );
 }
@@ -1910,17 +1962,33 @@ function useAdminCompanyId() {
   return companyId;
 }
 
-function SectionHeader({ description, eyebrow, title }: { description: string; eyebrow: string; title: string }) {
-  return (
-    <div className="flex flex-col gap-2 border-b border-slate-200/80 px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <p className="text-xs font-black uppercase tracking-wide text-teal-700">{eyebrow}</p>
-        <h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2>
-      </div>
-      <p className="max-w-2xl text-sm font-semibold leading-6 text-slate-500">{description}</p>
-    </div>
-  );
+// 2026-08-30 피드백("다수 고객들 사용할 수 있도록 개선된거야?") 대응: 이 페이지는 클라이언트
+// 컴포넌트라 서버 세션을 직접 읽지 못해, 지금까지는 모든 일반 고객 로그인에 회사명/이름을
+// "마주식자재"/"정두영"으로 고정 표시하고 있었습니다(다른 고객사가 로그인해도 항상 이렇게 보임 —
+// 실제 데이터 자체는 세션 쿠키로 서버에서 이미 회사별로 분리돼 있지만 헤더 표시만 틀렸던 것).
+// /api/customer/me로 실제 로그인한 회사명·이름을 가져와 어떤 고객사든 자기 정보를 보게 합니다.
+function useCustomerIdentity(isAdminPreview: boolean) {
+  const [companyName, setCompanyName] = useState("");
+  const [userName, setUserName] = useState("");
+  useEffect(() => {
+    if (isAdminPreview) return;
+    let ignore = false;
+    fetch("/api/customer/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (ignore || !payload?.session) return;
+        setCompanyName(payload.session.companyName || "");
+        setUserName(payload.session.name || "");
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [isAdminPreview]);
+  return { companyName, userName };
 }
+
+
 
 function CustomerFilterButton({
   active,
@@ -2091,7 +2159,7 @@ function LedgerListStatusStrip({
   totalCount,
   visibleCount
 }: {
-  customerSource: "loading" | "supabase" | "sample" | "error";
+  customerSource: "loading" | "supabase" | "empty" | "error";
   gradeFilter: "all" | "A" | "B" | "C";
   hasCustomers: boolean;
   operationFilter: OperationFilter;
@@ -2108,19 +2176,21 @@ function LedgerListStatusStrip({
     customerSource === "loading"
       ? "원장 불러오는 중"
       : customerSource === "supabase"
-        ? "DB 거래처 원장"
-        : "DB 거래처 원장 미연결";
+        ? "거래처 원장"
+        : customerSource === "empty"
+          ? "거래처 원장 비어 있음"
+          : "거래처 원장 미연결";
 
   return (
-    <div className={`mt-3 rounded-lg border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
+    <div className={`mt-3 rounded-md border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className={`text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>{sourceLabel}</p>
-          <p className={`mt-1 text-[11px] font-bold leading-4 ${hasCustomers ? "text-slate-500" : "text-amber-800"}`}>
-            {hasCustomers ? `현재 목록 ${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳 표시` : "거래처 마스터 등록 후 목록, 상세, 코스가 같은 DB 기준으로 연결됩니다."}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${hasCustomers ? "bg-emerald-500" : "bg-amber-500"}`} />
+          <p className={`truncate text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>
+            {sourceLabel} · {hasCustomers ? `${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳` : "등록 필요"}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {chips.length ? (
             chips.map((chip) => (
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700" key={chip}>
@@ -2129,71 +2199,9 @@ function LedgerListStatusStrip({
             ))
           ) : (
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${hasCustomers ? "bg-emerald-50 text-emerald-700" : "bg-white text-amber-800"}`}>
-              전체 DB 원장 기준
+              전체 원장 기준
             </span>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CustomerLedgerBasisPanel({
-  addressMissingCount,
-  businessNumberMissingCount,
-  customerCount,
-  filteredCount,
-  loadingReadyCount,
-  managerMissingCount,
-  managerCount,
-  memoCount
-}: {
-  addressMissingCount: number;
-  businessNumberMissingCount: number;
-  customerCount: number;
-  filteredCount: number;
-  loadingReadyCount: number;
-  managerMissingCount: number;
-  managerCount: number;
-  memoCount: number;
-}) {
-  const items = [
-    { label: "전체 DB 원장", value: `${customerCount.toLocaleString()}곳`, helper: "대시보드 거래처 기준" },
-    { label: "현재 필터", value: `${filteredCount.toLocaleString()}곳`, helper: "목록·상세 표시 기준" },
-    { label: "배송 담당자", value: `${managerCount.toLocaleString()}명`, helper: "지도 홈 필터" },
-    { label: "적재위치", value: `${loadingReadyCount.toLocaleString()}곳`, helper: "배송기사 앱 기준" },
-    { label: "메모 이력", value: `${memoCount.toLocaleString()}건`, helper: "방문·상담 히스토리" }
-  ];
-  const attentionItems = [
-    { label: "주소 미등록", value: addressMissingCount },
-    { label: "사업자번호 미등록", value: businessNumberMissingCount },
-    { label: "담당자 미지정", value: managerMissingCount }
-  ];
-  const attentionTotal = attentionItems.reduce((sum, item) => sum + item.value, 0);
-
-  return (
-    <div className="maju-section-card mt-3 overflow-hidden bg-slate-50/70">
-      <div className="maju-card-header grid gap-2 px-3 py-3 text-xs font-bold leading-5 text-slate-600 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
-        <p className="font-black text-slate-950">거래처 기준값</p>
-        <p>이 화면의 거래처 수, 배송 담당자, 적재위치, 메모 수는 지도 홈이 함께 사용하는 기준 데이터입니다.</p>
-      </div>
-      <div className="grid divide-y divide-slate-200 sm:grid-cols-5 sm:divide-x sm:divide-y-0">
-        {items.map((item) => (
-          <div className="min-w-0 px-3 py-3" key={item.label}>
-            <p className="text-[11px] font-black uppercase text-slate-400">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
-          </div>
-        ))}
-      </div>
-      <div className={`grid gap-2 border-t px-3 py-3 text-xs font-bold leading-5 md:grid-cols-[160px_minmax(0,1fr)] md:items-center ${attentionTotal ? "border-amber-200 bg-amber-50/80 text-amber-900" : "border-emerald-100 bg-emerald-50/70 text-emerald-900"}`}>
-        <p className="font-black">{attentionTotal ? `보완 필요 ${attentionTotal.toLocaleString()}건` : "필수값 정상"}</p>
-        <div className="flex flex-wrap gap-2">
-          {attentionItems.map((item) => (
-            <span className="rounded-full bg-white px-2.5 py-1 font-black" key={item.label}>
-              {item.label} {item.value.toLocaleString()}건
-            </span>
-          ))}
         </div>
       </div>
     </div>
@@ -2207,11 +2215,12 @@ function FieldRecordTracePanel({
 }: {
   onOpenHistory: () => void;
   onOpenLedger: () => void;
-  summary: {
-    attachmentCount: number;
-    deliveryProofCount: number;
-    loadingPositionCount: number;
-    memoCount: number;
+    summary: {
+      attachmentCount: number;
+      deliveryMessageCount: number;
+      deliveryProofCount: number;
+      loadingPositionCount: number;
+      memoCount: number;
     recentMemoAt: string;
     visitCount: number;
   };
@@ -2240,7 +2249,7 @@ function FieldRecordTracePanel({
     },
     {
       action: onOpenHistory,
-      helper: "모바일 완료 증빙",
+      helper: `알림 이력 ${summary.deliveryMessageCount.toLocaleString()}건`,
       icon: CheckCircle2,
       label: "배송완료",
       value: `${summary.deliveryProofCount.toLocaleString()}건`
@@ -2248,34 +2257,31 @@ function FieldRecordTracePanel({
   ];
 
   return (
-    <div className="overflow-hidden rounded-lg border border-teal-100 bg-gradient-to-r from-teal-50 via-white to-blue-50">
-      <div className="flex flex-col gap-3 border-b border-teal-100/80 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="overflow-hidden rounded-md border border-teal-100 bg-white">
+      <div className="flex flex-col gap-3 border-b border-teal-100/80 bg-teal-50/60 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Field Record Trace</p>
-          <h3 className="mt-1 text-base font-black text-slate-950">모바일 현장 기록 추적</h3>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
-            직원이 모바일에서 남긴 배송완료, 적재위치, 방문 메모를 거래처 원장과 히스토리에서 확인합니다.
-          </p>
+          <p className="text-xs font-black uppercase tracking-wide text-teal-700">Field Record</p>
+          <h3 className="mt-1 text-base font-black text-slate-950">현장 기록</h3>
         </div>
-        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-teal-100">방문 {summary.visitCount.toLocaleString()}회 기준</Badge>
+        <Badge className="w-fit bg-white text-teal-800 ring-1 ring-teal-100">방문 {summary.visitCount.toLocaleString()}회</Badge>
       </div>
-      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => {
           const Icon = item.icon;
           return (
             <button
-              className="rounded-md border border-white bg-white/90 p-3 text-left shadow-sm transition hover:border-teal-200 hover:bg-white hover:shadow-md"
+              className="rounded-md border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50"
               key={item.label}
               onClick={item.action}
               type="button"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-teal-700 text-white">
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="text-lg font-black text-slate-950">{item.value}</span>
               </div>
-              <p className="mt-3 text-sm font-black text-slate-900">{item.label}</p>
+              <p className="mt-2 text-sm font-black text-slate-900">{item.label}</p>
               <p className="mt-1 truncate text-xs font-bold text-slate-500">{item.helper}</p>
             </button>
           );
@@ -2351,39 +2357,10 @@ function MiniMetric({ label, value, wide = false }: { label: string; value: stri
   );
 }
 
-function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready" | "warning"; value: string }) {
-  const toneClassName = tone === "ready" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800";
-
-  return (
-    <div className={`maju-stat-card min-w-32 px-4 py-3 ${toneClassName}`}>
-      <p className="text-[11px] font-black opacity-70">{label}</p>
-      <p className="mt-1 text-xl font-black leading-none">{value}</p>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string; label: string; tone?: "slate" | "emerald" | "blue" | "violet"; value: string }) {
-  const toneClassName = {
-    blue: "text-blue-700",
-    emerald: "text-emerald-700",
-    slate: "text-slate-950",
-    violet: "text-violet-700"
-  }[tone];
-
-  return (
-    <div className="maju-stat-card p-4">
-      <p className="maju-muted-label">{label}</p>
-      <p className={`mt-2 truncate text-[24px] font-black leading-none ${toneClassName}`} title={value}>
-        {value}
-      </p>
-      <p className="mt-2 truncate text-xs font-semibold text-slate-500">{helper}</p>
-    </div>
-  );
-}
 
 function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
-    <div className="mb-3 flex items-end justify-between gap-3 border-b border-slate-200 pb-2">
+    <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
       <div>
         <p className="maju-muted-label">{eyebrow}</p>
         <p className="mt-0.5 text-sm font-black text-slate-950">{title}</p>
@@ -2395,12 +2372,12 @@ function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string
 
 function InfoTile({ icon: Icon, label, value }: { icon: typeof Store; label: string; value: string }) {
   return (
-    <div className="min-w-0 border-b border-r border-slate-200 bg-white p-3 last:border-r-0 xl:border-b-0">
+    <div className="min-w-0 border-b border-r border-slate-200 bg-white px-3 py-2.5 last:border-r-0 xl:border-b-0">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-400" />
         <p className="maju-muted-label">{label}</p>
       </div>
-      <p className="mt-2 truncate text-sm font-black text-slate-950" title={value}>
+      <p className="mt-1.5 truncate text-sm font-black text-slate-950" title={value}>
         {value}
       </p>
     </div>
@@ -2425,12 +2402,12 @@ function PriorityTile({
   }[tone];
 
   return (
-    <div className={`min-w-0 border-r border-slate-200 p-4 last:border-r-0 ${toneClassName}`}>
+    <div className={`min-w-0 border-r border-slate-200 px-3 py-2.5 last:border-r-0 ${toneClassName}`}>
       <p className="text-xs font-black opacity-70">{label}</p>
-      <p className="mt-2 truncate text-sm font-black" title={value}>
+      <p className="mt-1.5 truncate text-sm font-black" title={value}>
         {value}
       </p>
-      <p className="mt-1 text-xs font-bold opacity-60">{helper}</p>
+      <p className="mt-1 truncate text-xs font-bold opacity-60" title={helper}>{helper}</p>
     </div>
   );
 }
@@ -2446,13 +2423,13 @@ function HistoryInputSummary({
 }) {
   return (
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="maju-panel border-violet-100 bg-violet-50/80 p-3">
+      <div className="maju-panel border-teal-100 bg-teal-50/80 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className="bg-white text-violet-700 ring-1 ring-inset ring-violet-200">기록 요약</Badge>
-          <Badge className="bg-violet-700 text-white">{historyCount}건</Badge>
+          <Badge className="bg-white text-teal-700 ring-1 ring-inset ring-teal-200">기록 요약</Badge>
+          <Badge className="bg-teal-700 text-white">{historyCount}건</Badge>
         </div>
         <p className="mt-2 text-sm font-black text-slate-950">
-          {latestNote ? "최근 메모가 DB 이력으로 관리 중입니다." : "아직 DB 메모가 없습니다."}
+          {latestNote ? "최근 메모가 저장 이력으로 관리 중입니다." : "아직 저장된 메모가 없습니다."}
         </p>
         <p className="mt-1 text-xs font-bold leading-5 text-slate-600">
           {latestNote ? latestNote.memo : "상담, 배송 특이사항, 대표 요청사항을 남기면 거래처별 히스토리로 누적됩니다."}
@@ -2481,15 +2458,15 @@ function LoadingPositionFieldCard({
   const ready = Boolean(loadingPosition && attachmentCount > 0);
 
   return (
-    <div className={`maju-section-card p-4 ${ready ? "border-blue-100 bg-blue-50/80" : "border-amber-200 bg-amber-50/80"}`}>
+    <div className={`maju-section-card p-4 ${ready ? "border-teal-100 bg-teal-50/80" : "border-amber-200 bg-amber-50/80"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={ready ? "bg-blue-700 text-white" : "bg-amber-500 text-white"}>배송 핵심</Badge>
+            <Badge className={ready ? "bg-teal-700 text-white" : "bg-amber-500 text-white"}>배송 핵심</Badge>
             <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{attachmentCount}개 자료</Badge>
           </div>
           <h4 className="mt-3 text-base font-black text-slate-950">배송 적재위치</h4>
-          <p className="mt-2 rounded-md border border-white/80 bg-white px-3 py-2 text-sm font-black leading-6 text-blue-900">
+          <p className="mt-2 rounded-md border border-white/80 bg-white px-3 py-2 text-sm font-black leading-6 text-teal-900">
             {loadingPosition || "배송 적재위치가 아직 등록되지 않았습니다."}
           </p>
           <p className="mt-2 text-xs font-bold leading-5 text-slate-600">
@@ -2518,43 +2495,50 @@ function AttachmentChecklistPanel({
   const progress = checklist.length ? Math.round((readyCount / checklist.length) * 100) : 0;
 
   return (
-    <div className="maju-section-card mt-4 p-3">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className="maju-section-card mt-4 overflow-hidden">
+      <div className="maju-card-header flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-black text-slate-950">첨부자료 준비 상태</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">필수 자료가 채워질수록 거래처 원장과 현장 운영 신뢰도가 올라갑니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">필수 자료가 채워질수록 원장 신뢰도가 올라갑니다.</p>
         </div>
         <Badge className={progress === 100 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {readyCount}/{checklist.length} 완료
         </Badge>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-emerald-600" style={{ width: `${progress}%` }} />
+      <div className="h-1.5 bg-slate-100">
+        <div className="h-full bg-emerald-600" style={{ width: `${progress}%` }} />
       </div>
-      <div className="mt-3 grid gap-2">
+      <div className="hidden grid-cols-[140px_72px_80px_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black text-slate-400 md:grid">
+        <span>자료명</span>
+        <span>구분</span>
+        <span>상태</span>
+        <span>관리 기준</span>
+      </div>
+      <div className="divide-y divide-slate-100">
         {checklist.map((item) => (
           <div
             key={item.type}
-            className={`maju-filter-box p-3 ${
+            className={`grid gap-2 px-4 py-3 md:grid-cols-[140px_72px_80px_minmax(0,1fr)] md:items-center md:gap-3 ${
               item.type === "loading_position"
-                ? "border-blue-200 bg-blue-50/70"
+                ? "bg-teal-50/60"
                 : item.count > 0
-                  ? "border-emerald-100 bg-emerald-50/60"
-                  : "border-amber-100 bg-amber-50/60"
+                  ? "bg-emerald-50/40"
+                  : "bg-white"
             }`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-slate-950">
-                  {item.label}
-                  {item.type === "loading_position" ? <span className="ml-2 text-xs text-blue-700">최우선</span> : null}
-                </p>
-                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.description}</p>
-              </div>
-              <Badge className={item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-                {item.count > 0 ? `${item.count}건` : item.required ? "필요" : "선택"}
-              </Badge>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-slate-950">{item.label}</p>
+              {item.type === "loading_position" ? <p className="mt-0.5 text-[11px] font-black text-teal-700">배송 최우선 자료</p> : null}
             </div>
+            <Badge className={`w-fit ${item.required ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100" : "bg-slate-100 text-slate-600"}`}>
+              {item.required ? "필수" : "선택"}
+            </Badge>
+            <Badge className={`w-fit ${item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+              {item.count > 0 ? `${item.count}건` : "대기"}
+            </Badge>
+            <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 md:truncate" title={item.description}>
+              {item.description}
+            </p>
           </div>
         ))}
       </div>
@@ -2591,7 +2575,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
     "리뷰 변화와 컴플레인 단서",
     "배송 적재위치와 로드뷰 확인"
   ];
-  const searchLinks = buildPlaceSearchLinks([customer.customerName, customer.address].filter(Boolean).join(" "));
+  const searchLinks = buildPlaceSearchLinks(customer.customerName, customer.address);
 
   return (
     <div className="maju-section-card overflow-hidden border-teal-100">
@@ -2601,7 +2585,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
           <h4 className="mt-1 text-base font-black text-slate-950">네이버·카카오·구글 링크</h4>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-600">리뷰, 영업시간, 휴폐업 확인, 로드뷰 확인에 사용할 기준 링크입니다.</p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <Badge className={filledCount === links.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
             {filledCount}/{links.length} 등록
           </Badge>
@@ -2719,13 +2703,17 @@ function PlaceLinkButton({ label, purpose, url = "" }: { label: string; purpose:
   );
 }
 
-function buildPlaceSearchLinks(query: string) {
-  const encodedQuery = encodeURIComponent(query || "매장");
+function buildPlaceSearchLinks(customerName: string, address?: string) {
+  const fullQuery = [customerName, address].map((value) => value?.trim()).filter(Boolean).join(" ") || "거래처";
+  const encodedFullQuery = encodeURIComponent(fullQuery);
+  // 네이버 지도는 상호명+상세주소(동/호수·층수 포함)로 검색하면 네이버 DB 주소 표기와 조금만 달라도
+  // 결과가 없거나 다른 곳으로 연결되는 경우가 많아, 상호명 단독 검색이 훨씬 안정적으로 매칭됩니다.
+  const encodedNaverQuery = encodeURIComponent(customerName?.trim() || fullQuery);
   return [
-    { href: `https://map.naver.com/p/search/${encodedQuery}`, label: "네이버 지도" },
-    { href: `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedQuery}`, label: "네이버 블로그" },
-    { href: `https://map.kakao.com/?q=${encodedQuery}`, label: "카카오맵" },
-    { href: `https://www.google.com/maps/search/${encodedQuery}`, label: "구글맵" }
+    { href: `https://map.naver.com/p/search/${encodedNaverQuery}`, label: "네이버 지도" },
+    { href: `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedFullQuery}`, label: "네이버 블로그" },
+    { href: `https://map.kakao.com/?q=${encodedFullQuery}`, label: "카카오맵" },
+    { href: `https://www.google.com/maps/search/${encodedFullQuery}`, label: "구글맵" }
   ];
 }
 
@@ -2766,13 +2754,31 @@ function EditableField({
   );
 }
 
-function AttachmentRow({ icon: Icon, label, storagePath = "", url = "", value }: { icon: typeof PackageCheck; label: string; storagePath?: string; url?: string; value: string }) {
-  const statusLabel = storagePath ? "Storage 저장" : url ? "외부 링크" : "파일 대기";
+function AttachmentRow({
+  icon: Icon,
+  label,
+  mimeType = "",
+  onPreview,
+  storagePath = "",
+  url = "",
+  value
+}: {
+  icon: typeof PackageCheck;
+  label: string;
+  mimeType?: string;
+  onPreview?: (attachment: { mimeType: string; title: string; url: string }) => void;
+  storagePath?: string;
+  url?: string;
+  value: string;
+}) {
+  const statusLabel = storagePath ? "Storage 저장" : url ? "외부 링크" : "미등록";
   const statusClassName = storagePath
     ? "bg-emerald-50 text-emerald-800 ring-emerald-100"
     : url
       ? "bg-blue-50 text-blue-800 ring-blue-100"
-      : "bg-slate-100 text-slate-600 ring-slate-200";
+      : "bg-amber-50 text-amber-800 ring-amber-100";
+  // 이미지·PDF·영상은 화면에서 바로 미리보기가 가능합니다. 그 외 형식은 새창 링크만 제공합니다.
+  const canPreviewInline = /^image\/|^video\/|^application\/pdf/.test(mimeType);
 
   return (
     <div className="grid grid-cols-[32px_minmax(0,1fr)_minmax(0,auto)] items-center gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
@@ -2787,16 +2793,85 @@ function AttachmentRow({ icon: Icon, label, storagePath = "", url = "", value }:
         <p className="mt-1 text-xs font-bold text-slate-500">{value}</p>
       </div>
       {url ? (
-        <a
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-          href={url}
-          rel="noreferrer"
-          target="_blank"
-        >
-          <LinkIcon className="h-3.5 w-3.5" />
-          열기
-        </a>
+        <div className="flex items-center gap-1.5">
+          {canPreviewInline ? (
+            <button
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-black text-blue-700 hover:bg-blue-100"
+              onClick={() => onPreview?.({ mimeType, title: label, url })}
+              type="button"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              미리보기
+            </button>
+          ) : null}
+          <a
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+            href={url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <LinkIcon className="h-3.5 w-3.5" />
+            새창
+          </a>
+        </div>
       ) : null}
+    </div>
+  );
+}
+
+function AttachmentPreviewModal({
+  attachment,
+  onClose
+}: {
+  attachment: { mimeType: string; title: string; url: string };
+  onClose: () => void;
+}) {
+  const isImage = attachment.mimeType.startsWith("image/");
+  const isVideo = attachment.mimeType.startsWith("video/");
+  const isPdf = attachment.mimeType === "application/pdf";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{attachment.title}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+              href={attachment.url}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <LinkIcon className="h-3.5 w-3.5" />
+              새창에서 열기
+            </a>
+            <button
+              className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3">
+          {isImage ? (
+            <img alt={attachment.title} className="mx-auto max-h-[75vh] w-auto object-contain" src={attachment.url} />
+          ) : isVideo ? (
+            <video className="mx-auto max-h-[75vh] w-full" controls src={attachment.url} />
+          ) : isPdf ? (
+            <iframe className="h-[75vh] w-full rounded-md border border-slate-200 bg-white" src={attachment.url} title={attachment.title} />
+          ) : (
+            <div className="maju-empty-state p-6">
+              <p className="text-sm font-black text-slate-800">이 형식은 화면 미리보기를 지원하지 않습니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">위의 "새창에서 열기"를 눌러 확인하세요.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2811,6 +2886,7 @@ function attachmentLabel(type: string, title: string) {
 
 function noteTypeLabel(type: string) {
   if (type === "delivery") return "배송";
+  if (type === "delivery_message") return "알림";
   if (type === "sales") return "상담";
   if (type === "settlement") return "정산";
   return "메모";
@@ -2896,10 +2972,6 @@ function isOperationFilter(value: string | null): value is OperationFilter {
   );
 }
 
-function formatDbCount(value: number | null) {
-  return value === null ? "확인 필요" : `${value.toLocaleString()}건`;
-}
-
 function normalizeBusinessRegistrationNumber(value: string) {
   return value.replace(/[^0-9]/g, "");
 }
@@ -2908,6 +2980,33 @@ function formatBusinessRegistrationNumber(value: string) {
   const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
   if (digits.length !== 10) return value;
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+// 입력 중에도 자동으로 하이픈이 붙도록 하는 실시간 포맷터입니다 (10자리 미만이어도 동작).
+function formatBusinessNumberInput(value: string) {
+  const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+// 휴대폰(010 등, 3-4-4)과 서울/지역 번호(02는 2자리, 그 외는 3자리 지역번호)를
+// 입력 자릿수에 맞춰 실시간으로 하이픈을 붙여줍니다.
+function formatPhoneNumberInput(value: string) {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
+  if (!digits) return "";
+
+  if (digits.startsWith("02")) {
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
 }
 
 function isValidBusinessRegistrationNumber(value: string) {

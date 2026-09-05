@@ -16,7 +16,7 @@ export default async function AdminCompaniesPage() {
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="companies" badge="Company Control" session={session} subtitle="회사별 로그인 계정과 거래처 데이터를 분리해서 운영합니다" title="고객사 관리" />
 
-      <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
+      <section className="mx-auto max-w-7xl space-y-5 px-4 py-4 sm:px-4">
         <Card className="border-amber-200 bg-amber-50 shadow-none">
           <CardContent className="flex gap-3 p-4 text-sm leading-6 text-amber-900">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />

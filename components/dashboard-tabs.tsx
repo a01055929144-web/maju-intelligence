@@ -31,16 +31,16 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
   const active = tabs.find((tab) => tab.id === activeTab) || tabs[0];
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm">
-      <div className="border-b border-slate-200/80 bg-white px-4 py-4 sm:px-5">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(620px,780px)] xl:items-center">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(560px,720px)] xl:items-center">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-wide text-teal-700">운영 탭</p>
-            <h2 className="mt-1 text-lg font-black text-slate-950">{active.label}</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">{active.description}</p>
+            <p className="text-[11px] font-black text-slate-400">운영 화면</p>
+            <h2 className="mt-1 text-base font-black text-slate-950">{active.label}</h2>
+            <p className="mt-0.5 text-xs font-bold text-slate-500">{active.description}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-1.5">
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
             {tabs.map((tab, index) => {
               const Icon = tab.icon;
               const selected = activeTab === tab.id;
@@ -48,23 +48,22 @@ export function DashboardTabs({ overview, route, sales, shortcuts }: DashboardTa
               return (
                 <button
                   aria-pressed={selected}
-                  className={`group relative min-w-0 overflow-hidden rounded-md border px-3 py-3 text-left transition ${
+                  className={`group relative min-w-0 overflow-hidden rounded-md border px-3 py-2.5 text-left transition ${
                     selected
-                      ? "border-teal-700 bg-teal-700 text-white shadow-[0_10px_22px_rgba(15,118,110,0.18)]"
-                      : "border-slate-200 bg-white text-slate-600 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-900"
+                      ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   title={tab.description}
                   type="button"
                 >
-                  {selected ? <span className="absolute inset-x-0 top-0 h-1 bg-white/80" /> : null}
                   <span className="flex items-center gap-2 text-sm font-black">
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px] ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-teal-700"}`}>{index + 1}</span>
-                    <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400 group-hover:text-teal-700"}`} />
+                    <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-white"}`}>{index + 1}</span>
+                    <Icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
                     <span className="truncate">{tab.label}</span>
                   </span>
-                  <span className={`mt-2 block text-[11px] font-bold leading-4 ${selected ? "text-white/75" : "text-slate-400 group-hover:text-teal-600"}`}>
+                  <span className={`mt-1.5 block text-[11px] font-bold leading-4 ${selected ? "text-white/70" : "text-slate-400"}`}>
                     {tab.shortLabel}
                   </span>
                 </button>
