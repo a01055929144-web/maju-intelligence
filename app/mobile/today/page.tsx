@@ -8,7 +8,7 @@ import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attach
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerSession } from "@/lib/auth";
-import { getSessionAssignmentKeys, normalizeAssignmentValue } from "@/lib/customer-data-scope";
+import { getSessionAssignmentKeys, isAssignedToSession } from "@/lib/customer-data-scope";
 import { getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -29,7 +29,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   // 그대로 사용하도록 정렬을 명시적으로 추가합니다 — 정렬을 안 하면 원장에 저장된 순서(무작위에
   // 가까움)로 보일 수 있습니다.
   const myStops = assignmentKeys.size
-    ? allStops.filter((stop) => assignmentKeys.has(normalizeAssignmentValue(stop.deliveryDriver))).sort((a, b) => a.order - b.order)
+    ? allStops.filter((stop) => isAssignedToSession(stop.deliveryDriver, assignmentKeys)).sort((a, b) => a.order - b.order)
     : [];
   const isPersonalized = myStops.length > 0;
   // 2026-08-28 피드백 대응(담당자 이름이 정확히 안 맞으면 엉뚱한 거래처 목록이 뜸): 예전에는

@@ -14,6 +14,7 @@ export type AdminSession = {
 
 export type CustomerSession = {
   appRole: Extract<AppUserRole, "customer_user">;
+  assignmentKeys?: string[];
   companyId: string;
   companyName: string;
   email: string;
@@ -219,6 +220,7 @@ export async function validateCustomerCredentials(email: string, password: strin
 
   return {
     appRole: "customer_user",
+    assignmentKeys: credentials.assignmentKeys,
     companyId: credentials.customerCompanyId || process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
     companyName: credentials.companyName,
     email: customerEmail,

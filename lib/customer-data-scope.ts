@@ -9,12 +9,12 @@ export function normalizeAssignmentValue(value?: string | null) {
   return String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "");
+    .replace(/[\s\-().]/g, "");
 }
 
 export function getSessionAssignmentKeys(session: CustomerSession | null) {
   if (!session) return new Set<string>();
-  const keys = [session.name, session.email, session.email?.split("@")[0], session.userId]
+  const keys = [session.name, session.email, session.email?.split("@")[0], session.userId, ...(session.assignmentKeys || [])]
     .map((value) => normalizeAssignmentValue(value))
     .filter(Boolean);
   return new Set(keys);
@@ -26,7 +26,9 @@ export function shouldScopeCustomerSession(session: CustomerSession | null) {
 
 export function isAssignedToSession(value: string | undefined, assignmentKeys: Set<string>) {
   const normalizedValue = normalizeAssignmentValue(value);
-  return Boolean(normalizedValue && assignmentKeys.has(normalizedValue));
+  if (!normalizedValue) return false;
+  if (assignmentKeys.has(normalizedValue)) return true;
+  return Array.from(assignmentKeys).some((key) => key.length >= 3 && normalizedValue.includes(key));
 }
 
 export function scopeCustomerMasterForSession<T extends CustomerMasterLike>(customerMaster: T, session: CustomerSession | null): T {

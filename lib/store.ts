@@ -423,6 +423,7 @@ export type ManagedCompanyAccountInput = {
   customerPassword: string;
 };
 export type CustomerLoginCredentials = AuthCredentials & {
+  assignmentKeys?: string[];
   companyName: string;
   companyStatus?: string;
   ownerName?: string;
@@ -548,6 +549,7 @@ export type PersonalKakaoWorkspaceInput = {
   name?: string;
 };
 export type StaffKakaoAcceptResult = {
+  assignmentKeys?: string[];
   companyId: string;
   companyName: string;
   email: string;
@@ -557,6 +559,7 @@ export type StaffKakaoAcceptResult = {
   workspaceRole: StaffInvitation["role"];
 };
 export type PersonalKakaoWorkspaceResult = {
+  assignmentKeys?: string[];
   companyId: string;
   companyName: string;
   email: string;
@@ -1231,9 +1234,11 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
       const member = memberRows[0];
       if (member?.company_id) {
         const company = await getCompanySettings(member.company_id, "고객사").catch(() => null);
+        const assignmentKeys = await getAcceptedStaffAssignmentKeys(member.company_id, user.id).catch(() => uniqueAssignmentKeys([user.id, user.name, user.email]));
         return {
           adminEmail: fallback.adminEmail,
           adminPassword: fallback.adminPassword,
+          assignmentKeys,
           customerEmail: user.email || normalizedEmail,
           customerPassword: user.password_hash,
           customerCompanyId: member.company_id,
@@ -1295,6 +1300,7 @@ export async function updateCustomerUserLastLogin(userId: string, provider = "pa
 }
 
 export type CustomerWorkspaceSummary = {
+  assignmentKeys?: string[];
   companyId: string;
   companyName: string;
   memberId: string;
@@ -1328,7 +1334,9 @@ export async function getCustomerWorkspaces(input: { email?: string; userId?: st
   const workspaces = await Promise.all(
     memberRows.map(async (member) => {
       const company = await getCompanySettings(member.company_id, "워크스페이스").catch(() => null);
+      const assignmentKeys = await getAcceptedStaffAssignmentKeys(member.company_id, userId).catch(() => uniqueAssignmentKeys([userId, email]));
       return {
+        assignmentKeys,
         companyId: member.company_id,
         companyName: company?.name || "워크스페이스",
         memberId: member.id,
@@ -2436,6 +2444,15 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   }));
 
   return {
+    assignmentKeys: buildStaffAssignmentKeys({
+      acceptedEmail: user.email || loginEmail,
+      employeeEmail: invitation.employee_email,
+      employeeName: invitation.employee_name,
+      employeePhone: invitation.employee_phone,
+      name: user.name || displayName,
+      providerUserId: kakaoUserId,
+      userId: user.id
+    }),
     companyId: invitation.company_id,
     companyName: company.name,
     email: user.email || loginEmail,
@@ -2538,7 +2555,9 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     // 이미 초대를 수락해 회사에 소속된 직원이 재로그인하는 경우입니다.
     // 초대 코드 없이 다시 로그인해도 실제 직책(배송기사/영업직원 등)을 유지해야
     // PC 대시보드에서도 올바른 역할로 표시되고, 향후 역할별 권한 제한을 켜도 안전합니다.
+    const assignmentKeys = await getAcceptedStaffAssignmentKeys(existing.company_id, user.id, kakaoUserId).catch(() => uniqueAssignmentKeys([user.id, kakaoUserId, user.name, user.email]));
     return {
+      assignmentKeys,
       companyId: existing.company_id,
       companyName: existing.companies?.name || `${displayName} 워크스페이스`,
       email: user.email || loginEmail,
@@ -2688,6 +2707,15 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
   }));
 
   return {
+    assignmentKeys: buildStaffAssignmentKeys({
+      acceptedEmail: user.email || loginEmail,
+      employeeEmail: invitation.employee_email,
+      employeeName: invitation.employee_name,
+      employeePhone: invitation.employee_phone,
+      name: user.name || displayName,
+      providerUserId,
+      userId: user.id
+    }),
     companyId: invitation.company_id,
     companyName: company.name,
     email: user.email || loginEmail,
@@ -2751,7 +2779,9 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
+    const assignmentKeys = await getAcceptedStaffAssignmentKeys(existing.company_id, user.id, providerUserId).catch(() => uniqueAssignmentKeys([user.id, providerUserId, user.name, user.email]));
     return {
+      assignmentKeys,
       companyId: existing.company_id,
       companyName: existing.companies?.name || `${displayName} 워크스페이스`,
       email: user.email || loginEmail,
@@ -2849,6 +2879,57 @@ function createInviteCode(companyId: string) {
 function createStaffInviteUrl(inviteCode: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   return `${appUrl.replace(/\/$/, "")}/mobile/join?invite=${encodeURIComponent(inviteCode)}`;
+}
+
+function uniqueAssignmentKeys(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function buildStaffAssignmentKeys(input: {
+  acceptedEmail?: string | null;
+  employeeEmail?: string | null;
+  employeeName?: string | null;
+  employeePhone?: string | null;
+  name?: string | null;
+  providerUserId?: string | null;
+  userId?: string | null;
+}) {
+  return uniqueAssignmentKeys([
+    input.userId,
+    input.providerUserId,
+    input.name,
+    input.acceptedEmail,
+    input.acceptedEmail?.split("@")[0],
+    input.employeeEmail,
+    input.employeeEmail?.split("@")[0],
+    input.employeeName,
+    input.employeePhone
+  ]);
+}
+
+async function getAcceptedStaffAssignmentKeys(companyId: string, userId?: string, providerUserId?: string | null) {
+  if (!companyId || !userId || !isProductionStoreConfigured()) return uniqueAssignmentKeys([userId, providerUserId]);
+
+  const rows = await staffStoreRequest(supabaseRequest<
+    Array<{
+      employee_email: string | null;
+      employee_name: string | null;
+      employee_phone: string | null;
+    }>
+  >(
+    `staff_invitations?select=employee_email,employee_name,employee_phone&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=eq.${encodeURIComponent(
+      userId
+    )}&limit=5`
+  )).catch((error) => {
+    if (isMissingColumnError(error)) return [];
+    throw error;
+  });
+
+  return uniqueAssignmentKeys([
+    userId,
+    providerUserId,
+    ...rows.flatMap((row) => [row.employee_email, row.employee_email?.split("@")[0], row.employee_name, row.employee_phone])
+  ]);
 }
 
 function toStaffVehicleLocation(row: {

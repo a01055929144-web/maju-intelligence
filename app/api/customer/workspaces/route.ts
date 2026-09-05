@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
   const workspaceRole = normalizeWorkspaceRole(selected.role);
   await setCustomerSession({
     ...session,
+    assignmentKeys: selected.assignmentKeys,
     companyId: selected.companyId,
     companyName: selected.companyName,
     role: workspaceRole === "owner" ? "owner" : "member",

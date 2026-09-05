@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
 
     await setCustomerSession({
       appRole: "customer_user",
+      assignmentKeys: result.assignmentKeys,
       companyId: result.companyId,
       companyName: result.companyName,
       email: result.email,
