@@ -882,33 +882,42 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const openVehicleAnalysis = useCallback(
     async (vehicle: StaffVehicleLocation) => {
       setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, routeCosts: [], vehicle });
-      try {
-        const search = new URLSearchParams({ completions: "true", events: "true", hours: "12", userId: vehicle.userId });
-        if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
-        if (vehicle.driverName) search.set("driverName", vehicle.driverName);
-        if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
-        const costSearch = new URLSearchParams({ days: "1", userId: vehicle.userId });
-        if (churnRiskCompanyId) costSearch.set("companyId", churnRiskCompanyId);
-        const [response, costResponse] = await Promise.all([
-          fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000),
-          fetchWithTimeout(`/api/staff/route-costs?${costSearch.toString()}`, { cache: "no-store" }, 10000).catch(() => null)
-        ]);
-        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; events?: StaffLocationEvent[]; error?: string } | null;
-        const costPayload = costResponse
-          ? ((await costResponse.json().catch(() => null)) as { summaries?: StaffRouteDailySummary[] } | null)
-          : null;
-        if (!response.ok) throw new Error(payload?.error || "운행 기록을 불러오지 못했습니다.");
-        setVehicleAnalysis({
-          completions: payload?.completions || [],
-          events: payload?.events || [],
-          error: "",
-          loading: false,
-          routeCosts: costResponse?.ok && Array.isArray(costPayload?.summaries) ? costPayload.summaries : [],
-          vehicle
-        });
-      } catch (error) {
-        setVehicleAnalysis({ completions: [], events: [], error: error instanceof Error ? error.message : "운행 기록을 불러오지 못했습니다.", loading: false, routeCosts: [], vehicle });
+      const locationSearch = new URLSearchParams({ completions: "true", events: "true", hours: "12", userId: vehicle.userId });
+      if (vehicle.deliveryVehicle) locationSearch.set("deliveryVehicle", vehicle.deliveryVehicle);
+      if (vehicle.driverName) locationSearch.set("driverName", vehicle.driverName);
+      if (churnRiskCompanyId) locationSearch.set("companyId", churnRiskCompanyId);
+
+      const costSearch = new URLSearchParams({ days: "1", userId: vehicle.userId });
+      if (churnRiskCompanyId) costSearch.set("companyId", churnRiskCompanyId);
+
+      const [locationResult, costResult] = await Promise.allSettled([
+        fetchWithTimeout(`/api/staff/location?${locationSearch.toString()}`, { cache: "no-store" }, 10000),
+        fetchWithTimeout(`/api/staff/route-costs?${costSearch.toString()}`, { cache: "no-store" }, 10000)
+      ]);
+
+      let completions: DeliveryCompletionEvent[] = [];
+      let events: StaffLocationEvent[] = [];
+      let routeCosts: StaffRouteDailySummary[] = [];
+      let error = "";
+
+      if (locationResult.status === "fulfilled") {
+        const payload = (await locationResult.value.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; events?: StaffLocationEvent[]; error?: string } | null;
+        if (locationResult.value.ok) {
+          completions = payload?.completions || [];
+          events = payload?.events || [];
+        } else {
+          error = payload?.error || "최근 운행 기록을 불러오지 못했습니다.";
+        }
+      } else {
+        error = "최근 운행 기록 응답이 지연되고 있습니다.";
       }
+
+      if (costResult.status === "fulfilled") {
+        const costPayload = (await costResult.value.json().catch(() => null)) as { summaries?: StaffRouteDailySummary[] } | null;
+        routeCosts = costResult.value.ok && Array.isArray(costPayload?.summaries) ? costPayload.summaries : [];
+      }
+
+      setVehicleAnalysis({ completions, events, error, loading: false, routeCosts, vehicle });
     },
     [churnRiskCompanyId]
   );
@@ -4261,7 +4270,7 @@ function LiveVehicleStatusPanel({
                   onClick={() => onAnalyze(vehicle)}
                   type="button"
                 >
-                  분석
+                  운행·비용
                 </button>
                 {currentStore ? (
                   <button
@@ -4363,10 +4372,10 @@ function VehicleAnalysisModal({
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-teal-700">운행 기록 분석</p>
+            <p className="text-xs font-black uppercase text-teal-700">운행·비용 분석</p>
             <h2 className="mt-1 truncate text-xl font-black text-slate-950">{vehicle.deliveryVehicle || vehicle.driverName}</h2>
             <p className="mt-1 text-xs font-bold text-slate-500">
-              {vehicle.driverName} · {currentStore ? `현재 작업 ${currentStore.name}` : "최근 12시간 GPS 기록"}
+              {vehicle.driverName} · {currentStore ? `현재 작업 ${currentStore.name}` : "최근 12시간 경로와 오늘 누적 비용"}
             </p>
           </div>
           <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">
@@ -4376,9 +4385,14 @@ function VehicleAnalysisModal({
         <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1fr_280px]">
           <div className="min-h-[420px] bg-slate-100">
             {loading ? (
-              <div className="grid h-full min-h-[420px] place-items-center text-sm font-black text-slate-500">GPS 기록을 불러오는 중입니다.</div>
+              <div className="grid h-full min-h-[420px] place-items-center text-sm font-black text-slate-500">운행 기록을 불러오는 중입니다.</div>
             ) : error ? (
-              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-rose-600">{error}</div>
+              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center">
+                <div>
+                  <p className="text-sm font-bold text-rose-600">{error}</p>
+                  <p className="mt-2 text-xs font-bold text-slate-500">비용 집계가 있으면 오른쪽에서 계속 확인할 수 있습니다.</p>
+                </div>
+              </div>
             ) : events.length ? (
               <KakaoAddressMap mapClassName="h-full min-h-[420px] rounded-none border-0" markers={markers} routePath={routePath} showList={false} />
             ) : (
@@ -4387,8 +4401,8 @@ function VehicleAnalysisModal({
           </div>
           <aside className="min-h-0 overflow-auto border-l border-slate-200 bg-white p-4">
             <div className="grid grid-cols-2 gap-2">
-              <RouteMetric label="실제 이동" value={`${metrics.distanceKm.toLocaleString()}km`} />
-              <RouteMetric label="운행 시간" value={formatMinutes(metrics.durationMinutes)} />
+              <RouteMetric label="최근 이동" value={`${metrics.distanceKm.toLocaleString()}km`} />
+              <RouteMetric label="최근 시간" value={formatMinutes(metrics.durationMinutes)} />
               <RouteMetric label="GPS 기록" value={`${events.length.toLocaleString()}건`} />
               <RouteMetric label="누락 구간" value={`${metrics.gapCount.toLocaleString()}구간`} />
               <RouteMetric label="완료 매장" value={`${completions.length.toLocaleString()}곳`} />
@@ -4410,8 +4424,10 @@ function VehicleAnalysisModal({
                 <p className="mt-1 text-lg font-black text-teal-800">{formatKoreanWon(routeCostSummary.estimatedTotalCostWon)}</p>
               </div>
               {!routeCosts.length ? (
-                <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">오늘 모바일 GPS가 저장되면 자동으로 누적됩니다.</p>
-              ) : null}
+                <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">오늘 위치 저장 후 자동 집계됩니다. 설정에서 일자별 비용을 함께 확인할 수 있습니다.</p>
+              ) : (
+                <p className="mt-2 text-[11px] font-bold leading-5 text-teal-800">유류비 180원/km, 인건비 12,000원/시간 기준의 운영 추정치입니다.</p>
+              )}
             </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-black text-slate-950">판단 기준</p>
