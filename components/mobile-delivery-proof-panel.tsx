@@ -72,6 +72,7 @@ export function MobileDeliveryProofPanel({
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("sms");
   const [messageResult, setMessageResult] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
+  const [pendingNote, setPendingNote] = useState<{ id?: string; memoText: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [errorDetail, setErrorDetail] = useState("");
@@ -95,10 +96,22 @@ export function MobileDeliveryProofPanel({
       return;
     }
     setFileError("");
+    setErrorDetail("");
+    setMessageResult("");
+    setManualRecipientPhone("");
     setFile(selected);
     // 2026-08-31 피드백 대응: 저장 완료 직후 다시 배송완료를 기록하려는(같은 거래처를 하루에 두 번
     // 방문하는 등) 의도적인 재입력만 버튼을 다시 눌리게 합니다 — 아래 memo onChange와 동일한 이유.
     if (status === "saved") setStatus("idle");
+    if (status === "error") setStatus("idle");
+  }
+
+  function resetSavedState() {
+    setErrorDetail("");
+    setMessageResult("");
+    setManualRecipientPhone("");
+    setPendingNote(null);
+    if (status !== "idle") setStatus("idle");
   }
 
   // 배송완료를 저장하는 순간 좌표를 한 번만(단발성) 확인합니다. watchPosition처럼 계속 추적하지 않고
@@ -147,17 +160,20 @@ export function MobileDeliveryProofPanel({
       : "";
     const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카카오 수동/알림톡 대기" : "SMS 자동/무료 수동"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}${locationText}`;
 
-    const noteRequest = fetch("/api/customer-operations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "note",
-        customerId,
-        memo: memoText,
-        nextAction: messageChannel === "kakao" ? "카카오 알림톡 또는 수동 공유" : "SMS 자동 발송 또는 수동 문자",
-        noteType: "delivery"
-      })
-    });
+    const canReusePendingNote = Boolean(pendingNote?.id && pendingNote.memoText === memoText);
+    const noteRequest = canReusePendingNote
+      ? Promise.resolve({ ok: true, json: async () => ({ note: { id: pendingNote?.id } }) } as Response)
+      : fetch("/api/customer-operations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "note",
+            customerId,
+            memo: memoText,
+            nextAction: messageChannel === "kakao" ? "카카오 알림톡 또는 수동 공유" : "SMS 자동 발송 또는 수동 문자",
+            noteType: "delivery"
+          })
+        });
     const attachmentRequest = file ? uploadDeliveryProof(customerId, file, file.name) : Promise.resolve(new Response(null, { status: 200 }));
     const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]).catch(() => [null, null]);
 
@@ -165,6 +181,11 @@ export function MobileDeliveryProofPanel({
 
     const noteOk = Boolean(noteResponse?.ok);
     const attachmentOk = Boolean(attachmentResponse?.ok);
+    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
+    if (noteOk && notePayload?.note?.id) {
+      setPendingNote({ id: notePayload.note.id, memoText });
+    }
+
     if (!noteOk || !attachmentOk) {
       // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임/부분 실패 시 재시도하면 중복 업로드됨):
       // 메모는 성공했는데 사진 업로드만 실패한 경우, 재시도 시 메모가 또 한 번 저장되지 않도록 사진만
@@ -181,7 +202,6 @@ export function MobileDeliveryProofPanel({
     }
 
     setErrorDetail("");
-    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
     const attachmentPayload = attachmentResponse?.ok ? ((await attachmentResponse.json().catch(() => null)) as { attachment?: { id?: string } } | null) : null;
     const messageResponse = await fetch("/api/customer-messages/send", {
       method: "POST",
@@ -206,6 +226,7 @@ export function MobileDeliveryProofPanel({
     );
     setFile(null);
     setMemo("");
+    setPendingNote(null);
     setStatus("saved");
     await loadProofs();
   }
@@ -263,7 +284,10 @@ export function MobileDeliveryProofPanel({
               deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
-            onClick={() => setDeliveryStatus(item.value)}
+            onClick={() => {
+              setDeliveryStatus(item.value);
+              resetSavedState();
+            }}
             type="button"
           >
             {item.label}
@@ -287,6 +311,7 @@ export function MobileDeliveryProofPanel({
         className="mt-3 min-h-[92px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         onChange={(event) => {
           setMemo(event.target.value);
+          resetSavedState();
           // 저장 성공 직후 버튼이 잠겨 있는 상태에서, 메모를 다시 쓰기 시작하면 새로운 기록임을
           // 의미하므로 버튼을 다시 활성화합니다(아래 handleFileSelect와 동일한 이유).
           if (status === "saved") setStatus("idle");
@@ -302,7 +327,10 @@ export function MobileDeliveryProofPanel({
               messageChannel === item.value ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
-            onClick={() => setMessageChannel(item.value)}
+            onClick={() => {
+              setMessageChannel(item.value);
+              resetSavedState();
+            }}
             type="button"
           >
             {item.label}
