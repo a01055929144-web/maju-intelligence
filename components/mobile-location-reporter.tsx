@@ -18,7 +18,9 @@ type LocationPostStatus = "active" | "offline" | "paused";
 export function MobileLocationReporter({ currentCustomerId, currentCustomerName, deliveryVehicle }: MobileLocationReporterProps) {
   const [state, setState] = useState<LocationState>("idle");
   const [detail, setDetail] = useState("");
+  const [failureCount, setFailureCount] = useState(0);
   const [lastSentAt, setLastSentAt] = useState("");
+  const inFlightRef = useRef(false);
   const lastPostAtRef = useRef(0);
   const lastContextPostKeyRef = useRef("");
   const latestPositionRef = useRef<GeolocationPosition | null>(null);
@@ -31,6 +33,8 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   const postPosition = useCallback((position: GeolocationPosition, force = false, status: LocationPostStatus = "active") => {
     const now = Date.now();
     if (!force && now - lastPostAtRef.current < LOCATION_POST_INTERVAL_MS) return;
+    if (inFlightRef.current && !force) return;
+    inFlightRef.current = true;
     lastPostAtRef.current = now;
     latestPositionRef.current = position;
     const { currentCustomerId: latestCustomerId, deliveryVehicle: latestVehicle } = latestContextRef.current;
@@ -53,14 +57,19 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
           throw new Error(payload?.error || "위치 저장에 실패했습니다.");
         }
         setDetail("");
+        setFailureCount(0);
         setState("ready");
         setLastSentAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }));
       })
       .catch((error) => {
         if (status === "active") {
           setDetail(error instanceof Error ? error.message : "위치 저장에 실패했습니다.");
+          setFailureCount((count) => count + 1);
           setState("error");
         }
+      })
+      .finally(() => {
+        inFlightRef.current = false;
       });
   }, []);
 
@@ -68,6 +77,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
     (force = true) => {
       if (!("geolocation" in navigator)) {
         setDetail("이 브라우저는 위치 공유를 지원하지 않습니다.");
+        setFailureCount((count) => count + 1);
         setState("blocked");
         return;
       }
@@ -76,6 +86,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         (position) => postPosition(position, force),
         (error) => {
           setDetail(getGeolocationErrorMessage(error));
+          setFailureCount((count) => count + 1);
           setState("blocked");
         },
         { enableHighAccuracy: true, maximumAge: 30_000, timeout: 12_000 }
@@ -87,6 +98,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   useEffect(() => {
     if (!("geolocation" in navigator)) {
       setDetail("이 브라우저는 위치 공유를 지원하지 않습니다.");
+      setFailureCount((count) => count + 1);
       setState("blocked");
       return;
     }
@@ -95,6 +107,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
       (position) => postPosition(position),
       (error) => {
         setDetail(getGeolocationErrorMessage(error));
+        setFailureCount((count) => count + 1);
         setState("blocked");
       },
       { enableHighAccuracy: true, maximumAge: 30_000, timeout: 20_000 }
@@ -154,7 +167,9 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
       : state === "blocked"
         ? "위치 권한 필요"
         : state === "error"
-          ? "위치 저장 대기"
+          ? failureCount > 1
+            ? `위치 저장 재시도 필요 ${failureCount}회`
+            : "위치 저장 대기"
           : "위치 확인 중";
 
   const needsAction = state === "blocked" || state === "error";
@@ -179,7 +194,12 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
           </button>
         ) : null}
       </div>
-      {needsAction ? <p className="mt-1 truncate text-[10px] font-bold text-amber-700">{detail || "브라우저 위치 권한과 로그인 상태를 확인하세요."}</p> : null}
+      {needsAction ? (
+        <p className="mt-1 truncate text-[10px] font-bold text-amber-700">
+          {detail || "브라우저 위치 권한과 로그인 상태를 확인하세요."}
+          {lastSentAt ? ` · 마지막 성공 ${lastSentAt}` : ""}
+        </p>
+      ) : null}
     </div>
   );
 }

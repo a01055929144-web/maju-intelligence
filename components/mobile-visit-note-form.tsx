@@ -18,6 +18,20 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
   const [noteType, setNoteType] = useState("delivery");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [errorDetail, setErrorDetail] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState("");
+
+  function updateMemo(value: string) {
+    setMemo(value);
+    setErrorDetail("");
+    if (status !== "idle") setStatus("idle");
+  }
+
+  function updateNextAction(value: string) {
+    setNextAction(value);
+    setErrorDetail("");
+    if (status !== "idle") setStatus("idle");
+  }
 
   async function submit() {
     const trimmedMemo = memo.trim();
@@ -25,6 +39,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
 
     setSaving(true);
     setStatus("idle");
+    setErrorDetail("");
 
     const response = await fetch("/api/customer-operations", {
       method: "POST",
@@ -41,12 +56,15 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
     setSaving(false);
 
     if (!response?.ok) {
+      const payload = (await response?.json().catch(() => null)) as { message?: string; error?: string } | null;
+      setErrorDetail(payload?.message || payload?.error || "저장에 실패했습니다. 네트워크와 로그인 상태를 확인한 뒤 다시 시도해주세요.");
       setStatus("error");
       return;
     }
 
     setMemo("");
     setNextAction("");
+    setLastSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }));
     setStatus("saved");
   }
 
@@ -81,7 +99,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
             <button
               className="min-h-[2.75rem] rounded-full border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               key={item}
-              onClick={() => setMemo(item)}
+              onClick={() => updateMemo(item)}
               type="button"
             >
               {item}
@@ -93,14 +111,14 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           className="min-h-[108px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
           placeholder="예: 후문 냉장창고 앞 적재 완료. 다음 배송부터 오전 9시 이전 도착 요청."
           value={memo}
-          onChange={(event) => setMemo(event.target.value)}
+          onChange={(event) => updateMemo(event.target.value)}
         />
 
         <input
           className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
           placeholder="다음 액션 예: 다음 배송 전 연락"
           value={nextAction}
-          onChange={(event) => setNextAction(event.target.value)}
+          onChange={(event) => updateNextAction(event.target.value)}
         />
         <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">메모와 다음 액션은 거래처 원장에서 담당자별 기록으로 확인합니다.</p>
 
@@ -109,8 +127,12 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           {saving ? "저장 중" : status === "saved" ? "저장 완료" : "히스토리에 저장"}
         </Button>
 
-        {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 저장 연결을 확인해주세요.</p> : null}
-        {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장되었습니다. 거래처 원장에서 같은 기록을 확인할 수 있습니다.</p> : null}
+        {status === "error" ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-700 ring-1 ring-inset ring-rose-100">{errorDetail}</p> : null}
+        {status === "saved" ? (
+          <p className="rounded-lg bg-teal-50 px-3 py-2 text-xs font-bold leading-5 text-teal-700 ring-1 ring-inset ring-teal-100">
+            {lastSavedAt ? `${lastSavedAt} 저장 완료 · ` : ""}거래처 원장에서 같은 기록을 확인할 수 있습니다.
+          </p>
+        ) : null}
       </div>
     </section>
   );
