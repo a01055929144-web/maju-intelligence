@@ -621,6 +621,7 @@ export default function CrmTimelinePage() {
   const latestNote = customerNotes[0];
   const deliveryProofAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "delivery_proof").length;
   const deliveryMessageNotes = customerNotes.filter((note) => note.noteType === "delivery_message").length;
+  const routeActionNotes = customerNotes.filter((note) => note.noteType === "route_action").length;
   const fieldRecordSummary = {
     attachmentCount: customerAttachments.length,
     deliveryMessageCount: deliveryMessageNotes,
@@ -628,6 +629,7 @@ export default function CrmTimelinePage() {
     loadingPositionCount: loadingPositionAttachments,
     memoCount: historyCount,
     recentMemoAt: latestNote?.createdAt || "이력 대기",
+    routeActionCount: routeActionNotes,
     visitCount: selectedCustomer.visitCount
   };
   const draftBusinessNumberChanged = Boolean(
@@ -2224,6 +2226,7 @@ function FieldRecordTracePanel({
       deliveryProofCount: number;
       loadingPositionCount: number;
       memoCount: number;
+      routeActionCount: number;
     recentMemoAt: string;
     visitCount: number;
   };
@@ -2252,6 +2255,13 @@ function FieldRecordTracePanel({
     },
     {
       action: onOpenHistory,
+      helper: "전화·지도·주소 확인",
+      icon: Route,
+      label: "현장 액션",
+      value: `${summary.routeActionCount.toLocaleString()}건`
+    },
+    {
+      action: onOpenHistory,
       helper: `알림 이력 ${summary.deliveryMessageCount.toLocaleString()}건`,
       icon: CheckCircle2,
       label: "배송완료",
@@ -2268,7 +2278,7 @@ function FieldRecordTracePanel({
         </div>
         <Badge className="w-fit bg-white text-teal-800 ring-1 ring-teal-100">방문 {summary.visitCount.toLocaleString()}회</Badge>
       </div>
-      <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-5">
         {items.map((item) => {
           const Icon = item.icon;
           return (
