@@ -19,6 +19,7 @@ export type CustomerSession = {
   email: string;
   role: "owner" | "member";
   name: string;
+  userId?: string;
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
 };
