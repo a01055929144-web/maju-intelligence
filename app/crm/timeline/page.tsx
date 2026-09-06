@@ -308,17 +308,18 @@ export default function CrmTimelinePage() {
     setBulkManagerMessage("");
 
     try {
-      const customerIds = Array.from(bulkSelectedIds);
+      const customerIds = Array.from(new Set(Array.from(bulkSelectedIds).map((id) => id.trim()).filter(Boolean)));
+      const selectedIdSet = new Set(customerIds);
+      const nextManager = bulkManagerInput.trim();
       const response = await fetch("/api/customers/bulk-manager", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: bulkManagerInput })
+        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: nextManager })
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "일괄 변경에 실패했습니다.");
 
-      const nextManager = bulkManagerInput.trim();
-      setCustomers((previous) => previous.map((customer) => (customer.id && bulkSelectedIds.has(customer.id) ? { ...customer, deliveryManager: nextManager } : customer)));
+      setCustomers((previous) => previous.map((customer) => (customer.id && selectedIdSet.has(customer.id) ? { ...customer, deliveryManager: nextManager } : customer)));
       const updatedCount = typeof payload?.updated === "number" ? payload.updated : customerIds.length;
       setBulkManagerMessage(`${updatedCount.toLocaleString()}곳의 담당자를 "${nextManager}"(으)로 변경했습니다.`);
       setBulkSelectedIds(new Set());
@@ -485,6 +486,8 @@ export default function CrmTimelinePage() {
 
   useEffect(() => {
     setCustomerPage(1);
+    setBulkSelectedIds(new Set());
+    setBulkManagerMessage("");
   }, [customerPageSize, customerSearch, gradeFilter, operationFilter]);
 
   function jumpToCustomer(customerId: string | undefined) {

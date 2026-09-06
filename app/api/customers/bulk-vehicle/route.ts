@@ -13,14 +13,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "거래처 정보를 수정할 권한이 없습니다." }, { status: 403 });
   }
 
-  const customerIds = Array.isArray(body?.customerIds) ? body.customerIds.filter((id): id is string => typeof id === "string" && Boolean(id)) : [];
+  const customerIds = Array.isArray(body?.customerIds)
+    ? Array.from(new Set(body.customerIds.map((id) => (typeof id === "string" ? id.trim() : "")).filter(Boolean)))
+    : [];
   if (!customerIds.length) {
     return NextResponse.json({ message: "선택된 거래처가 없습니다." }, { status: 400 });
   }
-  if (typeof body?.deliveryVehicle !== "string" || !body.deliveryVehicle.trim()) {
+  const deliveryVehicle = typeof body?.deliveryVehicle === "string" ? body.deliveryVehicle.trim() : "";
+  if (!deliveryVehicle) {
     return NextResponse.json({ message: "호차명을 입력하세요." }, { status: 400 });
   }
 
-  const result = await bulkUpdateDeliveryVehicle(scope.companyId, customerIds, body.deliveryVehicle);
+  const result = await bulkUpdateDeliveryVehicle(scope.companyId, customerIds, deliveryVehicle);
   return NextResponse.json(result);
 }
