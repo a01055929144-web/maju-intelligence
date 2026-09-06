@@ -228,14 +228,14 @@ export async function setAdminSession(session: AdminSession) {
   });
 }
 
-export async function setCustomerSession(session: CustomerSession) {
+export async function setCustomerSession(session: CustomerSession, options?: { remember?: boolean }) {
   const cookieStore = await cookies();
   cookieStore.set(CUSTOMER_COOKIE_NAME, encodeSession(session), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 8
+    maxAge: options?.remember ? 60 * 60 * 24 * 400 : 60 * 60 * 8
   });
 }
 
