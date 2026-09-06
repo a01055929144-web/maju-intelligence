@@ -66,6 +66,8 @@ export async function GET(request: NextRequest) {
   const businessStatusReadyCount = isSupabaseSource ? customerMaster.customers.filter((customer) => customer.businessStatus === "정상").length : 0;
   const businessStatusNeedsCheckCount = isSupabaseSource ? customerMaster.customers.filter((customer) => customer.businessStatus !== "정상").length : 0;
   const businessNumberMissingCount = isSupabaseSource ? customerMaster.customers.filter((customer) => !customer.businessNumber?.trim()).length : 0;
+  const managerMissingCount = isSupabaseSource ? customerMaster.customers.filter((customer) => !customer.deliveryManager?.trim()).length : 0;
+  const assignedManagerCount = isSupabaseSource ? new Set(customerMaster.customers.map((customer) => customer.deliveryManager?.trim()).filter(Boolean)).size : 0;
   const visitCount = timeline.length;
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
   const estimatedRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.unknown || 0);
@@ -116,6 +118,12 @@ export async function GET(request: NextRequest) {
       value: `정상 ${businessStatusReadyCount.toLocaleString()} / 확인 ${businessStatusNeedsCheckCount.toLocaleString()}곳`
     },
     {
+      detail: "직원 모바일과 지도 홈은 거래처의 배송담당자/연락처 배정값을 기준으로 담당 거래처를 구분합니다.",
+      label: "직원 배정 기준",
+      ok: isSupabaseSource && managerMissingCount === 0,
+      value: `담당자 ${assignedManagerCount.toLocaleString()}명 / 미지정 ${managerMissingCount.toLocaleString()}곳`
+    },
+    {
       detail: "매출 원장의 거래처(사업자번호 또는 상호명·주소)가 거래처 원장과 같은 키로 연결되는지 확인합니다.",
       label: "매출 원장 ↔ 거래처 매칭",
       ok: sales.transactionCount === 0 || sales.unmatchedCustomerCount === 0,
@@ -149,6 +157,7 @@ export async function GET(request: NextRequest) {
     isSupabaseSource,
     masterCount: operationalMasterCount,
     masterWithoutRouteCount,
+    managerMissingCount,
     missingAddressCount,
     routeProviderCounts,
     routeWithoutMasterCount,
@@ -181,6 +190,8 @@ export async function GET(request: NextRequest) {
         businessNumberMissingCustomers: businessNumberMissingCount,
         businessStatusNeedsCheckCustomers: businessStatusNeedsCheckCount,
         businessStatusReadyCustomers: businessStatusReadyCount,
+        assignedManagers: assignedManagerCount,
+        managerMissingCustomers: managerMissingCount,
         missingAddressCustomers: missingAddressCount,
         missingAddressExamples: missingAddressCustomers,
         passedChecks: passedCheckCount,
@@ -209,6 +220,7 @@ function buildRecommendations({
   isSupabaseSource,
   masterCount,
   masterWithoutRouteCount,
+  managerMissingCount,
   missingAddressCount,
   routeProviderCounts,
   routeWithoutMasterCount,
@@ -225,6 +237,7 @@ function buildRecommendations({
   isSupabaseSource: boolean;
   masterCount: number;
   masterWithoutRouteCount: number;
+  managerMissingCount: number;
   missingAddressCount: number;
   routeProviderCounts: Record<string, number>;
   routeWithoutMasterCount: number;
@@ -255,6 +268,9 @@ function buildRecommendations({
   }
   if (missingAddressCount > 0) {
     items.push(`주소가 없어 지도에 표시되지 않는 매장이 ${missingAddressCount.toLocaleString()}곳 있습니다. 거래처 히스토리에서 주소를 보완하세요.`);
+  }
+  if (managerMissingCount > 0) {
+    items.push(`담당자가 지정되지 않아 직원 모바일에 노출되지 않을 수 있는 거래처가 ${managerMissingCount.toLocaleString()}곳 있습니다. 거래처 관리에서 담당자를 배정하세요.`);
   }
   if (businessNumberMissingCount > 0) {
     items.push(`사업자번호가 없어 국세청 상태조회에서 제외되는 거래처가 ${businessNumberMissingCount.toLocaleString()}곳 있습니다. 거래처 원장에서 사업자번호를 보완하세요.`);

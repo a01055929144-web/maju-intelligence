@@ -35,6 +35,8 @@ type ConsistencyPayload = {
     businessNumberMissingCustomers?: number;
     businessStatusNeedsCheckCustomers?: number;
     businessStatusReadyCustomers?: number;
+    assignedManagers?: number;
+    managerMissingCustomers?: number;
     missingAddressCustomers?: number;
     missingAddressExamples?: Array<{
       customerId?: string;
@@ -122,6 +124,8 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const mappableRouteStops = payload?.summary?.mappableRouteStops || 0;
   const missingAddressCustomers = payload?.summary?.missingAddressCustomers || 0;
   const businessStatusNeedsCheckCustomers = payload?.summary?.businessStatusNeedsCheckCustomers || 0;
+  const managerMissingCustomers = payload?.summary?.managerMissingCustomers || 0;
+  const assignedManagers = payload?.summary?.assignedManagers || 0;
   const salesTransactionCount = payload?.summary?.salesTransactionCount || 0;
   const salesMatchRate = payload?.summary?.salesMatchRate ?? 100;
   const coreItems = [
@@ -139,9 +143,15 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
     },
     {
       helper: `주소 ${missingAddressCustomers.toLocaleString()} · 사업자 ${businessStatusNeedsCheckCustomers.toLocaleString()}`,
-      label: "보완 필요",
+      label: "정보 보완",
       tone: missingAddressCustomers + businessStatusNeedsCheckCustomers > 0 ? "warn" : "good",
       value: hasPayload ? `${(missingAddressCustomers + businessStatusNeedsCheckCustomers).toLocaleString()}건` : "-"
+    },
+    {
+      helper: `담당자 ${assignedManagers.toLocaleString()}명`,
+      label: "직원 배정",
+      tone: managerMissingCustomers > 0 ? "warn" : "good",
+      value: hasPayload ? `${managerMissingCustomers.toLocaleString()}곳` : "-"
     },
     {
       helper: salesTransactionCount ? `${salesTransactionCount.toLocaleString()}건 거래내역` : "매출 원장 대기",
@@ -159,6 +169,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
         dataRegistrationHref,
         isSupabase,
         masterCustomers,
+        managerMissingCustomers,
         missingAddressCustomers,
         routeCoverage,
         routeStops,
@@ -198,7 +209,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
       </div>
 
       <div className="grid gap-3 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           {coreItems.map((item) => (
             <CoreConsistencyTile helper={item.helper} key={item.label} label={item.label} tone={item.tone} value={item.value} />
           ))}
@@ -367,6 +378,7 @@ function buildFixItems({
   dashboardCustomers,
   isSupabase,
   masterCustomers,
+  managerMissingCustomers,
   missingAddressCustomers,
   revenueHref,
   routeCoverage,
@@ -385,6 +397,7 @@ function buildFixItems({
   readonly dashboardCustomers: number;
   readonly isSupabase: boolean;
   readonly masterCustomers: number;
+  readonly managerMissingCustomers: number;
   readonly missingAddressCustomers: number;
   readonly revenueHref: string;
   readonly routeCoverage: number;
@@ -426,6 +439,17 @@ function buildFixItems({
     status: missingAddressCustomers > 0 ? "보완" : "정상",
     title: "주소·좌표",
     tone: missingAddressCustomers > 0 ? "warn" : "good"
+  });
+
+  items.push({
+    href: buildTimelineHrefFromBase(timelineHref, "manager-missing"),
+    label:
+      managerMissingCustomers > 0
+        ? `담당자 미지정 ${managerMissingCustomers.toLocaleString()}곳은 직원 모바일/담당자 지도에서 빠질 수 있습니다.`
+        : "거래처 담당자 배정값이 채워져 있습니다.",
+    status: managerMissingCustomers > 0 ? "배정" : "정상",
+    title: "직원 배정",
+    tone: managerMissingCustomers > 0 ? "warn" : "good"
   });
 
   items.push({
