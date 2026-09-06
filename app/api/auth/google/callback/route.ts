@@ -63,7 +63,9 @@ export async function GET(request: NextRequest) {
       role: inviteCode ? "member" : "owner",
       userId: result.userId,
       workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
-      workspaceType: inviteCode ? "company" : "personal"
+      workspaceType: inviteCode ? "company" : "personal",
+      assignedManagerName: result.assignedManagerName,
+      assignedVehicle: result.assignedVehicle
     }, { remember: true });
 
     return NextResponse.redirect(new URL(inviteCode ? "/mobile/today" : "/dashboard", request.url));

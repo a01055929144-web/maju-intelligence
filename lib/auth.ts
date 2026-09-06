@@ -22,6 +22,11 @@ export type CustomerSession = {
   userId?: string;
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
+  // 2026-09-07: 카카오 로그인 이름이 거래처의 배송담당자 표기와 달라 자동 매칭이 안 되는
+  // 직원을 위해, 관리자가 직원 초대 화면에서 수동으로 지정한 담당자명/차량 값입니다.
+  // getCustomerAssignmentKeys가 이 값도 매칭 후보로 함께 사용합니다.
+  assignedManagerName?: string;
+  assignedVehicle?: string;
 };
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
@@ -168,7 +173,9 @@ export function shouldScopeCustomerData(session: CustomerSession | null) {
 export function getCustomerAssignmentKeys(session: CustomerSession | null) {
   if (!session) return undefined;
   if (!shouldScopeCustomerData(session)) return undefined;
-  return [session.userId, session.name, session.email].map((value) => value?.trim()).filter(Boolean) as string[];
+  return [session.userId, session.name, session.email, session.assignedManagerName, session.assignedVehicle]
+    .map((value) => value?.trim())
+    .filter(Boolean) as string[];
 }
 
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {

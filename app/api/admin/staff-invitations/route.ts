@@ -40,10 +40,20 @@ export async function PATCH(request: NextRequest) {
 
   try {
     return NextResponse.json(
-      await updateStaffInvitation(body, {
-        actorName: session.name,
-        actorRole: session.appRole
-      })
+      await updateStaffInvitation(
+        {
+          companyId: body.companyId,
+          invitationId: body.invitationId,
+          role: body.role,
+          status: body.status,
+          assignedManagerName: body.assignedManagerName,
+          assignedVehicle: body.assignedVehicle
+        },
+        {
+          actorName: session.name,
+          actorRole: session.appRole
+        }
+      )
     );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "직원 업무 구분 변경에 실패했습니다." }, { status: 400 });

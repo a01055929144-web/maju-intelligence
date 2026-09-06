@@ -429,6 +429,12 @@ export type CustomerLoginCredentials = AuthCredentials & {
 };
 export type StaffInvitation = {
   acceptedBy?: string;
+  // 관리자가 화면에서 수동으로 지정한 배정 기준(자동 이름 매칭이 실패할 때 쓰는 값).
+  assignedManagerName?: string;
+  assignedVehicle?: string;
+  // 이 직원의 배정 기준으로 실제 몇 곳의 거래처가 매칭되는지(자동+수동 값 합산). 계산값이라
+  // DB 컬럼이 아니라 getCompanyStaffInvitations에서 매번 채워집니다.
+  matchedCustomerCount?: number;
   id: string;
   companyId: string;
   employeeName: string;
@@ -451,6 +457,9 @@ export type StaffInvitationUpdateInput = {
   invitationId: string;
   role?: StaffInvitation["role"];
   status?: Extract<StaffInvitation["status"], "pending" | "revoked">;
+  // 빈 문자열("")을 넘기면 지정 해제(null)로 저장됩니다.
+  assignedManagerName?: string;
+  assignedVehicle?: string;
 };
 export type StaffMobileLocationInput = {
   accuracyMeters?: number;
@@ -522,6 +531,8 @@ export type StaffKakaoAcceptResult = {
   persisted: boolean;
   userId?: string;
   workspaceRole: StaffInvitation["role"];
+  assignedManagerName?: string;
+  assignedVehicle?: string;
 };
 export type PersonalKakaoWorkspaceResult = {
   companyId: string;
@@ -531,6 +542,8 @@ export type PersonalKakaoWorkspaceResult = {
   persisted: boolean;
   userId?: string;
   workspaceRole: StaffInvitation["role"] | "owner";
+  assignedManagerName?: string;
+  assignedVehicle?: string;
 };
 export type OAuthProvider = "naver" | "google";
 export type LinkedOAuthProvider = OAuthProvider | "kakao";
@@ -1986,6 +1999,8 @@ export async function createStaffInvitation(input: StaffInvitationInput, auditCo
   const rows = await staffStoreRequest(supabaseRequest<
     Array<{
       accepted_by: string | null;
+      assigned_manager_name?: string | null;
+      assigned_vehicle?: string | null;
       id: string;
       company_id: string;
       employee_name: string | null;
@@ -2166,6 +2181,8 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   const rows = await staffStoreRequest(supabaseRequest<
     Array<{
       accepted_by?: string | null;
+      assigned_manager_name?: string | null;
+      assigned_vehicle?: string | null;
       id: string;
       company_id: string;
       employee_name: string | null;
@@ -2177,13 +2194,27 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
       created_at: string;
     }>
   >(
-    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by&company_id=eq.${encodeURIComponent(
+    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by,assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(
       companyId
     )}&order=created_at.desc`
   ));
 
+  const invitations = rows.map(toStaffInvitation);
+
+  // 가입 완료된 직원마다 "지금 이 배정 기준(이름/수동 지정값)으로 실제 몇 곳의 거래처가
+  // 매칭되는지"를 미리 보여줘서, 관리자가 0곳인 직원만 골라 수동으로 연결할 수 있게 합니다.
+  // 거래처 목록은 회사당 한 번만 불러와 재사용합니다(초대 건마다 다시 조회하지 않음).
+  const acceptedInvitations = invitations.filter((invitation) => invitation.status === "accepted");
+  if (acceptedInvitations.length) {
+    const { customers } = await getCustomerMaster(companyId).catch(() => ({ customers: [] as CustomerMasterItem[] }));
+    for (const invitation of acceptedInvitations) {
+      const keys = [invitation.employeeName, invitation.assignedManagerName, invitation.assignedVehicle].filter(Boolean) as string[];
+      invitation.matchedCustomerCount = filterCustomersByAssignment(customers, keys).length;
+    }
+  }
+
   return {
-    invitations: rows.map(toStaffInvitation),
+    invitations,
     persisted: true
   };
 }
@@ -2192,16 +2223,21 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
   if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
   if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
 
-  const patch: Record<string, string> = {};
+  const patch: Record<string, string | null> = {};
   if (input.role) patch.role = input.role;
   if (input.status) patch.status = input.status;
-  if (!Object.keys(patch).length) throw new Error("변경할 직원 업무 구분 또는 상태가 필요합니다.");
+  // 빈 문자열은 "지정 해제"로 취급해 null로 저장합니다. undefined면 아예 건드리지 않습니다.
+  if (input.assignedManagerName !== undefined) patch.assigned_manager_name = input.assignedManagerName.trim() || null;
+  if (input.assignedVehicle !== undefined) patch.assigned_vehicle = input.assignedVehicle.trim() || null;
+  if (!Object.keys(patch).length) throw new Error("변경할 직원 업무 구분, 상태 또는 배정 기준이 필요합니다.");
 
   if (!isProductionStoreConfigured()) {
     return {
       persisted: false,
       invitation: {
         acceptedBy: undefined,
+        assignedManagerName: input.assignedManagerName || undefined,
+        assignedVehicle: input.assignedVehicle || undefined,
         id: input.invitationId,
         companyId: input.companyId,
         employeeName: "직원",
@@ -2218,6 +2254,8 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
   const rows = await staffStoreRequest(supabaseRequest<
     Array<{
       accepted_by: string | null;
+      assigned_manager_name?: string | null;
+      assigned_vehicle?: string | null;
       id: string;
       company_id: string;
       employee_name: string | null;
@@ -2228,7 +2266,7 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
       expires_at: string | null;
       created_at: string;
     }>
-  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`, {
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by,assigned_manager_name,assigned_vehicle&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
   }));
@@ -2339,6 +2377,29 @@ export async function deleteStaffInvitation(
   return { deleted: true };
 }
 
+// 재로그인(초대 코드 없이 카카오/소셜 로그인) 때 이 사람이 이미 수락한 초대 건에 관리자가
+// 지정해둔 배정 기준(담당자명/차량)을 다시 읽어옵니다. 초대를 여러 건 수락했을 리 없으므로
+// (acceptStaffKakaoInvitation에서 중복 가입을 막습니다) 가장 최근 accepted 건 하나만 봅니다.
+async function getStaffAssignmentOverride(
+  companyId: string,
+  userId: string
+): Promise<{ assignedManagerName?: string; assignedVehicle?: string } | null> {
+  if (!isProductionStoreConfigured()) return null;
+
+  const rows = await supabaseRequest<Array<{ assigned_manager_name: string | null; assigned_vehicle: string | null }>>(
+    `staff_invitations?select=assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=eq.${encodeURIComponent(
+      userId
+    )}&status=eq.accepted&order=accepted_at.desc&limit=1`
+  ).catch(() => []);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    assignedManagerName: row.assigned_manager_name || undefined,
+    assignedVehicle: row.assigned_vehicle || undefined
+  };
+}
+
 export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): Promise<StaffKakaoAcceptResult> {
   const inviteCode = input.inviteCode.trim();
   const kakaoUserId = input.kakaoUserId.trim();
@@ -2367,8 +2428,10 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       employee_phone: string | null;
       role: StaffInvitation["role"];
       status: StaffInvitation["status"];
+      assigned_manager_name: string | null;
+      assigned_vehicle: string | null;
     }>
-  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status,assigned_manager_name,assigned_vehicle&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
@@ -2400,6 +2463,18 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   });
 
   const user = userRows[0];
+
+  // 2026-09-07 버그 리포트: 같은 카카오 계정으로 서로 다른 초대 링크(예: "정두영"과 "테스트
+  // 배송직원")를 각각 수락하면, app_users는 kakao_user_id로 병합되어 같은 user.id를 갖지만
+  // company_members에는 매번 새 행이 추가되어 한 사람이 같은 회사에 직원 슬롯 2개를 차지하는
+  // 문제가 있었습니다. 이미 이 회사에 활성 멤버로 연결된 카카오 계정이면 새 초대 수락을 막습니다.
+  const existingCompanyMemberships = await supabaseRequest<Array<{ id: string }>>(
+    `company_members?select=id&company_id=eq.${encodeURIComponent(invitation.company_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`
+  ).catch(() => []);
+  if (existingCompanyMemberships.length) {
+    throw new Error("이미 이 회사에 가입된 카카오 계정입니다. 직원 1명당 카카오 계정 1개만 사용할 수 있어요. 다른 카카오 계정으로 가입하거나 관리자에게 문의해주세요.");
+  }
+
   await upsertAuthIdentity({ email: user.email || loginEmail, provider: "kakao", providerUserId: kakaoUserId, userId: user.id });
   await supabaseRequest("company_members", {
     method: "POST",
@@ -2436,7 +2511,9 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     name: user.name || displayName,
     persisted: true,
     userId: user.id,
-    workspaceRole: invitation.role || "member"
+    workspaceRole: invitation.role || "member",
+    assignedManagerName: invitation.assigned_manager_name || undefined,
+    assignedVehicle: invitation.assigned_vehicle || undefined
   };
 }
 
@@ -2532,6 +2609,8 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     // 이미 초대를 수락해 회사에 소속된 직원이 재로그인하는 경우입니다.
     // 초대 코드 없이 다시 로그인해도 실제 직책(배송기사/영업직원 등)을 유지해야
     // PC 대시보드에서도 올바른 역할로 표시되고, 향후 역할별 권한 제한을 켜도 안전합니다.
+    // 관리자가 지정한 배정 기준(담당자명/차량)도 재로그인 때마다 다시 읽어와야 최신값이 반영됩니다.
+    const assignment = await getStaffAssignmentOverride(existing.company_id, user.id);
     return {
       companyId: existing.company_id,
       companyName: existing.companies?.name || `${displayName} 워크스페이스`,
@@ -2539,7 +2618,9 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       name: user.name || displayName,
       persisted: true,
       userId: user.id,
-      workspaceRole: existing.role || "owner"
+      workspaceRole: existing.role || "owner",
+      assignedManagerName: assignment?.assignedManagerName,
+      assignedVehicle: assignment?.assignedVehicle
     };
   }
 
@@ -2583,8 +2664,10 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
       employee_phone: string | null;
       role: StaffInvitation["role"];
       status: StaffInvitation["status"];
+      assigned_manager_name: string | null;
+      assigned_vehicle: string | null;
     }>
-  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status,assigned_manager_name,assigned_vehicle&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
@@ -2616,6 +2699,16 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
   });
 
   const user = userRows[0];
+
+  // 카카오 초대 수락(acceptStaffKakaoInvitation)과 동일한 이유로, 이미 이 회사에 활성
+  // 멤버로 연결된 소셜 계정이면 새 초대 수락을 막아 한 사람이 직원 슬롯 2개를 차지하지 않게 합니다.
+  const existingCompanyMemberships = await supabaseRequest<Array<{ id: string }>>(
+    `company_members?select=id&company_id=eq.${encodeURIComponent(invitation.company_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`
+  ).catch(() => []);
+  if (existingCompanyMemberships.length) {
+    throw new Error("이미 이 회사에 가입된 계정입니다. 직원 1명당 계정 1개만 사용할 수 있어요. 다른 계정으로 가입하거나 관리자에게 문의해주세요.");
+  }
+
   await upsertAuthIdentity({ email: user.email || loginEmail, provider: input.provider, providerUserId, userId: user.id });
   await supabaseRequest("company_members", {
     method: "POST",
@@ -2652,7 +2745,9 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
     name: user.name || displayName,
     persisted: true,
     userId: user.id,
-    workspaceRole: invitation.role || "member"
+    workspaceRole: invitation.role || "member",
+    assignedManagerName: invitation.assigned_manager_name || undefined,
+    assignedVehicle: invitation.assigned_vehicle || undefined
   };
 }
 
@@ -2709,6 +2804,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
+    const assignment = await getStaffAssignmentOverride(existing.company_id, user.id);
     return {
       companyId: existing.company_id,
       companyName: existing.companies?.name || `${displayName} 워크스페이스`,
@@ -2716,7 +2812,9 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       name: user.name || displayName,
       persisted: true,
       userId: user.id,
-      workspaceRole: existing.role || "owner"
+      workspaceRole: existing.role || "owner",
+      assignedManagerName: assignment?.assignedManagerName,
+      assignedVehicle: assignment?.assignedVehicle
     };
   }
 
@@ -2727,6 +2825,8 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
 
 function toStaffInvitation(row: {
   accepted_by?: string | null;
+  assigned_manager_name?: string | null;
+  assigned_vehicle?: string | null;
   id: string;
   company_id: string;
   employee_name: string | null;
@@ -2739,6 +2839,8 @@ function toStaffInvitation(row: {
 }): StaffInvitation {
   return {
     acceptedBy: row.accepted_by || undefined,
+    assignedManagerName: row.assigned_manager_name || undefined,
+    assignedVehicle: row.assigned_vehicle || undefined,
     id: row.id,
     companyId: row.company_id,
     employeeName: row.employee_name || "직원",

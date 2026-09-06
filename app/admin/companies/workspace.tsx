@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardLis
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/sortable-th";
+import { formatPhoneNumber } from "@/lib/phone";
 import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
 import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
@@ -691,7 +692,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-black text-slate-950">{invitation.employeeName}</p>
-                          <p className="mt-1 truncate text-xs font-bold text-muted-foreground">{getStaffRoleLabel(invitation.role)} · {invitation.employeePhone || "연락처 미입력"}</p>
+                          <p className="mt-1 truncate text-xs font-bold text-muted-foreground">{getStaffRoleLabel(invitation.role)} · {formatPhoneNumber(invitation.employeePhone) || "연락처 미입력"}</p>
                         </div>
                         <Badge className={invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
                           {getInvitationStatusLabel(invitation.status)}

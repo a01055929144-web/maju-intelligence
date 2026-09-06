@@ -2,9 +2,10 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Users } from "lucide-react";
+import { CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatPhoneNumber } from "@/lib/phone";
 import type { StaffInvitation } from "@/lib/store";
 
 const roleOptions: Array<{ label: string; value: StaffInvitation["role"] }> = [
@@ -89,6 +90,59 @@ export function StaffManagementPanel({
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === updated.id ? updated : item)));
     setMessage(payload.persisted ? "직원 정보 저장이 완료되었습니다." : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function deleteStaff(invitation: StaffInvitation) {
+    const confirmed = window.confirm(
+      invitation.status === "accepted"
+        ? `${invitation.employeeName || "이 직원"}을(를) 삭제하시겠습니까? 이미 가입된 직원이라 로그인 권한도 함께 비활성화됩니다.`
+        : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`
+    );
+    if (!confirmed) return;
+
+    setSavingId(invitation.id);
+    setMessage("");
+
+    const response = await fetch("/api/customer/staff-invitations", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationId: invitation.id })
+    });
+    const payload = await response.json().catch(() => null);
+    setSavingId("");
+
+    if (!response.ok) {
+      setMessage(payload?.message || "직원 삭제에 실패했습니다.");
+      return;
+    }
+
+    setInvitations((current) => current.filter((item) => item.id !== invitation.id));
+    setMessage("직원을 삭제했습니다.");
+  }
+
+  async function saveAssignment(invitation: StaffInvitation, patch: { assignedManagerName: string; assignedVehicle: string }) {
+    setSavingId(invitation.id);
+    setMessage("");
+
+    const response = await fetch("/api/customer/staff-invitations", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        invitationId: invitation.id,
+        ...patch
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    setSavingId("");
+
+    if (!response.ok) {
+      setMessage(payload?.message || "배정 기준 저장에 실패했습니다.");
+      return;
+    }
+
+    const updated = payload.invitation as StaffInvitation;
+    setInvitations((current) => current.map((item) => (item.id === updated.id ? { ...updated, matchedCustomerCount: item.matchedCustomerCount } : item)));
+    setMessage(payload.persisted ? "배정 기준 저장이 완료되었습니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다." : "배정 기준이 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function copyText(value: string, nextMessage: string) {
@@ -188,7 +242,7 @@ export function StaffManagementPanel({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-black text-slate-950">{invitation.employeeName}</p>
-                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{invitation.employeePhone || "연락처 미입력"}</p>
+                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{formatPhoneNumber(invitation.employeePhone) || "연락처 미입력"}</p>
                 </div>
                 <Badge className={invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : invitation.status === "revoked" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
                   {getStatusLabel(invitation.status)}
@@ -214,7 +268,29 @@ export function StaffManagementPanel({
                 ) : null}
               </div>
 
-              <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+              {invitation.status === "accepted" ? (
+                <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-black text-slate-900">거래처 매칭</p>
+                    {typeof invitation.matchedCustomerCount === "number" ? (
+                      <Badge className={invitation.matchedCustomerCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}>
+                        {invitation.matchedCustomerCount > 0 ? `${invitation.matchedCustomerCount}곳 매칭됨` : "매칭 안 됨"}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                    거래처의 배송담당자/차량 표기가 직원명과 다르면 매칭이 안 됩니다. 그럴 때만 아래에 실제 등록된 담당자명 또는 차량번호를 입력해 수동으로 연결하세요.
+                  </p>
+                  <StaffAssignmentEditor
+                    canEdit={canManageMembers}
+                    invitation={invitation}
+                    saving={savingId === invitation.id}
+                    onSave={(patch) => saveAssignment(invitation, patch)}
+                  />
+                </div>
+              ) : null}
+
+              <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
                 <select
                   className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={!canManageMembers || savingId === invitation.id}
@@ -238,6 +314,16 @@ export function StaffManagementPanel({
                   variant="outline"
                 >
                   {savingId === invitation.id ? "저장 중" : invitation.status === "revoked" ? "재활성화" : "비활성화"}
+                </Button>
+                <Button
+                  className="text-rose-700 hover:bg-rose-50"
+                  disabled={!canManageMembers || savingId === invitation.id}
+                  onClick={() => deleteStaff(invitation)}
+                  type="button"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  삭제
                 </Button>
               </div>
               <p className="mt-3 truncate rounded-md bg-slate-50 px-3 py-2 font-mono text-[11px] font-bold text-slate-500">{invitation.inviteUrl}</p>
@@ -325,6 +411,59 @@ function OnboardingStep({ icon, title, description }: { icon: ReactNode; title: 
         {title}
       </div>
       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
+    </div>
+  );
+}
+
+// 자동 이름 매칭이 실패하는 직원을 위한 수동 연결 입력창입니다. 직원마다 독립된 입력 상태를
+// 가져야 해서(목록 전체가 하나의 상태를 공유하면 다른 직원 입력 중 포커스가 튐) 부모의
+// invitations 배열과 별개로 이 컴포넌트 안에서만 편집 중 텍스트를 들고 있습니다.
+function StaffAssignmentEditor({
+  canEdit,
+  invitation,
+  onSave,
+  saving
+}: {
+  canEdit: boolean;
+  invitation: StaffInvitation;
+  onSave: (patch: { assignedManagerName: string; assignedVehicle: string }) => void;
+  saving: boolean;
+}) {
+  const [managerName, setManagerName] = useState(invitation.assignedManagerName || "");
+  const [vehicle, setVehicle] = useState(invitation.assignedVehicle || "");
+  const dirty = managerName !== (invitation.assignedManagerName || "") || vehicle !== (invitation.assignedVehicle || "");
+
+  if (!canEdit) {
+    return invitation.assignedManagerName || invitation.assignedVehicle ? (
+      <p className="mt-2 text-xs font-bold text-slate-600">
+        수동 연결: {[invitation.assignedManagerName, invitation.assignedVehicle].filter(Boolean).join(" · ")}
+      </p>
+    ) : null;
+  }
+
+  return (
+    <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+      <input
+        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => setManagerName(event.target.value)}
+        placeholder="담당자명(거래처에 등록된 이름)"
+        value={managerName}
+      />
+      <input
+        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => setVehicle(event.target.value)}
+        placeholder="배송차량(차량번호 등)"
+        value={vehicle}
+      />
+      <Button
+        className="h-9 px-3 text-xs"
+        disabled={!dirty || saving}
+        onClick={() => onSave({ assignedManagerName: managerName, assignedVehicle: vehicle })}
+        type="button"
+        variant="outline"
+      >
+        {saving ? "저장 중" : "연결 저장"}
+      </Button>
     </div>
   );
 }

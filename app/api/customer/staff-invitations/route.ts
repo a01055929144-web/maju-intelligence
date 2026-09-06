@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { customerHasCapability, getCustomerSession } from "@/lib/auth";
 import {
   createStaffInvitation,
+  deleteStaffInvitation,
   getCompanyStaffInvitations,
   StaffInvitationInput,
   StaffInvitationUpdateInput,
@@ -70,7 +71,9 @@ export async function PATCH(request: NextRequest) {
         companyId: session.companyId,
         invitationId: body.invitationId,
         role: body.role,
-        status: body.status
+        status: body.status,
+        assignedManagerName: body.assignedManagerName,
+        assignedVehicle: body.assignedVehicle
       }, {
         actorName: session.name,
         actorRole: session.workspaceRole
@@ -78,5 +81,32 @@ export async function PATCH(request: NextRequest) {
     );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "직원 업무 구분 변경에 실패했습니다." }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const { response, session } = await requireMemberManager();
+  if (response || !session) return response;
+  if (!customerHasCapability(session, "manage_members")) {
+    return NextResponse.json({ message: "직원을 삭제할 권한이 없습니다. 대표/관리자에게 요청하세요." }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => null)) as { invitationId?: string } | null;
+  if (!body?.invitationId) {
+    return NextResponse.json({ message: "직원 초대 ID가 필요합니다." }, { status: 400 });
+  }
+
+  try {
+    return NextResponse.json(
+      await deleteStaffInvitation(
+        { companyId: session.companyId, invitationId: body.invitationId },
+        {
+          actorName: session.name,
+          actorRole: session.workspaceRole
+        }
+      )
+    );
+  } catch (error) {
+    return NextResponse.json({ message: error instanceof Error ? error.message : "직원 삭제에 실패했습니다." }, { status: 400 });
   }
 }
