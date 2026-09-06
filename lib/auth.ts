@@ -159,6 +159,18 @@ export function scopeHasCapability(scope: Awaited<ReturnType<typeof getRequestAu
   return customerHasCapability(scope.customerSession, capability);
 }
 
+export function shouldScopeCustomerData(session: CustomerSession | null) {
+  if (!session) return false;
+  const role = normalizeWorkspaceRole(session.workspaceRole || session.role);
+  return role !== "owner" && role !== "manager";
+}
+
+export function getCustomerAssignmentKeys(session: CustomerSession | null) {
+  if (!session) return undefined;
+  if (!shouldScopeCustomerData(session)) return undefined;
+  return [session.userId, session.name, session.email].map((value) => value?.trim()).filter(Boolean) as string[];
+}
+
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {
   const credentials = await getAuthCredentials();
   const adminEmail = credentials.adminEmail || DEFAULT_ADMIN_EMAIL;

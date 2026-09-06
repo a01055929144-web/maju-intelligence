@@ -3244,7 +3244,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
 
 export async function getCustomerMaster(
   companyId?: string,
-  options?: { offset?: number }
+  options?: { assignmentKeys?: string[]; offset?: number }
 ): Promise<{ customers: CustomerMasterItem[]; source: "empty" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
   const offset = Math.max(0, Math.floor(options?.offset || 0));
@@ -3333,11 +3333,71 @@ export async function getCustomerMaster(
   if (!fetched) throw lastFetchError instanceof Error ? lastFetchError : new Error(String(lastFetchError));
   rows = fetched;
 
+  const customers = rows.map((row, index) => toCustomerMasterItem(row, offset + index));
+  const scopedCustomers = filterCustomersByAssignment(customers, options?.assignmentKeys);
+
   return {
-    customers: rows.map((row, index) => toCustomerMasterItem(row, offset + index)),
+    customers: scopedCustomers,
     source: "supabase",
     truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT
   };
+}
+
+function normalizeAssignmentKey(value?: string | null) {
+  return (value || "").toLowerCase().replace(/[\s\-_.()[\]{}]/g, "");
+}
+
+function matchesAssignmentKey(field: string, key: string) {
+  if (!field || !key) return false;
+  if (field === key) return true;
+  return field.length >= 5 && key.length >= 5 && (field.includes(key) || key.includes(field));
+}
+
+function filterCustomersByAssignment(customers: CustomerMasterItem[], assignmentKeys?: string[]) {
+  const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
+  if (!normalizedKeys.length) return customers;
+
+  return customers.filter((customer) => {
+    const assignmentFields = [
+      customer.deliveryManager,
+      customer.deliveryVehicle,
+      customer.email,
+      customer.phone
+    ].map(normalizeAssignmentKey).filter(Boolean);
+
+    return assignmentFields.some((field) => normalizedKeys.some((key) => matchesAssignmentKey(field, key)));
+  });
+}
+
+export async function canAccessAssignedCustomer(companyId: string | undefined, customerId: string, assignmentKeys?: string[]) {
+  const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
+  if (!normalizedKeys.length || customerId.startsWith("sample-") || customerId.startsWith("local-")) return true;
+  if (!isProductionStoreConfigured()) return true;
+
+  const rows = await supabaseRequest<
+    Array<{
+      delivery_manager: string | null;
+      delivery_vehicle?: string | null;
+      email: string | null;
+      phone: string | null;
+    }>
+  >(
+    `normalized_customers?select=delivery_manager,delivery_vehicle,email,phone&company_id=eq.${encodeURIComponent(
+      companyId || getDefaultCompanyId()
+    )}&id=eq.${encodeURIComponent(customerId)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row) return false;
+
+  return [
+    row.delivery_manager,
+    row.delivery_vehicle,
+    row.email,
+    row.phone
+  ]
+    .map(normalizeAssignmentKey)
+    .filter(Boolean)
+    .some((field) => normalizedKeys.some((key) => matchesAssignmentKey(field, key)));
 }
 
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
@@ -7066,11 +7126,11 @@ export async function saveRouteOrderConfirmation(companyId: string | undefined, 
   return { persisted: true };
 }
 
-export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
+export async function getTodayRoutePlan(companyId?: string, options?: { assignmentKeys?: string[] }): Promise<RoutePlan> {
   const resolvedCompanyId = companyId || getDefaultCompanyId();
   const [routeCache, customerMaster, routeOrderConfirmations] = await Promise.all([
     getRouteDistanceCacheMap(resolvedCompanyId),
-    getCustomerMaster(companyId),
+    getCustomerMaster(companyId, { assignmentKeys: options?.assignmentKeys }),
     getRouteOrderConfirmationMap(resolvedCompanyId)
   ]);
   const planned = customerMaster.customers

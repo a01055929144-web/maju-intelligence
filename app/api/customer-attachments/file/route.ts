@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
-import { createCustomerAttachmentSignedUrl } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
+import { canAccessAssignedCustomer, createCustomerAttachmentSignedUrl } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,13 @@ export async function GET(request: NextRequest) {
   }
   if (scope.companyId && pathSegments[0] !== scope.companyId) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  }
+  const customerId = pathSegments[1];
+  if (customerId) {
+    const canAccess = await canAccessAssignedCustomer(scope.companyId, customerId, getCustomerAssignmentKeys(scope.customerSession));
+    if (!canAccess) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
   }
 
   const signedUrl = await createCustomerAttachmentSignedUrl(path);

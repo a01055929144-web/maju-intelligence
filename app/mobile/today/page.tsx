@@ -7,7 +7,7 @@ import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
-import { getCustomerSession } from "@/lib/auth";
+import { getCustomerAssignmentKeys, getCustomerSession } from "@/lib/auth";
 import { getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -17,7 +17,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   if (!session) redirect("/mobile/join");
 
   const [routePlan, companySettings] = await Promise.all([
-    getTodayRoutePlan(session.companyId),
+    getTodayRoutePlan(session.companyId, { assignmentKeys: getCustomerAssignmentKeys(session) }),
     getCompanySettings(session.companyId, session.companyName)
   ]);
   const sourceReady = routePlan.source === "supabase";

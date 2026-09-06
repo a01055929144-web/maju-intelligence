@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
 import { getTodayRoutePlan } from "@/lib/store";
 
 export async function GET(request: NextRequest) {
@@ -10,6 +10,6 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    routePlan: await getTodayRoutePlan(scope.companyId)
+    routePlan: await getTodayRoutePlan(scope.companyId, { assignmentKeys: getCustomerAssignmentKeys(scope.customerSession) })
   });
 }
