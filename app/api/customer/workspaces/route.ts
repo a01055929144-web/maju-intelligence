@@ -17,7 +17,7 @@ export async function GET() {
     workspaces: workspaces.map((workspace) => ({
       ...workspace,
       isCurrent: workspace.companyId === session.companyId,
-      roleLabel: workspaceRoleLabels[workspace.role],
+      roleLabel: workspaceRoleLabels[normalizeWorkspaceRole(workspace.role)],
       workspaceTypeLabel: workspaceTypeLabels[workspace.workspaceType]
     }))
   });

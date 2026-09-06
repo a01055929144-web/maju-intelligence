@@ -5,7 +5,7 @@ import { ArrowRight, Building2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CustomerWorkspaceSummary } from "@/lib/store";
-import { workspaceRoleLabels, workspaceTypeLabels } from "@/lib/workspace";
+import { normalizeWorkspaceRole, workspaceRoleLabels, workspaceTypeLabels } from "@/lib/workspace";
 
 type WorkspaceSelectionPanelProps = {
   currentCompanyId?: string;
@@ -59,7 +59,7 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-500">
                     <span>{workspaceTypeLabels[workspace.workspaceType]}</span>
                     <span className="text-slate-300">/</span>
-                    <span>{workspaceRoleLabels[workspace.role]}</span>
+                    <span>{workspaceRoleLabels[normalizeWorkspaceRole(workspace.role)]}</span>
                   </div>
                 </div>
               </div>
