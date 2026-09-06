@@ -2525,7 +2525,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       role: StaffInvitation["role"] | "owner" | "member";
       companies: { business_type: string | null; name: string } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
@@ -2739,7 +2739,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       role: StaffInvitation["role"] | "owner" | "member";
       companies: { business_type: string | null; name: string } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
