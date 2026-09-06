@@ -9055,6 +9055,12 @@ export async function deleteCompanyPermanently(
   if (input.confirmCompanyName.trim() !== company.name.trim()) {
     throw new Error("입력하신 회사명이 실제 회사명과 일치하지 않습니다. 정확히 입력해주세요.");
   }
+  // 2026-09-07 사고 대응: 운영 중인 회사가 실수로 완전 삭제되는 걸 막기 위해, 먼저 "탈퇴(폐쇄)"
+  // 상태로 바꿔 저장한 회사만 완전 삭제할 수 있게 합니다. 관리자가 목록/상세 화면에서 최소 한 번은
+  // "이 회사는 이제 운영하지 않는다"를 명시적으로 확인하는 단계를 거치게 하는 안전장치입니다.
+  if (!isCompanyClosedStatus(company.status)) {
+    throw new Error("완전 삭제는 먼저 운영상태를 \"탈퇴(폐쇄)\"로 바꾸고 저장한 회사만 가능합니다. 실수로 운영 중인 회사를 지우는 것을 막기 위한 안전장치입니다.");
+  }
 
   // 감사 로그는 삭제 전에 남깁니다. admin_audit_logs.company_id는 on delete set null이라 회사가
   // 지워져도 로그 행 자체는 남지만 company_id는 비게 되므로, 회사명을 metadata에 함께 저장해

@@ -916,28 +916,34 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               <p className="mt-1 text-xs font-bold leading-5 text-rose-700">
                 탈퇴(폐쇄)와 달리 이 회사의 거래처, 매출, 업로드 이력, 직원 초대/계정, 구독 정보까지 전부 영구 삭제됩니다. 되돌릴 수 없으니 테스트로 만든 고객사를 정리할 때만 사용하세요.
               </p>
-              <div className="mt-3 grid gap-2 sm:max-w-md">
-                <label className="text-xs font-bold text-rose-700">
-                  확인을 위해 회사명 <span className="font-black text-rose-950">&quot;{selectedCompany.name}&quot;</span>을(를) 정확히 입력하세요.
-                </label>
-                <input
-                  className="h-11 rounded-md border border-rose-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
-                  onChange={(event) => setDeleteConfirmName(event.target.value)}
-                  placeholder={selectedCompany.name}
-                  type="text"
-                  value={deleteConfirmName}
-                />
-                <Button
-                  className="h-11 bg-rose-600 font-black hover:bg-rose-700"
-                  disabled={deleteConfirmName.trim() !== selectedCompany.name.trim() || deleting}
-                  onClick={deleteSelectedCompany}
-                  type="button"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {deleting ? "삭제 중" : "고객사 완전 삭제"}
-                </Button>
-                {deleteMessage ? <p className="rounded-md bg-rose-100 px-3 py-2 text-xs font-bold leading-5 text-rose-800">{deleteMessage}</p> : null}
-              </div>
+              {selectedCompany.status !== "closed" ? (
+                <p className="mt-3 rounded-md bg-rose-100 px-3 py-2 text-xs font-bold leading-5 text-rose-800">
+                  운영 중인 회사를 실수로 지우는 사고를 막기 위해, 완전 삭제는 먼저 위 &quot;운영상태&quot;를 &quot;탈퇴(폐쇄)&quot;로 바꾸고 저장한 회사만 가능합니다. 위에서 운영상태를 바꾸고 저장한 뒤 다시 시도하세요.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-2 sm:max-w-md">
+                  <label className="text-xs font-bold text-rose-700">
+                    확인을 위해 회사명 <span className="font-black text-rose-950">&quot;{selectedCompany.name}&quot;</span>을(를) 정확히 입력하세요.
+                  </label>
+                  <input
+                    className="h-11 rounded-md border border-rose-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                    onChange={(event) => setDeleteConfirmName(event.target.value)}
+                    placeholder={selectedCompany.name}
+                    type="text"
+                    value={deleteConfirmName}
+                  />
+                  <Button
+                    className="h-11 bg-rose-600 font-black hover:bg-rose-700"
+                    disabled={deleteConfirmName.trim() !== selectedCompany.name.trim() || deleting}
+                    onClick={deleteSelectedCompany}
+                    type="button"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deleting ? "삭제 중" : "고객사 완전 삭제"}
+                  </Button>
+                  {deleteMessage ? <p className="rounded-md bg-rose-100 px-3 py-2 text-xs font-bold leading-5 text-rose-800">{deleteMessage}</p> : null}
+                </div>
+              )}
             </div>
           ) : null}
 
