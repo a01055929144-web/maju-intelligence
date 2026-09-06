@@ -2377,6 +2377,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             {!rightCollapsed ? (
               <LiveVehicleStatusPanel
                 onAnalyze={openVehicleAnalysis}
+                onFocusVehicle={(vehicleId) => {
+                  setPreviewLeadId("");
+                  setPreviewStoreId("");
+                  setMapFocusId(`vehicle-${vehicleId}`);
+                  setMarkerViewMode("vehicle");
+                }}
                 onPreviewStore={(storeId) => {
                   setPreviewLeadId("");
                   setPreviewStoreId(storeId);
@@ -4044,11 +4050,13 @@ function VehicleEditForm({
 
 function LiveVehicleStatusPanel({
   onAnalyze,
+  onFocusVehicle,
   onPreviewStore,
   storeById,
   vehicles
 }: {
   readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
+  readonly onFocusVehicle: (vehicleId: string) => void;
   readonly onPreviewStore: (storeId: string) => void;
   readonly storeById: Map<string, StoreRow>;
   readonly vehicles: StaffVehicleLocation[];
@@ -4105,22 +4113,29 @@ function LiveVehicleStatusPanel({
                   {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
-                <button
-                  className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
-                  onClick={() => onAnalyze(vehicle)}
-                  type="button"
-                >
-                  분석
-                </button>
-                {currentStore ? (
                   <button
-                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
-                    onClick={() => onPreviewStore(currentStore.id)}
+                    className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-black text-white ring-1 ring-inset ring-teal-700 transition hover:bg-teal-800"
+                    onClick={() => onFocusVehicle(vehicle.id)}
                     type="button"
                   >
-                    거래처
+                    지도
                   </button>
-                ) : null}
+                  <button
+                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
+                    onClick={() => onAnalyze(vehicle)}
+                    type="button"
+                  >
+                    분석
+                  </button>
+                  {currentStore ? (
+                    <button
+                      className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                      onClick={() => onPreviewStore(currentStore.id)}
+                      type="button"
+                    >
+                      거래처
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
