@@ -2167,7 +2167,6 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
     Array<{
       accepted_by?: string | null;
       id: string;
-      accepted_by: string | null;
       company_id: string;
       employee_name: string | null;
       employee_phone: string | null;
