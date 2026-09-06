@@ -17,6 +17,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!scopeHasCapability(scope, "manage_customers")) {
     return NextResponse.json({ message: "리뷰를 요약할 권한이 없습니다." }, { status: 403 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
   if (!body?.rawText?.trim()) {
     return NextResponse.json({ message: "붙여넣은 리뷰 텍스트가 없습니다." }, { status: 400 });
   }

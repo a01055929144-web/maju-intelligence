@@ -36,7 +36,7 @@ export function StaffManagementPanel({
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
   const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length;
   const acceptedCount = invitations.filter((invitation) => invitation.status === "accepted").length;
-  const activeCount = invitations.filter((invitation) => invitation.status !== "revoked").length;
+  const linkedCount = invitations.filter((invitation) => Boolean(invitation.acceptedBy)).length;
   const totalPages = Math.max(1, Math.ceil(invitations.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = invitations.length ? (currentPage - 1) * pageSize + 1 : 0;
@@ -91,9 +91,9 @@ export function StaffManagementPanel({
     setMessage(payload.persisted ? "직원 정보 저장이 완료되었습니다." : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
-  async function copyInviteUrl(url: string) {
-    await navigator.clipboard?.writeText(url).catch(() => null);
-    setMessage("초대 링크를 복사했습니다.");
+  async function copyText(value: string, nextMessage: string) {
+    await navigator.clipboard?.writeText(value).catch(() => null);
+    setMessage(nextMessage);
   }
 
   return (
@@ -116,7 +116,7 @@ export function StaffManagementPanel({
         <StaffSignal icon={<Users className="h-4 w-4" />} label="등록 직원" value={`${invitations.length}명`} />
         <StaffSignal icon={<Link2 className="h-4 w-4" />} label="초대 대기" value={`${pendingCount}명`} />
         <StaffSignal icon={<Smartphone className="h-4 w-4" />} label="가입 완료" value={`${acceptedCount}명`} />
-        <StaffSignal icon={<CheckCircle2 className="h-4 w-4" />} label="활성 직원" value={`${activeCount}명`} />
+        <StaffSignal icon={<CheckCircle2 className="h-4 w-4" />} label="고유ID 연결" value={`${linkedCount}명`} />
       </div>
 
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -134,8 +134,8 @@ export function StaffManagementPanel({
             />
             <OnboardingStep
               icon={<Tags className="h-4 w-4" />}
-              title="3. 업무 구분"
-              description="역할은 표시와 필터 기준입니다. 초대 관리 자체는 대표/관리자만 가능합니다."
+              title="3. 거래처 배정"
+              description="가입 후 거래처 담당자 값과 연결되면 모바일에 담당 거래처만 표시됩니다."
             />
           </div>
 
@@ -195,6 +195,25 @@ export function StaffManagementPanel({
                 </Badge>
               </div>
 
+              <div className="mt-3 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-600 md:grid-cols-[1fr_auto]">
+                <div className="min-w-0">
+                  <p className="font-black text-slate-900">배정 기준</p>
+                  <p className="mt-1 truncate">{getAssignmentLabel(invitation)}</p>
+                </div>
+                {invitation.acceptedBy ? (
+                  <Button
+                    className="h-8 px-2 text-xs"
+                    disabled={!canManageMembers}
+                    onClick={() => copyText(invitation.acceptedBy || "", "직원 고유 ID를 복사했습니다.")}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    ID
+                  </Button>
+                ) : null}
+              </div>
+
               <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto]">
                 <select
                   className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -208,7 +227,7 @@ export function StaffManagementPanel({
                     </option>
                   ))}
                 </select>
-                <Button disabled={!canManageMembers || savingId === invitation.id} onClick={() => copyInviteUrl(invitation.inviteUrl)} type="button" variant="outline">
+                <Button disabled={!canManageMembers || savingId === invitation.id} onClick={() => copyText(invitation.inviteUrl, "초대 링크를 복사했습니다.")} type="button" variant="outline">
                   <Copy className="h-4 w-4" />
                   링크
                 </Button>
@@ -315,4 +334,10 @@ function getStatusLabel(status: StaffInvitation["status"]) {
   if (status === "expired") return "만료";
   if (status === "revoked") return "비활성";
   return "초대대기";
+}
+
+function getAssignmentLabel(invitation: StaffInvitation) {
+  if (invitation.acceptedBy) return `카카오/소셜 고유 ID 연결 · ${invitation.acceptedBy}`;
+  if (invitation.employeePhone) return `가입 전 · 연락처 ${invitation.employeePhone}`;
+  return `가입 전 · 직원명 ${invitation.employeeName}`;
 }

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     role: workspaceRole === "owner" ? "owner" : "member",
     workspaceRole,
     workspaceType: selected.workspaceType
-  });
+  }, { remember: true });
 
   return NextResponse.json({ ok: true, companyId: selected.companyId });
 }

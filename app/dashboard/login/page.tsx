@@ -137,10 +137,10 @@ export default function CustomerLoginPage() {
                 >
                   <Check className="h-3.5 w-3.5" />
                 </span>
-                로그인 유지
+                자동 로그인
               </span>
               <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
-              <span className="text-xs font-extrabold text-muted-foreground">30일</span>
+              <span className="text-xs font-extrabold text-muted-foreground">이 기기에서 유지</span>
             </label>
             <Button className="mt-1.5 w-full" disabled={loading}>
               {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}

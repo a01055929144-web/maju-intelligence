@@ -165,16 +165,20 @@ export function MobileDeliveryProofPanel({
 
     const noteOk = Boolean(noteResponse?.ok);
     const attachmentOk = Boolean(attachmentResponse?.ok);
+    const attachmentErrorPayload = !attachmentOk ? ((await attachmentResponse?.json().catch(() => null)) as { error?: string; message?: string } | null) : null;
     if (!noteOk || !attachmentOk) {
+      const attachmentFailureReason = attachmentErrorPayload?.message || attachmentErrorPayload?.error;
       // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임/부분 실패 시 재시도하면 중복 업로드됨):
       // 메모는 성공했는데 사진 업로드만 실패한 경우, 재시도 시 메모가 또 한 번 저장되지 않도록 사진만
       // 다시 첨부하도록 안내합니다(메모 텍스트는 비우지 않되, 어떤 부분이 실패했는지 구체적으로 알립니다).
       if (noteOk && !attachmentOk) {
-        setErrorDetail("배송 메모는 저장됐지만 사진/영상 업로드에 실패했습니다. 파일을 다시 선택한 뒤 저장을 다시 눌러주세요(메모는 중복 저장되지 않습니다).");
+        setErrorDetail(
+          `배송 메모는 저장됐지만 사진/영상 업로드에 실패했습니다. 파일을 다시 선택한 뒤 저장을 다시 눌러주세요(메모는 중복 저장되지 않습니다).${attachmentFailureReason ? ` 사유: ${attachmentFailureReason}` : ""}`
+        );
       } else if (!noteOk && attachmentOk) {
         setErrorDetail("사진/영상은 업로드됐지만 배송 메모 저장에 실패했습니다. 저장을 다시 눌러 메모를 다시 저장해주세요.");
       } else {
-        setErrorDetail("서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.");
+        setErrorDetail(`서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.${attachmentFailureReason ? ` 사유: ${attachmentFailureReason}` : ""}`);
       }
       setStatus("error");
       return;
@@ -182,7 +186,12 @@ export function MobileDeliveryProofPanel({
 
     setErrorDetail("");
     const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
-    const attachmentPayload = attachmentResponse?.ok ? ((await attachmentResponse.json().catch(() => null)) as { attachment?: { id?: string } } | null) : null;
+    const attachmentPayload = attachmentResponse?.ok ? ((await attachmentResponse.json().catch(() => null)) as { attachment?: Attachment } | null) : null;
+    if (attachmentPayload?.attachment) {
+      setAttachments((current) =>
+        current.some((item) => item.id === attachmentPayload.attachment?.id) ? current : [attachmentPayload.attachment as Attachment, ...current]
+      );
+    }
     const messageResponse = await fetch("/api/customer-messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -275,7 +284,10 @@ export function MobileDeliveryProofPanel({
         <input
           accept="image/*,video/*"
           className="hidden"
-          onChange={(event) => handleFileSelect(event.target.files?.[0] || null)}
+          onChange={(event) => {
+            handleFileSelect(event.target.files?.[0] || null);
+            event.target.value = "";
+          }}
           type="file"
         />
         <Plus className="h-4 w-4" />

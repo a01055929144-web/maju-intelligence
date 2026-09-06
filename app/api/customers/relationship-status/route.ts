@@ -22,6 +22,8 @@ export async function PATCH(request: NextRequest) {
   if (!body?.customerId) {
     return NextResponse.json({ message: "거래처 id가 필요합니다." }, { status: 400 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, body.customerId, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
   if (body.status !== RELATIONSHIP_STATUS_ACTIVE && body.status !== RELATIONSHIP_STATUS_TERMINATED) {
     return NextResponse.json({ message: `status는 "${RELATIONSHIP_STATUS_ACTIVE}" 또는 "${RELATIONSHIP_STATUS_TERMINATED}"여야 합니다.` }, { status: 400 });
   }

@@ -10,12 +10,14 @@ export type KakaoMapMarker = {
   readonly grade?: "A" | "B" | "C";
   readonly id?: string;
   readonly label: string;
+  readonly lat?: number;
+  readonly lng?: number;
   readonly markerColor?: string;
   // 기거래처 근접 리드 표시(2026-08-24 피드백: "기거래처 주변의 리드들은 별도의 뱃지가 있으면
   // 가독성이 좋을 것 같네") — tone: "lead" 마커에만 의미가 있습니다.
   readonly nearAnchor?: boolean;
   readonly name: string;
-  readonly tone: "customer" | "lead" | "origin" | "unregistered";
+  readonly tone: "customer" | "lead" | "origin" | "unregistered" | "vehicle";
   readonly x: number;
   readonly y: number;
 };

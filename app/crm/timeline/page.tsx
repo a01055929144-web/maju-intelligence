@@ -1113,6 +1113,7 @@ export default function CrmTimelinePage() {
                     <CustomerFilterButton active={operationFilter === "all"} count={customers.length} label="전체" onClick={clearOperationFilter} />
                     <CustomerFilterButton active={operationFilter === "business-check"} count={businessCheckCount} label="사업자 확인" onClick={() => applyOperationFilter("business-check")} tone="danger" />
                     <CustomerFilterButton active={operationFilter === "loading-missing"} count={loadingMissingCount} label="적재위치" onClick={() => applyOperationFilter("loading-missing")} tone="warning" />
+                    <CustomerFilterButton active={operationFilter === "manager-missing"} count={managerMissingCount} label="담당자" onClick={() => applyOperationFilter("manager-missing")} />
                   </div>
                   <div className="maju-filter-box mt-3">
                     <p className="maju-muted-label px-2 pb-1">매출 등급</p>
@@ -1136,13 +1137,12 @@ export default function CrmTimelinePage() {
                   <details className="maju-filter-box mt-3">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-1 text-xs font-black text-slate-500">
                       상세 보완 필터
-                      <Badge className="bg-slate-100 text-slate-600">{addressMissingCount + businessNumberMissingCount + contactMissingCount + managerMissingCount}건</Badge>
+                      <Badge className="bg-slate-100 text-slate-600">{addressMissingCount + businessNumberMissingCount + contactMissingCount}건</Badge>
                     </summary>
                     <div className="mt-2 grid grid-cols-2 gap-1.5">
                       <CustomerFilterButton active={operationFilter === "address-missing"} count={addressMissingCount} label="주소 미등록" onClick={() => applyOperationFilter("address-missing")} tone="danger" />
                       <CustomerFilterButton active={operationFilter === "business-number-missing"} count={businessNumberMissingCount} label="사업자번호" onClick={() => applyOperationFilter("business-number-missing")} tone="warning" />
                       <CustomerFilterButton active={operationFilter === "contact-missing"} count={contactMissingCount} label="연락처" onClick={() => applyOperationFilter("contact-missing")} />
-                      <CustomerFilterButton active={operationFilter === "manager-missing"} count={managerMissingCount} label="담당자" onClick={() => applyOperationFilter("manager-missing")} />
                     </div>
                   </details>
                 </div>

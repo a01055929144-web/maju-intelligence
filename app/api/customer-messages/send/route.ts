@@ -25,6 +25,10 @@ export async function POST(request: NextRequest) {
   if (!body?.customerId) {
     return NextResponse.json({ message: "customerId는 필수입니다." }, { status: 400 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, body.customerId, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) {
+    return NextResponse.json({ message: "담당 거래처에만 메시지를 발송할 수 있습니다." }, { status: 403 });
+  }
 
   if (!body.message?.trim()) {
     return NextResponse.json({ message: "발송할 메시지가 없습니다." }, { status: 400 });

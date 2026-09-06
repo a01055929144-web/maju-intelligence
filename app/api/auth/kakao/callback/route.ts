@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       userId: result.userId,
       workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
       workspaceType: inviteCode ? "company" : "personal"
-    });
+    }, { remember: true });
 
     return NextResponse.redirect(new URL(inviteCode ? "/mobile/today" : "/dashboard", request.url));
   } catch (error) {
