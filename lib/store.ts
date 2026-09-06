@@ -3175,7 +3175,7 @@ export async function getStaffVehicleLocations(companyId?: string): Promise<Staf
     >(
       `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(
         companyId
-      )}&not.last_lat=is.null&not.last_lng=is.null&order=last_location_at.desc&limit=100`
+      )}&last_lat=not.is.null&last_lng=not.is.null&order=last_location_at.desc&limit=100`
     );
     return rows.map(toStaffVehicleLocation).filter((location): location is StaffVehicleLocation => Boolean(location));
   } catch (error) {
