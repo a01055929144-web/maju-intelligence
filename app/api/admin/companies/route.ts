@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/auth";
-import { getManagedCompanyAccounts, ManagedCompanyAccountInput, upsertManagedCompanyAccount } from "@/lib/store";
+import { deleteCompanyPermanently, getManagedCompanyAccounts, ManagedCompanyAccountInput, upsertManagedCompanyAccount } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -38,4 +38,30 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   return POST(request);
+}
+
+export async function DELETE(request: NextRequest) {
+  const session = await requireAdminSession();
+  if (!session) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await request.json().catch(() => null)) as { companyId?: string; confirmCompanyName?: string } | null;
+  if (!body?.companyId || !body.confirmCompanyName?.trim()) {
+    return NextResponse.json({ message: "고객사 ID와 확인용 회사명이 필요합니다." }, { status: 400 });
+  }
+
+  try {
+    return NextResponse.json(
+      await deleteCompanyPermanently(
+        { companyId: body.companyId, confirmCompanyName: body.confirmCompanyName },
+        {
+          actorName: session.name,
+          actorRole: session.appRole
+        }
+      )
+    );
+  } catch (error) {
+    return NextResponse.json({ message: error instanceof Error ? error.message : "고객사 삭제에 실패했습니다." }, { status: 400 });
+  }
 }

@@ -9037,6 +9037,48 @@ export async function closeCompanyAccount(
   return { closed: true, subscriptionCancelled };
 }
 
+/**
+ * 관리자 전용 고객사 완전 삭제(hard delete)입니다. closeCompanyAccount(고객사 본인이 실행하는
+ * 탈퇴로, status만 "closed"로 바꾸는 소프트 삭제이자 되돌릴 수 있음)와 달리 companies 행 자체를
+ * 지웁니다. 스키마의 거의 모든 company_id 외래키가 on delete cascade로 걸려있어(supabase/schema.sql,
+ * supabase/migrations/*) 거래처/매출/업로드/직원 초대/구독 등 관련 데이터가 전부 함께 영구
+ * 삭제되며 되돌릴 수 없습니다. 호출부(관리자 화면)에서 회사명 재입력 확인을 반드시 거치게 해야 합니다.
+ */
+export async function deleteCompanyPermanently(
+  input: { companyId: string; confirmCompanyName: string },
+  auditContext: AuditActorContext = {}
+): Promise<{ deleted: boolean }> {
+  if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!isProductionStoreConfigured()) return { deleted: true };
+
+  const company = await getCompanySettings(input.companyId);
+  if (input.confirmCompanyName.trim() !== company.name.trim()) {
+    throw new Error("입력하신 회사명이 실제 회사명과 일치하지 않습니다. 정확히 입력해주세요.");
+  }
+
+  // 감사 로그는 삭제 전에 남깁니다. admin_audit_logs.company_id는 on delete set null이라 회사가
+  // 지워져도 로그 행 자체는 남지만 company_id는 비게 되므로, 회사명을 metadata에 함께 저장해
+  // 나중에 "어떤 회사였는지" 확인할 수 있게 합니다.
+  await writeAdminAuditLog({
+    companyId: input.companyId,
+    action: "company_permanently_deleted",
+    targetType: "company",
+    targetId: input.companyId,
+    metadata: {
+      actorName: auditContext.actorName || "관리자",
+      actorRole: auditContext.actorRole || "admin",
+      companyName: company.name
+    }
+  }).catch(() => null);
+
+  await supabaseRequest(`companies?id=eq.${encodeURIComponent(input.companyId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+
+  return { deleted: true };
+}
+
 export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
   if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("empty");
 

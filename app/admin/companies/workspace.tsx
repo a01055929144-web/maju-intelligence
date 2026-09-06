@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, UploadCloud, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, Trash2, UploadCloud, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/sortable-th";
@@ -53,6 +53,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [creatingDirect, setCreatingDirect] = useState(false);
   const [directResult, setDirectResult] = useState<DirectStaffAccountResult | null>(null);
   const [copiedField, setCopiedField] = useState<"email" | "password" | "">("");
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -308,6 +311,43 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       )
     );
     setInviteMessage("직원 초대를 삭제했습니다.");
+  }
+
+  // 2026-09-07: 테스트로 만든 고객사가 쌓여서 관리자 화면이 지저분해지고, 탈퇴(폐쇄) 처리만으로는
+  // 목록에 계속 남아 헷갈린다는 요청으로 완전 삭제(hard delete)를 추가했습니다. companies 행을
+  // 지우면 스키마의 거의 모든 외래키가 on delete cascade라 거래처/매출/업로드/직원/구독 등 관련
+  // 데이터가 전부 함께 영구 삭제되므로, 회사명을 정확히 입력해야 버튼이 활성화되고 확인 대화상자도
+  // 한 번 더 거칩니다.
+  async function deleteSelectedCompany() {
+    if (!selectedCompany) return;
+    if (deleteConfirmName.trim() !== selectedCompany.name.trim()) return;
+
+    const confirmed = window.confirm(
+      `정말 "${selectedCompany.name}"을(를) 완전히 삭제하시겠습니까?\n이 회사의 거래처, 매출, 업로드 이력, 직원 초대/계정, 구독 정보가 전부 영구 삭제되며 되돌릴 수 없습니다.`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setDeleteMessage("");
+
+    const response = await fetch("/api/admin/companies", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: selectedCompany.id, confirmCompanyName: deleteConfirmName })
+    });
+    const payload = await response.json().catch(() => null);
+    setDeleting(false);
+
+    if (!response.ok) {
+      setDeleteMessage(payload?.message || "고객사 삭제에 실패했습니다.");
+      return;
+    }
+
+    setCompanies((prev) => prev.filter((company) => company.id !== selectedCompany.id));
+    setDeleteConfirmName("");
+    setMessage("");
+    setDeleteMessage("");
+    startNewCompany();
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
@@ -864,6 +904,40 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               >
                 매출 원장 보기
               </Link>
+            </div>
+          ) : null}
+
+          {selectedCompany ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50/40 p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-rose-700" />
+                <p className="font-black text-rose-950">위험 구역 · 고객사 완전 삭제</p>
+              </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-rose-700">
+                탈퇴(폐쇄)와 달리 이 회사의 거래처, 매출, 업로드 이력, 직원 초대/계정, 구독 정보까지 전부 영구 삭제됩니다. 되돌릴 수 없으니 테스트로 만든 고객사를 정리할 때만 사용하세요.
+              </p>
+              <div className="mt-3 grid gap-2 sm:max-w-md">
+                <label className="text-xs font-bold text-rose-700">
+                  확인을 위해 회사명 <span className="font-black text-rose-950">&quot;{selectedCompany.name}&quot;</span>을(를) 정확히 입력하세요.
+                </label>
+                <input
+                  className="h-11 rounded-md border border-rose-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                  onChange={(event) => setDeleteConfirmName(event.target.value)}
+                  placeholder={selectedCompany.name}
+                  type="text"
+                  value={deleteConfirmName}
+                />
+                <Button
+                  className="h-11 bg-rose-600 font-black hover:bg-rose-700"
+                  disabled={deleteConfirmName.trim() !== selectedCompany.name.trim() || deleting}
+                  onClick={deleteSelectedCompany}
+                  type="button"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deleting ? "삭제 중" : "고객사 완전 삭제"}
+                </Button>
+                {deleteMessage ? <p className="rounded-md bg-rose-100 px-3 py-2 text-xs font-bold leading-5 text-rose-800">{deleteMessage}</p> : null}
+              </div>
             </div>
           ) : null}
 
