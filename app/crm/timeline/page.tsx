@@ -319,7 +319,8 @@ export default function CrmTimelinePage() {
 
       const nextManager = bulkManagerInput.trim();
       setCustomers((previous) => previous.map((customer) => (customer.id && bulkSelectedIds.has(customer.id) ? { ...customer, deliveryManager: nextManager } : customer)));
-      setBulkManagerMessage(`${customerIds.length.toLocaleString()}곳의 담당자를 "${nextManager}"(으)로 변경했습니다.`);
+      const updatedCount = typeof payload?.updated === "number" ? payload.updated : customerIds.length;
+      setBulkManagerMessage(`${updatedCount.toLocaleString()}곳의 담당자를 "${nextManager}"(으)로 변경했습니다.`);
       setBulkSelectedIds(new Set());
       setBulkManagerInput("");
     } catch (error) {
@@ -457,6 +458,13 @@ export default function CrmTimelinePage() {
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
   const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
+  const managerOptions = useMemo(
+    () =>
+      Array.from(new Set(customers.map((customer) => customer.deliveryManager?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) =>
+        a.localeCompare(b, "ko")
+      ),
+    [customers]
+  );
   const selectedFilteredArrayIndex = filteredCustomers.findIndex(({ index }) => index === selectedIndex);
   const selectedFilteredPosition = selectedFilteredArrayIndex + 1;
   const previousFilteredCustomer = selectedFilteredArrayIndex > 0 ? filteredCustomers[selectedFilteredArrayIndex - 1] : null;
@@ -657,6 +665,13 @@ export default function CrmTimelinePage() {
     setIsEditing(false);
     setSaveMessage("");
     setCustomerSearch("");
+  }
+
+  function selectBulkCustomers(scope: "filtered" | "page") {
+    const rows = scope === "filtered" ? filteredCustomers : pagedCustomers;
+    const ids = rows.map(({ customer }) => customer.id).filter((id): id is string => Boolean(id));
+    setBulkSelectedIds(new Set(ids));
+    setBulkManagerMessage(ids.length ? `${ids.length.toLocaleString()}곳을 선택했습니다.` : "선택할 거래처가 없습니다.");
   }
 
   function moveFilteredSelection(direction: "next" | "previous") {
@@ -1172,14 +1187,20 @@ export default function CrmTimelinePage() {
                 totalCount={customers.length}
               />
             </div>
+            <datalist id="bulk-manager-options">
+              {managerOptions.map((manager) => (
+                <option key={manager} value={manager} />
+              ))}
+            </datalist>
             {bulkSelectedIds.size ? (
               <div className="space-y-1.5 border-b border-teal-100 bg-teal-50/70 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-black text-teal-900">{bulkSelectedIds.size.toLocaleString()}곳 선택됨</span>
                   <input
                     className="h-8 min-w-0 flex-1 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400"
+                    list="bulk-manager-options"
                     onChange={(event) => setBulkManagerInput(event.target.value)}
-                    placeholder="새 담당자명"
+                    placeholder={managerOptions.length ? "담당자 선택 또는 입력" : "새 담당자명"}
                     value={bulkManagerInput}
                   />
                   <button
@@ -1218,7 +1239,7 @@ export default function CrmTimelinePage() {
                     {customerPageStart.toLocaleString()}-{customerPageEnd.toLocaleString()} / {filteredCustomers.length.toLocaleString()}곳
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <button
                     className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={customerPage <= 1}
@@ -1238,6 +1259,26 @@ export default function CrmTimelinePage() {
                   >
                     다음
                   </button>
+                  {operationFilter !== "all" ? (
+                    <>
+                      <button
+                        className="rounded-md border border-teal-100 bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={!pagedCustomers.length}
+                        onClick={() => selectBulkCustomers("page")}
+                        type="button"
+                      >
+                        현재 페이지 선택
+                      </button>
+                      <button
+                        className="rounded-md border border-teal-200 bg-white px-2 py-1 text-[11px] font-black text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={!filteredCustomers.length}
+                        onClick={() => selectBulkCustomers("filtered")}
+                        type="button"
+                      >
+                        필터 전체 선택
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -1612,7 +1653,13 @@ export default function CrmTimelinePage() {
                       <EditableField label="업종" value={draftCustomer.industry} onChange={(value) => updateDraft("industry", value)} />
                       <EditableField label="지역" value={draftCustomer.region} onChange={(value) => updateDraft("region", value)} />
                       <EditableField label="월 매출(만원)" value={String(draftCustomer.monthlyRevenue)} onChange={(value) => updateDraft("monthlyRevenue", value)} />
-                      <EditableField label="배송담당자" value={draftCustomer.deliveryManager || ""} inputRef={deliveryManagerInputRef} onChange={(value) => updateDraft("deliveryManager", value)} />
+                      <EditableField
+                        inputList="bulk-manager-options"
+                        inputRef={deliveryManagerInputRef}
+                        label="배송담당자"
+                        onChange={(value) => updateDraft("deliveryManager", value)}
+                        value={draftCustomer.deliveryManager || ""}
+                      />
                       <EditableField label="출발지 거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
@@ -2718,6 +2765,7 @@ function EditableField({
   className = "",
   helper = "",
   helperTone = "muted",
+  inputList,
   inputRef,
   label,
   onChange,
@@ -2726,6 +2774,7 @@ function EditableField({
   className?: string;
   helper?: string;
   helperTone?: "danger" | "muted" | "success";
+  inputList?: string;
   inputRef?: Ref<HTMLInputElement>;
   label: string;
   onChange: (value: string) => void;
@@ -2742,6 +2791,7 @@ function EditableField({
       <span className="mb-1.5 block text-xs font-black text-slate-500">{label}</span>
       <input
         className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-black text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+        list={inputList}
         onChange={(event) => onChange(event.target.value)}
         ref={inputRef}
         value={value}
