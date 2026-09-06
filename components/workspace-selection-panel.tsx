@@ -13,8 +13,11 @@ type WorkspaceSelectionPanelProps = {
 };
 
 export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: WorkspaceSelectionPanelProps) {
+  const [workspaceList, setWorkspaceList] = useState(workspaces);
   const [pendingCompanyId, setPendingCompanyId] = useState("");
+  const [leavingCompanyId, setLeavingCompanyId] = useState("");
   const [error, setError] = useState("");
+  const busy = Boolean(pendingCompanyId || leavingCompanyId);
 
   async function selectWorkspace(companyId: string) {
     setPendingCompanyId(companyId);
@@ -33,11 +36,44 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
     window.location.href = "/dashboard";
   }
 
+  async function leaveWorkspace(workspace: CustomerWorkspaceSummary) {
+    const isPersonal = workspace.workspaceType === "personal";
+    const confirmed = window.confirm(
+      `"${workspace.companyName}" 워크스페이스에서 나가시겠습니까?\n${
+        isPersonal ? "개인 워크스페이스라 나가면 관련 데이터도 함께 삭제됩니다." : "다시 들어오려면 관리자의 재초대가 필요합니다."
+      }\n되돌릴 수 없습니다.`
+    );
+    if (!confirmed) return;
+
+    setLeavingCompanyId(workspace.companyId);
+    setError("");
+    const response = await fetch("/api/customer/workspaces", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: workspace.companyId })
+    });
+    const payload = (await response.json().catch(() => null)) as { message?: string; switchedTo?: string } | null;
+    setLeavingCompanyId("");
+
+    if (!response.ok) {
+      setError(payload?.message || "워크스페이스 나가기에 실패했습니다.");
+      return;
+    }
+
+    if (workspace.companyId === currentCompanyId) {
+      // 지금 쓰던 워크스페이스를 나갔습니다. 서버가 남은 워크스페이스로 세션을 전환해줬으면
+      // 대시보드로, 남은 워크스페이스가 없으면 로그인 화면으로 이동합니다.
+      window.location.href = payload?.switchedTo ? "/dashboard" : "/dashboard/login";
+      return;
+    }
+    setWorkspaceList((current) => current.filter((item) => item.companyId !== workspace.companyId));
+  }
+
   return (
     <div>
       {error ? <p className="m-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
       <div className="divide-y divide-slate-200">
-        {workspaces.map((workspace) => {
+        {workspaceList.map((workspace) => {
           const isPersonal = workspace.workspaceType === "personal";
           const isCurrent = workspace.companyId === currentCompanyId;
           return (
@@ -63,10 +99,20 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
                   </div>
                 </div>
               </div>
-              <Button className="w-full sm:w-auto" disabled={Boolean(pendingCompanyId) || isCurrent} onClick={() => selectWorkspace(workspace.companyId)} size="sm">
-                {isCurrent ? "사용 중" : pendingCompanyId === workspace.companyId ? "전환 중" : "전환"}
-                {!isCurrent ? <ArrowRight className="h-4 w-4" /> : null}
-              </Button>
+              <div className="flex items-center gap-2 sm:flex-col sm:items-stretch">
+                <Button className="w-full sm:w-auto" disabled={busy || isCurrent} onClick={() => selectWorkspace(workspace.companyId)} size="sm">
+                  {isCurrent ? "사용 중" : pendingCompanyId === workspace.companyId ? "전환 중" : "전환"}
+                  {!isCurrent ? <ArrowRight className="h-4 w-4" /> : null}
+                </Button>
+                <button
+                  className="text-xs font-bold text-slate-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => leaveWorkspace(workspace)}
+                  type="button"
+                >
+                  {leavingCompanyId === workspace.companyId ? "나가는 중..." : "나가기"}
+                </button>
+              </div>
             </div>
           );
         })}

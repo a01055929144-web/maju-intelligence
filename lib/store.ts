@@ -1327,6 +1327,69 @@ export async function getCustomerWorkspaces(input: { email?: string; userId?: st
 }
 
 /**
+ * 워크스페이스 나가기(회원 탈퇴)입니다. 개인 카카오/OAuth 워크스페이스 자동생성 기능을 없앤 뒤에도
+ * 그 전에 이미 만들어진 "개인 고객사"가 워크스페이스 목록에 남아있는 문제를 사용자가 직접 정리할
+ * 수 있도록 합니다. 회사(company) 타입 워크스페이스는 본인의 소속(company_members)만 없애고
+ * 회사 데이터 자체는 남겨두지만, 개인(personal) 타입 워크스페이스는 나간 뒤 활성 멤버가 한 명도
+ * 남지 않으면 회사 레코드까지 함께 정리합니다(연쇄 삭제로 관련 데이터도 같이 지워집니다).
+ */
+export async function leaveCustomerWorkspace(
+  input: { userId: string; companyId: string },
+  auditContext: AuditActorContext = {}
+): Promise<{ left: boolean; companyDeleted: boolean }> {
+  if (!input.userId) throw new Error("사용자 ID가 필요합니다.");
+  if (!input.companyId) throw new Error("워크스페이스 ID가 필요합니다.");
+  if (!isProductionStoreConfigured()) return { left: true, companyDeleted: false };
+
+  const memberRows = await supabaseRequest<Array<{ id: string; role: string | null }>>(
+    `company_members?select=id,role&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
+      input.userId
+    )}&status=eq.active&limit=1`
+  ).catch(() => []);
+  const member = memberRows[0];
+  if (!member) throw new Error("이 워크스페이스의 멤버가 아닙니다.");
+
+  await supabaseRequest(`company_members?id=eq.${encodeURIComponent(member.id)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+
+  let companyDeleted = false;
+  const company = await getCompanySettings(input.companyId, "워크스페이스").catch(() => null);
+  if (company?.workspaceType === "personal") {
+    const remainingRows = await supabaseRequest<Array<{ id: string }>>(
+      `company_members?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&status=eq.active&limit=1`
+    ).catch(() => []);
+    if (!remainingRows.length) {
+      try {
+        await supabaseRequest(`companies?id=eq.${encodeURIComponent(input.companyId)}`, {
+          method: "DELETE",
+          headers: { Prefer: "return=minimal" }
+        });
+        companyDeleted = true;
+      } catch {
+        // 다른 테이블의 외래키 제약 등으로 삭제가 안 되어도, 멤버 탈퇴 자체는 이미 완료된
+        // 상태라 실패로 처리하지 않습니다. 남은 빈 회사 레코드는 관리자가 나중에 정리합니다.
+      }
+    }
+  }
+
+  await writeAdminAuditLog({
+    companyId: input.companyId,
+    action: "workspace_member_left",
+    targetType: "company_member",
+    targetId: member.id,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || member.role || "unknown",
+      companyDeleted
+    }
+  }).catch(() => null);
+
+  return { left: true, companyDeleted };
+}
+
+/**
  * 2026-08-26 보안 수정: 로그인 시점에 평문으로 저장돼 있던 비밀번호를 해시로 즉시 전환(레이지
  * 마이그레이션)하기 위한 전용 함수입니다. lib/auth.ts의 validateAdminCredentials에서만 호출합니다.
  */
