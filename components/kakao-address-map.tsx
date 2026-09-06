@@ -894,6 +894,22 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
     `);
   }
 
+  if (marker.tone === "vehicle") {
+    const isDelayed = marker.markerColor === "#64748b";
+    const borderColor = isDelayed ? "#cbd5e1" : "#14b8a6";
+    const haloColor = isDelayed ? "rgba(100,116,139,.24)" : "rgba(20,184,166,.28)";
+    const chipColor = isDelayed ? "#475569" : "#0f766e";
+    return htmlToElement(`
+      <button type="button" title="${name}" style="cursor:pointer;background:#ffffff;color:#0f172a;border:2px solid ${borderColor};border-radius:12px;display:flex;align-items:center;gap:7px;padding:7px 10px;box-shadow:0 0 0 5px ${haloColor},0 12px 28px rgba(15,23,42,.24);font-size:12px;font-weight:900;white-space:nowrap;">
+        <span style="width:24px;height:24px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;">차</span>
+        <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;">
+          <span style="max-width:96px;overflow:hidden;text-overflow:ellipsis;">${label}</span>
+          <span style="margin-top:2px;color:#64748b;font-size:10px;font-weight:800;">${escapeHtml(marker.address)}</span>
+        </span>
+      </button>
+    `);
+  }
+
   if ((marker.tone === "customer" || marker.markerColor) && /^\d+$/.test(marker.label)) {
     return htmlToElement(`
       <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
@@ -1042,13 +1058,15 @@ function FallbackAddressMap({
                         ? "bg-teal-600"
                         : marker.tone === "unregistered"
                           ? "bg-amber-500"
-                          : marker.tone === "lead"
-                            ? "bg-emerald-600"
-                            : "bg-primary"
+                    : marker.tone === "lead"
+                      ? "bg-emerald-600"
+                      : marker.tone === "vehicle"
+                        ? "bg-teal-700"
+                        : "bg-primary"
               }`}
               style={marker.markerColor ? { backgroundColor: marker.markerColor } : undefined}
             >
-              {marker.label}
+              {marker.tone === "vehicle" ? "차" : marker.label}
             </span>
             <div className="pointer-events-none absolute left-1/2 top-10 z-10 hidden w-56 -translate-x-1/2 rounded-md border border-border bg-white p-3 text-xs shadow-lg group-hover:block">
               <p className="font-black">{marker.name}</p>

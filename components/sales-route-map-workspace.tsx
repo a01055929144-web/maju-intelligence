@@ -1601,14 +1601,16 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               );
             })}
           </nav>
-          <div
-            className="hidden h-11 items-center gap-2 rounded-lg border border-teal-100 bg-teal-50 px-3 text-xs font-black text-teal-900 shadow-[0_1px_0_rgba(15,23,42,0.025)] xl:flex"
+          <button
+            className="flex h-11 shrink-0 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-900 shadow-[0_8px_18px_rgba(15,118,110,0.12)] transition hover:border-teal-300 hover:bg-teal-100"
+            onClick={() => setMarkerViewMode("vehicle")}
             title={`최근 수신 ${liveVehicleSummary.latestLabel}`}
+            type="button"
           >
             <Truck className="h-4 w-4 shrink-0 text-teal-700" />
-            <span>라이브 {liveVehicleSummary.active}대</span>
-            {liveVehicleSummary.stale ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">지연 {liveVehicleSummary.stale}</span> : null}
-          </div>
+            <span className="whitespace-nowrap">라이브차 {liveVehicleSummary.active}대</span>
+            {liveVehicleSummary.stale ? <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-inset ring-slate-200">지연 {liveVehicleSummary.stale}</span> : null}
+          </button>
           <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
             <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">화면</span>
             <button
@@ -2375,6 +2377,12 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             {!rightCollapsed ? (
               <LiveVehicleStatusPanel
                 onAnalyze={openVehicleAnalysis}
+                onFocusVehicle={(vehicleId) => {
+                  setPreviewLeadId("");
+                  setPreviewStoreId("");
+                  setMapFocusId(`vehicle-${vehicleId}`);
+                  setMarkerViewMode("vehicle");
+                }}
                 onPreviewStore={(storeId) => {
                   setPreviewLeadId("");
                   setPreviewStoreId(storeId);
@@ -4042,11 +4050,13 @@ function VehicleEditForm({
 
 function LiveVehicleStatusPanel({
   onAnalyze,
+  onFocusVehicle,
   onPreviewStore,
   storeById,
   vehicles
 }: {
   readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
+  readonly onFocusVehicle: (vehicleId: string) => void;
   readonly onPreviewStore: (storeId: string) => void;
   readonly storeById: Map<string, StoreRow>;
   readonly vehicles: StaffVehicleLocation[];
@@ -4103,22 +4113,29 @@ function LiveVehicleStatusPanel({
                   {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
-                <button
-                  className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
-                  onClick={() => onAnalyze(vehicle)}
-                  type="button"
-                >
-                  분석
-                </button>
-                {currentStore ? (
                   <button
-                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
-                    onClick={() => onPreviewStore(currentStore.id)}
+                    className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-black text-white ring-1 ring-inset ring-teal-700 transition hover:bg-teal-800"
+                    onClick={() => onFocusVehicle(vehicle.id)}
                     type="button"
                   >
-                    거래처
+                    지도
                   </button>
-                ) : null}
+                  <button
+                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
+                    onClick={() => onAnalyze(vehicle)}
+                    type="button"
+                  >
+                    분석
+                  </button>
+                  {currentStore ? (
+                    <button
+                      className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                      onClick={() => onPreviewStore(currentStore.id)}
+                      type="button"
+                    >
+                      거래처
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -7841,14 +7858,15 @@ function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: 
       const statusText = getVehicleMarkerStatusText(location);
       const currentStore = location.currentCustomerId ? storeById.get(location.currentCustomerId) : undefined;
       const currentStoreText = currentStore ? ` · 작업 ${currentStore.name}` : "";
+      const driverName = location.driverName || location.deliveryVehicle || "라이브 차량";
       return {
-        address: `${statusText}${currentStoreText}${accuracyText}`,
+        address: `${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
         id: `vehicle-${location.id}`,
         label,
         lat: location.lat,
         lng: location.lng,
-        markerColor: location.isStale ? "#64748b" : "#0f766e",
-        name: `${location.driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
+        markerColor: location.isStale ? "#64748b" : "#0d9488",
+        name: `${driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
         tone: "vehicle" as const,
         x: 50,
         y: 50

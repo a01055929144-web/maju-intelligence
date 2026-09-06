@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
@@ -55,6 +55,8 @@ export function StaffManagementPanel({
   const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length;
   const acceptedCount = invitations.filter((invitation) => invitation.status === "accepted").length;
   const linkedCount = invitations.filter((invitation) => Boolean(invitation.acceptedBy)).length;
+  const acceptedWithoutIdentityCount = invitations.filter((invitation) => invitation.status === "accepted" && !invitation.acceptedBy).length;
+  const unmatchedAcceptedCount = invitations.filter((invitation) => invitation.status === "accepted" && invitation.matchedCustomerCount === 0).length;
   const totalPages = Math.max(1, Math.ceil(invitations.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = invitations.length ? (currentPage - 1) * pageSize + 1 : 0;
@@ -226,11 +228,17 @@ export function StaffManagementPanel({
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
 
-      <div className="grid gap-4 border-b border-slate-200 bg-white p-4 md:grid-cols-4">
+      <div className="grid gap-4 border-b border-slate-200 bg-white p-4 md:grid-cols-3 xl:grid-cols-5">
         <StaffSignal icon={<Users className="h-4 w-4" />} label="등록 직원" value={`${invitations.length}명`} />
         <StaffSignal icon={<Link2 className="h-4 w-4" />} label="초대 대기" value={`${pendingCount}명`} />
         <StaffSignal icon={<Smartphone className="h-4 w-4" />} label="가입 완료" value={`${acceptedCount}명`} />
         <StaffSignal icon={<CheckCircle2 className="h-4 w-4" />} label="고유ID 연결" value={`${linkedCount}명`} />
+        <StaffSignal
+          icon={<AlertCircle className="h-4 w-4" />}
+          label="매핑 확인"
+          tone={acceptedWithoutIdentityCount + unmatchedAcceptedCount > 0 ? "warn" : "good"}
+          value={`${(acceptedWithoutIdentityCount + unmatchedAcceptedCount).toLocaleString()}건`}
+        />
       </div>
 
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -495,10 +503,16 @@ export function StaffManagementPanel({
   );
 }
 
-function StaffSignal({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function StaffSignal({ icon, label, tone = "default", value }: { icon: ReactNode; label: string; tone?: "default" | "good" | "warn"; value: string }) {
+  const toneClassName =
+    tone === "warn"
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "good"
+        ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-slate-50 text-teal-700";
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <div className="text-teal-700">{icon}</div>
+    <div className={`rounded-lg border p-4 ${toneClassName}`}>
+      <div>{icon}</div>
       <p className="mt-3 text-xs font-bold text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
     </div>

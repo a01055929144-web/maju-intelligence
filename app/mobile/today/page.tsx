@@ -87,7 +87,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
         </header>
 
-        <div className="flex-1 space-y-4 px-5 py-5">
+        <div className="flex-1 space-y-4 px-5 pb-24 pt-5">
           <section className="rounded-2xl bg-teal-700 p-4 text-white shadow-[0_16px_36px_rgba(15,118,110,0.22)]">
             <p className="text-xs font-black uppercase text-white/70">Today Route</p>
             <h1 className="mt-2 text-[28px] font-black leading-tight">{heroCopy.title}</h1>
@@ -227,7 +227,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </section>
         </div>
 
-        <footer className="grid grid-cols-4 border-t border-slate-200 bg-white px-3 py-2">
+        <footer className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
           <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
           <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="거래처" />
           <FooterItem href="/mobile/register" icon={PlusCircle} label="등록" />
@@ -264,7 +264,7 @@ function MobileOperationBasisPanel({
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
         <p className="text-sm font-black text-slate-950">운영 기준 데이터</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">관리자가 확정한 거래처 원장과 배송차 코스를 모바일에서 실행합니다. 업무 구분은 표시와 필터 기준입니다.</p>
+        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">확정된 담당 코스와 선택 매장 기준입니다.</p>
       </div>
       <div className="grid grid-cols-2 divide-x divide-y divide-slate-100">
         {items.map((item) => (
@@ -323,7 +323,7 @@ function MobileFieldFlowPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-black text-slate-950">현장 실행 순서</p>
-            <p className="mt-1 text-xs font-bold leading-5 text-blue-800">모바일에서는 선택한 거래처 기준으로 이동, 연락, 적재위치, 완료 기록을 처리합니다.</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-blue-800">매장 선택 후 이동, 연락, 기록을 처리합니다.</p>
           </div>
           <Badge className={hasSelectedStop ? "bg-white text-blue-800 ring-1 ring-inset ring-blue-100" : "bg-amber-100 text-amber-800"}>
             {hasSelectedStop ? "실행 가능" : "매장 선택"}
