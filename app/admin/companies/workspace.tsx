@@ -989,7 +989,9 @@ function getStaffRoleLabel(role: StaffInvitation["role"]) {
   if (role === "driver") return "배송기사";
   if (role === "sales") return "영업직원";
   if (role === "manager") return "현장관리자";
-  return "일반직원";
+  if (role === "member") return "일반직원";
+  // 고객사가 회사 설정 화면에서 직접 추가한 커스텀 담당 업무 이름표입니다.
+  return role || "일반직원";
 }
 
 function getInvitationStatusLabel(status: StaffInvitation["status"]) {

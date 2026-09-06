@@ -5,15 +5,10 @@ import { useState } from "react";
 import { CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DriverSelectField } from "@/components/driver-select-field";
 import { formatPhoneNumber } from "@/lib/phone";
-import type { StaffInvitation } from "@/lib/store";
+import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle, type StaffInvitation } from "@/lib/store";
 
-const roleOptions: Array<{ label: string; value: StaffInvitation["role"] }> = [
-  { label: "배송기사", value: "driver" },
-  { label: "영업직원", value: "sales" },
-  { label: "현장관리자", value: "manager" },
-  { label: "일반직원", value: "member" }
-];
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
@@ -23,13 +18,34 @@ function isErrorMessage(message: string) {
 
 export function StaffManagementPanel({
   canManageMembers,
-  initialInvitations
+  initialInvitations,
+  initialJobTitles,
+  managerOptions,
+  vehicleOptions
 }: {
   canManageMembers: boolean;
   initialInvitations: StaffInvitation[];
+  initialJobTitles: CompanyJobTitle[];
+  managerOptions: string[];
+  vehicleOptions: string[];
 }) {
   const [invitations, setInvitations] = useState(initialInvitations);
-  const [form, setForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as StaffInvitation["role"] });
+  const [form, setForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as string });
+  // 거래처에 실제 등록된 담당자명/배송차량 목록입니다. 화면에서 "+ 새 담당자/배송차 추가"로 입력한
+  // 이름은 거래처에 저장되는 값이 아니라 이 직원의 배정 기준(override)으로만 쓰이므로 서버에 다시
+  // 등록할 필요 없이 이 세션의 선택지 목록에만 더해서 바로 고를 수 있게 합니다.
+  const [managerChoices, setManagerChoices] = useState(managerOptions);
+  const [vehicleChoices, setVehicleChoices] = useState(vehicleOptions);
+  // 기본 4개(배송기사/영업직원/현장관리자/일반직원)는 권한 체계와 연결돼 있어 항상 고정으로
+  // 제공되고, 회사가 직접 추가한 담당 업무 이름표만 이 상태로 관리됩니다(추가/삭제 가능).
+  const [jobTitles, setJobTitles] = useState(initialJobTitles);
+  const [newJobTitle, setNewJobTitle] = useState("");
+  const [addingJobTitle, setAddingJobTitle] = useState(false);
+  const [removingJobTitleId, setRemovingJobTitleId] = useState("");
+  const roleOptions: Array<{ label: string; value: string }> = [
+    ...DEFAULT_STAFF_JOB_TITLES,
+    ...jobTitles.map((jobTitle) => ({ label: jobTitle.label, value: jobTitle.label }))
+  ];
   const [message, setMessage] = useState("");
   const [savingId, setSavingId] = useState("");
   const [creating, setCreating] = useState(false);
@@ -143,6 +159,49 @@ export function StaffManagementPanel({
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === updated.id ? { ...updated, matchedCustomerCount: item.matchedCustomerCount } : item)));
     setMessage(payload.persisted ? "배정 기준 저장이 완료되었습니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다." : "배정 기준이 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function addJobTitle() {
+    if (!newJobTitle.trim() || addingJobTitle) return;
+    setAddingJobTitle(true);
+    setMessage("");
+
+    const response = await fetch("/api/company-job-titles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newJobTitle })
+    });
+    const payload = await response.json().catch(() => null);
+    setAddingJobTitle(false);
+
+    if (!response.ok) {
+      setMessage(payload?.message || "담당 업무 추가에 실패했습니다.");
+      return;
+    }
+
+    setJobTitles((current) => [...current, payload.jobTitle as CompanyJobTitle]);
+    setNewJobTitle("");
+    setMessage(payload.persisted ? "담당 업무를 추가했습니다." : "담당 업무가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+  }
+
+  async function removeJobTitle(jobTitle: CompanyJobTitle) {
+    const confirmed = window.confirm(`"${jobTitle.label}" 담당 업무 항목을 삭제하시겠습니까? 이미 이 값으로 지정된 직원의 표시는 그대로 남습니다.`);
+    if (!confirmed) return;
+
+    setRemovingJobTitleId(jobTitle.id);
+    setMessage("");
+
+    const response = await fetch(`/api/company-job-titles?id=${encodeURIComponent(jobTitle.id)}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => null);
+    setRemovingJobTitleId("");
+
+    if (!response.ok) {
+      setMessage(payload?.message || "담당 업무 삭제에 실패했습니다.");
+      return;
+    }
+
+    setJobTitles((current) => current.filter((item) => item.id !== jobTitle.id));
+    setMessage(`"${jobTitle.label}" 항목을 삭제했습니다.`);
   }
 
   async function copyText(value: string, nextMessage: string) {
@@ -284,8 +343,12 @@ export function StaffManagementPanel({
                   <StaffAssignmentEditor
                     canEdit={canManageMembers}
                     invitation={invitation}
-                    saving={savingId === invitation.id}
+                    managerOptions={managerChoices}
+                    onAddManagerOption={(name) => setManagerChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
+                    onAddVehicleOption={(name) => setVehicleChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
                     onSave={(patch) => saveAssignment(invitation, patch)}
+                    saving={savingId === invitation.id}
+                    vehicleOptions={vehicleChoices}
                   />
                 </div>
               ) : null}
@@ -376,6 +439,44 @@ export function StaffManagementPanel({
                 {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
                 {creating ? "추가 중" : "직원 추가"}
               </Button>
+
+              <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-white p-3">
+                <p className="text-xs font-black text-slate-900">담당 업무 항목 관리</p>
+                <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">
+                  배송기사·영업직원·현장관리자·일반직원은 기본 제공 항목이라 삭제할 수 없습니다. 필요한 이름을 자유롭게 추가·삭제하세요.
+                </p>
+                {jobTitles.length ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {jobTitles.map((jobTitle) => (
+                      <li key={jobTitle.id} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5">
+                        <span className="truncate text-xs font-bold text-slate-700">{jobTitle.label}</span>
+                        <button
+                          className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={removingJobTitleId === jobTitle.id}
+                          onClick={() => removeJobTitle(jobTitle)}
+                          type="button"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="mt-2 flex items-center gap-1.5">
+                  <input
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                    onChange={(event) => setNewJobTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addJobTitle();
+                    }}
+                    placeholder="새 담당 업무 이름 (예: 냉동창고 관리)"
+                    value={newJobTitle}
+                  />
+                  <Button className="h-9 shrink-0 px-2.5 text-xs" disabled={!newJobTitle.trim() || addingJobTitle} onClick={addJobTitle} type="button" variant="outline">
+                    {addingJobTitle ? "추가 중" : "추가"}
+                  </Button>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="mt-4 rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-500">
@@ -421,13 +522,21 @@ function OnboardingStep({ icon, title, description }: { icon: ReactNode; title: 
 function StaffAssignmentEditor({
   canEdit,
   invitation,
+  managerOptions,
+  onAddManagerOption,
+  onAddVehicleOption,
   onSave,
-  saving
+  saving,
+  vehicleOptions
 }: {
   canEdit: boolean;
   invitation: StaffInvitation;
+  managerOptions: string[];
+  onAddManagerOption: (name: string) => void;
+  onAddVehicleOption: (name: string) => void;
   onSave: (patch: { assignedManagerName: string; assignedVehicle: string }) => void;
   saving: boolean;
+  vehicleOptions: string[];
 }) {
   const [managerName, setManagerName] = useState(invitation.assignedManagerName || "");
   const [vehicle, setVehicle] = useState(invitation.assignedVehicle || "");
@@ -443,16 +552,30 @@ function StaffAssignmentEditor({
 
   return (
     <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-      <input
-        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-        onChange={(event) => setManagerName(event.target.value)}
-        placeholder="담당자명(거래처에 등록된 이름)"
+      <DriverSelectField
+        compact
+        driverOptions={managerOptions}
+        entityLabel="담당자"
+        onAddDriver={async (name) => {
+          const trimmed = name.trim();
+          if (!trimmed) return { ok: false, message: "담당자명을 입력하세요." };
+          onAddManagerOption(trimmed);
+          return { ok: true };
+        }}
+        onChange={setManagerName}
         value={managerName}
       />
-      <input
-        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-        onChange={(event) => setVehicle(event.target.value)}
-        placeholder="배송차량(차량번호 등)"
+      <DriverSelectField
+        compact
+        driverOptions={vehicleOptions}
+        entityLabel="배송차량"
+        onAddDriver={async (name) => {
+          const trimmed = name.trim();
+          if (!trimmed) return { ok: false, message: "배송차량명을 입력하세요." };
+          onAddVehicleOption(trimmed);
+          return { ok: true };
+        }}
+        onChange={setVehicle}
         value={vehicle}
       />
       <Button
