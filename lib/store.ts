@@ -2718,13 +2718,17 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       role: StaffInvitation["role"] | "owner" | "member";
       companies: { business_type: string | null; name: string; status: string | null; workspace_type: string | null } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type,status,workspace_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type,status,workspace_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc`).catch(() => []);
 
-  const existing = existingMemberships[0];
+  // 2026-09-07 버그 리포트 3: 같은 카카오 계정으로 여러 회사에 테스트 가입을 해두면, 그중 가장
+  // 먼저 가입한 회사 하나만 보고(예전에는 limit=1) 그 회사가 탈퇴(폐쇄) 상태면 다른 회사의
+  // 활성 멤버십이 남아있어도 로그인 전체를 막아버렸습니다. 활성 멤버십 중 탈퇴되지 않은 회사가
+  // 하나라도 있으면 그 회사로 로그인시키고, 정말로 전부 탈퇴된 경우에만 막습니다.
+  const existing = existingMemberships.find((membership) => !isCompanyClosedStatus(membership.companies?.status));
+  if (!existing && existingMemberships.length) {
+    throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
+  }
   if (existing?.company_id) {
-    if (isCompanyClosedStatus(existing.companies?.status)) {
-      throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
-    }
     // 이미 초대를 수락해 회사에 소속된 직원이 재로그인하는 경우입니다.
     // 초대 코드 없이 다시 로그인해도 실제 직책(배송기사/영업직원 등)을 유지해야
     // PC 대시보드에서도 올바른 역할로 표시되고, 향후 역할별 권한 제한을 켜도 안전합니다.
@@ -2947,13 +2951,15 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       role: StaffInvitation["role"] | "owner" | "member";
       companies: { business_type: string | null; name: string; status: string | null; workspace_type: string | null } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type,status,workspace_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type,status,workspace_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc`).catch(() => []);
 
-  const existing = existingMemberships[0];
+  // acceptStaffKakaoInvitation과 동일한 이유(2026-09-07 버그 리포트 3)로, 여러 회사에 가입된
+  // 계정 중 하나만 탈퇴(폐쇄)여도 전체 로그인을 막지 않고 탈퇴되지 않은 회사를 찾아 로그인시킵니다.
+  const existing = existingMemberships.find((membership) => !isCompanyClosedStatus(membership.companies?.status));
+  if (!existing && existingMemberships.length) {
+    throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
+  }
   if (existing?.company_id) {
-    if (isCompanyClosedStatus(existing.companies?.status)) {
-      throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
-    }
     const assignment = await getStaffAssignmentOverride(existing.company_id, user.id);
     return {
       companyId: existing.company_id,
