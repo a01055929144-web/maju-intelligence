@@ -267,6 +267,48 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
     setInviteMessage(payload.persisted ? "직원 업무 구분/상태 저장이 완료되었습니다." : "직원 업무 구분/상태가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
+  async function deleteStaffInvitationEntry(invitation: StaffInvitation) {
+    if (!selectedCompany) return;
+    const confirmed = window.confirm(
+      invitation.status === "accepted"
+        ? `${invitation.employeeName || "이 직원"}의 초대 기록을 삭제하시겠습니까? 이미 가입된 직원이라 접속 권한도 함께 비활성화됩니다.`
+        : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`
+    );
+    if (!confirmed) return;
+
+    setUpdatingStaffId(invitation.id);
+    setInviteMessage("");
+
+    const response = await fetch("/api/admin/staff-invitations", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyId: selectedCompany.id,
+        invitationId: invitation.id
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    setUpdatingStaffId("");
+
+    if (!response.ok) {
+      setInviteMessage(payload?.message || "직원 초대 삭제에 실패했습니다.");
+      return;
+    }
+
+    setCompanies((prev) =>
+      prev.map((company) =>
+        company.id === selectedCompany.id
+          ? {
+              ...company,
+              staffInvitationCount: Math.max(0, (company.staffInvitationCount || 0) - 1),
+              staffInvitations: (company.staffInvitations || []).filter((item) => item.id !== invitation.id)
+            }
+          : company
+      )
+    );
+    setInviteMessage("직원 초대를 삭제했습니다.");
+  }
+
   const selectedCompany = companies.find((company) => company.id === selectedId);
   const selectedReadiness = selectedCompany ? getCompanyReadiness(selectedCompany) : null;
   const totalCustomers = companies.reduce((sum, company) => sum + company.customerCount, 0);
@@ -658,7 +700,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                       <div className="mt-3 rounded-md bg-slate-50 px-2 py-2 font-mono text-[11px] font-bold text-slate-600">
                         {invitation.inviteUrl}
                       </div>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                         <label className="block space-y-1.5">
                           <span className="text-[11px] font-black text-muted-foreground">직원 업무 구분</span>
                           <select
@@ -681,6 +723,15 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                           variant="outline"
                         >
                           {updatingStaffId === invitation.id ? "저장 중" : invitation.status === "revoked" ? "재활성화" : invitation.status === "accepted" ? "직원 비활성화" : "초대 취소"}
+                        </Button>
+                        <Button
+                          className="self-end text-rose-700 hover:bg-rose-50"
+                          disabled={updatingStaffId === invitation.id}
+                          onClick={() => deleteStaffInvitationEntry(invitation)}
+                          type="button"
+                          variant="outline"
+                        >
+                          삭제
                         </Button>
                       </div>
                     </div>

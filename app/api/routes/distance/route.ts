@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
-import { getCompanyOriginAddress, saveRouteDistanceCache } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
+import { canAccessAssignedCustomer, getCompanyOriginAddress, saveRouteDistanceCache } from "@/lib/store";
 import { calculateRouteDistance } from "@/lib/tmap";
 
 export async function POST(request: NextRequest) {
@@ -18,10 +18,17 @@ export async function POST(request: NextRequest) {
   }
 
   const companyId = scope.companyId;
+  const customerId = typeof body?.customerId === "string" ? body.customerId : "";
+  if (customerId) {
+    const canAccess = await canAccessAssignedCustomer(scope.companyId, customerId, getCustomerAssignmentKeys(scope.customerSession));
+    if (!canAccess) {
+      return NextResponse.json({ error: "담당 거래처의 거리만 계산할 수 있습니다." }, { status: 403 });
+    }
+  }
   const originAddress = String(body?.originAddress || (await getCompanyOriginAddress(companyId))).trim();
   const result = await calculateRouteDistance(originAddress, destinationAddress);
   const saved = await saveRouteDistanceCache(companyId, result, {
-    customerId: body?.customerId || null
+    customerId: customerId || null
   });
 
   return NextResponse.json({

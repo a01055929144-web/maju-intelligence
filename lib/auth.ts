@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
-import { getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash } from "./store";
+import { getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
@@ -19,6 +19,7 @@ export type CustomerSession = {
   email: string;
   role: "owner" | "member";
   name: string;
+  userId?: string;
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
 };
@@ -158,6 +159,18 @@ export function scopeHasCapability(scope: Awaited<ReturnType<typeof getRequestAu
   return customerHasCapability(scope.customerSession, capability);
 }
 
+export function shouldScopeCustomerData(session: CustomerSession | null) {
+  if (!session) return false;
+  const role = normalizeWorkspaceRole(session.workspaceRole || session.role);
+  return role !== "owner" && role !== "manager";
+}
+
+export function getCustomerAssignmentKeys(session: CustomerSession | null) {
+  if (!session) return undefined;
+  if (!shouldScopeCustomerData(session)) return undefined;
+  return [session.userId, session.name, session.email].map((value) => value?.trim()).filter(Boolean) as string[];
+}
+
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {
   const credentials = await getAuthCredentials();
   const adminEmail = credentials.adminEmail || DEFAULT_ADMIN_EMAIL;
@@ -194,24 +207,36 @@ export async function validateCustomerCredentials(email: string, password: strin
   if (process.env.NODE_ENV === "production" && isDevelopmentCustomerCredential(customerEmail, customerPassword)) {
     return null;
   }
+  if (credentials.companyStatus && !["active", "fallback"].includes(credentials.companyStatus)) {
+    return null;
+  }
+  if (credentials.userStatus && credentials.userStatus !== "active") {
+    return null;
+  }
 
   if (email.trim().toLowerCase() !== customerEmail.toLowerCase()) return null;
   if (!(await verifyPassword(password, customerPassword))) return null;
 
   // 2026-08-26 보안 수정: 위 관리자 로그인과 동일하게, 평문 비밀번호는 로그인 성공 시 즉시 해시로
   // 전환해 저장합니다.
-  if (!isHashedPassword(customerPassword)) {
+  if (credentials.credentialSource !== "app_users" && !isHashedPassword(customerPassword)) {
     await updateCustomerPasswordHash(customerEmail, await hashPassword(password)).catch(() => null);
   }
+  if (credentials.userId) {
+    await updateCustomerUserLastLogin(credentials.userId, "password").catch(() => null);
+  }
+
+  const workspaceRole = normalizeWorkspaceRole(credentials.workspaceRole || "owner");
 
   return {
     appRole: "customer_user",
     companyId: credentials.customerCompanyId || process.env.CUSTOMER_COMPANY_ID || DEFAULT_CUSTOMER_COMPANY_ID,
     companyName: credentials.companyName,
     email: customerEmail,
-    role: "owner",
+    role: workspaceRole === "owner" ? "owner" : "member",
     name: credentials.ownerName || credentials.companyName,
-    workspaceRole: normalizeWorkspaceRole("owner"),
+    userId: credentials.userId,
+    workspaceRole,
     workspaceType: "company"
   };
 }
@@ -227,14 +252,14 @@ export async function setAdminSession(session: AdminSession) {
   });
 }
 
-export async function setCustomerSession(session: CustomerSession) {
+export async function setCustomerSession(session: CustomerSession, maxAgeSeconds = 60 * 60 * 8) {
   const cookieStore = await cookies();
   cookieStore.set(CUSTOMER_COOKIE_NAME, encodeSession(session), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 8
+    maxAge: maxAgeSeconds
   });
 }
 

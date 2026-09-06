@@ -19,7 +19,9 @@ const required = [
   "COMPANY_ORIGIN_ADDRESS",
   "TMAP_API_KEY",
   "KAKAO_REST_KEY",
-  "NEXT_PUBLIC_KAKAO_MAP_APP_KEY"
+  "NEXT_PUBLIC_KAKAO_MAP_APP_KEY",
+  "KAKAO_CLIENT_ID",
+  "KAKAO_REDIRECT_URI"
 ];
 const optional = [
   "OPINET_API_KEY",
@@ -29,7 +31,8 @@ const optional = [
   "NCP_DATALAB_CLIENT_ID",
   "NCP_DATALAB_CLIENT_SECRET",
   "GOV_RESTAURANT_API_KEY",
-  "SEOUL_OPENDATA_API_KEY"
+  "SEOUL_OPENDATA_API_KEY",
+  "KAKAO_CLIENT_SECRET"
 ];
 
 const env = {
@@ -90,6 +93,14 @@ if (!env.COMPANY_ORIGIN_ADDRESS || !env.TMAP_API_KEY) {
 if (!env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY) {
   process.exitCode = 1;
   console.error("NEXT_PUBLIC_KAKAO_MAP_APP_KEY가 필요합니다.");
+}
+
+if (!env.KAKAO_CLIENT_ID || !env.KAKAO_REDIRECT_URI) {
+  process.exitCode = 1;
+  console.error(
+    "KAKAO_CLIENT_ID와 KAKAO_REDIRECT_URI가 필요합니다. 이게 없으면 카카오 로그인/직원 초대 수락이 " +
+      "\"missing_kakao_env\" 오류로 실패합니다(지도용 KAKAO_REST_KEY와는 별개 키/앱 등록입니다)."
+  );
 }
 
 if (!env.NTS_BUSINESS_API_KEY) {

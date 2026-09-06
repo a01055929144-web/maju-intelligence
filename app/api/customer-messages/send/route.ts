@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
-import { sendCustomerDeliveryMessage } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
+import { canAccessAssignedCustomer, sendCustomerDeliveryMessage } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
 
   if (!body.message?.trim()) {
     return NextResponse.json({ message: "발송할 메시지가 없습니다." }, { status: 400 });
+  }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, body.customerId, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) {
+    return NextResponse.json({ message: "담당 거래처에만 메시지를 발송할 수 있습니다." }, { status: 403 });
   }
 
   try {

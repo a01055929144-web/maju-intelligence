@@ -428,6 +428,7 @@ export type CustomerLoginCredentials = AuthCredentials & {
   credentialSource?: "app_users" | "auth_credentials" | "fallback";
 };
 export type StaffInvitation = {
+  acceptedBy?: string;
   id: string;
   companyId: string;
   employeeName: string;
@@ -1967,6 +1968,7 @@ export async function createStaffInvitation(input: StaffInvitationInput, auditCo
     return {
       persisted: false,
       invitation: {
+        acceptedBy: undefined,
         id: globalThis.crypto.randomUUID(),
         companyId,
         employeeName,
@@ -2163,6 +2165,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
 
   const rows = await staffStoreRequest(supabaseRequest<
     Array<{
+      accepted_by?: string | null;
       id: string;
       company_id: string;
       employee_name: string | null;
@@ -2174,7 +2177,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
       created_at: string;
     }>
   >(
-    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&company_id=eq.${encodeURIComponent(
+    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by&company_id=eq.${encodeURIComponent(
       companyId
     )}&order=created_at.desc`
   ));
@@ -2198,6 +2201,7 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
     return {
       persisted: false,
       invitation: {
+        acceptedBy: undefined,
         id: input.invitationId,
         companyId: input.companyId,
         employeeName: "직원",
@@ -2274,6 +2278,65 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
     invitation: updatedInvitation,
     persisted: true
   };
+}
+
+// 2026-09-06 피드백("초대했으면 삭제도 되야하는거잖아") 대응: 기존 "초대 취소/재활성화"는
+// status만 토글해서 목록에 계속 남아 있었습니다. 이 함수는 실제로 행을 지웁니다. 이미 수락되어
+// 실제 로그인 권한이 생긴 초대라면(accepted_by 존재), 초대 행만 지우고 company_members는 그대로
+// 두면 그 직원은 여전히 로그인 가능한 상태로 남아 화면에서는 "삭제했다"고 보이는데 실제로는
+// 계속 접속 가능한 모순이 생깁니다 — 그래서 이 경우 company_members도 함께 비활성화합니다.
+export async function deleteStaffInvitation(
+  input: { companyId: string; invitationId: string },
+  auditContext: AuditActorContext = {}
+): Promise<{ deleted: boolean }> {
+  if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
+
+  if (!isProductionStoreConfigured()) {
+    return { deleted: true };
+  }
+
+  const rows = await staffStoreRequest(
+    supabaseRequest<Array<{ id: string; employee_name: string | null; accepted_by: string | null }>>(
+      `staff_invitations?select=id,employee_name,accepted_by&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Prefer: "return=representation"
+        }
+      }
+    )
+  );
+
+  const deletedInvitation = rows[0];
+  if (!deletedInvitation) throw new Error("직원 초대 정보를 찾을 수 없습니다.");
+
+  if (deletedInvitation.accepted_by) {
+    await supabaseRequest(
+      `company_members?company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(deletedInvitation.accepted_by)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify({ status: "inactive", updated_at: new Date().toISOString() })
+      }
+    ).catch(() => null);
+  }
+
+  await writeAdminAuditLog({
+    companyId: input.companyId,
+    action: "staff_invitation_deleted",
+    targetType: "staff_invitation",
+    targetId: input.invitationId,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      employeeName: deletedInvitation.employee_name || "직원"
+    }
+  }).catch(() => null);
+
+  return { deleted: true };
 }
 
 export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): Promise<StaffKakaoAcceptResult> {
@@ -2734,6 +2797,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
 }
 
 function toStaffInvitation(row: {
+  accepted_by?: string | null;
   id: string;
   company_id: string;
   employee_name: string | null;
@@ -2745,6 +2809,7 @@ function toStaffInvitation(row: {
   created_at: string;
 }): StaffInvitation {
   return {
+    acceptedBy: row.accepted_by || undefined,
     id: row.id,
     companyId: row.company_id,
     employeeName: row.employee_name || "직원",
@@ -3244,7 +3309,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
 
 export async function getCustomerMaster(
   companyId?: string,
-  options?: { offset?: number }
+  options?: { assignmentKeys?: string[]; offset?: number }
 ): Promise<{ customers: CustomerMasterItem[]; source: "empty" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
   const offset = Math.max(0, Math.floor(options?.offset || 0));
@@ -3333,11 +3398,71 @@ export async function getCustomerMaster(
   if (!fetched) throw lastFetchError instanceof Error ? lastFetchError : new Error(String(lastFetchError));
   rows = fetched;
 
+  const customers = rows.map((row, index) => toCustomerMasterItem(row, offset + index));
+  const scopedCustomers = filterCustomersByAssignment(customers, options?.assignmentKeys);
+
   return {
-    customers: rows.map((row, index) => toCustomerMasterItem(row, offset + index)),
+    customers: scopedCustomers,
     source: "supabase",
     truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT
   };
+}
+
+function normalizeAssignmentKey(value?: string | null) {
+  return (value || "").toLowerCase().replace(/[\s\-_.()[\]{}]/g, "");
+}
+
+function matchesAssignmentKey(field: string, key: string) {
+  if (!field || !key) return false;
+  if (field === key) return true;
+  return field.length >= 5 && key.length >= 5 && (field.includes(key) || key.includes(field));
+}
+
+function filterCustomersByAssignment(customers: CustomerMasterItem[], assignmentKeys?: string[]) {
+  const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
+  if (!normalizedKeys.length) return customers;
+
+  return customers.filter((customer) => {
+    const assignmentFields = [
+      customer.deliveryManager,
+      customer.deliveryVehicle,
+      customer.email,
+      customer.phone
+    ].map(normalizeAssignmentKey).filter(Boolean);
+
+    return assignmentFields.some((field) => normalizedKeys.some((key) => matchesAssignmentKey(field, key)));
+  });
+}
+
+export async function canAccessAssignedCustomer(companyId: string | undefined, customerId: string, assignmentKeys?: string[]) {
+  const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
+  if (!normalizedKeys.length || customerId.startsWith("sample-") || customerId.startsWith("local-")) return true;
+  if (!isProductionStoreConfigured()) return true;
+
+  const rows = await supabaseRequest<
+    Array<{
+      delivery_manager: string | null;
+      delivery_vehicle?: string | null;
+      email: string | null;
+      phone: string | null;
+    }>
+  >(
+    `normalized_customers?select=delivery_manager,delivery_vehicle,email,phone&company_id=eq.${encodeURIComponent(
+      companyId || getDefaultCompanyId()
+    )}&id=eq.${encodeURIComponent(customerId)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row) return false;
+
+  return [
+    row.delivery_manager,
+    row.delivery_vehicle,
+    row.email,
+    row.phone
+  ]
+    .map(normalizeAssignmentKey)
+    .filter(Boolean)
+    .some((field) => normalizedKeys.some((key) => matchesAssignmentKey(field, key)));
 }
 
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
@@ -7066,11 +7191,11 @@ export async function saveRouteOrderConfirmation(companyId: string | undefined, 
   return { persisted: true };
 }
 
-export async function getTodayRoutePlan(companyId?: string): Promise<RoutePlan> {
+export async function getTodayRoutePlan(companyId?: string, options?: { assignmentKeys?: string[] }): Promise<RoutePlan> {
   const resolvedCompanyId = companyId || getDefaultCompanyId();
   const [routeCache, customerMaster, routeOrderConfirmations] = await Promise.all([
     getRouteDistanceCacheMap(resolvedCompanyId),
-    getCustomerMaster(companyId),
+    getCustomerMaster(companyId, { assignmentKeys: options?.assignmentKeys }),
     getRouteOrderConfirmationMap(resolvedCompanyId)
   ]);
   const planned = customerMaster.customers

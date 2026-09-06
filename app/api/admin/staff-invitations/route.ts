@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/auth";
-import { createStaffInvitation, StaffInvitationInput, StaffInvitationUpdateInput, updateStaffInvitation } from "@/lib/store";
+import { createStaffInvitation, deleteStaffInvitation, StaffInvitationInput, StaffInvitationUpdateInput, updateStaffInvitation } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -47,5 +47,31 @@ export async function PATCH(request: NextRequest) {
     );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "직원 업무 구분 변경에 실패했습니다." }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const session = await requireAdminSession();
+  if (!session) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await request.json().catch(() => null)) as { companyId?: string; invitationId?: string } | null;
+  if (!body?.companyId || !body.invitationId) {
+    return NextResponse.json({ message: "고객사 ID와 직원 초대 ID가 필요합니다." }, { status: 400 });
+  }
+
+  try {
+    return NextResponse.json(
+      await deleteStaffInvitation(
+        { companyId: body.companyId, invitationId: body.invitationId },
+        {
+          actorName: session.name,
+          actorRole: session.appRole
+        }
+      )
+    );
+  } catch (error) {
+    return NextResponse.json({ message: error instanceof Error ? error.message : "직원 초대 삭제에 실패했습니다." }, { status: 400 });
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
-import { getCustomerOperationsSummary } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
+import { canAccessAssignedCustomer, getCustomerOperationsSummary } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ summary: {} });
   }
 
-  const summary = await getCustomerOperationsSummary(customerIds, scope.companyId);
+  const assignmentKeys = getCustomerAssignmentKeys(scope.customerSession);
+  const allowedCustomerIds = assignmentKeys?.length
+    ? (
+        await Promise.all(
+          customerIds.map(async (customerId) => ({
+            allowed: await canAccessAssignedCustomer(scope.companyId, customerId, assignmentKeys),
+            customerId
+          }))
+        )
+      )
+        .filter((entry) => entry.allowed)
+        .map((entry) => entry.customerId)
+    : customerIds;
+  const summary = await getCustomerOperationsSummary(allowedCustomerIds, scope.companyId);
   return NextResponse.json({ summary });
 }

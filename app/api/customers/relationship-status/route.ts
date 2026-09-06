@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { RELATIONSHIP_STATUS_ACTIVE, RELATIONSHIP_STATUS_TERMINATED, setCustomerRelationshipStatus } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { canAccessAssignedCustomer, RELATIONSHIP_STATUS_ACTIVE, RELATIONSHIP_STATUS_TERMINATED, setCustomerRelationshipStatus } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,8 @@ export async function PATCH(request: NextRequest) {
   if (body.status !== RELATIONSHIP_STATUS_ACTIVE && body.status !== RELATIONSHIP_STATUS_TERMINATED) {
     return NextResponse.json({ message: `status는 "${RELATIONSHIP_STATUS_ACTIVE}" 또는 "${RELATIONSHIP_STATUS_TERMINATED}"여야 합니다.` }, { status: 400 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, body.customerId, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   try {
     const result = await setCustomerRelationshipStatus(scope.companyId, body.customerId, body.status, body.note);

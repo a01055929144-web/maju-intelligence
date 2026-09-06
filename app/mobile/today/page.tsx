@@ -7,7 +7,7 @@ import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
-import { getCustomerSession } from "@/lib/auth";
+import { getCustomerAssignmentKeys, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
 import { getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -16,8 +16,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const session = await getCustomerSession();
   if (!session) redirect("/mobile/join");
 
+  const assignmentKeys = getCustomerAssignmentKeys(session);
+  const isScopedStaffView = shouldScopeCustomerData(session);
   const [routePlan, companySettings] = await Promise.all([
-    getTodayRoutePlan(session.companyId),
+    getTodayRoutePlan(session.companyId, { assignmentKeys }),
     getCompanySettings(session.companyId, session.companyName)
   ]);
   const sourceReady = routePlan.source === "supabase";
@@ -27,9 +29,17 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   // 2026-08-28 피드백 대응: 데스크톱에서 확정한 순서(order 필드, route_plan_confirmations 반영)를
   // 그대로 사용하도록 정렬을 명시적으로 추가합니다 — 정렬을 안 하면 원장에 저장된 순서(무작위에
   // 가까움)로 보일 수 있습니다.
-  const myStops = normalizedDriverName
-    ? allStops.filter((stop) => stop.deliveryDriver?.trim() === normalizedDriverName).sort((a, b) => a.order - b.order)
-    : [];
+  // 2026-09-06 피드백("거래처가 0곳으로 뜸") 대응: 배송담당자 이름을 세션 이름과 정확히
+  // 일치(===)시켜야만 코스가 보였는데, 카카오 프로필 이름 표기가 조금만 달라도(공백, 별명 등)
+  // 전부 비어 보였습니다. 이제 일반 직원(운영/영업 등, owner·manager가 아닌 계정)은 이미
+  // getTodayRoutePlan 단계에서 assignmentKeys(세션 userId/이름/이메일)로 담당 거래처만 걸러
+  // 받아오므로 여기서 다시 이름을 엄격히 매칭할 필요가 없습니다.
+  const myStops = (isScopedStaffView
+    ? allStops
+    : normalizedDriverName
+      ? allStops.filter((stop) => stop.deliveryDriver?.trim() === normalizedDriverName)
+      : []
+  ).sort((a, b) => a.order - b.order);
   const isPersonalized = myStops.length > 0;
   // 2026-08-28 피드백 대응(담당자 이름이 정확히 안 맞으면 엉뚱한 거래처 목록이 뜸): 예전에는
   // 담당자 이름이 매칭되지 않으면 이 기사님과 무관한, 매출 상위 권역의 아무 거래처 6곳을 그냥
@@ -98,7 +108,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           {sourceReady && !isPersonalized && normalizedDriverName ? (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800 ring-1 ring-inset ring-amber-100">
-              {driverName}님 이름으로 배정된 담당 거래처가 없습니다. 거래처 관리에서 배송담당자 이름을 계정 이름과 정확히 동일하게 배정해야 코스가 표시됩니다.
+              {driverName}님에게 배정된 담당 거래처가 없습니다. 회사 설정에서 직원 계정과 거래처 담당자/연락처 배정값을 확인해주세요.
             </p>
           ) : null}
 

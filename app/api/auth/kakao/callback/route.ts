@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
       email: result.email,
       name: result.name,
       role: inviteCode ? "member" : "owner",
+      userId: result.userId,
       workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
       workspaceType: inviteCode ? "company" : "personal"
     });

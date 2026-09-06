@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
       email: result.email,
       name: result.name,
       role: "owner",
+      userId: result.userId,
       workspaceRole: normalizeWorkspaceRole("owner"),
       workspaceType: "company"
     });

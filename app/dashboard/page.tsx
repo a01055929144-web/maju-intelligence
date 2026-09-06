@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
-import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan } from "@/lib/store";
 
@@ -17,10 +17,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const assignmentKeys = getCustomerAssignmentKeys(customerSession);
   const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
-    getTodayRoutePlan(companyId),
-    getCustomerMaster(companyId),
+    getTodayRoutePlan(companyId, { assignmentKeys }),
+    getCustomerMaster(companyId, { assignmentKeys }),
     getCompanyOriginAddress(companyId),
     getChurnRiskCustomers(companyId).catch(() => []),
     getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),

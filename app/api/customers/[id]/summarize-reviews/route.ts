@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { summarizeCustomerReviewText } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { canAccessAssignedCustomer, summarizeCustomerReviewText } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
@@ -20,6 +20,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!body?.rawText?.trim()) {
     return NextResponse.json({ message: "붙여넣은 리뷰 텍스트가 없습니다." }, { status: 400 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   try {
     const outcome = await summarizeCustomerReviewText(scope.companyId!, id, {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { getCustomerAssignmentKeys, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { CustomerMasterInput, getCustomerMaster, upsertCustomerMaster } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   const offsetParam = request.nextUrl.searchParams.get("offset");
   const offset = offsetParam ? Math.max(0, Number.parseInt(offsetParam, 10) || 0) : 0;
-  const result = await getCustomerMaster(scope.companyId, { offset });
+  const result = await getCustomerMaster(scope.companyId, { assignmentKeys: getCustomerAssignmentKeys(scope.customerSession), offset });
   return NextResponse.json(result);
 }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { listCustomerContacts, upsertCustomerContact } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { canAccessAssignedCustomer, listCustomerContacts, upsertCustomerContact } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +9,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const scope = await getRequestAuthScope(request);
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   const contacts = await listCustomerContacts(scope.companyId!, id);
   return NextResponse.json({ contacts });
@@ -29,6 +31,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!body?.name?.trim()) {
     return NextResponse.json({ message: "담당자 이름은 필수입니다." }, { status: 400 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   try {
     const result = await upsertCustomerContact(scope.companyId!, id, {

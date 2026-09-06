@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { deleteCustomerContact, upsertCustomerContact } from "@/lib/store";
+import { getCustomerAssignmentKeys, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { canAccessAssignedCustomer, deleteCustomerContact, upsertCustomerContact } from "@/lib/store";
 
 // PATCH: 기존 연락처 정보(이름/직책/전화/메모/대표 여부)를 수정합니다.
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string; contactId: string }> }) {
@@ -17,6 +17,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!body?.name?.trim()) {
     return NextResponse.json({ message: "담당자 이름은 필수입니다." }, { status: 400 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   try {
     const result = await upsertCustomerContact(scope.companyId!, id, {
@@ -37,8 +39,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 // DELETE: 연락처를 삭제합니다.
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ contactId: string }> }) {
-  const { contactId } = await params;
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string; contactId: string }> }) {
+  const { id, contactId } = await params;
   const companyId = request.nextUrl.searchParams.get("companyId") || undefined;
   const scope = await getRequestAuthScope(request, companyId);
 
@@ -46,6 +48,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!scopeHasCapability(scope, "manage_customers")) {
     return NextResponse.json({ message: "연락처를 삭제할 권한이 없습니다." }, { status: 403 });
   }
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
+  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   try {
     const result = await deleteCustomerContact(scope.companyId!, contactId);
