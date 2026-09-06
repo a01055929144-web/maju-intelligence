@@ -54,21 +54,26 @@ export async function GET(request: NextRequest) {
       ? await acceptStaffOAuthInvitation({ ...profile, inviteCode })
       : await createPersonalOAuthWorkspace(profile);
 
+    // 카카오 콜백과 동일한 이유로, inviteCode 유무가 아니라 실제 역할(result.workspaceRole)
+    // 기준으로 role/workspaceType/이동 경로를 정합니다.
+    const normalizedRole = normalizeWorkspaceRole(result.workspaceRole);
+    const isOwner = normalizedRole === "owner";
+
     await setCustomerSession({
       appRole: "customer_user",
       companyId: result.companyId,
       companyName: result.companyName,
       email: result.email,
       name: result.name,
-      role: inviteCode ? "member" : "owner",
+      role: isOwner ? "owner" : "member",
       userId: result.userId,
-      workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
-      workspaceType: inviteCode ? "company" : "personal",
+      workspaceRole: normalizedRole,
+      workspaceType: result.workspaceType,
       assignedManagerName: result.assignedManagerName,
       assignedVehicle: result.assignedVehicle
     }, { remember: true });
 
-    return NextResponse.redirect(new URL(inviteCode ? "/mobile/today" : "/dashboard", request.url));
+    return NextResponse.redirect(new URL(isOwner ? "/dashboard" : "/mobile/today", request.url));
   } catch (error) {
     console.error("Google staff callback failed:", error);
     return redirectJoin(request.url, inviteCode, error instanceof Error ? error.message : "google_callback_failed");

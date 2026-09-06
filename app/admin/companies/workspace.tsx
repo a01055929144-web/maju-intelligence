@@ -479,8 +479,16 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   <p className="font-black">{company.name}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{company.customerEmail || "로그인 계정 미등록"}</p>
                 </div>
-                <Badge className={company.status === "active" ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-600"}>
-                  {company.status === "active" ? "운영" : "중지"}
+                <Badge
+                  className={
+                    company.status === "active"
+                      ? "bg-primary/10 text-primary"
+                      : company.status === "closed"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-slate-100 text-slate-600"
+                  }
+                >
+                  {company.status === "active" ? "운영" : company.status === "closed" ? "탈퇴" : "중지"}
                 </Badge>
               </div>
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
@@ -784,7 +792,13 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               >
                 <option value="active">운영</option>
                 <option value="paused">중지</option>
+                <option value="closed">탈퇴(폐쇄)</option>
               </select>
+              {form.status === "closed" ? (
+                <p className="text-xs font-bold leading-5 text-rose-600">
+                  이 회사는 탈퇴(폐쇄) 처리되어 있어 어떤 로그인(이메일/카카오/소셜)도 막혀 있습니다. 다시 쓸 수 있게 하려면 위에서 &quot;운영&quot;으로 바꾸고 저장하세요.
+                </p>
+              ) : null}
             </label>
           </div>
 

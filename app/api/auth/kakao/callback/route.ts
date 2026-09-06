@@ -64,21 +64,30 @@ export async function GET(request: NextRequest) {
         })
       : await createPersonalKakaoWorkspace(kakaoProfile);
 
+    // 2026-09-07 버그 수정: inviteCode 유무만으로 role/workspaceType/이동 경로를 정했었는데,
+    // 개인 워크스페이스 자동생성 제거(2026-09-07 이전 변경) 이후로는 inviteCode 없는 로그인도
+    // 대부분 "이미 회사에 소속된 직원/오너가 다시 로그인"하는 경우입니다. 그런데 이 값들을
+    // inviteCode 기준으로 고정해버려서, 초대 코드 없이 카카오 버튼으로 재로그인하는 직원이
+    // 오너처럼 취급되어 대시보드(PC용)로 보내지는 문제가 있었습니다. 실제 역할(result.workspaceRole)
+    // 기준으로 판단해야 재로그인 직원도 모바일 코스 화면으로 정확히 이동합니다.
+    const normalizedRole = normalizeWorkspaceRole(result.workspaceRole);
+    const isOwner = normalizedRole === "owner";
+
     await setCustomerSession({
       appRole: "customer_user",
       companyId: result.companyId,
       companyName: result.companyName,
       email: result.email,
       name: result.name,
-      role: inviteCode ? "member" : "owner",
+      role: isOwner ? "owner" : "member",
       userId: result.userId,
-      workspaceRole: normalizeWorkspaceRole(result.workspaceRole),
-      workspaceType: inviteCode ? "company" : "personal",
+      workspaceRole: normalizedRole,
+      workspaceType: result.workspaceType,
       assignedManagerName: result.assignedManagerName,
       assignedVehicle: result.assignedVehicle
     }, { remember: true });
 
-    return NextResponse.redirect(new URL(inviteCode ? "/mobile/today" : "/dashboard", request.url));
+    return NextResponse.redirect(new URL(isOwner ? "/dashboard" : "/mobile/today", request.url));
   } catch (error) {
     console.error("Kakao staff callback failed:", error);
     return redirectJoin(request.url, inviteCode, error instanceof Error ? error.message : "kakao_callback_failed");

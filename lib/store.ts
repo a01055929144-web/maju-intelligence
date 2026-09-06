@@ -535,6 +535,8 @@ export type StaffKakaoAcceptResult = {
   persisted: boolean;
   userId?: string;
   workspaceRole: StaffInvitation["role"];
+  // 직원 초대 수락은 항상 회사(company) 타입 워크스페이스에 들어가는 것이라 값이 고정입니다.
+  workspaceType: "company";
   assignedManagerName?: string;
   assignedVehicle?: string;
 };
@@ -546,6 +548,10 @@ export type PersonalKakaoWorkspaceResult = {
   persisted: boolean;
   userId?: string;
   workspaceRole: StaffInvitation["role"] | "owner";
+  // 2026-09-07: 초대 코드 없이 로그인했다고 해서 무조건 "개인(personal)" 워크스페이스가 아닙니다
+  // — 이미 회사에 소속된 직원/오너가 재로그인하는 경우가 대부분이라 실제 회사 타입을 그대로
+  // 돌려줘야 콜백 라우트가 role/workspaceType/이동 경로를 올바르게 정할 수 있습니다.
+  workspaceType: "personal" | "company";
   assignedManagerName?: string;
   assignedVehicle?: string;
 };
@@ -2490,7 +2496,8 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       name: input.name || "모바일 직원",
       persisted: false,
       userId: undefined,
-      workspaceRole: "driver"
+      workspaceRole: "driver",
+      workspaceType: "company"
     };
   }
 
@@ -2589,6 +2596,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     persisted: true,
     userId: user.id,
     workspaceRole: invitation.role || "member",
+    workspaceType: "company",
     assignedManagerName: invitation.assigned_manager_name || undefined,
     assignedVehicle: invitation.assigned_vehicle || undefined
   };
@@ -2647,7 +2655,8 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       name: displayName,
       persisted: false,
       userId: undefined,
-      workspaceRole: "owner"
+      workspaceRole: "owner",
+      workspaceType: "personal"
     };
   }
 
@@ -2677,9 +2686,9 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     Array<{
       company_id: string;
       role: StaffInvitation["role"] | "owner" | "member";
-      companies: { business_type: string | null; name: string; status: string | null } | null;
+      companies: { business_type: string | null; name: string; status: string | null; workspace_type: string | null } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type,status)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type,status,workspace_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
@@ -2699,6 +2708,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
       persisted: true,
       userId: user.id,
       workspaceRole: existing.role || "owner",
+      workspaceType: existing.companies?.workspace_type === "personal" ? "personal" : "company",
       assignedManagerName: assignment?.assignedManagerName,
       assignedVehicle: assignment?.assignedVehicle
     };
@@ -2732,7 +2742,8 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
       name: input.name || "모바일 직원",
       persisted: false,
       userId: undefined,
-      workspaceRole: "driver"
+      workspaceRole: "driver",
+      workspaceType: "company"
     };
   }
 
@@ -2829,6 +2840,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
     persisted: true,
     userId: user.id,
     workspaceRole: invitation.role || "member",
+    workspaceType: "company",
     assignedManagerName: invitation.assigned_manager_name || undefined,
     assignedVehicle: invitation.assigned_vehicle || undefined
   };
@@ -2851,7 +2863,8 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       name: displayName,
       persisted: false,
       userId: undefined,
-      workspaceRole: "owner"
+      workspaceRole: "owner",
+      workspaceType: "personal"
     };
   }
 
@@ -2881,9 +2894,9 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
     Array<{
       company_id: string;
       role: StaffInvitation["role"] | "owner" | "member";
-      companies: { business_type: string | null; name: string; status: string | null } | null;
+      companies: { business_type: string | null; name: string; status: string | null; workspace_type: string | null } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type,status)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type,status,workspace_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
@@ -2899,6 +2912,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
       persisted: true,
       userId: user.id,
       workspaceRole: existing.role || "owner",
+      workspaceType: existing.companies?.workspace_type === "personal" ? "personal" : "company",
       assignedManagerName: assignment?.assignedManagerName,
       assignedVehicle: assignment?.assignedVehicle
     };
