@@ -2543,46 +2543,12 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     };
   }
 
-  const companyRows = await companiesRequest<Array<{ id: string; name: string }>>("companies", {
-    method: "POST",
-    body: JSON.stringify([
-      {
-        business_type: "personal",
-        name: `${displayName} 워크스페이스`,
-        owner_name: displayName,
-        status: "active",
-        workspace_type: "personal",
-        updated_at: now
-      }
-    ])
-  });
-
-  const company = companyRows[0];
-  await supabaseRequest("company_members", {
-    method: "POST",
-    headers: {
-      Prefer: "return=minimal"
-    },
-    body: JSON.stringify([
-      {
-        company_id: company.id,
-        role: "owner",
-        status: "active",
-        updated_at: now,
-        user_id: user.id
-      }
-    ])
-  });
-
-  return {
-    companyId: company.id,
-    companyName: company.name,
-    email: user.email || loginEmail,
-    name: user.name || displayName,
-    persisted: true,
-    userId: user.id,
-    workspaceRole: "owner"
-  };
+  // 2026-09-07: 초대 코드 없는 카카오 로그인이 "개인 사용자 워크스페이스"라는 이름의 회사
+  // 계정을 자동으로 만들던 기능을 제거했습니다. 고객사 계정은 관리자가 만들어주거나 고객사가
+  // 직접 회사 가입(/signup)으로 만들어야 하며, 카카오 로그인만으로 새 회사가 생겨서는 안 됩니다.
+  // 이 계정이 아직 어떤 회사에도 소속되어 있지 않다면(=초대를 수락한 적이 없다면) 여기서
+  // 안내 메시지를 던지고, 호출자(카카오 콜백 라우트)가 /mobile/join으로 안내 화면을 보여줍니다.
+  throw new Error("초대 링크가 필요합니다. 회사 관리자에게 카카오톡 직원 초대 링크를 요청해주세요.");
 }
 
 // 네이버/구글 로그인은 카카오와 동일한 초대 수락 절차를 따르므로, 컬럼명(예: naver_user_id)만
@@ -2754,46 +2720,9 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
     };
   }
 
-  const companyRows = await companiesRequest<Array<{ id: string; name: string }>>("companies", {
-    method: "POST",
-    body: JSON.stringify([
-      {
-        business_type: "personal",
-        name: `${displayName} 워크스페이스`,
-        owner_name: displayName,
-        status: "active",
-        workspace_type: "personal",
-        updated_at: now
-      }
-    ])
-  });
-
-  const company = companyRows[0];
-  await supabaseRequest("company_members", {
-    method: "POST",
-    headers: {
-      Prefer: "return=minimal"
-    },
-    body: JSON.stringify([
-      {
-        company_id: company.id,
-        role: "owner",
-        status: "active",
-        updated_at: now,
-        user_id: user.id
-      }
-    ])
-  });
-
-  return {
-    companyId: company.id,
-    companyName: company.name,
-    email: user.email || loginEmail,
-    name: user.name || displayName,
-    persisted: true,
-    userId: user.id,
-    workspaceRole: "owner"
-  };
+  // 2026-09-07: 카카오와 동일한 이유로, 초대 코드 없는 네이버/구글 로그인도 더 이상 새 회사를
+  // 자동으로 만들지 않습니다. createPersonalKakaoWorkspace 참고.
+  throw new Error("초대 링크가 필요합니다. 회사 관리자에게 직원 초대 링크를 요청해주세요.");
 }
 
 function toStaffInvitation(row: {

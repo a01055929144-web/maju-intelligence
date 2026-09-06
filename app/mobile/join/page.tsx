@@ -49,7 +49,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
               {joinMode === "company"
                 ? "직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다. 역할은 업무 구분과 필터 기준으로 사용합니다."
-                : "이미 회사 초대를 수락한 카카오 계정이면 자동으로 같은 회사로 연결됩니다. 처음 사용하는 카카오 계정이면 개인 워크스페이스가 새로 만들어집니다."}
+                : "이미 회사 초대를 수락한 카카오 계정이면 자동으로 같은 회사로 연결됩니다. 아직 어떤 회사에도 소속되지 않은 카카오 계정은 관리자의 초대 링크가 있어야 로그인할 수 있습니다."}
             </p>
           </section>
 
@@ -114,7 +114,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                   {joinMode === "company"
                     ? "카카오 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
-                    : "이 카카오 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 개인 워크스페이스가 새로 만들어지며, 이후 관리자 초대를 받으면 회사로 전환할 수 있습니다."}
+                    : "이 카카오 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 회사 계정이 자동으로 만들어지지 않으며, 관리자에게 초대 링크를 받아야 합니다."}
                 </p>
               </div>
             </div>
