@@ -159,8 +159,8 @@ export default function CustomerLoginPage() {
               <Smartphone className="mr-1 h-3.5 w-3.5" />
               직원용
             </Badge>
-            <CardTitle className="text-2xl">직원 로그인</CardTitle>
-            <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">카카오톡 초대를 받은 직원은 여기서 카카오로 로그인하세요.</p>
+            <CardTitle className="text-2xl">카카오 로그인</CardTitle>
+            <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">카카오톡 초대를 받은 직원은 여기서 카카오 로그인하세요.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             <OAuthLoginButtons />
@@ -169,7 +169,7 @@ export default function CustomerLoginPage() {
               href="/mobile/join"
             >
               <Smartphone className="h-4 w-4" />
-              모바일 버전으로 로그인
+              모바일 화면으로 카카오 로그인
             </Link>
             <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold leading-5 text-slate-500">
               카카오 계정만으로는 회사 데이터에 연결되지 않습니다. 관리자가 발급한 초대 링크로 먼저 가입해야 합니다.

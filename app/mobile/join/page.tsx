@@ -26,7 +26,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]">M</span>
               <div>
                 <p className="text-sm font-black">MAJU Intelligence</p>
-                <p className="text-xs font-bold text-slate-500">{joinMode === "company" ? "직원 모바일 가입" : "카카오 로그인"}</p>
+                <p className="text-xs font-bold text-slate-500">카카오 로그인</p>
               </div>
             </div>
             <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">Mobile</Badge>
@@ -37,11 +37,9 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
           <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <Badge className="mb-4 bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-200">
               <MessageCircle className="mr-1 h-3.5 w-3.5" />
-              {joinMode === "company" ? "카카오톡 초대" : "카카오 로그인"}
+              카카오 로그인
             </Badge>
-            <h1 className="text-2xl font-black leading-snug text-slate-950">
-              {joinMode === "company" ? "카카오로 가입하고 오늘 코스를 바로 확인하세요." : "카카오 계정으로 로그인하세요."}
-            </h1>
+            <h1 className="text-2xl font-black leading-snug text-slate-950">카카오 로그인</h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
               {joinMode === "company"
                 ? "아래에서 초대 내용을 확인한 뒤, 카카오 버튼 하나로 바로 가입이 끝납니다."
@@ -112,7 +110,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
           <section className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2">
               <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-700 text-[11px] font-black text-white">{inviteCode ? "2" : "1"}</span>
-              <p className="text-xs font-black text-slate-500">카카오로 로그인</p>
+              <p className="text-xs font-black text-slate-500">카카오 로그인</p>
             </div>
             <div className="mt-3">
               <OAuthLoginButtons inviteCode={inviteCode} />

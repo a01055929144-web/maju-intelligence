@@ -18,7 +18,7 @@ export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
       href={`/api/auth/kakao/start${query}`}
     >
       <KakaoMark />
-      카카오로 계속하기
+      카카오 로그인
     </Link>
   );
 }
