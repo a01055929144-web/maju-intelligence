@@ -428,6 +428,7 @@ export type CustomerLoginCredentials = AuthCredentials & {
   credentialSource?: "app_users" | "auth_credentials" | "fallback";
 };
 export type StaffInvitation = {
+  acceptedBy?: string;
   id: string;
   companyId: string;
   employeeName: string;
@@ -1967,6 +1968,7 @@ export async function createStaffInvitation(input: StaffInvitationInput, auditCo
     return {
       persisted: false,
       invitation: {
+        acceptedBy: undefined,
         id: globalThis.crypto.randomUUID(),
         companyId,
         employeeName,
@@ -2164,6 +2166,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   const rows = await staffStoreRequest(supabaseRequest<
     Array<{
       id: string;
+      accepted_by: string | null;
       company_id: string;
       employee_name: string | null;
       employee_phone: string | null;
@@ -2174,7 +2177,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
       created_at: string;
     }>
   >(
-    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&company_id=eq.${encodeURIComponent(
+    `staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at,accepted_by&company_id=eq.${encodeURIComponent(
       companyId
     )}&order=created_at.desc`
   ));
@@ -2198,6 +2201,7 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
     return {
       persisted: false,
       invitation: {
+        acceptedBy: undefined,
         id: input.invitationId,
         companyId: input.companyId,
         employeeName: "직원",
@@ -2734,6 +2738,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
 }
 
 function toStaffInvitation(row: {
+  accepted_by?: string | null;
   id: string;
   company_id: string;
   employee_name: string | null;
@@ -2745,6 +2750,7 @@ function toStaffInvitation(row: {
   created_at: string;
 }): StaffInvitation {
   return {
+    acceptedBy: row.accepted_by || undefined,
     id: row.id,
     companyId: row.company_id,
     employeeName: row.employee_name || "직원",
