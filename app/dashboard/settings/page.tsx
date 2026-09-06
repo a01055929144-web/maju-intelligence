@@ -5,6 +5,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { customerHasCapability, getCustomerSession } from "@/lib/auth";
 import { getBusinessNumberExceptions, getCompanyJobTitles, getCompanySettings, getCompanyStaffInvitations, getCustomerMaster } from "@/lib/store";
 import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-panel";
+import { CompanyClosurePanel } from "./company-closure-panel";
 import { CompanySettingsForm } from "./settings-form";
 import { StaffManagementPanel } from "./staff-management-panel";
 
@@ -58,6 +59,7 @@ export default async function CompanySettingsPage() {
             vehicleOptions={vehicleOptions}
           />
           <BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} />
+          {session.workspaceRole === "owner" ? <CompanyClosurePanel companyName={company.name} /> : null}
         </div>
       </section>
     </CustomerAppShell>

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
@@ -10,13 +9,10 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
   const inviteCode = resolvedSearchParams?.invite || "";
   const errorCode = resolvedSearchParams?.error || "";
 
-  // 초대 코드도 없고 오류도 없는 "그냥 로그인" 진입은 /dashboard/login과 화면이 사실상
-  // 중복이었습니다. /dashboard/login에 이미 같은 소셜 로그인 버튼들이 있으므로, 이 화면은
-  // 초대 코드가 있는 직원 가입 딥링크와 오류 발생 시 재시도 화면으로만 남겨둡니다.
-  if (!inviteCode && !errorCode) {
-    redirect("/dashboard/login");
-  }
-
+  // 2026-09-07: /dashboard/login 우측에 "모바일 버전으로 로그인" 링크가 이 화면을 직접
+  // 가리키게 되면서, 초대 코드/오류 코드 없는 "그냥 카카오 로그인" 진입도 정식 목적지가
+  // 되었습니다. 예전에는 /dashboard/login과 중복이라 여기로 튕겨보냈지만, 이제는 모바일
+  // 화면에 최적화된 이 페이지가 그 용도를 담당하므로 리다이렉트를 없앴습니다.
   const joinMode = inviteCode ? "company" : "personal";
   const errorMessage = describeOAuthError(errorCode);
   const invitePreview = inviteCode ? await getStaffInvitationPreview(inviteCode).catch(() => null) : null;

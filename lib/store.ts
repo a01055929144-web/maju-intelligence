@@ -2467,6 +2467,13 @@ async function getStaffAssignmentOverride(
   };
 }
 
+// 고객사가 탈퇴(closeCompanyAccount)하면 companies.status를 "closed"로 바꿉니다. 비밀번호
+// 로그인은 lib/auth.ts validateCustomerCredentials가 이미 companyStatus를 확인해 막지만,
+// 카카오/소셜 로그인 경로는 별도 확인이 없었어서 여기서 같은 기준으로 막습니다.
+function isCompanyClosedStatus(status?: string | null) {
+  return Boolean(status) && !["active", "fallback"].includes(status as string);
+}
+
 export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): Promise<StaffKakaoAcceptResult> {
   const inviteCode = input.inviteCode.trim();
   const kakaoUserId = input.kakaoUserId.trim();
@@ -2505,6 +2512,9 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
 
   const company = await getCompanySettings(invitation.company_id);
+  if (isCompanyClosedStatus(company.status)) {
+    throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
+  }
   const displayName = input.name || invitation.employee_name || "모바일 직원";
   const loginEmail = input.email || `kakao-${kakaoUserId}@maju.local`;
   const now = new Date().toISOString();
@@ -2667,12 +2677,15 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
     Array<{
       company_id: string;
       role: StaffInvitation["role"] | "owner" | "member";
-      companies: { business_type: string | null; name: string } | null;
+      companies: { business_type: string | null; name: string; status: string | null } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type,status)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
+    if (isCompanyClosedStatus(existing.companies?.status)) {
+      throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
+    }
     // 이미 초대를 수락해 회사에 소속된 직원이 재로그인하는 경우입니다.
     // 초대 코드 없이 다시 로그인해도 실제 직책(배송기사/영업직원 등)을 유지해야
     // PC 대시보드에서도 올바른 역할로 표시되고, 향후 역할별 권한 제한을 켜도 안전합니다.
@@ -2741,6 +2754,9 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
   if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
 
   const company = await getCompanySettings(invitation.company_id);
+  if (isCompanyClosedStatus(company.status)) {
+    throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
+  }
   const displayName = input.name || invitation.employee_name || "모바일 직원";
   const loginEmail = input.email || `${input.provider}-${providerUserId}@maju.local`;
   const now = new Date().toISOString();
@@ -2865,12 +2881,15 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
     Array<{
       company_id: string;
       role: StaffInvitation["role"] | "owner" | "member";
-      companies: { business_type: string | null; name: string } | null;
+      companies: { business_type: string | null; name: string; status: string | null } | null;
     }>
-  >(`company_members?select=company_id,role,companies(name,business_type)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
+  >(`company_members?select=company_id,role,companies(name,business_type,status)&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&order=created_at.asc&limit=1`).catch(() => []);
 
   const existing = existingMemberships[0];
   if (existing?.company_id) {
+    if (isCompanyClosedStatus(existing.companies?.status)) {
+      throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
+    }
     const assignment = await getStaffAssignmentOverride(existing.company_id, user.id);
     return {
       companyId: existing.company_id,
@@ -8884,6 +8903,67 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };
+}
+
+/**
+ * 고객사 탈퇴(회사 계정 전체 삭제)입니다. 사용자 선택에 따라 하드 삭제가 아니라 비활성화(소프트
+ * 삭제) 방식으로 구현합니다: companies.status를 "closed"로 바꿔 로그인을 막고(비밀번호 로그인은
+ * lib/auth.ts validateCustomerCredentials가, 카카오/소셜 로그인은 이 파일의
+ * isCompanyClosedStatus 체크가 각각 막습니다), 데이터 자체는 남겨둬서 문제가 생기면 관리자가
+ * status를 다시 "active"로 되돌려 복구할 수 있게 합니다. 완전 삭제가 필요하면 나중에 별도
+ * 기능으로 만듭니다. 활성 구독(결제)이 걸려있으면 탈퇴와 함께 자동으로 해지합니다.
+ */
+export async function closeCompanyAccount(
+  input: { companyId: string; confirmCompanyName: string },
+  auditContext: AuditActorContext = {}
+): Promise<{ closed: boolean; subscriptionCancelled: boolean }> {
+  if (!input.companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!isProductionStoreConfigured()) return { closed: true, subscriptionCancelled: false };
+
+  const company = await getCompanySettings(input.companyId);
+  if (isCompanyClosedStatus(company.status)) {
+    throw new Error("이미 탈퇴(폐쇄) 처리된 회사입니다.");
+  }
+  if (input.confirmCompanyName.trim() !== company.name.trim()) {
+    throw new Error("입력하신 회사명이 실제 회사명과 일치하지 않습니다. 정확히 입력해주세요.");
+  }
+
+  let subscriptionCancelled = false;
+  const subscription = await getSubscription(input.companyId).catch(() => null);
+  if (subscription && subscription.status !== "canceled") {
+    await updateSubscriptionStatus(input.companyId, "canceled");
+    subscriptionCancelled = true;
+  }
+
+  const now = new Date().toISOString();
+  await supabaseRequest(`companies?id=eq.${encodeURIComponent(input.companyId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ status: "closed", closed_at: now, closed_by: auditContext.actorName || "시스템", updated_at: now })
+  }).catch(async (error) => {
+    if (!isMissingColumnError(error)) throw error;
+    // closed_at/closed_by 컬럼 마이그레이션 전이어도 로그인 차단(status="closed")은 반드시
+    // 적용되어야 하므로, 컬럼이 없다는 오류면 status만이라도 저장합니다.
+    await supabaseRequest(`companies?id=eq.${encodeURIComponent(input.companyId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "closed", updated_at: now })
+    });
+  });
+
+  await writeAdminAuditLog({
+    companyId: input.companyId,
+    action: "company_account_closed",
+    targetType: "company",
+    targetId: input.companyId,
+    metadata: {
+      actorName: auditContext.actorName || "시스템",
+      actorRole: auditContext.actorRole || "unknown",
+      subscriptionCancelled
+    }
+  }).catch(() => null);
+
+  return { closed: true, subscriptionCancelled };
 }
 
 export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
