@@ -16,14 +16,6 @@ export async function POST(request: NextRequest) {
   if (!destinationAddress) {
     return NextResponse.json({ error: "목적지 주소가 필요합니다." }, { status: 400 });
   }
-  const customerId = typeof body?.customerId === "string" ? body.customerId : "";
-  if (customerId) {
-    const canAccess = await canAccessAssignedCustomer(scope.companyId, customerId, getCustomerAssignmentKeys(scope.customerSession));
-    if (!canAccess) {
-      return NextResponse.json({ error: "담당 거래처의 거리만 계산할 수 있습니다." }, { status: 403 });
-    }
-  }
-
   const companyId = scope.companyId;
   const customerId = typeof body?.customerId === "string" ? body.customerId : "";
   if (customerId) {

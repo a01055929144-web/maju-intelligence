@@ -33,8 +33,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!body?.name?.trim()) {
     return NextResponse.json({ message: "담당자 이름은 필수입니다." }, { status: 400 });
   }
-  const canAccess = await canAccessAssignedCustomer(scope.companyId, id, getCustomerAssignmentKeys(scope.customerSession));
-  if (!canAccess) return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
 
   try {
     const result = await upsertCustomerContact(scope.companyId!, id, {
