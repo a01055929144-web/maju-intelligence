@@ -2912,6 +2912,9 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
       }>
     >("staff_mobile_devices?on_conflict=company_id,user_id,platform", {
       method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation"
+      },
       body: JSON.stringify([
         {
           company_id: input.companyId,
