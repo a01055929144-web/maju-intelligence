@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
 import { formatPhoneNumber } from "@/lib/phone";
-import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle, type StaffInvitation } from "@/lib/store";
+import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "@/lib/staff-job-titles";
+import type { StaffInvitation } from "@/lib/store";
 
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];

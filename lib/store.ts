@@ -13,6 +13,7 @@ import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
 import { hashPassword } from "./password";
 import { sendEmail } from "./email";
 import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "./business-number";
+import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titles";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
@@ -4194,21 +4195,10 @@ export async function removeBusinessNumberException(companyId: string, exception
   }).catch(() => null);
 }
 
-// 권한 체계(lib/workspace.ts)와 연결된 기본 4개 담당 업무입니다. 화면에서 항상 고정으로 노출되고
-// 삭제할 수 없습니다. 회사가 추가한 커스텀 이름표는 company_job_titles 테이블에서 가져와 이 목록
-// 뒤에 이어붙입니다.
-export const DEFAULT_STAFF_JOB_TITLES: Array<{ label: string; value: string }> = [
-  { label: "배송기사", value: "driver" },
-  { label: "영업직원", value: "sales" },
-  { label: "현장관리자", value: "manager" },
-  { label: "일반직원", value: "member" }
-];
-
-export type CompanyJobTitle = {
-  id: string;
-  label: string;
-  createdAt: string;
-};
+// 이 상수/타입의 실제 정의는 lib/staff-job-titles.ts에 있습니다(클라이언트 컴포넌트도 값을
+// import해야 하는데, 이 파일 lib/store.ts는 서버 전용 코드라 여기서 직접 값을 export하면 그걸
+// import하는 클라이언트 컴포넌트의 번들에 서버 코드 전체가 딸려 들어가 런타임 에러가 납니다).
+export { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titles";
 
 function isMissingCompanyJobTitlesTableError(error: unknown) {
   return error instanceof Error && error.message.includes("company_job_titles");
