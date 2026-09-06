@@ -486,6 +486,8 @@ export default function CrmTimelinePage() {
 
   useEffect(() => {
     setCustomerPage(1);
+    setBulkSelectedIds(new Set());
+    setBulkManagerMessage("");
   }, [customerPageSize, customerSearch, gradeFilter, operationFilter]);
 
   function jumpToCustomer(customerId: string | undefined) {
