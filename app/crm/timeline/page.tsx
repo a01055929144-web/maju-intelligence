@@ -1203,11 +1203,6 @@ export default function CrmTimelinePage() {
                     placeholder={managerOptions.length ? "담당자 선택 또는 입력" : "새 담당자명"}
                     value={bulkManagerInput}
                   />
-                  <datalist id="bulk-manager-options">
-                    {managerOptions.map((manager) => (
-                      <option key={manager} value={manager} />
-                    ))}
-                  </datalist>
                   <button
                     className="maju-button-secondary h-8 shrink-0 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={!bulkManagerInput.trim() || bulkManagerSubmitting}
