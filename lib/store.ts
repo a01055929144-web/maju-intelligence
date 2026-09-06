@@ -14,6 +14,7 @@ import { hashPassword } from "./password";
 import { sendEmail } from "./email";
 import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "./business-number";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titles";
+import { maskPhoneNumber } from "./phone";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
@@ -576,6 +577,7 @@ export type StaffInvitationPreview = {
   companyId: string;
   companyName: string;
   employeeName: string;
+  maskedPhone: string;
   role: StaffInvitation["role"];
   status: StaffInvitation["status"];
 };
@@ -2516,7 +2518,6 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
-  if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
 
   const company = await getCompanySettings(invitation.company_id);
   if (isCompanyClosedStatus(company.status)) {
@@ -2552,12 +2553,38 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   // 배송직원")를 각각 수락하면, app_users는 kakao_user_id로 병합되어 같은 user.id를 갖지만
   // company_members에는 매번 새 행이 추가되어 한 사람이 같은 회사에 직원 슬롯 2개를 차지하는
   // 문제가 있었습니다. 이미 이 회사에 활성 멤버로 연결된 카카오 계정이면 새 초대 수락을 막습니다.
-  const existingCompanyMemberships = await supabaseRequest<Array<{ id: string }>>(
-    `company_members?select=id&company_id=eq.${encodeURIComponent(invitation.company_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`
+  const existingCompanyMemberships = await supabaseRequest<Array<{ id: string; role: StaffInvitation["role"] }>>(
+    `company_members?select=id,role&company_id=eq.${encodeURIComponent(invitation.company_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`
   ).catch(() => []);
-  if (existingCompanyMemberships.length) {
-    throw new Error("이미 이 회사에 가입된 카카오 계정입니다. 직원 1명당 카카오 계정 1개만 사용할 수 있어요. 다른 카카오 계정으로 가입하거나 관리자에게 문의해주세요.");
+  const existingMembership = existingCompanyMemberships[0];
+
+  // 2026-09-07 버그 리포트 2: "카카오 로그인에 실패했습니다"가 계속 뜬다는 신고 - 원인은 이미
+  // 초대를 수락해 활성 멤버가 된 카카오 계정이 같은 초대 링크를 다시 눌렀을 때(=정상적인 재로그인)
+  // invitation.status가 "pending"이 아니라는 이유만으로 무조건 에러를 던지던 것이었습니다.
+  // 이 카카오 계정이 이 회사에 이미 활성 멤버로 연결돼 있으면 재로그인으로 보고 기존 배정을
+  // 그대로 돌려줍니다. 활성 멤버가 아직 없는데 초대 상태만 pending이 아니라면(=다른 사람이
+  // 이미 쓴 초대이거나 만료/취소된 초대) 그때만 진짜 사용 불가 에러로 막습니다.
+  if (existingMembership) {
+    if (invitation.status === "pending") {
+      throw new Error("이미 이 회사에 가입된 카카오 계정입니다. 직원 1명당 카카오 계정 1개만 사용할 수 있어요. 다른 카카오 계정으로 가입하거나 관리자에게 문의해주세요.");
+    }
+    await upsertAuthIdentity({ email: user.email || loginEmail, provider: "kakao", providerUserId: kakaoUserId, userId: user.id });
+    const assignment = await getStaffAssignmentOverride(invitation.company_id, user.id);
+    return {
+      companyId: invitation.company_id,
+      companyName: company.name,
+      email: user.email || loginEmail,
+      name: user.name || displayName,
+      persisted: true,
+      userId: user.id,
+      workspaceRole: existingMembership.role || invitation.role || "member",
+      workspaceType: "company",
+      assignedManagerName: assignment?.assignedManagerName || invitation.assigned_manager_name || undefined,
+      assignedVehicle: assignment?.assignedVehicle || invitation.assigned_vehicle || undefined
+    };
   }
+
+  if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
 
   await upsertAuthIdentity({ email: user.email || loginEmail, provider: "kakao", providerUserId: kakaoUserId, userId: user.id });
   await supabaseRequest("company_members", {
@@ -2613,6 +2640,7 @@ export async function getStaffInvitationPreview(inviteCode: string): Promise<Sta
       companyId,
       companyName: company?.name || "마주식자재",
       employeeName: "모바일 직원",
+      maskedPhone: "",
       role: "driver",
       status: "pending"
     };
@@ -2622,10 +2650,11 @@ export async function getStaffInvitationPreview(inviteCode: string): Promise<Sta
     Array<{
       company_id: string;
       employee_name: string | null;
+      employee_phone: string | null;
       role: StaffInvitation["role"];
       status: StaffInvitation["status"];
     }>
-  >(`staff_invitations?select=company_id,employee_name,role,status&invite_code=eq.${encodeURIComponent(normalizedInviteCode)}&limit=1`));
+  >(`staff_invitations?select=company_id,employee_name,employee_phone,role,status&invite_code=eq.${encodeURIComponent(normalizedInviteCode)}&limit=1`));
 
   const invitation = rows[0];
   if (!invitation) return null;
@@ -2634,6 +2663,7 @@ export async function getStaffInvitationPreview(inviteCode: string): Promise<Sta
     companyId: invitation.company_id,
     companyName: company?.name || "회사 워크스페이스",
     employeeName: invitation.employee_name || "모바일 직원",
+    maskedPhone: maskPhoneNumber(invitation.employee_phone),
     role: invitation.role || "member",
     status: invitation.status
   };
@@ -2762,7 +2792,6 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
-  if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
 
   const company = await getCompanySettings(invitation.company_id);
   if (isCompanyClosedStatus(company.status)) {
@@ -2796,12 +2825,34 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
 
   // 카카오 초대 수락(acceptStaffKakaoInvitation)과 동일한 이유로, 이미 이 회사에 활성
   // 멤버로 연결된 소셜 계정이면 새 초대 수락을 막아 한 사람이 직원 슬롯 2개를 차지하지 않게 합니다.
-  const existingCompanyMemberships = await supabaseRequest<Array<{ id: string }>>(
-    `company_members?select=id&company_id=eq.${encodeURIComponent(invitation.company_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`
+  const existingCompanyMemberships = await supabaseRequest<Array<{ id: string; role: StaffInvitation["role"] }>>(
+    `company_members?select=id,role&company_id=eq.${encodeURIComponent(invitation.company_id)}&user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&limit=1`
   ).catch(() => []);
-  if (existingCompanyMemberships.length) {
-    throw new Error("이미 이 회사에 가입된 계정입니다. 직원 1명당 계정 1개만 사용할 수 있어요. 다른 계정으로 가입하거나 관리자에게 문의해주세요.");
+  const existingMembership = existingCompanyMemberships[0];
+
+  // acceptStaffKakaoInvitation과 동일한 이유("카카오 로그인 실패" 재로그인 버그 수정)로,
+  // 이미 활성 멤버인 계정이 같은 초대 링크를 다시 사용하면 재로그인으로 취급합니다.
+  if (existingMembership) {
+    if (invitation.status === "pending") {
+      throw new Error("이미 이 회사에 가입된 계정입니다. 직원 1명당 계정 1개만 사용할 수 있어요. 다른 계정으로 가입하거나 관리자에게 문의해주세요.");
+    }
+    await upsertAuthIdentity({ email: user.email || loginEmail, provider: input.provider, providerUserId, userId: user.id });
+    const assignment = await getStaffAssignmentOverride(invitation.company_id, user.id);
+    return {
+      companyId: invitation.company_id,
+      companyName: company.name,
+      email: user.email || loginEmail,
+      name: user.name || displayName,
+      persisted: true,
+      userId: user.id,
+      workspaceRole: existingMembership.role || invitation.role || "member",
+      workspaceType: "company",
+      assignedManagerName: assignment?.assignedManagerName || invitation.assigned_manager_name || undefined,
+      assignedVehicle: assignment?.assignedVehicle || invitation.assigned_vehicle || undefined
+    };
   }
+
+  if (invitation.status !== "pending") throw new Error("이미 처리되었거나 사용할 수 없는 초대입니다.");
 
   await upsertAuthIdentity({ email: user.email || loginEmail, provider: input.provider, providerUserId, userId: user.id });
   await supabaseRequest("company_members", {

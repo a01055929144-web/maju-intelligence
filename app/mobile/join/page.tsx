@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, ClipboardCheck, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, MapPinned, MessageCircle, ShieldCheck, Smartphone, Truck, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 import { getStaffInvitationPreview } from "@/lib/store";
@@ -39,53 +39,14 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
               <MessageCircle className="mr-1 h-3.5 w-3.5" />
               {joinMode === "company" ? "카카오톡 초대" : "카카오 로그인"}
             </Badge>
-            <h1 className="text-[28px] font-black leading-tight text-slate-950">
+            <h1 className="text-2xl font-black leading-snug text-slate-950">
               {joinMode === "company" ? "카카오로 가입하고 오늘 코스를 바로 확인하세요." : "카카오 계정으로 로그인하세요."}
             </h1>
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
               {joinMode === "company"
-                ? "직원은 모바일에서 배정 코스, 거래처 정보, 적재위치 사진, 방문 메모를 빠르게 처리합니다. 역할은 업무 구분과 필터 기준으로 사용합니다."
+                ? "아래에서 초대 내용을 확인한 뒤, 카카오 버튼 하나로 바로 가입이 끝납니다."
                 : "이미 회사 초대를 수락한 카카오 계정이면 자동으로 같은 회사로 연결됩니다. 아직 어떤 회사에도 소속되지 않은 카카오 계정은 관리자의 초대 링크가 있어야 로그인할 수 있습니다."}
             </p>
-          </section>
-
-          {inviteCode ? (
-            <section className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-black text-slate-500">초대 코드</p>
-                {invitePreview?.status === "pending" ? (
-                  <Badge className="bg-emerald-50 text-emerald-700">
-                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                    확인됨
-                  </Badge>
-                ) : (
-                  <Badge className="bg-amber-50 text-amber-800">확인 필요</Badge>
-                )}
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-3">
-                <span className="min-w-0 truncate font-mono text-sm font-black text-slate-900">{inviteCode}</span>
-                <Badge className="bg-emerald-50 text-emerald-700">회사 연결</Badge>
-              </div>
-              {invitePreview ? (
-                <div className="mt-3 grid gap-2 rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-sm">
-                  <p className="font-black text-slate-950">{invitePreview.companyName}</p>
-                  <p className="font-semibold text-slate-600">
-                    {invitePreview.employeeName}님 초대 · 상태 {invitePreview.status === "pending" ? "가입 가능" : "처리 확인 필요"}
-                  </p>
-                  {invitePreview.status !== "pending" ? <p className="text-xs font-bold text-amber-800">이미 사용되었거나 중지된 초대일 수 있습니다. 관리자에게 새 초대 링크를 요청하세요.</p> : null}
-                </div>
-              ) : (
-                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
-                  초대 정보를 아직 확인하지 못했습니다. 카카오 로그인 후에도 같은 오류가 나면 관리자에게 초대 링크 재발급을 요청하세요.
-                </p>
-              )}
-            </section>
-          ) : null}
-
-          <section className="grid gap-3">
-            <MobileBenefit icon={Truck} title="오늘 코스" description="내 배송차 또는 영업 담당 코스를 모바일에서 확인합니다." />
-            <MobileBenefit icon={MapPinned} title="거래처 위치" description="출발지, 경유지, 거래처 주소와 간략 정보를 바로 봅니다." />
-            <MobileBenefit icon={ClipboardCheck} title="현장 기록" description="방문 결과, 배송 특이사항, 사진과 메모를 남깁니다." />
           </section>
 
           {errorMessage ? (
@@ -100,16 +61,78 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             </div>
           ) : null}
 
-          <OAuthLoginButtons inviteCode={inviteCode} />
+          {inviteCode ? (
+            <section className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
+              <div className="flex items-center gap-2">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-700 text-[11px] font-black text-white">1</span>
+                <p className="text-xs font-black text-teal-800">초대 확인</p>
+              </div>
+              {invitePreview ? (
+                <div className="mt-3">
+                  <p className="text-xs font-bold text-slate-500">초대한 회사</p>
+                  <p className="text-xl font-black leading-tight text-slate-950">{invitePreview.companyName}</p>
+
+                  <div className="mt-3 flex items-start gap-2 rounded-lg border border-teal-100 bg-white p-3">
+                    <UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
+                    <div className="text-sm">
+                      <p className="font-black text-slate-900">{invitePreview.employeeName}</p>
+                      <p className="font-semibold text-slate-500">
+                        {invitePreview.maskedPhone || "연락처 미등록"}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-slate-400">
+                        본인 정보가 맞는지 확인 후 아래 카카오 버튼을 눌러주세요.
+                      </p>
+                    </div>
+                  </div>
+
+                  {invitePreview.status === "pending" ? (
+                    <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      가입 준비 완료 · 카카오로 로그인하면 바로 연결됩니다
+                    </p>
+                  ) : invitePreview.status === "accepted" ? (
+                    <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      이미 가입된 초대입니다 · 같은 카카오 계정으로 로그인하면 바로 접속됩니다
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-xs font-bold text-amber-800">
+                      이 초대는 만료되었거나 취소되었습니다. 관리자에게 새 초대 링크를 요청하세요.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
+                  초대 정보를 아직 확인하지 못했습니다. 카카오 로그인 후에도 같은 오류가 나면 관리자에게 초대 링크 재발급을 요청하세요.
+                </p>
+              )}
+            </section>
+          ) : null}
+
+          <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-2">
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-700 text-[11px] font-black text-white">{inviteCode ? "2" : "1"}</span>
+              <p className="text-xs font-black text-slate-500">카카오로 로그인</p>
+            </div>
+            <div className="mt-3">
+              <OAuthLoginButtons inviteCode={inviteCode} />
+            </div>
+          </section>
+
+          <section className="grid gap-3">
+            <MobileBenefit icon={Truck} title="오늘 코스" description="내 배송차 또는 영업 담당 코스를 모바일에서 확인합니다." />
+            <MobileBenefit icon={MapPinned} title="거래처 위치" description="출발지, 경유지, 거래처 주소와 간략 정보를 바로 봅니다." />
+            <MobileBenefit icon={ClipboardCheck} title="현장 기록" description="방문 결과, 배송 특이사항, 사진과 메모를 남깁니다." />
+          </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
               <div>
-                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대 코드로 확인합니다" : "기존 회사 연결은 카카오 계정으로 자동 확인합니다"}</p>
+                <p className="font-black text-slate-950">{joinMode === "company" ? "회사 연결은 초대로만 확인합니다" : "기존 회사 연결은 카카오 계정으로 자동 확인합니다"}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                   {joinMode === "company"
-                    ? "카카오 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 발급한 초대 링크를 통해 같은 회사 워크스페이스에 합류합니다."
+                    ? "카카오 계정만으로 회사 데이터에 바로 연결하지 않습니다. 고객사 관리자가 보낸 초대를 통해서만 같은 회사 워크스페이스에 합류합니다. 연락처는 본인 확인 용도로만 일부만 표시됩니다."
                     : "이 카카오 계정으로 이미 회사 초대를 수락하셨다면 그 회사로 바로 들어갑니다. 아직 초대받은 적이 없다면 회사 계정이 자동으로 만들어지지 않으며, 관리자에게 초대 링크를 받아야 합니다."}
                 </p>
               </div>
