@@ -6,6 +6,7 @@ import { KeyRound, Loader2, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -18,21 +19,26 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setMessage("");
 
-    const response = await fetch("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
-    });
-    const data = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
-    setLoading(false);
+    try {
+      const response = await fetchWithTimeout("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      }, 10000);
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
 
-    if (!response.ok) {
-      setMessage(data?.message || "요청 처리 중 오류가 발생했습니다.");
-      return;
+      if (!response.ok) {
+        setMessage(data?.message || "요청 처리 중 오류가 발생했습니다.");
+        return;
+      }
+
+      setSubmitted(true);
+      setMessage(data?.message || "가입된 이메일이면 비밀번호 재설정 링크를 보내드렸습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "요청 처리 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
     }
-
-    setSubmitted(true);
-    setMessage(data?.message || "가입된 이메일이면 비밀번호 재설정 링크를 보내드렸습니다.");
   }
 
   return (

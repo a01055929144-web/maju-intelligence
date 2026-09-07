@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 function formatBusinessNumberInput(value: string) {
   const digits = value.replace(/[^0-9]/g, "").slice(0, 10);
@@ -48,29 +49,33 @@ export default function CompanySignupPage() {
     }
 
     setLoading(true);
-    const response = await fetch("/api/company-signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        companyName,
-        businessRegistrationNumber,
-        ownerName,
-        ownerEmail,
-        ownerPassword,
-        termsAgreed,
-        privacyAgreed
-      })
-    });
+    try {
+      const response = await fetchWithTimeout("/api/company-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName,
+          businessRegistrationNumber,
+          ownerName,
+          ownerEmail,
+          ownerPassword,
+          termsAgreed,
+          privacyAgreed
+        })
+      }, 12000);
 
-    const data = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
-    setLoading(false);
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
+      if (!response.ok || !data?.ok) {
+        setError(data?.message || "가입 처리 중 오류가 발생했습니다.");
+        return;
+      }
 
-    if (!response.ok || !data?.ok) {
-      setError(data?.message || "가입 처리 중 오류가 발생했습니다.");
-      return;
+      window.location.href = "/dashboard";
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "가입 처리 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
     }
-
-    window.location.href = "/dashboard";
   }
 
   return (
