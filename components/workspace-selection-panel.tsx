@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRight, Building2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { CustomerWorkspaceSummary } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels, workspaceTypeLabels } from "@/lib/workspace";
 
@@ -22,18 +23,27 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
   async function selectWorkspace(companyId: string) {
     setPendingCompanyId(companyId);
     setError("");
-    const response = await fetch("/api/customer/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId })
-    });
-    setPendingCompanyId("");
-    if (!response.ok) {
-      const data = (await response.json().catch(() => null)) as { message?: string } | null;
-      setError(data?.message || "워크스페이스를 전환하지 못했습니다.");
-      return;
+    try {
+      const response = await fetchWithTimeout(
+        "/api/customer/workspaces",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId })
+        },
+        12000
+      );
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { message?: string } | null;
+        setError(data?.message || "워크스페이스를 전환하지 못했습니다.");
+        return;
+      }
+      window.location.href = "/dashboard";
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "워크스페이스를 전환하지 못했습니다.");
+    } finally {
+      setPendingCompanyId("");
     }
-    window.location.href = "/dashboard";
   }
 
   async function leaveWorkspace(workspace: CustomerWorkspaceSummary) {
@@ -47,26 +57,35 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
 
     setLeavingCompanyId(workspace.companyId);
     setError("");
-    const response = await fetch("/api/customer/workspaces", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId: workspace.companyId })
-    });
-    const payload = (await response.json().catch(() => null)) as { message?: string; switchedTo?: string } | null;
-    setLeavingCompanyId("");
+    try {
+      const response = await fetchWithTimeout(
+        "/api/customer/workspaces",
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: workspace.companyId })
+        },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { message?: string; switchedTo?: string } | null;
 
-    if (!response.ok) {
-      setError(payload?.message || "워크스페이스 나가기에 실패했습니다.");
-      return;
-    }
+      if (!response.ok) {
+        setError(payload?.message || "워크스페이스 나가기에 실패했습니다.");
+        return;
+      }
 
-    if (workspace.companyId === currentCompanyId) {
-      // 지금 쓰던 워크스페이스를 나갔습니다. 서버가 남은 워크스페이스로 세션을 전환해줬으면
-      // 대시보드로, 남은 워크스페이스가 없으면 로그인 화면으로 이동합니다.
-      window.location.href = payload?.switchedTo ? "/dashboard" : "/dashboard/login";
-      return;
+      if (workspace.companyId === currentCompanyId) {
+        // 지금 쓰던 워크스페이스를 나갔습니다. 서버가 남은 워크스페이스로 세션을 전환해줬으면
+        // 대시보드로, 남은 워크스페이스가 없으면 로그인 화면으로 이동합니다.
+        window.location.href = payload?.switchedTo ? "/dashboard" : "/dashboard/login";
+        return;
+      }
+      setWorkspaceList((current) => current.filter((item) => item.companyId !== workspace.companyId));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "워크스페이스 나가기에 실패했습니다.");
+    } finally {
+      setLeavingCompanyId("");
     }
-    setWorkspaceList((current) => current.filter((item) => item.companyId !== workspace.companyId));
   }
 
   return (

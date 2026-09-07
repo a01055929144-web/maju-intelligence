@@ -867,6 +867,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
+  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘(최근 20시간) 안에 배송완료로
+  // 기록된 거래처 id 목록입니다. 라이브 차량 위치와 같은 폴링 주기를 타도록 같은 요청에
+  // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
+  const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
+  const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(
     () => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta, completedStoreIdsToday),
@@ -6350,6 +6355,7 @@ export type PermitUploadResult = {
   duplicates: number;
   excludedInactive: number;
   excludedNonTarget: number;
+  excludedStaleAutoLead: number;
   inserted: number;
   skippedNoName: number;
   total: number;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Building2, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { BusinessNumberException } from "@/lib/store";
 
 function isErrorMessage(message: string) {
@@ -37,15 +38,19 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
     setCreating(true);
     setMessage("");
 
-    const response = await fetch("/api/business-number-exceptions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ businessRegistrationNumber: businessNumber, memo })
-    });
-    const payload = await response.json().catch(() => null);
+    const response = await fetchWithTimeout(
+      "/api/business-number-exceptions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessRegistrationNumber: businessNumber, memo })
+      },
+      12000
+    ).catch(() => null);
+    const payload = await response?.json().catch(() => null);
     setCreating(false);
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "등록에 실패했습니다.");
       return;
     }
@@ -60,11 +65,11 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
     setRemovingId(exception.id);
     setMessage("");
 
-    const response = await fetch(`/api/business-number-exceptions?id=${encodeURIComponent(exception.id)}`, { method: "DELETE" });
-    const payload = await response.json().catch(() => null);
+    const response = await fetchWithTimeout(`/api/business-number-exceptions?id=${encodeURIComponent(exception.id)}`, { method: "DELETE" }, 12000).catch(() => null);
+    const payload = await response?.json().catch(() => null);
     setRemovingId("");
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "삭제에 실패했습니다.");
       return;
     }

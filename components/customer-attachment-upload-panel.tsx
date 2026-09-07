@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, ExternalLink, FileVideo, ImageIcon, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LoadingPositionGallery } from "@/components/loading-position-gallery";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type AttachmentItem = {
@@ -31,7 +32,7 @@ export function CustomerAttachmentUploadPanel({ customerId, customerName }: { cu
     const params = new URLSearchParams({ customerId });
     const companyId = getCurrentCompanyId();
     if (companyId) params.set("companyId", companyId);
-    const response = await fetch(`/api/customer-operations?${params.toString()}`, { cache: "no-store" }).catch(() => null);
+    const response = await fetchWithTimeout(`/api/customer-operations?${params.toString()}`, { cache: "no-store" }, 12000).catch(() => null);
     if (!response?.ok) {
       setLoadState("error");
       return;
@@ -152,7 +153,7 @@ function AttachmentSlot({
       const companyId = getCurrentCompanyId();
       if (companyId) formData.append("companyId", companyId);
 
-      const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
+      const response = await fetchWithTimeout("/api/customer-attachments/upload", { method: "POST", body: formData }, 20000).catch(() => null);
 
       if (!response?.ok) {
         failedFileNames.push(file.name);

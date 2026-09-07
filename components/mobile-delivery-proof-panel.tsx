@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LinkifiedText } from "@/components/linkified-text";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type DeliveryStatus = "arrived" | "partial" | "issue";
@@ -128,7 +129,7 @@ export function MobileDeliveryProofPanel({
 
   async function loadProofs() {
     setLoadingProofs(true);
-    const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
+    const response = await fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000).catch(() => null);
     const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[]; notes?: OperationNote[] } | null) : null;
     setAttachments(payload?.attachments || []);
     setNotes(payload?.notes || []);
@@ -147,7 +148,7 @@ export function MobileDeliveryProofPanel({
       : "";
     const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카카오 수동/알림톡 대기" : "SMS 자동/무료 수동"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}${locationText}`;
 
-    const noteRequest = fetch("/api/customer-operations", {
+    const noteRequest = fetchWithTimeout("/api/customer-operations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -157,7 +158,7 @@ export function MobileDeliveryProofPanel({
         nextAction: messageChannel === "kakao" ? "카카오 알림톡 또는 수동 공유" : "SMS 자동 발송 또는 수동 문자",
         noteType: "delivery"
       })
-    });
+    }, 15000);
     const attachmentRequest = file ? uploadDeliveryProof(customerId, file, file.name) : Promise.resolve(new Response(null, { status: 200 }));
     const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]).catch(() => [null, null]);
 
@@ -192,7 +193,7 @@ export function MobileDeliveryProofPanel({
         current.some((item) => item.id === attachmentPayload.attachment?.id) ? current : [attachmentPayload.attachment as Attachment, ...current]
       );
     }
-    const messageResponse = await fetch("/api/customer-messages/send", {
+    const messageResponse = await fetchWithTimeout("/api/customer-messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -203,7 +204,7 @@ export function MobileDeliveryProofPanel({
         noteId: notePayload?.note?.id,
         triggerType: deliveryStatus === "issue" ? "delivery_issue" : "delivery_complete"
       })
-    }).catch(() => null);
+    }, 12000).catch(() => null);
     const messagePayload = (await messageResponse?.json().catch(() => null)) as
       | { log?: { errorMessage?: string; recipientPhone?: string; status?: string }; message?: string; sent?: boolean }
       | null;
@@ -454,10 +455,10 @@ async function uploadDeliveryProof(customerId: string, file: File, title: string
   formData.append("file", file);
   formData.append("title", title);
 
-  return fetch("/api/customer-attachments/upload", {
+  return fetchWithTimeout("/api/customer-attachments/upload", {
     method: "POST",
     body: formData
-  });
+  }, 20000);
 }
 
 function createOwnerMessage(

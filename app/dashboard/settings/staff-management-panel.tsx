@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartp
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatPhoneNumber } from "@/lib/phone";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "@/lib/staff-job-titles";
 import type { StaffInvitation } from "@/lib/store";
@@ -15,6 +16,12 @@ type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 function isErrorMessage(message: string) {
   return ["실패", "오류", "않", "필요", "맞지", "준비"].some((keyword) => message.includes(keyword));
+}
+
+async function requestStaffJson(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 12000) {
+  const response = await fetchWithTimeout(input, init, timeoutMs).catch(() => null);
+  const payload = await response?.json().catch(() => null);
+  return { payload, response };
 }
 
 export function StaffManagementPanel({
@@ -68,15 +75,14 @@ export function StaffManagementPanel({
     setCreating(true);
     setMessage("");
 
-    const response = await fetch("/api/customer/staff-invitations", {
+    const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form)
     });
-    const payload = await response.json().catch(() => null);
     setCreating(false);
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "직원 추가에 실패했습니다.");
       return;
     }
@@ -90,7 +96,7 @@ export function StaffManagementPanel({
     setSavingId(invitation.id);
     setMessage("");
 
-    const response = await fetch("/api/customer/staff-invitations", {
+    const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -98,10 +104,9 @@ export function StaffManagementPanel({
         ...patch
       })
     });
-    const payload = await response.json().catch(() => null);
     setSavingId("");
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "직원 정보 변경에 실패했습니다.");
       return;
     }
@@ -122,15 +127,14 @@ export function StaffManagementPanel({
     setSavingId(invitation.id);
     setMessage("");
 
-    const response = await fetch("/api/customer/staff-invitations", {
+    const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ invitationId: invitation.id })
     });
-    const payload = await response.json().catch(() => null);
     setSavingId("");
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "직원 삭제에 실패했습니다.");
       return;
     }
@@ -143,7 +147,7 @@ export function StaffManagementPanel({
     setSavingId(invitation.id);
     setMessage("");
 
-    const response = await fetch("/api/customer/staff-invitations", {
+    const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -151,10 +155,9 @@ export function StaffManagementPanel({
         ...patch
       })
     });
-    const payload = await response.json().catch(() => null);
     setSavingId("");
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "배정 기준 저장에 실패했습니다.");
       return;
     }
@@ -169,15 +172,14 @@ export function StaffManagementPanel({
     setAddingJobTitle(true);
     setMessage("");
 
-    const response = await fetch("/api/company-job-titles", {
+    const { payload, response } = await requestStaffJson("/api/company-job-titles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: newJobTitle })
     });
-    const payload = await response.json().catch(() => null);
     setAddingJobTitle(false);
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "담당 업무 추가에 실패했습니다.");
       return;
     }
@@ -194,11 +196,10 @@ export function StaffManagementPanel({
     setRemovingJobTitleId(jobTitle.id);
     setMessage("");
 
-    const response = await fetch(`/api/company-job-titles?id=${encodeURIComponent(jobTitle.id)}`, { method: "DELETE" });
-    const payload = await response.json().catch(() => null);
+    const { payload, response } = await requestStaffJson(`/api/company-job-titles?id=${encodeURIComponent(jobTitle.id)}`, { method: "DELETE" });
     setRemovingJobTitleId("");
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setMessage(payload?.message || "담당 업무 삭제에 실패했습니다.");
       return;
     }

@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { Bell, Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { CompanySettings } from "@/lib/store";
 
 export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
@@ -37,27 +38,31 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     setLoading(true);
     setMessage("");
 
-    const response = await fetch("/api/customer/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
-    const payload = await response.json().catch(() => null);
+    const response = await fetchWithTimeout(
+      "/api/customer/settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      },
+      12000
+    ).catch(() => null);
+    const payload = await response?.json().catch(() => null);
 
     setLoading(false);
-    setMessageOk(response.ok);
-    setMessage(response.ok ? "회사 설정이 저장됐습니다." : payload?.error || "저장에 실패했습니다. 값을 다시 확인해주세요.");
+    setMessageOk(Boolean(response?.ok));
+    setMessage(response?.ok ? "회사 설정이 저장됐습니다." : payload?.error || "저장에 실패했습니다. 값을 다시 확인해주세요.");
   }
 
   async function handleTelegramTest() {
     setTelegramTesting(true);
     setTelegramTestMessage("");
 
-    const response = await fetch("/api/customer/telegram-test", { method: "POST" });
-    const payload = await response.json().catch(() => null);
+    const response = await fetchWithTimeout("/api/customer/telegram-test", { method: "POST" }, 12000).catch(() => null);
+    const payload = await response?.json().catch(() => null);
 
     setTelegramTesting(false);
-    setTelegramTestMessage(response.ok ? "테스트 메시지를 보냈습니다. 텔레그램 그룹을 확인하세요." : payload?.message || "테스트 발송에 실패했습니다.");
+    setTelegramTestMessage(response?.ok ? "테스트 메시지를 보냈습니다. 텔레그램 그룹을 확인하세요." : payload?.message || "테스트 발송에 실패했습니다.");
   }
 
   return (

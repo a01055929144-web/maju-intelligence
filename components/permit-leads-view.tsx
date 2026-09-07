@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
@@ -205,7 +206,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     if (hasPhoneOnly) params.set("hasPhone", "true");
     if (!excludeExcluded) params.set("excludeExcluded", "false");
 
-    fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" })
+    fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!payload) {
@@ -224,7 +225,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }, [loadLeads]);
 
   useEffect(() => {
-    fetch(withPermitLeadCompanyQuery("/api/leads/permits/sources"), { cache: "no-store" })
+    fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/permits/sources"), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (payload) setSourceStatus(payload);
@@ -233,7 +234,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }, []);
 
   const loadKeywordSearchRegions = useCallback(() => {
-    fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), { cache: "no-store" })
+    fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (payload?.regions) setKeywordSearchRegions(payload.regions);
@@ -250,11 +251,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setRegionBusy(true);
     setRegionMessage("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: newRegionLabel })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: newRegionLabel })
+        },
+        12000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setRegionMessage(payload?.message || "지역 추가에 실패했습니다.");
@@ -275,9 +280,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     try {
       // 2026-08-31 에러 처리 감사 대응: 응답 상태를 확인하지 않고 바로 화면 목록에서 지웠던
       // 탓에, 서버가 삭제에 실패해도 화면은 이미 삭제된 것처럼 보였습니다.
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(regionId)}`), {
-        method: "DELETE"
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(regionId)}`),
+        {
+          method: "DELETE"
+        },
+        12000
+      );
       if (!response.ok) {
         setRegionMessage("지역 삭제에 실패했습니다. 다시 시도해주세요.");
         return;
@@ -297,10 +306,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setKeywordSweepResult(null);
     setKeywordSweepWarning("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/keyword-search"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setKeywordSweepWarning(payload?.message || "영업리드 탐색에 실패했습니다.");
@@ -398,11 +411,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     if (!targetIds.length) return;
 
     setKeywordVolumeLoading(true);
-    fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-volume"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadIds: targetIds })
-    })
+    fetchWithTimeout(
+      withPermitLeadCompanyQuery("/api/leads/permits/keyword-volume"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadIds: targetIds })
+      },
+      20000
+    )
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!payload) return;
@@ -697,15 +714,19 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
     for (const lead of targets) {
       try {
-        const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            actionType,
-            memo: [`일괄 처리: ${result}`, bulkNextActionDate ? `다음 액션일: ${bulkNextActionDate}` : ""].filter(Boolean).join("\n"),
-            result
-          })
-        });
+        const response = await fetchWithTimeout(
+          withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              actionType,
+              memo: [`일괄 처리: ${result}`, bulkNextActionDate ? `다음 액션일: ${bulkNextActionDate}` : ""].filter(Boolean).join("\n"),
+              result
+            })
+          },
+          12000
+        );
         const payload = (await response.json().catch(() => null)) as { message?: string; status?: string } | null;
         if (!response.ok) {
           failCount += 1;
@@ -817,11 +838,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         setUploadWarning("인식 가능한 행이 없습니다. '사업장명' 컬럼이 있는 파일인지 확인하세요.");
         return;
       }
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows })
+        },
+        20000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setUploadWarning(payload?.message || "업로드에 실패했습니다.");
@@ -846,11 +871,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setGovSyncResult(null);
     setGovSyncWarning("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/gov-sync"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 14 })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/gov-sync"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days: 14 })
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         // 2026-09-07 피드백("자동 수집에 실패했습니다" 원인 확인 요청): payload가 비어있으면
@@ -877,11 +906,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setSeoulSyncResult(null);
     setSeoulSyncWarning("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/seoul-sync"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 14 })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/seoul-sync"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days: 14 })
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setSeoulSyncWarning(payload?.message || `자동 수집에 실패했습니다 (응답 코드 ${response.status}). 처리 시간이 길어져 시간 초과됐을 수 있습니다 — 잠시 후 다시 시도해주세요.`);
@@ -909,11 +942,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setRecommendBusy(true);
     setRecommendMessage("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/recommend-refresh"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ radiusKm: 30 })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/recommend-refresh"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ radiusKm: 30 })
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.ok) {
         setRecommendMessage(payload?.message || "추천 점수 갱신에 실패했습니다.");
@@ -933,11 +970,15 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   async function runLeadAction(lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string): Promise<PermitLeadActionResult> {
     setActionMessage("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType, result, memo })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actionType, result, memo })
+        },
+        12000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         const message = payload?.message || "처리에 실패했습니다.";
@@ -964,7 +1005,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   async function convertToCustomer(lead: PermitLeadItem) {
     setActionMessage("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" });
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" }, 15000);
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setActionMessage(payload?.message || "거래처 전환에 실패했습니다.");
@@ -993,15 +1034,19 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setNearbySearching(true);
     setNearbyResult(null);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/nearby"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          anchorMode,
-          anchorCustomer: anchorStore ? { id: anchorStore.id, name: anchorStore.name, address: anchorStore.address } : undefined,
-          radiusKm
-        })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/nearby"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            anchorMode,
+            anchorCustomer: anchorStore ? { id: anchorStore.id, name: anchorStore.name, address: anchorStore.address } : undefined,
+            radiusKm
+          })
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setNearbyError(payload?.message || "리드 탐색에 실패했습니다.");
@@ -2420,7 +2465,7 @@ function PermitLeadDetailPanel({
     setHistoryState("loading");
     setActionHistory([]);
 
-    fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/actions`), { cache: "no-store" })
+    fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/actions`), { cache: "no-store" }, 12000)
       .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
       .then(({ ok, payload }) => {
         if (cancelled) return;
@@ -2461,11 +2506,15 @@ function PermitLeadDetailPanel({
 
     setInstagramSaving(true);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instagramUrl: normalizedValue || null })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instagramUrl: normalizedValue || null })
+        },
+        12000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.ok) throw new Error(payload?.message || "인스타 정보를 저장하지 못했습니다.");
 
@@ -2571,11 +2620,15 @@ function PermitLeadDetailPanel({
     setExternalInfoSaving(true);
     setExternalInfoMessage("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/enrich`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/enrich`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        },
+        20000
+      );
       const payload = (await response.json().catch(() => null)) as PermitLeadEnrichResponse | null;
       if (!response.ok || !payload?.ok) {
         setExternalInfoMessage(payload?.message || "외부 정보 보강에 실패했습니다.");

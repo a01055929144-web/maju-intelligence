@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Loader2, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 const noteTypes = [
   { label: "배송 특이사항", value: "delivery" },
@@ -26,7 +27,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
     setSaving(true);
     setStatus("idle");
 
-    const response = await fetch("/api/customer-operations", {
+    const response = await fetchWithTimeout("/api/customer-operations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -36,7 +37,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         nextAction: nextAction.trim(),
         noteType
       })
-    }).catch(() => null);
+    }, 15000).catch(() => null);
 
     setSaving(false);
 
