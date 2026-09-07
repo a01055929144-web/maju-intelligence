@@ -139,10 +139,16 @@ export default async function RevenueTransactionsPage({
           ) : null}
         </div>
 
-        <div className="grid maju-section-card lg:grid-cols-3">
-          {salesSignals.map((signal) => (
-            <SalesSignalCard key={signal.label} {...signal} />
-          ))}
+        <div className="maju-section-card">
+          <div className="maju-card-header">
+            <p className="maju-section-title">다음 액션 요약</p>
+            <p className="mt-1 maju-muted-label">원장 적재 · 거래처 연결 · 품목 분석 준비 상태</p>
+          </div>
+          <div className="grid lg:grid-cols-3">
+            {salesSignals.map((signal) => (
+              <SalesSignalCard key={signal.label} {...signal} />
+            ))}
+          </div>
         </div>
 
         <div className="scroll-mt-28" id="ledger-basis">

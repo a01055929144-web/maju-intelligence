@@ -367,7 +367,7 @@ export default function CrmSummaryPage() {
         <div className="maju-section-card">
           <SectionHeader
             eyebrow="지도 작업공간"
-            title="전체 현황"
+            title="거래처 기준 현황"
             description="지도 홈이 사용하는 거래처 기준입니다."
           />
           <div className="p-3">
