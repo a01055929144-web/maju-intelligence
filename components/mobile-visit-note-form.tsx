@@ -58,9 +58,8 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           <MessageSquareText className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <span className="mb-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">3. 히스토리 기록</span>
-          <p className="font-black text-slate-950">방문 메모 남기기</p>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{customerName} 현장 기록을 거래처 원장에 저장합니다.</p>
+          <span className="mb-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">메모</span>
+          <p className="truncate font-black text-slate-950">{customerName}</p>
         </div>
       </div>
 
@@ -92,26 +91,25 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
 
         <textarea
           className="min-h-[108px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-          placeholder="예: 후문 냉장창고 앞 적재 완료. 다음 배송부터 오전 9시 이전 도착 요청."
+          placeholder="방문 메모"
           value={memo}
           onChange={(event) => setMemo(event.target.value)}
         />
 
         <input
           className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-          placeholder="다음 액션 예: 다음 배송 전 연락"
+          placeholder="다음 액션"
           value={nextAction}
           onChange={(event) => setNextAction(event.target.value)}
         />
-        <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">메모와 다음 액션은 거래처 원장에서 담당자별 기록으로 확인합니다.</p>
 
         <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!memo.trim() || saving} onClick={submit}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          {saving ? "저장 중" : status === "saved" ? "저장 완료" : "히스토리에 저장"}
+          {saving ? "저장 중" : status === "saved" ? "저장 완료" : "메모 저장"}
         </Button>
 
         {status === "error" ? <p className="text-xs font-bold text-rose-600">저장에 실패했습니다. 로그인 상태와 저장 연결을 확인해주세요.</p> : null}
-        {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장되었습니다. 거래처 원장에서 같은 기록을 확인할 수 있습니다.</p> : null}
+        {status === "saved" ? <p className="text-xs font-bold text-teal-700">저장 완료</p> : null}
       </div>
     </section>
   );

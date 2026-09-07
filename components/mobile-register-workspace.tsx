@@ -191,9 +191,8 @@ export function MobileRegisterWorkspace() {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl bg-teal-700 p-4 text-white shadow-[0_16px_36px_rgba(15,118,110,0.22)]">
-        <p className="text-xs font-black uppercase text-white/70">Quick Register</p>
-        <h1 className="mt-2 text-2xl font-black leading-tight">새 거래처를 현장에서 바로 등록하세요.</h1>
-        <p className="mt-3 text-sm font-semibold leading-6 text-white/78">매장명을 검색하면 카카오맵 정보로 자동 입력됩니다. 검색 결과가 없으면 직접 입력할 수 있습니다.</p>
+        <p className="text-xs font-black text-white/70">빠른 등록</p>
+        <h1 className="mt-1 text-2xl font-black leading-tight">매장을 검색하세요.</h1>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
@@ -211,7 +210,7 @@ export function MobileRegisterWorkspace() {
           <div className="mt-3 space-y-2">
             {isSearching ? <p className="text-xs font-bold text-slate-400">검색 중...</p> : null}
             {!isSearching && searchMessage ? <p className="text-xs font-bold text-rose-600">{searchMessage}</p> : null}
-            {!isSearching && !searchMessage && !results.length ? <p className="text-xs font-bold text-slate-400">검색 결과가 없습니다.</p> : null}
+            {!isSearching && !searchMessage && !results.length ? <p className="text-xs font-bold text-slate-400">결과 없음</p> : null}
             {results.map((result) => (
               <button
                 className="flex min-h-[72px] w-full items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50"
@@ -234,11 +233,11 @@ export function MobileRegisterWorkspace() {
               type="button"
             >
               <Plus className="h-3.5 w-3.5" />
-              검색 결과에 없으면 직접 입력
+              직접 입력
             </button>
           </div>
         ) : (
-          <p className="mt-3 text-xs font-bold leading-5 text-slate-400">2글자 이상 입력하면 카카오맵 매장 검색 결과가 나타납니다.</p>
+          <p className="mt-3 text-xs font-bold leading-5 text-slate-400">2글자 이상 입력</p>
         )}
       </section>
     </div>
@@ -274,7 +273,7 @@ function MobileRegisterForm({
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <p className="text-sm font-black text-slate-950">거래처 정보 확인</p>
-        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">상호명만 있으면 바로 저장할 수 있습니다. 나머지는 나중에 보완해도 됩니다.</p>
+        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">상호명만 필수입니다.</p>
 
         <div className="mt-3 space-y-3">
           <FormField icon={Store} label="상호명 (필수)" onChange={(value) => onChange({ ...draft, customerName: value })} placeholder="상호명" value={draft.customerName} />
@@ -392,7 +391,7 @@ function MobileRegisterAttachmentStep({
           <p className="font-black">{customerName} 등록 완료</p>
         </div>
         <p className="mt-1 text-xs font-bold leading-5 text-teal-700">
-          사업자등록증, 신분증, 적재위치 사진을 업로드하면 바로 사용할 수 있도록 준비됩니다. 지금 없으면 나중에 추가해도 됩니다.
+          필요한 파일만 바로 올리세요. 나머지는 나중에 추가할 수 있습니다.
         </p>
       </section>
 
