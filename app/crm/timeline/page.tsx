@@ -8,6 +8,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { LinkifiedText } from "@/components/linkified-text";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type TimelineItem = {
   id: string;
@@ -197,7 +198,7 @@ export default function CrmTimelinePage() {
   useEffect(() => {
     let active = true;
 
-    fetch(withCompanyQuery("/api/customer/history-status"), { cache: "no-store" })
+    fetchWithTimeout(withCompanyQuery("/api/customer/history-status"), { cache: "no-store" }, 12000)
       .then((response) => response.json())
       .then((payload) => {
         if (!active) return;
@@ -231,7 +232,7 @@ export default function CrmTimelinePage() {
   useEffect(() => {
     let active = true;
 
-    fetch(withCompanyQuery("/api/customers"), { cache: "no-store" })
+    fetchWithTimeout(withCompanyQuery("/api/customers"), { cache: "no-store" }, 12000)
       .then((response) => {
         if (!response.ok) return null;
         return response.json();
@@ -272,7 +273,7 @@ export default function CrmTimelinePage() {
     setLoadMoreError("");
 
     try {
-      const response = await fetch(withCompanyQuery(`/api/customers?offset=${customers.length}`), { cache: "no-store" });
+      const response = await fetchWithTimeout(withCompanyQuery(`/api/customers?offset=${customers.length}`), { cache: "no-store" }, 12000);
       if (!response.ok) throw new Error("추가 거래처를 불러오지 못했습니다.");
       const payload = await response.json();
       if (payload?.source !== "supabase") throw new Error("추가 거래처를 불러오지 못했습니다.");
@@ -311,11 +312,15 @@ export default function CrmTimelinePage() {
       const customerIds = Array.from(new Set(Array.from(bulkSelectedIds).map((id) => id.trim()).filter(Boolean)));
       const selectedIdSet = new Set(customerIds);
       const nextManager = bulkManagerInput.trim();
-      const response = await fetch("/api/customers/bulk-manager", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: nextManager })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customers/bulk-manager",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: nextManager })
+        },
+        15000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "일괄 변경에 실패했습니다.");
 
@@ -400,7 +405,7 @@ export default function CrmTimelinePage() {
     syncSelectedCustomerUrl(selectedCustomer.id);
     let active = true;
 
-    fetch(withCompanyQuery(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`), { cache: "no-store" })
+    fetchWithTimeout(withCompanyQuery(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!active || !payload) return;
@@ -506,11 +511,15 @@ export default function CrmTimelinePage() {
     setMergingCustomerId(duplicateId);
     setMergeMessage("");
     try {
-      const response = await fetch("/api/customers/merge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), primaryCustomerId: selectedCustomer.id, duplicateCustomerIds: [duplicateId] })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customers/merge",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), primaryCustomerId: selectedCustomer.id, duplicateCustomerIds: [duplicateId] })
+        },
+        15000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "병합에 실패했습니다.");
 
@@ -704,7 +713,7 @@ export default function CrmTimelinePage() {
 
     setIsAddressSearching(true);
     setAddressSearchMessage("");
-    const response = await fetch(`/api/address-search?query=${encodeURIComponent(query)}`, { cache: "no-store" }).catch(() => null);
+    const response = await fetchWithTimeout(`/api/address-search?query=${encodeURIComponent(query)}`, { cache: "no-store" }, 12000).catch(() => null);
     const payload = response?.ok ? await response.json().catch(() => null) : null;
     const results = Array.isArray(payload?.results) ? payload.results : [];
 
@@ -734,34 +743,38 @@ export default function CrmTimelinePage() {
     setSaveMessage("");
 
     try {
-      const response = await fetch(withCompanyQuery("/api/customers"), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address: draftCustomer.address,
-          businessNumber: formatBusinessRegistrationNumber(draftCustomer.businessNumber || ""),
-          businessStatus: draftCustomer.businessStatus,
-          customerName: draftCustomer.customerName,
-          deliveryKm: draftCustomer.deliveryKm,
-          deliveryManager: draftCustomer.deliveryManager,
-          email: draftCustomer.email,
-          industry: draftCustomer.industry,
-          lastOrderDays: draftCustomer.lastOrderDays,
-          loadingPosition: draftCustomer.loadingPosition,
-          naverPlaceUrl: draftCustomer.naverPlaceUrl,
-          kakaoPlaceUrl: draftCustomer.kakaoPlaceUrl,
-          googleMapUrl: draftCustomer.googleMapUrl,
-          monthlyRevenue: draftCustomer.monthlyRevenue,
-          phone: draftCustomer.phone,
-          region: draftCustomer.region,
-          representativeName: draftCustomer.representativeName,
-          // 사업자번호를 몰라 임시값을 넣거나 나중에 정정하는 경우가 흔해, 저장 자체는 항상 허용합니다
-          // (검증은 위 helper 텍스트로만 참고 안내).
-          validateBusinessNumber: false,
-          visitCount: draftCustomer.visitCount,
-          companyId: getAdminCompanyIdFromUrl()
-        })
-      });
+      const response = await fetchWithTimeout(
+        withCompanyQuery("/api/customers"),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: draftCustomer.address,
+            businessNumber: formatBusinessRegistrationNumber(draftCustomer.businessNumber || ""),
+            businessStatus: draftCustomer.businessStatus,
+            customerName: draftCustomer.customerName,
+            deliveryKm: draftCustomer.deliveryKm,
+            deliveryManager: draftCustomer.deliveryManager,
+            email: draftCustomer.email,
+            industry: draftCustomer.industry,
+            lastOrderDays: draftCustomer.lastOrderDays,
+            loadingPosition: draftCustomer.loadingPosition,
+            naverPlaceUrl: draftCustomer.naverPlaceUrl,
+            kakaoPlaceUrl: draftCustomer.kakaoPlaceUrl,
+            googleMapUrl: draftCustomer.googleMapUrl,
+            monthlyRevenue: draftCustomer.monthlyRevenue,
+            phone: draftCustomer.phone,
+            region: draftCustomer.region,
+            representativeName: draftCustomer.representativeName,
+            // 사업자번호를 몰라 임시값을 넣거나 나중에 정정하는 경우가 흔해, 저장 자체는 항상 허용합니다
+            // (검증은 위 helper 텍스트로만 참고 안내).
+            validateBusinessNumber: false,
+            visitCount: draftCustomer.visitCount,
+            companyId: getAdminCompanyIdFromUrl()
+          })
+        },
+        15000
+      );
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "거래처 저장에 실패했습니다.");
@@ -804,11 +817,15 @@ export default function CrmTimelinePage() {
     setBusinessStatusMessage("");
 
     try {
-      const response = await fetch("/api/customer/business-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds: [selectedCustomer.id] })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customer/business-status",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds: [selectedCustomer.id] })
+        },
+        15000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "사업자 상태 조회에 실패했습니다.");
 
@@ -821,7 +838,7 @@ export default function CrmTimelinePage() {
         return;
       }
 
-      const refreshed = await fetch(withCompanyQuery("/api/customers"), { cache: "no-store" });
+      const refreshed = await fetchWithTimeout(withCompanyQuery("/api/customers"), { cache: "no-store" }, 12000);
       const refreshedPayload = await refreshed.json().catch(() => null);
       const nextCustomer = Array.isArray(refreshedPayload?.customers)
         ? refreshedPayload.customers.find((customer: CustomerView) => customer.id === selectedCustomer.id)
@@ -845,11 +862,15 @@ export default function CrmTimelinePage() {
     setBulkBusinessStatusMessage("");
 
     try {
-      const response = await fetch("/api/customer/business-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl() })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customer/business-status",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl() })
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "사업자 상태 일괄 조회에 실패했습니다.");
 
@@ -869,7 +890,7 @@ export default function CrmTimelinePage() {
         }${apiFailures ? ` · ⚠ 국세청 API 장애로 ${apiFailures}곳은 조회하지 못해 기존 상태를 유지했습니다` : ""}`
       );
 
-      const refreshed = await fetch(withCompanyQuery("/api/customers"), { cache: "no-store" });
+      const refreshed = await fetchWithTimeout(withCompanyQuery("/api/customers"), { cache: "no-store" }, 12000);
       const refreshedPayload = await refreshed.json().catch(() => null);
       if (Array.isArray(refreshedPayload?.customers)) {
         setCustomers(refreshedPayload.customers);
@@ -887,18 +908,22 @@ export default function CrmTimelinePage() {
     setNoteMessage("");
 
     try {
-      const response = await fetch("/api/customer-operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "note",
-          customerId: selectedCustomer.id,
-          companyId: getAdminCompanyIdFromUrl(),
-          memo: newMemo,
-          nextAction: newNextAction,
-          noteType: "general"
-        })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customer-operations",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "note",
+            customerId: selectedCustomer.id,
+            companyId: getAdminCompanyIdFromUrl(),
+            memo: newMemo,
+            nextAction: newNextAction,
+            noteType: "general"
+          })
+        },
+        15000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "메모 저장에 실패했습니다.");
       if (payload?.note) {
@@ -948,10 +973,14 @@ export default function CrmTimelinePage() {
         formData.append("customerId", selectedCustomer.id);
         formData.append("file", file);
         formData.append("title", files.length > 1 ? `${titleBase} ${index + 1}` : titleBase);
-        const response = await fetch("/api/customer-attachments/upload", {
-          method: "POST",
-          body: formData
-        });
+        const response = await fetchWithTimeout(
+          "/api/customer-attachments/upload",
+          {
+            method: "POST",
+            body: formData
+          },
+          20000
+        );
         const payload = await response.json().catch(() => null);
         if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);
         if (payload?.attachment) uploadedAttachments.push(payload.attachment);
@@ -988,19 +1017,23 @@ export default function CrmTimelinePage() {
       const uploadedAttachments: CustomerAttachmentView[] = [];
       let hasTemporaryResult = false;
 
-      const response = await fetch("/api/customer-operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "attachment",
-          attachmentType: newAttachmentType,
-          companyId: getAdminCompanyIdFromUrl(),
-          customerId: selectedCustomer.id,
-          fileUrl: newAttachmentUrl,
-          mimeType: guessMimeType(newAttachmentUrl),
-          title: newAttachmentTitle
-        })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customer-operations",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "attachment",
+            attachmentType: newAttachmentType,
+            companyId: getAdminCompanyIdFromUrl(),
+            customerId: selectedCustomer.id,
+            fileUrl: newAttachmentUrl,
+            mimeType: guessMimeType(newAttachmentUrl),
+            title: newAttachmentTitle
+          })
+        },
+        15000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "첨부자료 저장에 실패했습니다.");
       if (payload?.attachment) uploadedAttachments.push(payload.attachment);
@@ -2021,7 +2054,7 @@ function useCustomerIdentity(isAdminPreview: boolean) {
   useEffect(() => {
     if (isAdminPreview) return;
     let ignore = false;
-    fetch("/api/customer/me", { cache: "no-store" })
+    fetchWithTimeout("/api/customer/me", { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (ignore || !payload?.session) return;

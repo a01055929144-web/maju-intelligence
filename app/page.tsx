@@ -40,6 +40,7 @@ import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
 import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
 import { SortableTh } from "@/components/sortable-th";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -294,11 +295,15 @@ export default function Home() {
   // "그래도 등록"으로 재시도할 때 둘 다 이 함수를 씁니다 — 재시도할 때는 검수 목록에 행을
   // 또 추가하면 안 되므로(saveManualEntry 쪽 로직과 분리) 여기서는 순수하게 저장 요청만 합니다.
   async function submitCustomerRow(nextRow: RawRow, confirmDuplicate: boolean) {
-    const response = await fetch(customerMasterEndpoint(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...buildManualCustomerPayload(nextRow), confirmDuplicate })
-    }).catch(() => null);
+    const response = await fetchWithTimeout(
+      customerMasterEndpoint(),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...buildManualCustomerPayload(nextRow), confirmDuplicate })
+      },
+      15000
+    ).catch(() => null);
     const payload = response ? await response.json().catch(() => null) : null;
 
     if (response?.ok && payload?.possibleDuplicate) {
@@ -458,20 +463,24 @@ export default function Home() {
     await completePipelineStep("normalize");
     await completePipelineStep("score");
 
-    const response = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        actorName: "정두영",
-        columnMapping: nextFieldMap,
-        companyId: getAdminCompanyIdFromUrl(),
-        companyName: nextRows[0]?.companyName || "업로드 고객사",
-        originalFilename: nextFilename,
-        rawRows: nextRawRows,
-        rows: nextRows,
-        uploadType
-      })
-    }).catch(() => null);
+    const response = await fetchWithTimeout(
+      "/api/analyze",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actorName: "정두영",
+          columnMapping: nextFieldMap,
+          companyId: getAdminCompanyIdFromUrl(),
+          companyName: nextRows[0]?.companyName || "업로드 고객사",
+          originalFilename: nextFilename,
+          rawRows: nextRawRows,
+          rows: nextRows,
+          uploadType
+        })
+      },
+      30000
+    ).catch(() => null);
 
     if (response?.ok) {
       const payload = await response.json().catch(() => null);
@@ -535,7 +544,7 @@ export default function Home() {
   }
 
   async function refreshUploadHistory() {
-    const response = await fetch(uploadHistoryEndpoint(), { cache: "no-store" }).catch(() => null);
+    const response = await fetchWithTimeout(uploadHistoryEndpoint(), { cache: "no-store" }, 12000).catch(() => null);
     if (!response?.ok) return;
     const payload = await response.json().catch(() => null);
     if (Array.isArray(payload?.uploads)) setUploadHistory(payload.uploads);
@@ -643,7 +652,7 @@ function useCustomerIdentity(isAdminPreview: boolean) {
   useEffect(() => {
     if (isAdminPreview) return;
     let ignore = false;
-    fetch("/api/customer/me", { cache: "no-store" })
+    fetchWithTimeout("/api/customer/me", { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (ignore || !payload?.session) return;
@@ -1257,7 +1266,7 @@ function Onboarding({
   const [exemptBusinessNumbers, setExemptBusinessNumbers] = useState<Set<string>>(new Set());
   useEffect(() => {
     let active = true;
-    fetch(businessNumberExceptionsEndpoint(), { cache: "no-store" })
+    fetchWithTimeout(businessNumberExceptionsEndpoint(), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!active || !Array.isArray(payload?.exceptions)) return;
@@ -1531,7 +1540,7 @@ function Onboarding({
     let cancelled = false;
     setIsSearchingBusinessName(true);
     const timer = setTimeout(async () => {
-      const response = await fetch(`/api/business-search?query=${encodeURIComponent(businessNameQuery)}`, { cache: "no-store" }).catch(() => null);
+      const response = await fetchWithTimeout(`/api/business-search?query=${encodeURIComponent(businessNameQuery)}`, { cache: "no-store" }, 12000).catch(() => null);
       if (cancelled) return;
       const payload = response?.ok ? await response.json().catch(() => null) : null;
       const results = Array.isArray(payload?.results) ? payload.results : [];
@@ -1587,10 +1596,14 @@ function Onboarding({
 
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch("/api/ocr/business-license", {
-      method: "POST",
-      body: formData
-    }).catch(() => null);
+    const response = await fetchWithTimeout(
+      "/api/ocr/business-license",
+      {
+        method: "POST",
+        body: formData
+      },
+      30000
+    ).catch(() => null);
     const payload = response?.ok ? await response.json().catch(() => null) : null;
     const extracted = payload?.extracted || {};
 
@@ -1619,7 +1632,7 @@ function Onboarding({
     setSavedPreset(preset);
     setPresetMessage(preset ? `${template.label} 매핑 프리셋이 저장되어 있습니다.` : "");
 
-    fetch(mappingPresetEndpoint(uploadType), { cache: "no-store" })
+    fetchWithTimeout(mappingPresetEndpoint(uploadType), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!active || !payload?.preset?.mapping) return;
@@ -1639,15 +1652,19 @@ function Onboarding({
     setSavedPreset(fieldMap);
     setPresetMessage(`${template.label} 매핑을 저장 중입니다.`);
 
-    const response = await fetch(mappingPresetEndpoint(uploadType), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        companyId: getAdminCompanyIdFromUrl(),
-        mapping: fieldMap,
-        uploadType
-      })
-    }).catch(() => null);
+    const response = await fetchWithTimeout(
+      mappingPresetEndpoint(uploadType),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: getAdminCompanyIdFromUrl(),
+          mapping: fieldMap,
+          uploadType
+        })
+      },
+      12000
+    ).catch(() => null);
     const payload = response?.ok ? await response.json().catch(() => null) : null;
 
     setPresetMessage(
@@ -1672,9 +1689,13 @@ function Onboarding({
     setSavedPreset(null);
     setPresetMessage("저장된 매핑 프리셋을 삭제 중입니다.");
 
-    const response = await fetch(mappingPresetEndpoint(uploadType), {
-      method: "DELETE"
-    }).catch(() => null);
+    const response = await fetchWithTimeout(
+      mappingPresetEndpoint(uploadType),
+      {
+        method: "DELETE"
+      },
+      12000
+    ).catch(() => null);
     const payload = response?.ok ? await response.json().catch(() => null) : null;
 
     setPresetMessage(payload?.persisted ? "서버 매핑 프리셋을 삭제했습니다." : "이 브라우저의 매핑 프리셋을 삭제했습니다.");

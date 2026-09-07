@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { SortableTh } from "@/components/sortable-th";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { useTableSort } from "@/lib/use-table-sort";
 
 type UploadHistoryItem = {
@@ -44,7 +45,7 @@ function useCustomerIdentity(isAdminPreview: boolean) {
   useEffect(() => {
     if (isAdminPreview) return;
     let ignore = false;
-    fetch("/api/customer/me", { cache: "no-store" })
+    fetchWithTimeout("/api/customer/me", { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (ignore || !payload?.session) return;
@@ -73,7 +74,7 @@ export default function CustomerDataManagementPage() {
     const endpoint = adminCompanyId ? `/api/upload-history?companyId=${encodeURIComponent(adminCompanyId)}` : "/api/upload-history";
 
     setLoadError(false);
-    fetch(endpoint, { cache: "no-store" })
+    fetchWithTimeout(endpoint, { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
       .then((payload) => {
         if (!active) return;

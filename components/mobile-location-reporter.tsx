@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Crosshair, RefreshCw } from "lucide-react";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type MobileLocationReporterProps = {
   readonly currentCustomerId?: string;
@@ -47,12 +48,16 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   }, []);
 
   const sendPayload = useCallback(async (payload: LocationPayload) => {
-    const response = await fetch("/api/staff/location", {
-      body: JSON.stringify(payload),
-      headers: { "Content-Type": "application/json" },
-      keepalive: true,
-      method: "POST"
-    });
+    const response = await fetchWithTimeout(
+      "/api/staff/location",
+      {
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        method: "POST"
+      },
+      8000
+    );
     if (!response.ok) {
       const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
       throw new Error(errorPayload?.error || "위치 저장에 실패했습니다.");
