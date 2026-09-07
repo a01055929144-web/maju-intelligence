@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  // 카카오 키 설정 여부·도메인 후보 등 배포 환경 정보를 노출하므로 관리자만 조회할 수 있게 제한합니다.
+  const adminSession = await requireAdminSession();
+  if (!adminSession) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
   const javascriptKeyConfigured = Boolean(process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY && process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY !== "replace-with-kakao-javascript-key");
   const restKeyConfigured = Boolean(process.env.KAKAO_REST_KEY && process.env.KAKAO_REST_KEY !== "replace-with-kakao-rest-api-key");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";

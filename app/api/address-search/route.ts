@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthScope } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,10 @@ type KakaoAddressDocument = {
 };
 
 export async function GET(request: NextRequest) {
+  // 로그인한 사용자만 카카오 검색 API 쿼터를 소모하도록 제한합니다(비로그인 직접 호출 방지).
+  const scope = await getRequestAuthScope(request);
+  if (!scope.ok) return NextResponse.json({ message: "Unauthorized", results: [] }, { status: 401 });
+
   const query = request.nextUrl.searchParams.get("query")?.trim();
   const kakaoRestKey = process.env.KAKAO_REST_KEY;
 

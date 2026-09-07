@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as CompanySignupBody | null;
   const identifier = body?.ownerEmail || "unknown";
 
-  const throttle = checkLoginThrottle(identifier);
+  const throttle = await checkLoginThrottle(identifier);
   if (!throttle.allowed) {
     return NextResponse.json(
       { ok: false, message: `가입 시도가 많아 잠시 제한되었습니다. ${throttle.retryAfterSeconds}초 후 다시 시도해주세요.` },
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       privacyAgreed: Boolean(body?.privacyAgreed)
     });
 
-    clearLoginThrottle(identifier);
+    await clearLoginThrottle(identifier);
     await clearAdminSession();
     await setCustomerSession({
       appRole: "customer_user",
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, companyId: result.companyId, companyName: result.companyName });
   } catch (error) {
-    recordLoginFailure(identifier);
+    await recordLoginFailure(identifier);
     const message = error instanceof Error ? error.message : "가입 처리 중 오류가 발생했습니다.";
     return NextResponse.json({ ok: false, message }, { status: 400 });
   }

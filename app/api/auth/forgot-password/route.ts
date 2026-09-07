@@ -15,14 +15,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "이메일을 입력해주세요." }, { status: 400 });
   }
 
-  const throttle = checkLoginThrottle(`forgot-password:${email}`);
+  const throttle = await checkLoginThrottle(`forgot-password:${email}`);
   if (!throttle.allowed) {
     return NextResponse.json(
       { ok: false, message: `요청이 많아 잠시 제한되었습니다. ${throttle.retryAfterSeconds}초 후 다시 시도해주세요.` },
       { status: 429 }
     );
   }
-  recordLoginFailure(`forgot-password:${email}`);
+  await recordLoginFailure(`forgot-password:${email}`);
 
   const result = await createPasswordResetRequest(email).catch(() => null);
 
