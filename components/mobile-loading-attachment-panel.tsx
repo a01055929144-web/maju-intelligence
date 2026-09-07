@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, Loader2, Plus, RefreshCw } from "lucide-react";
 import { LoadingPositionGallery } from "@/components/loading-position-gallery";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type Attachment = {
@@ -38,7 +39,7 @@ export function MobileLoadingAttachmentPanel({
 
   async function loadAttachments() {
     setLoadState("loading");
-    const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
+    const response = await fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000).catch(() => null);
     if (!response?.ok) {
       setLoadState("error");
       return;
@@ -66,10 +67,10 @@ export function MobileLoadingAttachmentPanel({
     formData.append("attachmentType", "loading_position");
     formData.append("title", `배송 적재위치 - ${customerName}`);
 
-    const response = await fetch("/api/customer-attachments/upload", {
+    const response = await fetchWithTimeout("/api/customer-attachments/upload", {
       method: "POST",
       body: formData
-    }).catch(() => null);
+    }, 20000).catch(() => null);
 
     if (!response?.ok) {
       setSaveState("error");
