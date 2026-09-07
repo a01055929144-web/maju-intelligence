@@ -5828,6 +5828,7 @@ function computePermitLeadNextAction(input: {
   isDuplicate: boolean;
   isTarget: boolean;
   industryKnown: boolean;
+  isNewLead: boolean;
   leadPeriod: PermitLeadPeriod;
   hasPhone: boolean;
   hasAddress: boolean;
@@ -5845,8 +5846,15 @@ function computePermitLeadNextAction(input: {
     return { action: "정보 보강", reasons };
   }
 
-  const periodLabel =
-    input.leadPeriod === "today"
+  // 2026-09-07 피드백 대응: 개업일이 확인 안 되는 리드(영업리드)를 "최근 90일 신규 인허가"라고
+  // 잘못 표시하던 문제를 고칩니다 — leadPeriod가 today/week/month가 아니면 예전엔 무조건 "최근
+  // 90일 신규 인허가"라고 썼는데, 실제로는 "날짜를 아예 모르는 경우"와 "확인은 됐지만 90일보다
+  // 오래된 경우"가 둘 다 여기 섞여 있었습니다(카카오 키워드 탐색 영업리드도 마찬가지로 날짜가
+  // 없어 매번 이 문구가 잘못 붙었습니다). isNewLead가 false면 "개업일 확인 안 됨" 대신 검색량
+  // 기반 영업리드라는 근거를 명확히 씁니다.
+  const periodLabel = !input.isNewLead
+    ? "영업리드(검색량 기반 타겟팅)"
+    : input.leadPeriod === "today"
       ? "오늘 신규 인허가"
       : input.leadPeriod === "week"
         ? "이번 주 신규 인허가"
@@ -5854,7 +5862,7 @@ function computePermitLeadNextAction(input: {
           ? "이번 달 신규 인허가"
           : "최근 90일 신규 인허가";
 
-  if (input.leadPeriod === "today" && input.hasPhone) {
+  if (input.isNewLead && input.leadPeriod === "today" && input.hasPhone) {
     return { action: "오늘 바로 전화", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 확인됨"] };
   }
   if (!input.hasPhone) {
@@ -5912,7 +5920,7 @@ export type PermitLeadIngestResult = {
   excludedInactive: number;
   excludedNonTarget: number;
   skippedNoName: number;
-  excludedStaleAutoLead: number;
+  classifiedAsSalesLead: number;
 };
 
 const PERMIT_LEAD_UPDATE_CONCURRENCY = 8;
@@ -5951,7 +5959,7 @@ export async function ingestPermitLeadRows(
     excludedInactive: 0,
     excludedNonTarget: 0,
     skippedNoName: 0,
-    excludedStaleAutoLead: 0
+    classifiedAsSalesLead: 0
   };
   if (!rows.length || !isProductionStoreConfigured()) return result;
 
@@ -6011,24 +6019,29 @@ export async function ingestPermitLeadRows(
     const isDuplicate = businessNumber ? customerBizNoSet.has(businessNumber) : false;
     if (isDuplicate) result.duplicates += 1;
 
-    // 자동 동기화(gov/seoul)로 아직 한 번도 못 본 사업자를 새로 추가하려는데 개업일(없으면
-    // 인허가일)이 90일보다 오래됐다면, 실제로는 "레코드가 최근 손질됐을 뿐인 오래된 매장"이므로
-    // 신규 리드로 쌓지 않고 건너뜁니다. 위 상수 선언부 주석 참고.
-    // 2026-09-07 피드백("개시일이 미확인 것들 확인이 필요해"): 처음엔 날짜를 아예 못 읽은 행(원본에
-    // 개업일·인허가일 자체가 비어있는 경우)은 "너무 오래됐다"는 조건(staleCheckDate < cutoff)에
-    // 걸리지 않아 이 필터를 그냥 통과했습니다 — 그 결과 "언제 생겼는지도 확인 안 되는" 매장이
-    // "확인됐고 최근"인 매장과 똑같이 신규 리드로 들어오는 모순이 있었습니다. 신규 리드로 인정하려면
-    // "최근 개업했다는 게 확인된" 날짜가 있어야 하므로, 날짜가 아예 없거나 파싱이 안 되는 경우도
-    // 오래된 것과 동일하게 제외합니다(확인 불가 = 신규라고 보장할 수 없음).
+    // 자동 동기화(gov/seoul)로 아직 한 번도 못 본 사업자인데 개업일(없으면 인허가일)이 90일보다
+    // 오래됐거나 아예 확인이 안 되면, "최근 개업이 확인된" 신규 리드로는 인정하지 않습니다(위 상수
+    // 선언부 주석 참고 — 레코드가 최근 손질됐을 뿐인 오래된 매장은 실제 신규 개업이 아님).
+    // 2026-09-07 피드백("개업일자가 없으면 신규리드가 아니라 그냥 영업리드인거야 — 개업일자가 있으면
+    // 신생 사업자, 없으면 검색량 기반으로 영업 타겟팅하는 영업리드"): 예전엔 이 조건에 걸리면 리드
+    // 자체를 건너뛰어(continue) 아예 리드 풀에 들어오지도 못했습니다 — 그런데 이 회사의 실제 리드
+    // 개념은 "날짜 불확실 = 버림"이 아니라 "날짜 불확실 = 신규리드가 아니라 영업리드"입니다. 그래서
+    // 이제 건너뛰지 않고 그대로 리드로 적재하되, isNewLead를 false로 표시합니다 — leadPeriod가
+    // "recent"(신규 리드 필터의 today/week/month/최근 90일에 걸리지 않는 기본값)로 계산되고,
+    // 카카오 키워드 탐색(영업리드) 리드와 똑같이 검색량·리뷰 기반 점수와 "영업리드" 정렬 모드,
+    // 야간 추천 점수 갱신(route_fit_score 등)의 대상이 됩니다 — 상대방 정보(연락처·주소·업종·
+    // 검색량·리뷰)는 그대로 다 채워지고, 다만 "최근에 문을 열었다"는 보장만 없는 것으로 다룹니다.
     const existingId = businessNumber ? leadBizNoToId.get(businessNumber) : undefined;
-    if (isAutoPermitSync && !existingId) {
-      const staleCheckDateText = row.openDate || row.permitDate;
-      const staleCheckDate = staleCheckDateText ? new Date(staleCheckDateText) : null;
-      const hasConfirmedRecentDate = Boolean(staleCheckDate) && !Number.isNaN(staleCheckDate!.getTime()) && staleCheckDate! >= newLeadStaleCutoff;
-      if (!hasConfirmedRecentDate) {
-        result.excludedStaleAutoLead += 1;
-        continue;
-      }
+    // isNewLead는 소스와 무관하게 "확인된 최근(90일 내) 개업/인허가일이 있는가"만 봅니다 — 카카오
+    // 키워드 탐색(영업리드)은 애초에 날짜가 없어 항상 false이고, gov/seoul 자동 동기화는 날짜가
+    // 있어야 true입니다. 수동 업로드는 담당자가 직접 고른 리드라 날짜가 없어도 신규로 취급합니다
+    // (기존 동작 유지 — AUTO_PERMIT_SYNC_SOURCES에 없는 소스는 이 판정 자체를 건너뜀).
+    const staleCheckDateText = row.openDate || row.permitDate;
+    const staleCheckDate = staleCheckDateText ? new Date(staleCheckDateText) : null;
+    const hasConfirmedRecentDate = Boolean(staleCheckDate) && !Number.isNaN(staleCheckDate!.getTime()) && staleCheckDate! >= newLeadStaleCutoff;
+    const isNewLead = isAutoPermitSync ? hasConfirmedRecentDate : true;
+    if (isAutoPermitSync && !existingId && !hasConfirmedRecentDate) {
+      result.classifiedAsSalesLead += 1;
     }
 
     // 프레시니스는 인허가일보다 개업일을 우선 씁니다("신규 리드는 개업일자가 중요하다"는 피드백,
@@ -6057,6 +6070,7 @@ export async function ingestPermitLeadRows(
       isDuplicate,
       isTarget: classification.isTarget,
       industryKnown,
+      isNewLead,
       leadPeriod,
       hasPhone,
       hasAddress,
@@ -6138,7 +6152,7 @@ const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   excludedInactive: 0,
   excludedNonTarget: 0,
   skippedNoName: 0,
-  excludedStaleAutoLead: 0
+  classifiedAsSalesLead: 0
 };
 
 export type GovRestaurantSyncResult = {
@@ -6491,7 +6505,7 @@ const EMPTY_KEYWORD_SWEEP_INGEST: PermitLeadIngestResult = {
   excludedInactive: 0,
   excludedNonTarget: 0,
   skippedNoName: 0,
-  excludedStaleAutoLead: 0
+  classifiedAsSalesLead: 0
 };
 
 function normalizeLeadNameForDedupe(value: string) {

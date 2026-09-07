@@ -6360,7 +6360,7 @@ export type PermitUploadResult = {
   duplicates: number;
   excludedInactive: number;
   excludedNonTarget: number;
-  excludedStaleAutoLead: number;
+  classifiedAsSalesLead: number;
   inserted: number;
   skippedNoName: number;
   total: number;

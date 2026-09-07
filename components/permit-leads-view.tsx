@@ -1626,9 +1626,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <span className="text-emerald-700">신규 {govSyncResult.ingest.inserted.toLocaleString()}</span>
                     <span className="text-blue-700">갱신 {govSyncResult.ingest.updated.toLocaleString()}</span>
                     <span className="text-slate-400">중복 {govSyncResult.ingest.duplicates.toLocaleString()}</span>
-                    {govSyncResult.ingest.excludedStaleAutoLead ? (
-                      <span className="text-slate-400" title="개업일(인허가일)이 90일보다 오래됐거나, 개업일·인허가일 자체가 확인되지 않아 최근 개업 여부를 확인할 수 없어 신규 리드로 쌓지 않고 제외한 건수입니다.">
-                        오래된/개시일 미확인 매장 제외 {govSyncResult.ingest.excludedStaleAutoLead.toLocaleString()}
+                    {govSyncResult.ingest.classifiedAsSalesLead ? (
+                      <span className="text-slate-400" title="개업일(인허가일)이 90일보다 오래됐거나 확인되지 않아 신규 리드로는 인정하지 않지만, 리드 자체는 그대로 쌓여 영업리드(검색량·리뷰 기반 타겟팅)로 분류된 건수입니다.">
+                        영업리드로 편입(개시일 미확인/오래됨) {govSyncResult.ingest.classifiedAsSalesLead.toLocaleString()}
                       </span>
                     ) : null}
                   </div>
@@ -1640,9 +1640,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <span className="text-emerald-700">신규 {seoulSyncResult.ingest.inserted.toLocaleString()}</span>
                     <span className="text-blue-700">갱신 {seoulSyncResult.ingest.updated.toLocaleString()}</span>
                     <span className="text-slate-400">중복 {seoulSyncResult.ingest.duplicates.toLocaleString()}</span>
-                    {seoulSyncResult.ingest.excludedStaleAutoLead ? (
-                      <span className="text-slate-400" title="개업일(인허가일)이 90일보다 오래됐거나, 개업일·인허가일 자체가 확인되지 않아 최근 개업 여부를 확인할 수 없어 신규 리드로 쌓지 않고 제외한 건수입니다.">
-                        오래된/개시일 미확인 매장 제외 {seoulSyncResult.ingest.excludedStaleAutoLead.toLocaleString()}
+                    {seoulSyncResult.ingest.classifiedAsSalesLead ? (
+                      <span className="text-slate-400" title="개업일(인허가일)이 90일보다 오래됐거나 확인되지 않아 신규 리드로는 인정하지 않지만, 리드 자체는 그대로 쌓여 영업리드(검색량·리뷰 기반 타겟팅)로 분류된 건수입니다.">
+                        영업리드로 편입(개시일 미확인/오래됨) {seoulSyncResult.ingest.classifiedAsSalesLead.toLocaleString()}
                       </span>
                     ) : null}
                   </div>
