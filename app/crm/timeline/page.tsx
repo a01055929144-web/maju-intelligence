@@ -1080,7 +1080,7 @@ export default function CrmTimelinePage() {
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
-            description="거래처를 선택하면 오른쪽에서 원장을 편집합니다."
+            description="거래처를 선택하면 아래 원장에서 확인·편집합니다."
           />
           <div className="grid gap-2 border-t border-slate-200/80 bg-white p-3 sm:grid-cols-3">
             {[
@@ -1404,8 +1404,10 @@ export default function CrmTimelinePage() {
             </div>
           </aside>
             )}
+          </div>
+        </div>
 
-          <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-4">
             <div className="maju-section-card scroll-mt-28 p-4" id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
@@ -2024,8 +2026,6 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
           </div>
-          </div>
-        </div>
         </div>
       </section>
       {previewAttachment ? <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} /> : null}
