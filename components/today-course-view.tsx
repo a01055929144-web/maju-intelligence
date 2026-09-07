@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { GeoPoint } from "@/lib/navigation-links";
 import type { DeliveryVehicle } from "@/lib/store";
 import {
@@ -319,11 +320,15 @@ export function TodayCourseView({
     }
     setRouteConfirmState({ status: "saving" });
     try {
-      const response = await fetch("/api/routes/confirm-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driverName, customerIds })
-      });
+      const response = await fetchWithTimeout(
+        "/api/routes/confirm-order",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ driverName, customerIds })
+        },
+        15000
+      );
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         setRouteConfirmState({ status: "error", message: payload?.message || "코스 확정 저장에 실패했습니다. 잠시 후 다시 시도하세요." });
@@ -343,31 +348,39 @@ export function TodayCourseView({
     const memo = `${proof.memo}\n\n배송 상태: ${deliveryStatusLabel(proof.deliveryStatus)}\n알림 방식: ${proof.messageChannel === "kakao" ? "카톡 발송 대기" : "문자 발송 대기"}${proof.fileName ? `\n증빙 파일: ${proof.fileName}` : ""}`;
 
     try {
-      const noteRequest = fetch("/api/customer-operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "note",
-          customerId: storeId,
-          memo,
-          nextAction: proof.messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
-          noteType: "delivery"
-        })
-      });
+      const noteRequest = fetchWithTimeout(
+        "/api/customer-operations",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "note",
+            customerId: storeId,
+            memo,
+            nextAction: proof.messageChannel === "kakao" ? "카카오 알림톡 발송" : "문자 발송",
+            noteType: "delivery"
+          })
+        },
+        15000
+      );
       const attachmentRequest = proof.file
         ? uploadDeliveryProofFile(storeId, proof.file, proof.fileName || "배송완료 증빙")
-        : fetch("/api/customer-operations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "attachment",
-              attachmentType: "delivery_proof",
-              customerId: storeId,
-              fileUrl: "",
-              mimeType: proof.fileName.toLowerCase().match(/\.(mp4|mov|webm)$/) ? "video/*" : "image/*",
-              title: proof.fileName || "배송완료 증빙"
-            })
-          });
+        : fetchWithTimeout(
+            "/api/customer-operations",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "attachment",
+                attachmentType: "delivery_proof",
+                customerId: storeId,
+                fileUrl: "",
+                mimeType: proof.fileName.toLowerCase().match(/\.(mp4|mov|webm)$/) ? "video/*" : "image/*",
+                title: proof.fileName || "배송완료 증빙"
+              })
+            },
+            15000
+          );
       const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]);
 
       persisted = noteResponse.ok && attachmentResponse.ok;
@@ -1173,10 +1186,14 @@ async function uploadDeliveryProofFile(storeId: string, file: File, title: strin
   formData.append("file", file);
   formData.append("title", title);
 
-  return fetch("/api/customer-attachments/upload", {
-    method: "POST",
-    body: formData
-  });
+  return fetchWithTimeout(
+    "/api/customer-attachments/upload",
+    {
+      method: "POST",
+      body: formData
+    },
+    20000
+  );
 }
 
 function createDeliveryOwnerMessage(store: StoreRow, memo: string, status: DeliveryProof["deliveryStatus"], fileName: string) {
