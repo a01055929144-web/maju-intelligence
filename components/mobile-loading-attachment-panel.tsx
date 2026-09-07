@@ -96,9 +96,8 @@ export function MobileLoadingAttachmentPanel({
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <span className="mb-2 inline-flex rounded-full bg-blue-100 px-2 py-1 text-[11px] font-black text-blue-800">1. 적재위치 확인</span>
-            <p className="font-black text-slate-950">배송 적재위치</p>
-            <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{loadingPosition || "적재위치 사진/영상을 현장에서 확인하고 보완합니다."}</p>
+            <span className="mb-2 inline-flex rounded-full bg-blue-100 px-2 py-1 text-[11px] font-black text-blue-800">적재위치</span>
+            <p className="font-black text-slate-950">{loadingPosition || "사진/영상 확인"}</p>
           </div>
         </div>
         <button aria-label="적재위치 자료 새로고침" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500" onClick={loadAttachments} type="button">
@@ -106,17 +105,16 @@ export function MobileLoadingAttachmentPanel({
         </button>
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-4 text-sm font-black text-blue-800 transition hover:bg-blue-100">
+      <label className="mt-4 flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-100">
         <input accept="image/*,video/*" className="hidden" onChange={(event) => uploadFile(event.target.files?.[0] || null)} type="file" />
         {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-        {saveState === "saving" ? "업로드 중" : "사진/영상 업로드"}
+        {saveState === "saving" ? "업로드 중" : "사진/영상"}
       </label>
-      <p className="mt-2 text-xs font-bold leading-5 text-slate-500">배송 적재위치 자료는 거래처 상세의 첨부자료와 현장 히스토리에 같이 남습니다.</p>
 
       {saveState === "saved" ? (
         <p className="mt-2 flex items-center gap-1 text-xs font-bold text-teal-700">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          업로드되었습니다. 거래처 원장 첨부자료에도 반영됩니다.
+          업로드 완료
         </p>
       ) : null}
       {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveErrorMessage || "업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요."}</p> : null}
@@ -125,12 +123,12 @@ export function MobileLoadingAttachmentPanel({
         {loadState === "loading" ? (
           <p className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            첨부자료를 불러오는 중입니다.
+            불러오는 중
           </p>
         ) : null}
         {loadState === "error" ? <p className="rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700">첨부자료를 불러오지 못했습니다.</p> : null}
         {loadState === "ready" ? (
-          <LoadingPositionGallery emptyMessage="아직 등록된 적재위치 사진/영상이 없습니다." items={loadingAttachments} />
+          <LoadingPositionGallery emptyMessage="등록된 자료 없음" items={loadingAttachments} />
         ) : null}
       </div>
     </section>

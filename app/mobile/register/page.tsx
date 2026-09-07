@@ -12,16 +12,16 @@ export default async function MobileRegisterPage() {
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
       <section className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col bg-white shadow-[0_20px_80px_rgba(15,23,42,0.12)]">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
-              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{session.name}님 모바일 업무</p>
+              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{session.name}님</p>
             </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">신규 거래처 등록</Badge>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">등록</Badge>
           </div>
-          <Link className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-teal-700 underline decoration-teal-200 underline-offset-2" href="/dashboard">
-            PC 버전(전체 화면)으로 보기
+          <Link className="mt-2 inline-flex h-8 items-center rounded-full bg-slate-50 px-3 text-xs font-black text-teal-700 ring-1 ring-inset ring-slate-200" href="/dashboard">
+            PC 화면
           </Link>
         </header>
 
@@ -31,9 +31,9 @@ export default async function MobileRegisterPage() {
 
         <footer className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
           <FooterItem href="/mobile/today#route-list" icon={Route} label="코스" />
-          <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="거래처" />
+          <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="매장" />
           <FooterItem active href="/mobile/register" icon={PlusCircle} label="등록" />
-          <FooterItem href="/mobile/today#field-records" icon={CheckCircle2} label="기록" />
+          <FooterItem href="/mobile/today#field-records" icon={CheckCircle2} label="완료" />
         </footer>
       </section>
     </main>

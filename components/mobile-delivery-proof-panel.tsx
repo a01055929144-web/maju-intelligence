@@ -256,9 +256,8 @@ export function MobileDeliveryProofPanel({
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <span className="mb-2 inline-flex rounded-full bg-white px-2 py-1 text-[11px] font-black text-blue-800 ring-1 ring-inset ring-blue-100">2. 배송완료 저장</span>
-            <p className="font-black text-slate-950">배송완료 기록</p>
-            <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">{customerName} 도착 사진과 점주 발송 문구를 저장합니다.</p>
+            <span className="mb-2 inline-flex rounded-full bg-white px-2 py-1 text-[11px] font-black text-blue-800 ring-1 ring-inset ring-blue-100">배송완료</span>
+            <p className="truncate font-black text-slate-950">{customerName}</p>
           </div>
         </div>
         <button aria-label="배송완료 증빙 새로고침" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-blue-200 bg-white text-blue-700" onClick={loadProofs} type="button">
@@ -269,7 +268,7 @@ export function MobileDeliveryProofPanel({
       <div className="mt-4 grid grid-cols-3 gap-2">
         {deliveryStatuses.map((item) => (
           <button
-            className={`h-11 rounded-lg border px-2 text-xs font-black transition ${
+            className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
               deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
@@ -281,7 +280,7 @@ export function MobileDeliveryProofPanel({
         ))}
       </div>
 
-      <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-white px-4 py-4 text-sm font-black text-blue-800 transition hover:bg-blue-50">
+      <label className="mt-3 flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-white px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-50">
         <input
           accept="image/*,video/*"
           className="hidden"
@@ -292,7 +291,7 @@ export function MobileDeliveryProofPanel({
           type="file"
         />
         <Plus className="h-4 w-4" />
-        {file ? file.name : "도착 사진/영상 선택"}
+        {file ? file.name : "사진/영상 선택"}
       </label>
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
 
@@ -304,14 +303,14 @@ export function MobileDeliveryProofPanel({
           // 의미하므로 버튼을 다시 활성화합니다(아래 handleFileSelect와 동일한 이유).
           if (status === "saved") setStatus("idle");
         }}
-        placeholder="예: 후문 냉장창고 앞에 적재 완료했습니다."
+        placeholder="메모"
         value={memo}
       />
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         {messageChannels.map((item) => (
           <button
-            className={`h-11 rounded-lg border px-2 text-xs font-black transition ${
+            className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
               messageChannel === item.value ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700"
             }`}
             key={item.value}
@@ -340,18 +339,16 @@ export function MobileDeliveryProofPanel({
         <p className="mt-2 whitespace-pre-line rounded-lg bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
       </div>
-      <p className="mt-2 text-xs font-bold leading-5 text-blue-800">저장하면 배송 메모와 증빙 파일이 거래처 원장에 함께 누적됩니다.</p>
-
       <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-800">
         <MapPin className="h-3 w-3 shrink-0" />
         {locationStatus === "granted" && location
-          ? `현재 위치 태그 준비됨 · 정확도 약 ${location.accuracy}m`
+          ? `위치 준비됨 · ${location.accuracy}m`
           : locationStatus === "loading"
             ? "위치 확인 중..."
             : locationStatus === "denied"
-              ? "위치 접근이 거부되어 위치 태그 없이 저장됩니다"
+              ? "위치 없이 저장"
               : locationStatus === "unavailable"
-                ? "이 브라우저는 위치 확인을 지원하지 않습니다"
+                ? "위치 미지원"
                 : "위치 확인 대기 중"}
         {locationStatus === "denied" ? (
           <button className="-m-2 p-2 underline decoration-dotted underline-offset-2" onClick={requestLocation} type="button">
@@ -362,13 +359,13 @@ export function MobileDeliveryProofPanel({
 
       <Button className="mt-3 h-11 w-full bg-blue-700 font-black hover:bg-blue-800" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
-        {saving ? "저장 중" : status === "saved" ? "저장 완료" : "배송완료 저장"}
+        {saving ? "저장 중" : status === "saved" ? "저장 완료" : "완료 저장"}
       </Button>
 
       {status === "error" ? (
         <p className="mt-2 text-xs font-bold text-rose-600">{errorDetail || "저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요."}</p>
       ) : null}
-      {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">거래처 원장에 배송완료 기록이 저장되었습니다.</p> : null}
+      {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">원장 저장 완료</p> : null}
       {messageResult ? <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-800 ring-1 ring-inset ring-blue-100">{messageResult}</p> : null}
       {status === "saved" && manualRecipientPhone ? (
         <a
