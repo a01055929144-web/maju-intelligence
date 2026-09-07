@@ -2570,11 +2570,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       {activeView === "customers" ? (
         <CustomerDirectoryView
           dataRegistrationHref={dataRegistrationHref}
+          driverOptions={deliveryDefaults.drivers}
           fuelPrices={fuelPrices}
           onSelectStore={setSelectedId}
           selectedStoreId={selectedId}
           sourceReady={sourceReady}
           stores={visibleStores}
+          vehicleOptions={vehicleNameOptions}
         />
       ) : null}
 
@@ -4777,18 +4779,22 @@ function LeadListPanel({
 
 function CustomerDirectoryView({
   dataRegistrationHref,
+  driverOptions,
   fuelPrices,
   onSelectStore,
   selectedStoreId,
   sourceReady,
-  stores
+  stores,
+  vehicleOptions
 }: {
   readonly dataRegistrationHref: string;
+  readonly driverOptions: string[];
   readonly fuelPrices: FuelPriceByType;
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
+  readonly vehicleOptions: string[];
 }) {
   const router = useRouter();
   const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
@@ -4827,9 +4833,21 @@ function CustomerDirectoryView({
     }
   }
   const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
+  // 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게 필요할
+  // 것 같아. 하나하나 옮기려니까 너무 힘드네") 대응: 담당자/배송차로 목록을 좁혀두면 "전체 선택"
+  // 만으로 그 그룹 전체를 한 번에 고를 수 있습니다(체크박스로 부분 선택도 그대로 가능).
+  const [directoryManagerFilter, setDirectoryManagerFilter] = useState("");
+  const [directoryVehicleFilter, setDirectoryVehicleFilter] = useState("");
+  const filteredStores = useMemo(() => {
+    return stores.filter((store) => {
+      if (directoryManagerFilter && (store.deliveryDriver || "") !== directoryManagerFilter) return false;
+      if (directoryVehicleFilter && (store.deliveryVehicleName || "") !== directoryVehicleFilter) return false;
+      return true;
+    });
+  }, [stores, directoryManagerFilter, directoryVehicleFilter]);
   const sortedStores = useMemo(() => {
-    if (!sortKey) return stores;
-    const decorated = stores.map((store) => ({
+    if (!sortKey) return filteredStores;
+    const decorated = filteredStores.map((store) => ({
       logisticsCost: estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2,
       store
     }));
@@ -4847,7 +4865,7 @@ function CustomerDirectoryView({
       return sortDirection === "asc" ? diff : -diff;
     });
     return decorated.map((item) => item.store);
-  }, [stores, sortKey, sortDirection, deliveryPricePerLiter]);
+  }, [filteredStores, sortKey, sortDirection, deliveryPricePerLiter]);
   function SortableHeader({
     className = "",
     label,
@@ -4888,6 +4906,67 @@ function CustomerDirectoryView({
   const [mergingKey, setMergingKey] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState("");
   const [pendingMergeGroup, setPendingMergeGroup] = useState<StoreRow[] | null>(null);
+
+  // 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게 필요할
+  // 것 같아. 하나하나 옮기려니까 너무 힘드네") 대응: 지금까지는 거래처를 한 곳씩 열어 담당자/배송차를
+  // 고쳐야 했습니다. 위 directoryManagerFilter/directoryVehicleFilter로 목록을 좁힌 뒤 "전체 선택"으로
+  // 그 그룹 전체를 한 번에, 또는 체크박스로 원하는 거래처만 골라, 다른 담당자/배송차로 한 번에
+  // 옮길 수 있게 합니다.
+  const [selectedStoreIds, setSelectedStoreIds] = useState<Set<string>>(new Set());
+  const [bulkTargetManager, setBulkTargetManager] = useState("");
+  const [bulkTargetVehicle, setBulkTargetVehicle] = useState("");
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [bulkError, setBulkError] = useState("");
+
+  function toggleSelectStore(storeId: string) {
+    setSelectedStoreIds((current) => {
+      const next = new Set(current);
+      if (next.has(storeId)) next.delete(storeId);
+      else next.add(storeId);
+      return next;
+    });
+  }
+
+  async function runBulkReassign() {
+    const targetManager = bulkTargetManager.trim();
+    const targetVehicle = bulkTargetVehicle.trim();
+    const customerIds = Array.from(selectedStoreIds);
+    if (!customerIds.length || (!targetManager && !targetVehicle)) return;
+    setBulkApplying(true);
+    setBulkError("");
+    setBulkMessage("");
+    try {
+      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+      if (targetManager) {
+        const response = await fetch("/api/customers/bulk-manager", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: companyId || undefined, customerIds, deliveryManager: targetManager })
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || "담당자 일괄 변경에 실패했습니다.");
+      }
+      if (targetVehicle) {
+        const response = await fetch("/api/customers/bulk-vehicle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: companyId || undefined, customerIds, deliveryVehicle: targetVehicle })
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || "배송차 일괄 변경에 실패했습니다.");
+      }
+      setBulkMessage(`${customerIds.length.toLocaleString()}곳을 이동했습니다.`);
+      setSelectedStoreIds(new Set());
+      setBulkTargetManager("");
+      setBulkTargetVehicle("");
+      router.refresh();
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : "일괄 이동에 실패했습니다.");
+    } finally {
+      setBulkApplying(false);
+    }
+  }
 
   function completenessScore(store: StoreRow) {
     return [store.businessRegistrationNumber, store.deliveryDriver, store.deliveryVehicleName, store.phone, store.representativeName, store.accessMethodType, store.loadingPosition].filter(
@@ -4983,6 +5062,104 @@ function CustomerDirectoryView({
         </div>
       ) : null}
 
+      {/* 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게
+          필요할 것 같아. 하나하나 옮기려니까 너무 힘드네"): 담당자/배송차로 목록을 좁힌 뒤 "전체
+          선택"으로 그 그룹 전체를, 또는 표의 체크박스로 원하는 거래처만 골라 다른 담당자·배송차로
+          한 번에 옮길 수 있습니다. */}
+      {sourceReady && stores.length ? (
+        <div className="mt-3 flex shrink-0 flex-col gap-2.5 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="shrink-0 text-xs font-black text-teal-900">담당자/배송차 일괄 이동</p>
+            <select
+              className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+              onChange={(event) => setDirectoryManagerFilter(event.target.value)}
+              value={directoryManagerFilter}
+            >
+              <option value="">담당자 전체</option>
+              {driverOptions.map((driver) => (
+                <option key={driver} value={driver}>
+                  {driver}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+              onChange={(event) => setDirectoryVehicleFilter(event.target.value)}
+              value={directoryVehicleFilter}
+            >
+              <option value="">배송차 전체</option>
+              {vehicleOptions.map((vehicle) => (
+                <option key={vehicle} value={vehicle}>
+                  {vehicle}
+                </option>
+              ))}
+            </select>
+            <button
+              className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
+              onClick={() => {
+                const allVisibleSelected = sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id));
+                setSelectedStoreIds(allVisibleSelected ? new Set() : new Set(sortedStores.map((store) => store.id)));
+              }}
+              type="button"
+            >
+              {sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id)) ? "전체 해제" : `보이는 ${sortedStores.length.toLocaleString()}곳 전체 선택`}
+            </button>
+            {selectedStoreIds.size ? <span className="text-xs font-black text-teal-900">{selectedStoreIds.size.toLocaleString()}곳 선택됨</span> : null}
+          </div>
+          {selectedStoreIds.size ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-teal-200 pt-2.5">
+              <span className="shrink-0 text-xs font-bold text-teal-900">이동할 곳:</span>
+              <select
+                className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+                onChange={(event) => setBulkTargetManager(event.target.value)}
+                value={bulkTargetManager}
+              >
+                <option value="">담당자 변경 안 함</option>
+                {driverOptions.map((driver) => (
+                  <option key={driver} value={driver}>
+                    {driver}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+                onChange={(event) => setBulkTargetVehicle(event.target.value)}
+                value={bulkTargetVehicle}
+              >
+                <option value="">배송차 변경 안 함</option>
+                {vehicleOptions.map((vehicle) => (
+                  <option key={vehicle} value={vehicle}>
+                    {vehicle}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="maju-button-primary h-8 shrink-0 px-3 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={bulkApplying || (!bulkTargetManager.trim() && !bulkTargetVehicle.trim())}
+                onClick={runBulkReassign}
+                type="button"
+              >
+                {bulkApplying ? "이동 중..." : `${selectedStoreIds.size.toLocaleString()}곳 이동`}
+              </button>
+              <button
+                className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
+                disabled={bulkApplying}
+                onClick={() => {
+                  setSelectedStoreIds(new Set());
+                  setBulkTargetManager("");
+                  setBulkTargetVehicle("");
+                }}
+                type="button"
+              >
+                선택 해제
+              </button>
+            </div>
+          ) : null}
+          {bulkError ? <p className="text-xs font-bold text-rose-700">{bulkError}</p> : null}
+          {bulkMessage ? <p className="text-xs font-bold text-emerald-700">{bulkMessage}</p> : null}
+        </div>
+      ) : null}
+
       <div className="maju-section-card mt-4 !overflow-visible">
         {!sourceReady ? (
           <OperationalEmptyState
@@ -4998,6 +5175,18 @@ function CustomerDirectoryView({
               <table className="w-full min-w-[1520px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
+                    <th className="w-[36px] border-r border-slate-200 px-3 py-3">
+                      <input
+                        aria-label="현재 보이는 거래처 전체 선택"
+                        checked={sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id))}
+                        className="h-3.5 w-3.5 accent-teal-700"
+                        onChange={() => {
+                          const allVisibleSelected = sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id));
+                          setSelectedStoreIds(allVisibleSelected ? new Set() : new Set(sortedStores.map((store) => store.id)));
+                        }}
+                        type="checkbox"
+                      />
+                    </th>
                     <SortableHeader className="w-[28%]" label="거래처" sortKeyValue="name" />
                     <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" />
                     <SortableHeader className="w-[96px]" label="매출등급" sortKeyValue="grade" />
@@ -5040,6 +5229,15 @@ function CustomerDirectoryView({
                         if (event.key === "Enter" || event.key === " ") onSelectStore(store.id);
                       }}
                     >
+                      <td className="border-r border-slate-100 px-3 py-3" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          aria-label={`${store.name} 선택`}
+                          checked={selectedStoreIds.has(store.id)}
+                          className="h-3.5 w-3.5 accent-teal-700"
+                          onChange={() => toggleSelectStore(store.id)}
+                          type="checkbox"
+                        />
+                      </td>
                       <td className="min-w-0 border-r border-slate-100 px-4 py-3">
                         <p className="truncate font-black text-slate-950">{store.name}</p>
                         <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
