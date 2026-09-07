@@ -15,6 +15,7 @@ import {
   Search,
   Store
 } from "lucide-react";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
 type ExternalBusinessResult = {
@@ -79,7 +80,7 @@ export function MobileRegisterWorkspace() {
     let cancelled = false;
     setIsSearching(true);
     const timer = setTimeout(async () => {
-      const response = await fetch(`/api/business-search?query=${encodeURIComponent(query.trim())}`, { cache: "no-store" }).catch(() => null);
+      const response = await fetchWithTimeout(`/api/business-search?query=${encodeURIComponent(query.trim())}`, { cache: "no-store" }, 12000).catch(() => null);
       if (cancelled) return;
       const payload = (await response?.json().catch(() => null)) as { message?: string; results?: ExternalBusinessResult[] } | null;
       setResults(response?.ok ? payload?.results || [] : []);
@@ -118,20 +119,24 @@ export function MobileRegisterWorkspace() {
     setSaveError("");
 
     try {
-      const response = await fetch("/api/customers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address: draft.address,
-          businessStatus: "확인 필요",
-          confirmDuplicate,
-          customerName: draft.customerName,
-          industry: draft.industry || "미분류",
-          kakaoPlaceUrl: draft.kakaoPlaceUrl,
-          phone: draft.phone,
-          validateBusinessNumber: false
-        })
-      });
+      const response = await fetchWithTimeout(
+        "/api/customers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: draft.address,
+            businessStatus: "확인 필요",
+            confirmDuplicate,
+            customerName: draft.customerName,
+            industry: draft.industry || "미분류",
+            kakaoPlaceUrl: draft.kakaoPlaceUrl,
+            phone: draft.phone,
+            validateBusinessNumber: false
+          })
+        },
+        15000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
       if (payload?.possibleDuplicate) {
@@ -363,7 +368,7 @@ function MobileRegisterAttachmentStep({
 
   async function loadAttachments() {
     setLoadState("loading");
-    const response = await fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }).catch(() => null);
+    const response = await fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000).catch(() => null);
     if (!response?.ok) {
       setLoadState("error");
       return;
@@ -459,7 +464,7 @@ function AttachmentSlotUploader({
     formData.append("attachmentType", attachmentType);
     formData.append("title", `${label} - ${customerName}`);
 
-    const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
+    const response = await fetchWithTimeout("/api/customer-attachments/upload", { method: "POST", body: formData }, 20000).catch(() => null);
 
     if (!response?.ok) {
       setSaveState("error");
