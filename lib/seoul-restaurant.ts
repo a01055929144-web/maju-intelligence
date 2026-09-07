@@ -148,7 +148,9 @@ const FETCH_CONCURRENCY = 5;
 // 동일한 구조라 같은 위험이 있습니다). 스캔 예산을 20초로 더 줄이고, 한 번에 적재할 행 수에도
 // 상한(MAX_ROWS_PER_RUN)을 둬 ingest 소요 시간을 예측 가능한 범위로 묶습니다 — 상한에 걸려 못
 // 다 훑은 나머지는 데이터가 사라지는 게 아니라 다음 실행으로 미뤄질 뿐입니다.
-const TIME_BUDGET_MS = 20_000;
+// 2026-09-07 피드백("전국 다 훑는데 시간이 오래 걸리면 시간을 넉넉히 줘도 된다") 대응: gov-restaurant.ts와
+// 같은 이유로(야간 cron에서 이 작업과 병렬로 도는 다른 작업들은 보통 가볍게 끝남) 35초로 올립니다.
+const TIME_BUDGET_MS = 35_000;
 const MAX_ROWS_PER_RUN = 4000;
 
 export type SeoulRestaurantFetchResult = {

@@ -6261,16 +6261,37 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
   };
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
-  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const companies = await supabaseRequest<Array<{ id: string; gov_restaurant_sync_cursor: number | null }>>(
+    "companies?select=id,gov_restaurant_sync_cursor"
+  ).catch(() => []);
   // days=14(이 소스의 최대 조회 범위) — 스캔하는 구간(페이지 수)은 그대로고 그 안에서 걸러내는
   // 날짜 필터만 넓어지므로 비용 증가 없이 회수율만 올라갑니다(2026-08-23 피드백 대응).
   // 2026-08-28 피드백 대응: 회사 하나가 실패해도(네트워크 오류 등) Promise.all 전체가 reject되어
   // 나머지 회사까지 동기화를 건너뛰지 않도록 개별적으로 catch합니다(실패 상태는 recordLeadSyncStatus로
   // 이미 기록됨).
+  // 2026-09-07 피드백("전국 다 훑는데 시간이 오래 걸리면 시간을 넉넉히 줘도 된다") 대응: 예전에는
+  // 매일 rotateStartPage()가 "오늘 날짜" 기준으로 매번 새 구간을 계산해서, 하루치 스캔이 그 구간의
+  // 일부만 훑고 멈춰도 다음날은 그 나머지를 이어가지 않고 완전히 다른 구간으로 점프해버렸습니다 —
+  // 결국 대부분의 구간이 영영 스캔되지 않고 버려지는 셈이었습니다. 이제 회사별로 저장된 커서
+  // (gov_restaurant_sync_cursor)가 있으면 그 지점부터 진짜로 이어서 스캔하고, 끝난 지점을 다시
+  // 저장해둡니다 — 매일의 진행이 누적되어 결국 전국을 다 훑게 됩니다.
   const results = await Promise.all(
-    companies.map((company) =>
-      syncGovRestaurantLeads(company.id, 14).catch((): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT }))
-    )
+    companies.map(async (company) => {
+      const startPage = Number.isFinite(company.gov_restaurant_sync_cursor) && Number(company.gov_restaurant_sync_cursor) > 0
+        ? Number(company.gov_restaurant_sync_cursor)
+        : undefined;
+      const result = await syncGovRestaurantLeads(company.id, 14, startPage).catch(
+        (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
+      );
+      if (result.nextStartPage) {
+        await supabaseRequest(`companies?id=eq.${encodeURIComponent(company.id)}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ gov_restaurant_sync_cursor: result.nextStartPage })
+        }).catch(() => null);
+      }
+      return result;
+    })
   );
 
   return results.reduce<GovRestaurantDailySyncResult>(
@@ -6344,15 +6365,32 @@ export async function syncAllCompaniesSeoulRestaurantLeads(): Promise<SeoulResta
   };
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
-  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const companies = await supabaseRequest<Array<{ id: string; seoul_restaurant_sync_cursor: number | null }>>(
+    "companies?select=id,seoul_restaurant_sync_cursor"
+  ).catch(() => []);
   // days=14(이 소스의 최대 조회 범위) — 행정안전부 소스와 같은 이유로 비용 증가 없이 회수율만
   // 올라갑니다(2026-08-23 피드백 대응).
   // 2026-08-28 피드백 대응: 회사 하나가 실패해도 나머지 회사 동기화를 건너뛰지 않도록 개별적으로
   // catch합니다(실패 상태는 recordLeadSyncStatus로 이미 기록됨).
+  // 2026-09-07 피드백 대응: gov-restaurant와 동일하게, 매일 날짜기반으로 새 구간을 계산해 진행이
+  // 버려지던 문제를 회사별 커서(seoul_restaurant_sync_cursor)로 이어서 진행하도록 고칩니다.
   const results = await Promise.all(
-    companies.map((company) =>
-      syncSeoulRestaurantLeads(company.id, 14).catch((): SeoulRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT }))
-    )
+    companies.map(async (company) => {
+      const startPage = Number.isFinite(company.seoul_restaurant_sync_cursor) && Number(company.seoul_restaurant_sync_cursor) > 0
+        ? Number(company.seoul_restaurant_sync_cursor)
+        : undefined;
+      const result = await syncSeoulRestaurantLeads(company.id, 14, startPage).catch(
+        (): SeoulRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
+      );
+      if (result.nextStartPage) {
+        await supabaseRequest(`companies?id=eq.${encodeURIComponent(company.id)}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ seoul_restaurant_sync_cursor: result.nextStartPage })
+        }).catch(() => null);
+      }
+      return result;
+    })
   );
 
   return results.reduce<SeoulRestaurantDailySyncResult>(

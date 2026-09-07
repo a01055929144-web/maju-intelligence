@@ -140,7 +140,11 @@ const FETCH_CONCURRENCY = 5;
 // 한 번에 적재할 행 수에도 상한(MAX_ROWS_PER_RUN)을 둬 ingest 소요 시간을 예측 가능한 범위로
 // 묶습니다 — 상한에 걸려 못 다 훑은 나머지는 데이터가 사라지는 게 아니라 다음 실행(rotateStartPage가
 // 이어서 훑음)으로 미뤄질 뿐입니다.
-const TIME_BUDGET_MS = 20_000;
+// 2026-09-07 피드백("전국 다 훑는데 시간이 오래 걸리면 시간을 넉넉히 줘도 된다") 대응: 이 함수를
+// 호출하는 야간 cron(app/api/cron/business-status)은 이 작업과 병렬로 몇 가지 다른 작업만 함께
+// 돌기 때문에(순차로 실행되는 건 사업자 상태 새로고침뿐, 보통 몇 초 안에 끝남) 60초 함수 시간
+// 제한 안에서 20초보다 훨씬 더 써도 안전합니다. 35초로 올려 한 번에 스캔하는 페이지 수를 늘립니다.
+const TIME_BUDGET_MS = 35_000;
 const MAX_ROWS_PER_RUN = 4000;
 
 export type GovRestaurantFetchResult = {
