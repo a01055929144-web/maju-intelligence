@@ -893,7 +893,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(startPage ? { days: 14, startPage } : { days: 14 })
         },
-        25000
+        // 2026-09-07 실측(라이브 검증): 25초는 서버 쪽 20초 스캔 예산 + 적재(ingest) + 네트워크
+        // 왕복을 감당하기에 너무 타이트해서 "요청이 25초 안에 응답하지 않았습니다" 오류로 라운드가
+        // 통째로 날아가는 게 실제로 재현됐습니다(서버는 정상 응답 중이었는데 클라이언트가 먼저
+        // 포기). Vercel 함수 자체 한도(maxDuration=60)에 가깝게, 그러나 넘지 않게 55초로 늘립니다.
+        55000
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -968,7 +972,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(startPage ? { days: 14, startPage } : { days: 14 })
         },
-        25000
+        // 55초로 늘린 이유는 runGovAutoSync 쪽 주석과 동일합니다(같은 20초 스캔 예산 구조).
+        55000
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -1032,7 +1037,17 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   // "계속 이어서 훑기"의 두 소스 동시 실행 버전 — 시간이 오래 걸려도 되니 전국을 최대한 넓게
   // 훑고 싶을 때 한 번에 누르는 버튼입니다.
+  // 2026-09-07 라이브 검증 중 실제로 재현된 버그: 두 소스 체인이 독립적으로 도는데(예: 전국
+  // 쪽이 네트워크 타임아웃으로 먼저 끝나고 서울 쪽은 계속 도는 중), 그 상태에서 이 버튼을 다시
+  // 누르면 "이미 끝난 전국 체인"은 govChainRunning이 false라서 handleGovAutoSyncChain이 중단이
+  // 아니라 새로 시작해버렸습니다(서울 체인만 중단됨). 버튼을 다시 눌렀을 때는 "둘 중 하나라도
+  // 돌고 있으면 전부 중단"만 하고, 완전히 둘 다 멈춰 있을 때만 새로 시작하도록 바꿉니다.
   async function handleAllSourcesSyncChain() {
+    if (govChainRunning || seoulChainRunning) {
+      govChainStopRef.current = true;
+      seoulChainStopRef.current = true;
+      return;
+    }
     await Promise.all([handleGovAutoSyncChain(), handleSeoulAutoSyncChain()]);
   }
 
