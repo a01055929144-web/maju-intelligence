@@ -143,25 +143,49 @@ const FETCH_CONCURRENCY = 5;
 const TIME_BUDGET_MS = 20_000;
 const MAX_ROWS_PER_RUN = 4000;
 
-export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 150): Promise<GovRestaurantRow[]> {
-  if (!isGovRestaurantApiConfigured()) return [];
+export type GovRestaurantFetchResult = {
+  rows: GovRestaurantRow[];
+  // 2026-09-07 피드백("데이터양이 많아 시간이 오래걸리면 시간은 넉넉하고 끊어서 진행하면 더
+  // 자세한 데이터가 있지 않을까") 대응: 예전에는 시작 페이지가 날짜(day index)로만 정해져서, 같은
+  // 날 버튼을 여러 번 눌러도 항상 같은 구간을 다시 훑을 뿐이었습니다(회전 폭 150페이지가 전국
+  // 229만 건/1000행=2,290페이지를 다 돌려면 약 16일이 걸림). nextStartPage를 돌려줘서 화면이
+  // 이어서 바로 다음 구간을 요청할 수 있게 하면, 한 번의 "계속 가져오기" 세션 안에서 시간이
+  // 허용하는 만큼 여러 구간을 이어 붙여 짧은 시간에 훨씬 넓은 지역을 훑을 수 있습니다.
+  nextStartPage: number;
+  scannedPages: number;
+  startPage: number;
+  totalPages: number;
+};
+
+export async function fetchRecentGovRestaurantRows(
+  days = 3,
+  pagesPerRun = 150,
+  startPageOverride?: number
+): Promise<GovRestaurantFetchResult> {
+  const empty = { rows: [] as GovRestaurantRow[], nextStartPage: 1, scannedPages: 0, startPage: 1, totalPages: 1 };
+  if (!isGovRestaurantApiConfigured()) return empty;
 
   const startedAt = Date.now();
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - Math.max(1, Math.min(days, MAX_LOOKBACK_DAYS)));
 
   const first = await fetchPage(1);
-  if (!first) return [];
+  if (!first) return empty;
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
-  const startPage = rotateStartPage(totalPages, pagesPerRun);
+  const startPage =
+    startPageOverride && startPageOverride >= 1 && startPageOverride <= totalPages
+      ? startPageOverride
+      : rotateStartPage(totalPages, pagesPerRun);
   const pageNumbers = Array.from({ length: pagesPerRun }, (_, offset) => ((startPage - 1 + offset) % totalPages) + 1);
 
   const rows: GovRestaurantRow[] = [];
+  let scannedPages = 0;
   for (let i = 0; i < pageNumbers.length; i += FETCH_CONCURRENCY) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     if (rows.length >= MAX_ROWS_PER_RUN) break;
     const batch = pageNumbers.slice(i, i + FETCH_CONCURRENCY);
     const pages = await Promise.all(batch.map((pageNo) => (pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo))));
+    scannedPages += batch.length;
     for (const page of pages) {
       if (!page?.rows?.length) continue;
       for (const raw of page.rows) {
@@ -176,5 +200,12 @@ export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 150):
     }
   }
 
-  return rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows;
+  const nextStartPage = ((startPage - 1 + scannedPages) % totalPages) + 1;
+  return {
+    rows: rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows,
+    nextStartPage,
+    scannedPages,
+    startPage,
+    totalPages
+  };
 }

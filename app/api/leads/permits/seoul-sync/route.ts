@@ -9,7 +9,7 @@ export const maxDuration = 60;
 // 변경분을 가져와 신규 리드로 적재합니다. 화면의 "지금 가져오기(서울시 공공데이터)" 버튼에서
 // 호출합니다. SEOUL_OPENDATA_API_KEY가 없으면 configured: false를 반환합니다.
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { companyId?: string; days?: number } | null;
+  const body = (await request.json().catch(() => null)) as { companyId?: string; days?: number; startPage?: number } | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -19,7 +19,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const days = Number.isFinite(body?.days) && Number(body?.days) > 0 ? Number(body?.days) : 3;
-    const result = await syncSeoulRestaurantLeads(scope.companyId!, days);
+    // 2026-09-07 피드백("끊어서 진행하면 더 자세한 데이터") 대응: gov-sync와 동일하게 "계속
+    // 가져오기"가 nextStartPage를 이어서 넘길 수 있게 합니다.
+    const startPage = Number.isFinite(body?.startPage) && Number(body?.startPage) > 0 ? Number(body?.startPage) : undefined;
+    const result = await syncSeoulRestaurantLeads(scope.companyId!, days, startPage);
     if (!result.configured) {
       return NextResponse.json(
         { message: "SEOUL_OPENDATA_API_KEY가 설정되지 않아 자동 수집을 실행할 수 없습니다. 관리자에게 문의하세요.", ...result },

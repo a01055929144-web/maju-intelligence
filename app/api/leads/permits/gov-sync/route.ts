@@ -10,7 +10,7 @@ export const maxDuration = 60;
 // GOV_RESTAURANT_API_KEY가 없으면 configured: false를 반환하고, 화면은 이를 "API 키 필요"
 // 안내로 표시합니다.
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { companyId?: string; days?: number } | null;
+  const body = (await request.json().catch(() => null)) as { companyId?: string; days?: number; startPage?: number } | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -20,7 +20,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const days = Number.isFinite(body?.days) && Number(body?.days) > 0 ? Number(body?.days) : 3;
-    const result = await syncGovRestaurantLeads(scope.companyId!, days);
+    // 2026-09-07 피드백("끊어서 진행하면 더 자세한 데이터") 대응: 화면의 "계속 가져오기"가 지난
+    // 호출의 nextStartPage를 그대로 넘겨서, 같은 날 여러 번 눌러도 매번 다른(다음) 구간을 훑도록
+    // 합니다. 넘기지 않으면 예전처럼 날짜 기반 회전 구간을 씁니다.
+    const startPage = Number.isFinite(body?.startPage) && Number(body?.startPage) > 0 ? Number(body?.startPage) : undefined;
+    const result = await syncGovRestaurantLeads(scope.companyId!, days, startPage);
     if (!result.configured) {
       return NextResponse.json(
         { message: "GOV_RESTAURANT_API_KEY가 설정되지 않아 자동 수집을 실행할 수 없습니다. 관리자에게 문의하세요.", ...result },

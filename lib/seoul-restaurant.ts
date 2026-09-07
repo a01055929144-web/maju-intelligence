@@ -151,25 +151,45 @@ const FETCH_CONCURRENCY = 5;
 const TIME_BUDGET_MS = 20_000;
 const MAX_ROWS_PER_RUN = 4000;
 
-export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 150): Promise<SeoulRestaurantRow[]> {
-  if (!isSeoulOpenDataConfigured()) return [];
+export type SeoulRestaurantFetchResult = {
+  rows: SeoulRestaurantRow[];
+  // 2026-09-07 피드백 대응(lib/gov-restaurant.ts와 동일한 이유) — nextStartPage를 돌려줘서 화면이
+  // "계속 가져오기"로 바로 다음 구간을 이어서 요청할 수 있게 합니다.
+  nextStartPage: number;
+  scannedPages: number;
+  startPage: number;
+  totalPages: number;
+};
+
+export async function fetchRecentSeoulRestaurantRows(
+  days = 3,
+  pagesPerRun = 150,
+  startPageOverride?: number
+): Promise<SeoulRestaurantFetchResult> {
+  const empty = { rows: [] as SeoulRestaurantRow[], nextStartPage: 1, scannedPages: 0, startPage: 1, totalPages: 1 };
+  if (!isSeoulOpenDataConfigured()) return empty;
 
   const startedAt = Date.now();
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - Math.max(1, Math.min(days, MAX_LOOKBACK_DAYS)));
 
   const first = await fetchPage(1);
-  if (!first) return [];
+  if (!first) return empty;
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
-  const startPage = rotateStartPage(totalPages, pagesPerRun);
+  const startPage =
+    startPageOverride && startPageOverride >= 1 && startPageOverride <= totalPages
+      ? startPageOverride
+      : rotateStartPage(totalPages, pagesPerRun);
   const pageNumbers = Array.from({ length: pagesPerRun }, (_, offset) => ((startPage - 1 + offset) % totalPages) + 1);
 
   const rows: SeoulRestaurantRow[] = [];
+  let scannedPages = 0;
   for (let i = 0; i < pageNumbers.length; i += FETCH_CONCURRENCY) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     if (rows.length >= MAX_ROWS_PER_RUN) break;
     const batch = pageNumbers.slice(i, i + FETCH_CONCURRENCY);
     const pages = await Promise.all(batch.map((pageNo) => (pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo))));
+    scannedPages += batch.length;
     for (const page of pages) {
       if (!page?.rows?.length) continue;
       for (const raw of page.rows) {
@@ -184,5 +204,12 @@ export async function fetchRecentSeoulRestaurantRows(days = 3, pagesPerRun = 150
     }
   }
 
-  return rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows;
+  const nextStartPage = ((startPage - 1 + scannedPages) % totalPages) + 1;
+  return {
+    rows: rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows,
+    nextStartPage,
+    scannedPages,
+    startPage,
+    totalPages
+  };
 }

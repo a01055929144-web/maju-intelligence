@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
@@ -133,6 +133,18 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [seoulSyncBusy, setSeoulSyncBusy] = useState(false);
   const [seoulSyncResult, setSeoulSyncResult] = useState<SeoulSyncResult | null>(null);
   const [seoulSyncWarning, setSeoulSyncWarning] = useState("");
+  // 2026-09-07 피드백("데이터양이 많아 시간이 오래걸리면 시간은 넉넉하고 끊어서 진행하면 더
+  // 자세한 데이터가 있지 않을까 싶어") 대응: 한 번의 자동 수집은 시간 제한 때문에 전체 데이터의
+  // 한 구간만 훑습니다. "이어서 계속" 버튼/자동 반복이 매번 nextStartPage를 이어 넘겨 짧은 시간에
+  // 훨씬 넓은 구간(결국 전국 전체 한 바퀴)을 훑을 수 있게 합니다.
+  const [govChainRunning, setGovChainRunning] = useState(false);
+  const [govChainRounds, setGovChainRounds] = useState(0);
+  const [govChainTotals, setGovChainTotals] = useState({ fetched: 0, inserted: 0, updated: 0 });
+  const govChainStopRef = useRef(false);
+  const [seoulChainRunning, setSeoulChainRunning] = useState(false);
+  const [seoulChainRounds, setSeoulChainRounds] = useState(0);
+  const [seoulChainTotals, setSeoulChainTotals] = useState({ fetched: 0, inserted: 0, updated: 0 });
+  const seoulChainStopRef = useRef(false);
   const [showSourceDetails, setShowSourceDetails] = useState(false);
   const [sourceStatus, setSourceStatus] = useState<PermitLeadSourceStatus | null>(null);
 
@@ -147,7 +159,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [keywordSweepResult, setKeywordSweepResult] = useState<KakaoKeywordLeadSweepResult | null>(null);
   const [keywordSweepWarning, setKeywordSweepWarning] = useState("");
 
-  const anySyncBusy = govSyncBusy || seoulSyncBusy;
+  const anySyncBusy = govSyncBusy || seoulSyncBusy || govChainRunning || seoulChainRunning;
   const [recommendBusy, setRecommendBusy] = useState(false);
   const [recommendMessage, setRecommendMessage] = useState("");
   const [recommendTopIndustries, setRecommendTopIndustries] = useState<string[]>([]);
@@ -174,7 +186,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
   const [keywordVolumeConfigured, setKeywordVolumeConfigured] = useState(true);
 
-  type LeadTableSortKey = "businessName" | "confidence" | "grade" | "industryPrimary" | "instagram" | "nextAction" | "phone" | "review" | "status";
+  type LeadTableSortKey = "businessName" | "confidence" | "grade" | "industryPrimary" | "instagram" | "nextAction" | "openDate" | "phone" | "review" | "status";
   const [tableSortKey, setTableSortKey] = useState<LeadTableSortKey | null>(null);
   const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
   function toggleTableSort(key: LeadTableSortKey) {
@@ -477,6 +489,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       else if (tableSortKey === "phone") diff = (a.lead.phone ? 1 : 0) - (b.lead.phone ? 1 : 0);
       else if (tableSortKey === "review") diff = (a.lead.rating || 0) - (b.lead.rating || 0) || (a.lead.reviewCount || 0) - (b.lead.reviewCount || 0);
       else if (tableSortKey === "nextAction") diff = (a.lead.nextAction || "").localeCompare(b.lead.nextAction || "", "ko");
+      else if (tableSortKey === "openDate") diff = (getPermitLeadOpenDate(a.lead) || "").localeCompare(getPermitLeadOpenDate(b.lead) || "", "ko");
       else if (tableSortKey === "status") diff = (a.lead.status || "").localeCompare(b.lead.status || "", "ko");
       return tableSortDirection === "asc" ? diff : -diff;
     });
@@ -866,9 +879,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   // days=14(이 소스의 최대 조회 범위) — 이 API는 "최근 변경분만" 걸러주는 파라미터가 없어 매일
   // 전체 스냅샷의 한 구간(약 15만 행)만 훑고 그 안에서 최근 변경분을 골라냅니다. days를 크게
   // 잡을수록 같은 구간 안에서 더 많은 변경분이 걸립니다(2026-08-23, "DB가 적다" 피드백 대응).
-  async function handleGovAutoSync() {
+  // startPage를 넘기면(=계속 이어서 훑기) 그 구간부터, 안 넘기면 예전처럼 날짜 기반 회전
+  // 구간부터 스캔합니다. loadLeads 새로고침은 체인 호출 쪽에서 마지막에 한 번만 하도록 옵션으로
+  // 뺐습니다(라운드마다 목록을 새로고침하면 느려집니다).
+  async function runGovAutoSync(startPage?: number): Promise<GovSyncResult | null> {
     setGovSyncBusy(true);
-    setGovSyncResult(null);
     setGovSyncWarning("");
     try {
       const response = await fetchWithTimeout(
@@ -876,7 +891,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ days: 14 })
+          body: JSON.stringify(startPage ? { days: 14, startPage } : { days: 14 })
         },
         25000
       );
@@ -887,23 +902,63 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         // 초과)를 내려줬다는 뜻입니다 — 상태 코드라도 같이 보여줘 다음에 같은 일이 생기면 원인을
         // 더 빨리 좁힐 수 있게 합니다.
         setGovSyncWarning(payload?.message || `자동 수집에 실패했습니다 (응답 코드 ${response.status}). 처리 시간이 길어져 시간 초과됐을 수 있습니다 — 잠시 후 다시 시도해주세요.`);
-        return;
+        return null;
       }
       setGovSyncResult(payload);
-      loadLeads();
+      return payload as GovSyncResult;
     } catch (error) {
       setGovSyncWarning(error instanceof Error ? error.message : "네트워크 오류로 자동 수집하지 못했습니다.");
+      return null;
     } finally {
       setGovSyncBusy(false);
     }
   }
 
+  async function handleGovAutoSync() {
+    const payload = await runGovAutoSync();
+    if (payload) loadLeads();
+  }
+
+  // "계속 이어서 훑기" — 안전 상한(최대 25라운드) 또는 전국 데이터를 한 바퀴 다 훑을 때까지
+  // (스캔한 페이지 누적이 totalPages 이상) 자동으로 다음 구간을 이어서 호출합니다. 이미 실행
+  // 중이면 다시 누르는 것은 "중단" 역할을 합니다.
+  async function handleGovAutoSyncChain() {
+    if (govChainRunning) {
+      govChainStopRef.current = true;
+      return;
+    }
+    govChainStopRef.current = false;
+    setGovChainRunning(true);
+    setGovChainRounds(0);
+    setGovChainTotals({ fetched: 0, inserted: 0, updated: 0 });
+    let startPage: number | undefined;
+    let scannedSoFar = 0;
+    let totalPages = 0;
+    for (let round = 0; round < 25; round++) {
+      if (govChainStopRef.current) break;
+      const payload = await runGovAutoSync(startPage);
+      if (!payload) break;
+      setGovChainRounds(round + 1);
+      setGovChainTotals((totals) => ({
+        fetched: totals.fetched + payload.fetched,
+        inserted: totals.inserted + payload.ingest.inserted,
+        updated: totals.updated + payload.ingest.updated
+      }));
+      if (!payload.nextStartPage || !payload.totalPages) break;
+      totalPages = payload.totalPages;
+      scannedSoFar += payload.scannedPages || 0;
+      if (scannedSoFar >= totalPages) break; // 전국을 한 바퀴 다 훑었습니다.
+      startPage = payload.nextStartPage;
+    }
+    setGovChainRunning(false);
+    loadLeads();
+  }
+
   // 서울시 공공데이터(서울 열린데이터광장) 자동 수집: SEOUL_OPENDATA_API_KEY 필요.
   // days=14(이 소스의 최대 조회 범위) — 행정안전부 소스와 같은 이유로 구간 회전 방식이라, days를
   // 크게 잡을수록 오늘 훑는 구간 안에서 더 많은 변경분이 걸립니다(2026-08-23 피드백 대응).
-  async function handleSeoulAutoSync() {
+  async function runSeoulAutoSync(startPage?: number): Promise<SeoulSyncResult | null> {
     setSeoulSyncBusy(true);
-    setSeoulSyncResult(null);
     setSeoulSyncWarning("");
     try {
       const response = await fetchWithTimeout(
@@ -911,28 +966,74 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ days: 14 })
+          body: JSON.stringify(startPage ? { days: 14, startPage } : { days: 14 })
         },
         25000
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setSeoulSyncWarning(payload?.message || `자동 수집에 실패했습니다 (응답 코드 ${response.status}). 처리 시간이 길어져 시간 초과됐을 수 있습니다 — 잠시 후 다시 시도해주세요.`);
-        return;
+        return null;
       }
       setSeoulSyncResult(payload);
-      loadLeads();
+      return payload as SeoulSyncResult;
     } catch (error) {
       setSeoulSyncWarning(error instanceof Error ? error.message : "네트워크 오류로 자동 수집하지 못했습니다.");
+      return null;
     } finally {
       setSeoulSyncBusy(false);
     }
+  }
+
+  async function handleSeoulAutoSync() {
+    const payload = await runSeoulAutoSync();
+    if (payload) loadLeads();
+  }
+
+  // "계속 이어서 훑기" — handleGovAutoSyncChain과 동일한 방식(서울은 데이터가 훨씬 적어 보통 몇
+  // 라운드 안에 전체를 다 훑습니다).
+  async function handleSeoulAutoSyncChain() {
+    if (seoulChainRunning) {
+      seoulChainStopRef.current = true;
+      return;
+    }
+    seoulChainStopRef.current = false;
+    setSeoulChainRunning(true);
+    setSeoulChainRounds(0);
+    setSeoulChainTotals({ fetched: 0, inserted: 0, updated: 0 });
+    let startPage: number | undefined;
+    let scannedSoFar = 0;
+    let totalPages = 0;
+    for (let round = 0; round < 25; round++) {
+      if (seoulChainStopRef.current) break;
+      const payload = await runSeoulAutoSync(startPage);
+      if (!payload) break;
+      setSeoulChainRounds(round + 1);
+      setSeoulChainTotals((totals) => ({
+        fetched: totals.fetched + payload.fetched,
+        inserted: totals.inserted + payload.ingest.inserted,
+        updated: totals.updated + payload.ingest.updated
+      }));
+      if (!payload.nextStartPage || !payload.totalPages) break;
+      totalPages = payload.totalPages;
+      scannedSoFar += payload.scannedPages || 0;
+      if (scannedSoFar >= totalPages) break;
+      startPage = payload.nextStartPage;
+    }
+    setSeoulChainRunning(false);
+    loadLeads();
   }
 
   // 두 데이터 소스 모두 매일 새벽 cron으로 이미 자동 수집됩니다(설정된 소스만). 이 버튼은 지금 바로 최신
   // 데이터를 당겨오고 싶을 때 쓰는 수동 새로고침이라, 소스별로 따로 누르지 않도록 한 번에 묶어서 호출합니다.
   async function handleAllSourcesSync() {
     await Promise.all([handleGovAutoSync(), handleSeoulAutoSync()]);
+  }
+
+  // "계속 이어서 훑기"의 두 소스 동시 실행 버전 — 시간이 오래 걸려도 되니 전국을 최대한 넓게
+  // 훑고 싶을 때 한 번에 누르는 버튼입니다.
+  async function handleAllSourcesSyncChain() {
+    await Promise.all([handleGovAutoSyncChain(), handleSeoulAutoSyncChain()]);
   }
 
   // "기거래처 주변 리드 + 업종 유사도" 추천 점수 갱신(2026-08-24 피드백: "거래 성사 확률이 높은 곳을
@@ -1112,6 +1213,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         label: lead.leadPeriod === "today" ? "오늘" : lead.grade || "신규",
         tone: "lead" as const,
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
+        // 2026-09-07 피드백("신규 리드가 의정부쪽으로 모여져있어서 확인이 필요해") 대응: 서울/카카오
+        // 리드 소스는 이미 정확한 위경도를 갖고 있는데도 여기서 버리고 매번 주소 텍스트로 재지오코딩
+        // 했습니다. 지오코딩은 부정확한 매칭이 나와도 성공(OK)으로 처리되어 서로 다른 주소가 같은
+        // 좌표로 뭉치는 원인이 됩니다. 저장된 좌표가 있으면 그대로 넘겨서(KakaoAddressMap이 lat/lng가
+        // 있으면 지오코딩을 건너뜁니다) 실제 위치에 정확히 찍히게 합니다.
+        lat: Number.isFinite(lead.latitude) ? lead.latitude : undefined,
+        lng: Number.isFinite(lead.longitude) ? lead.longitude : undefined,
         x: 0,
         y: 0
       }));
@@ -1425,6 +1533,20 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 {anySyncBusy ? "수집 중..." : "신규 리드 지금 수집"}
               </button>
               <button
+                className={`inline-flex w-fit items-center gap-2 rounded-md px-3 py-1.5 text-xs font-black ring-1 ring-inset ${
+                  govChainRunning || seoulChainRunning
+                    ? "bg-rose-50 text-rose-700 ring-rose-200"
+                    : "bg-teal-50 text-teal-700 ring-teal-200"
+                }`}
+                disabled={(govSyncBusy || seoulSyncBusy) && !govChainRunning && !seoulChainRunning}
+                onClick={() => void handleAllSourcesSyncChain()}
+                title="시간이 걸려도 되니 한 번 누르면 전국 데이터를 끝까지(또는 중단할 때까지) 구간을 이어서 계속 훑어 더 넓고 자세한 데이터를 모읍니다."
+                type="button"
+              >
+                <Radar className="h-3.5 w-3.5" />
+                {govChainRunning || seoulChainRunning ? "이어서 훑는 중 (누르면 중단)" : "끊어서 이어서 계속 수집"}
+              </button>
+              <button
                 className="text-[11px] font-bold text-slate-400 underline decoration-dotted underline-offset-2 hover:text-slate-600"
                 onClick={() => setShowSourceDetails((value) => !value)}
                 type="button"
@@ -1432,6 +1554,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 {showSourceDetails ? "소스 정보 접기" : "어떤 소스에서 가져오나요?"}
               </button>
             </div>
+            {govChainRunning || seoulChainRunning || govChainRounds > 0 || seoulChainRounds > 0 ? (
+              <p className="text-[11px] font-bold text-teal-700">
+                전국 공공데이터 {govChainRounds}회 구간 진행(수집 {govChainTotals.fetched.toLocaleString()}·신규 {govChainTotals.inserted.toLocaleString()})
+                {" · "}
+                서울시 공공데이터 {seoulChainRounds}회 구간 진행(수집 {seoulChainTotals.fetched.toLocaleString()}·신규 {seoulChainTotals.inserted.toLocaleString()})
+                {govChainRunning || seoulChainRunning ? " — 계속 진행 중입니다, 창을 닫지 말고 기다려주세요." : " — 완료"}
+              </p>
+            ) : null}
             {showSourceDetails ? (
               <p className="text-[11px] font-semibold leading-4 text-slate-400">
                 "전국 공공데이터"는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, "서울시 공공데이터"는
@@ -2139,6 +2269,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
                     <LeadSortableHeader className="w-[84px]" label="업종" sortKeyValue="industryPrimary" />
                     <LeadSortableHeader
+                      className="w-[92px]"
+                      label="개시일"
+                      sortKeyValue="openDate"
+                      title="인허가(개업) 신청일입니다. 공공데이터 소스에는 실제 개업일과 별도로 관리되는 값이 없어 인허가일과 같습니다. 영업리드(키워드 탐색)는 이미 운영 중인 매장이라 이 값이 없습니다."
+                    />
+                    <LeadSortableHeader
                       className="w-[64px]"
                       label="등급"
                       sortKeyValue="grade"
@@ -2210,6 +2346,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           })()}
                         </td>
                         <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                          {getPermitLeadOpenDate(lead) || <span className="text-slate-300">미확인</span>}
+                        </td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
                         </td>

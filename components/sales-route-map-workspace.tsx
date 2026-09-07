@@ -870,20 +870,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘(최근 20시간) 안에 배송완료로
   // 기록된 거래처 id 목록입니다. 라이브 차량 위치와 같은 폴링 주기를 타도록 같은 요청에
   // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
+  // (이 블록이 예전에 병합 과정에서 두 벌로 중복 선언돼 빌드가 깨졌던 것을 여기서 하나로 정리했습니다.)
   const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
-  const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
-  const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
-  const markers = useMemo(
-    () => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta, completedStoreIdsToday),
-    [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores, completedStoreIdsToday]
-  );
   useEffect(() => {
     setLiveVehicleLocations(staffVehicleLocations);
   }, [staffVehicleLocations]);
-  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘(최근 20시간) 안에 배송완료로
-  // 기록된 거래처 id 목록입니다. 라이브 차량 위치와 같은 폴링 주기를 타도록 같은 요청에
-  // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
-  const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -913,6 +904,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     };
   }, [churnRiskCompanyId]);
   const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
+  const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
+  const markers = useMemo(
+    () => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta, completedStoreIdsToday),
+    [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores, completedStoreIdsToday]
+  );
   const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehicleLocations, storeById), [liveVehicleLocations, storeById]);
   const liveVehicleSummary = useMemo(() => {
     const active = liveVehicleLocations.filter((location) => !location.isStale).length;
@@ -1011,6 +1007,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         label: `${lead.distanceKm}km`,
         name: lead.businessName,
         tone: "lead" as const,
+        // 2026-09-07 피드백("신규 리드가 의정부쪽으로 모여져있어서") 대응: 저장된 위경도가 있으면
+        // 그대로 넘겨 재지오코딩을 건너뜁니다(주소 텍스트 지오코딩은 부정확한 매칭도 성공 처리되어
+        // 서로 다른 주소가 한 좌표로 뭉치는 원인이 됩니다).
+        lat: Number.isFinite(lead.latitude) ? lead.latitude : undefined,
+        lng: Number.isFinite(lead.longitude) ? lead.longitude : undefined,
         x: 0,
         y: 0
       }));
@@ -1088,6 +1089,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
         name: lead.businessName,
         tone: "lead" as const,
+        // 2026-09-07 피드백("신규 리드가 의정부쪽으로 모여져있어서") 대응: 저장된 위경도가 있으면
+        // 그대로 넘겨 재지오코딩을 건너뜁니다.
+        lat: Number.isFinite(lead.latitude) ? lead.latitude : undefined,
+        lng: Number.isFinite(lead.longitude) ? lead.longitude : undefined,
         x: 0,
         y: 0
       }));
@@ -6366,12 +6371,20 @@ export type GovSyncResult = {
   configured: boolean;
   fetched: number;
   ingest: PermitUploadResult;
+  // 2026-09-07 피드백("끊어서 진행하면 더 자세한 데이터") 대응: "계속 가져오기" 버튼이 다음 호출에
+  // 그대로 넘길 다음 스캔 시작 페이지/전체 페이지 수입니다.
+  nextStartPage?: number;
+  scannedPages?: number;
+  totalPages?: number;
 };
 
 export type SeoulSyncResult = {
   configured: boolean;
   fetched: number;
   ingest: PermitUploadResult;
+  nextStartPage?: number;
+  scannedPages?: number;
+  totalPages?: number;
 };
 
 export type PermitLeadSourceStatus = {

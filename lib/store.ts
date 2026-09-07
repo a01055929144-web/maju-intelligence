@@ -6145,6 +6145,9 @@ export type GovRestaurantSyncResult = {
   configured: boolean;
   fetched: number;
   ingest: PermitLeadIngestResult;
+  nextStartPage?: number;
+  scannedPages?: number;
+  totalPages?: number;
 };
 
 /**
@@ -6213,16 +6216,26 @@ export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStat
   };
 }
 
-export async function syncGovRestaurantLeads(companyId: string, days = 3): Promise<GovRestaurantSyncResult> {
+// 2026-09-07 피드백("시간은 넉넉하고 끊어서 진행하면 더 자세한 데이터가 있지 않을까") 대응:
+// startPage를 넘기면 그 구간부터 스캔하고, 결과에 nextStartPage를 함께 돌려줘서 화면이 "계속
+// 가져오기"로 바로 다음 구간을 이어서 요청할 수 있습니다. 안 넘기면 예전처럼 날짜 기반 회전입니다.
+export async function syncGovRestaurantLeads(companyId: string, days = 3, startPage?: number): Promise<GovRestaurantSyncResult> {
   if (!isGovRestaurantApiConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
   }
 
   try {
-    const rows = await fetchRecentGovRestaurantRows(days);
-    const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
+    const result = await fetchRecentGovRestaurantRows(days, undefined, startPage);
+    const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "gov_restaurant_api" });
     await recordLeadSyncStatus(companyId, "gov", "success");
-    return { configured: true, fetched: rows.length, ingest };
+    return {
+      configured: true,
+      fetched: result.rows.length,
+      ingest,
+      nextStartPage: result.nextStartPage,
+      scannedPages: result.scannedPages,
+      totalPages: result.totalPages
+    };
   } catch (error) {
     await recordLeadSyncStatus(companyId, "gov", "error", error instanceof Error ? error.message : String(error));
     throw error;
@@ -6276,6 +6289,9 @@ export type SeoulRestaurantSyncResult = {
   configured: boolean;
   fetched: number;
   ingest: PermitLeadIngestResult;
+  nextStartPage?: number;
+  scannedPages?: number;
+  totalPages?: number;
 };
 
 /**
@@ -6284,16 +6300,25 @@ export type SeoulRestaurantSyncResult = {
  * 채우므로(lib/seoul-restaurant.ts) 카카오 지오코더를 다시 타지 않고 바로 지도에 표시됩니다.
  * SEOUL_OPENDATA_API_KEY가 없으면 configured: false를 반환합니다.
  */
-export async function syncSeoulRestaurantLeads(companyId: string, days = 3): Promise<SeoulRestaurantSyncResult> {
+// 2026-09-07 피드백 대응(syncGovRestaurantLeads와 동일한 이유) — startPage로 이어서 스캔하고
+// nextStartPage를 돌려줍니다.
+export async function syncSeoulRestaurantLeads(companyId: string, days = 3, startPage?: number): Promise<SeoulRestaurantSyncResult> {
   if (!isSeoulOpenDataConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
   }
 
   try {
-    const rows = await fetchRecentSeoulRestaurantRows(days);
-    const ingest = await ingestPermitLeadRows(companyId, rows, { source: "seoul_opendata_api" });
+    const result = await fetchRecentSeoulRestaurantRows(days, undefined, startPage);
+    const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "seoul_opendata_api" });
     await recordLeadSyncStatus(companyId, "seoul", "success");
-    return { configured: true, fetched: rows.length, ingest };
+    return {
+      configured: true,
+      fetched: result.rows.length,
+      ingest,
+      nextStartPage: result.nextStartPage,
+      scannedPages: result.scannedPages,
+      totalPages: result.totalPages
+    };
   } catch (error) {
     await recordLeadSyncStatus(companyId, "seoul", "error", error instanceof Error ? error.message : String(error));
     throw error;
@@ -6640,7 +6665,11 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
-  const limit = Math.min(500, filters.limit || 300);
+  // 2026-09-07 피드백("리드는 총 500개인데 왜 지도에 표시는 적게 나오는지") 대응: 300건(최대
+  // 500건) 상한 때문에 그 이후 순위의 리드는 아예 조회조차 되지 않아 목록/지도 어디에도 나타나지
+  // 않았습니다. 데이터 양이 많아져도 화면(테이블 페이지네이션·지도)이 감당하도록 상한을 대폭
+  // 올립니다 -- 실제 병목은 이 조회 상한이지, 목록/지도 렌더링 쪽이 아니었습니다.
+  const limit = Math.min(5000, filters.limit || 3000);
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
     `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}`
@@ -6649,7 +6678,35 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   let leads = rows.map(toPermitLeadItem);
   if (filters.hasPhone) leads = leads.filter((lead) => Boolean(lead.phone));
 
-  return { leads, total: leads.length };
+  // 2026-09-07: 예전에는 total이 이미 상한으로 잘린 leads.length라서 실제 전체 건수와 달랐습니다
+  // (예: DB에 500건이어도 300건만 받아와 "총 300건"으로 잘못 표시). hasPhone처럼 조회 이후
+  // 자바스크립트로만 걸러지는 필터가 없을 때는, 같은 조건으로 count=exact를 별도 조회해 진짜
+  // 전체 건수를 돌려줍니다.
+  let total = leads.length;
+  if (!filters.hasPhone) {
+    total = await supabasePermitLeadCount(params).catch(() => leads.length);
+  }
+
+  return { leads, total };
+}
+
+async function supabasePermitLeadCount(params: string[]): Promise<number> {
+  const config = getSupabaseConfig();
+  if (!config) return 0;
+
+  const response = await fetch(`${config.url}/rest/v1/business_permit_leads?select=id&${params.join("&")}&limit=1`, {
+    headers: {
+      apikey: config.serviceRoleKey,
+      Authorization: `Bearer ${config.serviceRoleKey}`,
+      Prefer: "count=exact"
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) return 0;
+  const contentRange = response.headers.get("content-range");
+  const count = Number(contentRange?.split("/")[1]);
+  return Number.isFinite(count) ? count : 0;
 }
 
 function extractPermitLeadRegionKey(address?: string) {
