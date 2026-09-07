@@ -100,24 +100,36 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           </div>
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3">
-          <BasisCard
-            icon={<FileSpreadsheet className="h-4 w-4" />}
-            title="1. 기준정보 저장"
-            description="회사명과 물류 출발지가 저장되어야 거래처 거리와 코스 계산 기준이 맞습니다."
-          />
-          <BasisCard
-            icon={<Upload className="h-4 w-4" />}
-            title="2. 거래처 데이터 연결"
-            description="수기 등록 또는 엑셀 업로드 데이터가 같은 회사 기준으로 누적됩니다."
-          />
-          <BasisCard
-            icon={<Truck className="h-4 w-4" />}
-            title="3. 현장 화면 반영"
-            description="지도 홈과 거래처 원장에서 동일한 기준값을 사용합니다."
-          />
+        {/* 2026-09-08 피드백("회사설정 내의 레이아웃과 카드내용이 다른데 합쳐진 경우가 있어 이를
+            개선해"): 예전엔 이 3단계 안내가 카드 테두리 없이 옆 카드들 사이에 붕 떠 있었습니다 —
+            다른 섹션들과 같은 maju-section-card로 감싸 시각적 리듬을 맞춥니다. */}
+        <section className="maju-section-card">
+          <div className="maju-card-header">
+            <p className="maju-section-title">설정 절차</p>
+            <p className="mt-1 maju-muted-label normal-case tracking-normal">아래 3단계로 저장한 기준값이 지도·코스·거래처 화면에 그대로 반영됩니다.</p>
+          </div>
+          <div className="grid gap-3 p-4 md:grid-cols-3">
+            <BasisCard
+              icon={<FileSpreadsheet className="h-4 w-4" />}
+              title="1. 기준정보 저장"
+              description="회사명과 물류 출발지가 저장되어야 거래처 거리와 코스 계산 기준이 맞습니다."
+            />
+            <BasisCard
+              icon={<Upload className="h-4 w-4" />}
+              title="2. 거래처 데이터 연결"
+              description="수기 등록 또는 엑셀 업로드 데이터가 같은 회사 기준으로 누적됩니다."
+            />
+            <BasisCard
+              icon={<Truck className="h-4 w-4" />}
+              title="3. 현장 화면 반영"
+              description="지도 홈과 거래처 원장에서 동일한 기준값을 사용합니다."
+            />
+          </div>
         </section>
 
+        {/* 2026-09-08 개선: 예전엔 이 카드 하나("회사 설정" 헤더)에 회사 정보 + 문자 발송 설정 +
+            텔레그램 이탈 알림까지 서로 다른 세 기능이 한 카드 안에 섞여 있어서, 카드 헤더가 말하는
+            내용과 실제 카드 본문 내용이 어긋나 보였습니다. 셋을 각자 헤더가 맞는 별도 카드로 나눕니다. */}
         <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
@@ -166,6 +178,19 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 placeholder="예: 경기도 하남시 초이로 133 1층"
               />
             </label>
+          </div>
+        </section>
+
+        <section className="maju-section-card">
+          <div className="maju-card-header">
+            <Badge className="mb-3 w-fit bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-100">
+              <SendHorizonal className="mr-1 h-3.5 w-3.5" />
+              문자 발송 설정
+            </Badge>
+            <h2 className="text-xl font-black text-slate-950">고객 문자 발신 정보와 상태별 기본 문구</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">현장 직원이 배송 메모를 남기지 않아도 여기 저장된 문구로 자동 발송됩니다.</p>
+          </div>
+          <div className="space-y-4 p-4">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground">문자 문의번호</span>
@@ -224,11 +249,21 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 />
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="maju-section-card">
+          <div className="maju-card-header">
+            <Badge className="mb-3 w-fit bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">
+              <Bell className="mr-1 h-3.5 w-3.5" />
+              이탈 위험 알림
+            </Badge>
+            <h2 className="text-xl font-black text-slate-950">텔레그램 그룹으로 이탈 위험 거래처 알림 받기</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다.</p>
+          </div>
+          <div className="space-y-3 p-4">
             <label className="space-y-1.5">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                <Bell className="h-3.5 w-3.5" />
-                이탈 위험 알림 · 텔레그램 그룹 chat_id
-              </span>
+              <span className="text-xs font-bold text-muted-foreground">텔레그램 그룹 chat_id</span>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
@@ -247,40 +282,41 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                   {telegramTesting ? "발송 중..." : "테스트 발송"}
                 </Button>
               </div>
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
-                <p>21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다. 설정 방법:</p>
-                <ol className="mt-1.5 list-decimal space-y-1 pl-4">
-                  <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
-                  <li>그룹 chat_id를 확인합니다 — 그룹에 아무 메시지나 보낸 뒤, 브라우저에서 <code className="rounded bg-white px-1 py-0.5">https://api.telegram.org/bot(봇 토큰)/getUpdates</code>에 접속하면 <code className="rounded bg-white px-1 py-0.5">chat.id</code> 값(그룹은 보통 -로 시작하는 숫자)을 확인할 수 있습니다. 봇 토큰은 MAJU 담당자에게 문의하세요.</li>
-                  <li>위 입력칸에 chat_id를 저장한 뒤 "테스트 발송"으로 실제 도착을 확인합니다.</li>
-                </ol>
-                <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 chat_id가 바뀌면 알림이 조용히 끊깁니다 — 주기적으로 테스트 발송으로 확인해주세요.</p>
-              </div>
-              {telegramTestMessage ? (
-                <p className={`text-xs font-bold ${telegramTestMessage.includes("실패") || telegramTestMessage.includes("먼저") ? "text-rose-600" : "text-emerald-700"}`}>
-                  {telegramTestMessage}
-                </p>
-              ) : null}
             </label>
-            {message ? (
-              <p className={`rounded-md px-3 py-2 text-sm font-bold ${messageOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{message}</p>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-bold leading-5 text-slate-500">저장 후 지도 홈과 거래처 원장에서 같은 출발지 기준으로 계산됩니다.</p>
-              <Button className="shrink-0" disabled={loading}>
-                {loading ? <Check className="h-4 w-4 animate-pulse" /> : <Save className="h-4 w-4" />}
-                설정 저장
-              </Button>
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
+              <p>설정 방법:</p>
+              <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+                <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
+                <li>그룹 chat_id를 확인합니다 — 그룹에 아무 메시지나 보낸 뒤, 브라우저에서 <code className="rounded bg-white px-1 py-0.5">https://api.telegram.org/bot(봇 토큰)/getUpdates</code>에 접속하면 <code className="rounded bg-white px-1 py-0.5">chat.id</code> 값(그룹은 보통 -로 시작하는 숫자)을 확인할 수 있습니다. 봇 토큰은 MAJU 담당자에게 문의하세요.</li>
+                <li>위 입력칸에 chat_id를 저장한 뒤 "테스트 발송"으로 실제 도착을 확인합니다.</li>
+              </ol>
+              <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 chat_id가 바뀌면 알림이 조용히 끊깁니다 — 주기적으로 테스트 발송으로 확인해주세요.</p>
             </div>
+            {telegramTestMessage ? (
+              <p className={`text-xs font-bold ${telegramTestMessage.includes("실패") || telegramTestMessage.includes("먼저") ? "text-rose-600" : "text-emerald-700"}`}>
+                {telegramTestMessage}
+              </p>
+            ) : null}
           </div>
         </section>
+
+        {message ? (
+          <p className={`rounded-md px-3 py-2 text-sm font-bold ${messageOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{message}</p>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-bold leading-5 text-slate-500">저장 후 지도 홈과 거래처 원장에서 같은 출발지 기준으로 계산됩니다.</p>
+          <Button className="shrink-0" disabled={loading}>
+            {loading ? <Check className="h-4 w-4 animate-pulse" /> : <Save className="h-4 w-4" />}
+            설정 저장
+          </Button>
+        </div>
       </div>
 
       <aside className="h-fit maju-section-card">
         <div className="maju-card-header space-y-3">
           <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
             <MapPin className="h-5 w-5 text-primary" />
-            운영 기준값
+            저장 가이드
           </h2>
           <div className="rounded-lg border border-teal-100 bg-teal-50/70 p-3">
             <p className="text-xs font-black text-primary">현재 출발지</p>
