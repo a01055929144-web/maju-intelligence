@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 /**
  * 고객사 탈퇴(회사 계정 전체 삭제)입니다. 대표(오너)만 볼 수 있고, 실수로 누르는 걸 막기 위해
@@ -24,14 +25,18 @@ export function CompanyClosurePanel({ companyName }: { companyName: string }) {
 
     setClosing(true);
     setError("");
-    const response = await fetch("/api/customer/company/close", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmCompanyName: confirmText })
-    });
-    const payload = await response.json().catch(() => null);
+    const response = await fetchWithTimeout(
+      "/api/customer/company/close",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmCompanyName: confirmText })
+      },
+      12000
+    ).catch(() => null);
+    const payload = await response?.json().catch(() => null);
 
-    if (!response.ok) {
+    if (!response?.ok) {
       setClosing(false);
       setError(payload?.message || "회사 탈퇴 처리에 실패했습니다.");
       return;

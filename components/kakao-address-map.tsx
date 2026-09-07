@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 
 export type KakaoMapMarker = {
   readonly address: string;
+  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘 배송완료 기록(customer_notes
+  // note_type=delivery)이 있는 거래처 마커에 작은 완료 배지를 그리기 위한 플래그입니다. tone: "customer"
+  // 마커에만 의미가 있습니다.
+  readonly completed?: boolean;
   readonly grade?: "A" | "B" | "C";
   readonly id?: string;
   readonly label: string;
@@ -1018,6 +1022,13 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
           : "background:#2563eb;color:#ffffff;";
   const label = escapeHtml(marker.label);
   const name = escapeHtml(marker.name);
+  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘 배송완료 기록이 있는
+  // 거래처 마커 오른쪽 위에 작은 초록 체크 배지를 얹습니다. 마커 자체의 등급 색/모양은 그대로 두고
+  // 배지만 덧붙여, "이 매장은 이미 오늘 방문·완료됐다"를 지도에서 바로 구분할 수 있게 합니다.
+  const completedBadge = marker.completed
+    ? `<span style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:999px;background:#059669;border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1;color:#ffffff;font-weight:900;">✓</span>`
+    : "";
+  const completedTitleSuffix = marker.completed ? " · 오늘 배송완료" : "";
 
   if (marker.tone === "origin") {
     return htmlToElement(`
@@ -1056,15 +1067,15 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
     // 지연되지 않은(정상 수신 중인) 차량은 원 전체가 은은하게 밝아졌다 어두워지길 반복하는
     // pulse 효과를 줘 "지금 살아서 접속돼 있다"는 느낌을 한눈에 알아볼 수 있게 합니다. 지연된
     // 차량은 애니메이션 없이 무채색으로 가라앉혀 "지금 안 잡히는 차량"임을 대비시킵니다.
+    // 2026-09-07 추가 피드백("간략한 이모티콘이면 좋을 것 같고"): 처음엔 이름·주소까지 항상
+    // 펼쳐진 카드로 그렸는데, 차량이 늘어나면 지도가 텍스트로 뒤덮여 오히려 복잡해 보였습니다.
+    // 이제는 이모지 원 하나만 남기고, 이름·상태·작업 매장 같은 상세 정보는 title(hover 툴팁)과
+    // 클릭 시 열리는 카드(부모의 onMarkerClick)로만 보여줍니다.
     const pulseClass = isDelayed ? "" : "animate-pulse";
     return htmlToElement(`
-      <button type="button" title="${name}" style="cursor:pointer;background:#ffffff;color:#0f172a;border:2px solid ${borderColor};border-radius:12px;display:flex;align-items:center;gap:7px;padding:7px 10px;box-shadow:0 0 0 5px ${haloColor},0 12px 28px rgba(15,23,42,.24);font-size:12px;font-weight:900;white-space:nowrap;">
-        <span class="${pulseClass}" style="position:relative;width:28px;height:28px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;">
+      <button type="button" title="${name}" style="cursor:pointer;position:relative;width:36px;height:36px;border-radius:999px;background:#ffffff;border:2px solid ${borderColor};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 5px ${haloColor},0 10px 22px rgba(15,23,42,.28);padding:0;">
+        <span class="${pulseClass}" style="width:28px;height:28px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;">
           🚚
-        </span>
-        <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;">
-          <span style="max-width:96px;overflow:hidden;text-overflow:ellipsis;">${label}</span>
-          <span style="margin-top:2px;color:#64748b;font-size:10px;font-weight:800;">${escapeHtml(marker.address)}</span>
         </span>
       </button>
     `);
@@ -1072,8 +1083,8 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
 
   if ((marker.tone === "customer" || marker.markerColor) && /^\d+$/.test(marker.label)) {
     return htmlToElement(`
-      <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
-        ${label}
+      <button type="button" title="${name}${completedTitleSuffix}" style="cursor:pointer;position:relative;${toneClass}width:30px;height:30px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(37,99,235,.30);font-size:12px;font-weight:900;">
+        ${label}${completedBadge}
       </button>
     `);
   }
@@ -1112,15 +1123,15 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
 
   if (marker.grade) {
     return htmlToElement(`
-      <button type="button" title="${name}" style="cursor:pointer;${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;">
-        ${label}
+      <button type="button" title="${name}${completedTitleSuffix}" style="cursor:pointer;position:relative;${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;">
+        ${label}${completedBadge}
       </button>
     `);
   }
 
   return htmlToElement(`
-    <button type="button" title="${name}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:7px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:12px;font-weight:800;white-space:nowrap;">
-      ${label} · ${name}
+    <button type="button" title="${name}${completedTitleSuffix}" style="cursor:pointer;position:relative;${toneClass}border:0;border-radius:8px;padding:7px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:12px;font-weight:800;white-space:nowrap;">
+      ${label} · ${name}${completedBadge}
     </button>
   `);
 }
