@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 const statusLabels: Record<string, string> = {
   today: "오늘 추천",
@@ -22,11 +23,15 @@ export function LeadStatusSelect({ leadId, value, companyId }: { leadId: string;
     setSaving(true);
     setError("");
     try {
-      const response = await fetch(`/api/leads/${leadId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus, companyId })
-      });
+      const response = await fetchWithTimeout(
+        `/api/leads/${leadId}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: nextStatus, companyId })
+        },
+        12000
+      );
       if (!response.ok) {
         setStatus(previousStatus);
         setError("저장 실패");
