@@ -135,20 +135,24 @@ function externalResultId(result: ExternalBusinessResult) {
 // 패널(QuickRegisterDrawer)의 저장 로직과 별개로, 여러 매장을 체크해 한 번에 등록할 때 씁니다.
 async function registerExternalBusinessResult(result: ExternalBusinessResult): Promise<{ id: string; name: string }> {
   const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-  const response = await fetch("/api/customers", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      address: result.roadAddress || result.address,
-      businessStatus: "확인 필요",
-      companyId: companyId || undefined,
-      customerName: result.name,
-      industry: result.industry || "미분류",
-      kakaoPlaceUrl: result.kakaoPlaceUrl,
-      phone: result.phone,
-      validateBusinessNumber: false
-    })
-  });
+  const response = await fetchWithTimeout(
+    "/api/customers",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: result.roadAddress || result.address,
+        businessStatus: "확인 필요",
+        companyId: companyId || undefined,
+        customerName: result.name,
+        industry: result.industry || "미분류",
+        kakaoPlaceUrl: result.kakaoPlaceUrl,
+        phone: result.phone,
+        validateBusinessNumber: false
+      })
+    },
+    15000
+  );
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.message || `${result.name} 등록에 실패했습니다.`);
   // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 여러 곳을 한 번에 등록하는 흐름이라
@@ -632,16 +636,20 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     setLeadRadiusSearching(true);
     setLeadRadiusResult(null);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/nearby"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          anchorMode: leadRadiusAnchorMode,
-          anchorCustomer: anchorStore ? { id: anchorStore.id, name: anchorStore.name, address: anchorStore.address } : undefined,
-          anchorPoint: leadRadiusAnchorMode === "point" ? point : undefined,
-          radiusKm: radiusKmValue
-        })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery("/api/leads/permits/nearby"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            anchorMode: leadRadiusAnchorMode,
+            anchorCustomer: anchorStore ? { id: anchorStore.id, name: anchorStore.name, address: anchorStore.address } : undefined,
+            anchorPoint: leadRadiusAnchorMode === "point" ? point : undefined,
+            radiusKm: radiusKmValue
+          })
+        },
+        25000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setLeadRadiusError(payload?.message || "리드 탐색에 실패했습니다.");
@@ -695,7 +703,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     try {
       // 숨김(제외) 리드도 함께 받아와서, "활성/숨김" 토글로 클라이언트에서 바로 전환할 수 있게
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits?excludeExcluded=false"), { cache: "no-store" });
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/permits?excludeExcluded=false"), { cache: "no-store" }, 12000);
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) {
         setAllLeadsLoadState("error");
@@ -732,11 +740,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 않으므로, 지도 쪽 로컬 목록만 직접 갱신합니다.
   async function dismissLeadFromMap(lead: PermitLeadItem) {
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType: "exclude", result: "제외" })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actionType: "exclude", result: "제외" })
+        },
+        12000
+      );
       if (!response.ok) return;
       // 목록에서 완전히 지우지 않고 상태만 "제외"로 바꿔둡니다 — "숨김 리드" 필터로 다시 볼 수 있고,
       // 나중에 복구도 가능합니다(2026-08-24 피드백).
@@ -753,11 +765,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 다시 보이기 때문입니다.
   async function restoreLeadFromMap(lead: PermitLeadItem) {
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType: "hold" })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actionType: "hold" })
+        },
+        12000
+      );
       if (!response.ok) return;
       setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "검토 필요" } : item)));
     } catch {
@@ -827,7 +843,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     let cancelled = false;
     setIsSearchingExternal(true);
     const timer = setTimeout(async () => {
-      const response = await fetch(`/api/business-search?query=${encodeURIComponent(keyword)}`, { cache: "no-store" }).catch(() => null);
+      const response = await fetchWithTimeout(`/api/business-search?query=${encodeURIComponent(keyword)}`, { cache: "no-store" }, 12000).catch(() => null);
       if (cancelled) return;
       const payload = response?.ok ? await response.json().catch(() => null) : null;
       const results = Array.isArray(payload?.results) ? payload.results : [];
@@ -1219,7 +1235,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
 
     Promise.all(
       (["diesel", "gasoline"] as const).map((fuelType) =>
-        fetch(`/api/fuel/opinet?fuelType=${fuelType}`, { cache: "no-store" })
+        fetchWithTimeout(`/api/fuel/opinet?fuelType=${fuelType}`, { cache: "no-store" }, 12000)
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null)
       )
@@ -1417,15 +1433,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     }
 
     try {
-      const response = await fetch("/api/delivery-vehicles", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
-          driverName: trimmed,
-          fuelType
-        })
-      });
+      const response = await fetchWithTimeout(
+        "/api/delivery-vehicles",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+            driverName: trimmed,
+            fuelType
+          })
+        },
+        12000
+      );
       const payload = await response.json().catch(() => null);
       if (!response.ok) return { ok: false, message: payload?.message || "담당자 저장에 실패했습니다." };
     } catch {
@@ -1444,14 +1464,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   async function deleteVehicle(vehicle: DeliveryVehicle): Promise<{ ok: boolean; message?: string }> {
     if (vehicle.stops.length > 0) {
       try {
-        const clearResponse = await fetch("/api/customers/bulk-clear-assignment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
-            customerIds: vehicle.stops.map((stop) => stop.id)
-          })
-        });
+        const clearResponse = await fetchWithTimeout(
+          "/api/customers/bulk-clear-assignment",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+              customerIds: vehicle.stops.map((stop) => stop.id)
+            })
+          },
+          15000
+        );
         if (!clearResponse.ok) {
           const payload = await clearResponse.json().catch(() => null);
           return { ok: false, message: payload?.message || "배정된 거래처를 해제하는 데 실패했습니다." };
@@ -1463,14 +1487,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
 
     if (vehicle.driver) {
       try {
-        const response = await fetch("/api/delivery-vehicles", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
-            driverName: vehicle.driver
-          })
-        });
+        const response = await fetchWithTimeout(
+          "/api/delivery-vehicles",
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              companyId: new URLSearchParams(window.location.search).get("companyId") || undefined,
+              driverName: vehicle.driver
+            })
+          },
+          12000
+        );
         if (!response.ok) {
           const payload = await response.json().catch(() => null);
           return { ok: false, message: payload?.message || "삭제에 실패했습니다." };
@@ -1509,11 +1537,15 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       const allFailures: Array<{ address: string; message: string }> = [];
       for (let index = 0; index < destinations.length; index += 25) {
         const chunk = destinations.slice(index, index + 25);
-        const response = await fetch("/api/routes/batch-distance", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId, destinations: chunk })
-        });
+        const response = await fetchWithTimeout(
+          "/api/routes/batch-distance",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ companyId, destinations: chunk })
+          },
+          25000
+        );
         const payload = await response.json().catch(() => null);
         if (!response.ok) {
           const message = payload?.error || "거리 계산에 실패했습니다.";
@@ -3325,11 +3357,15 @@ function RouteWorkspaceGuide({
 async function geocodeAddresses(addresses: string[]): Promise<Record<string, GeoPoint | null>> {
   const uniqueAddresses = Array.from(new Set(addresses.filter(Boolean)));
   if (!uniqueAddresses.length) return {};
-  const response = await fetch("/api/routes/geocode", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ addresses: uniqueAddresses })
-  }).catch(() => null);
+  const response = await fetchWithTimeout(
+    "/api/routes/geocode",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addresses: uniqueAddresses })
+    },
+    15000
+  ).catch(() => null);
   if (!response?.ok) return {};
   const payload = await response.json().catch(() => null);
   return payload?.points || {};
@@ -7192,7 +7228,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setIsLoading(true);
     setLoadError("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), { cache: "no-store" });
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), { cache: "no-store" }, 12000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "연락처를 불러오지 못했습니다.");
       setContacts(Array.isArray(data?.contacts) ? data.contacts : []);
@@ -7215,17 +7251,21 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setIsAdding(true);
     setAddError("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: draftRole || "담당자",
-          name: draftName.trim(),
-          phone: draftPhone.trim(),
-          birthDate: draftBirthDate,
-          memo: draftMemo.trim()
-        })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: draftRole || "담당자",
+            name: draftName.trim(),
+            phone: draftPhone.trim(),
+            birthDate: draftBirthDate,
+            memo: draftMemo.trim()
+          })
+        },
+        12000
+      );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 400 && typeof data?.message === "string" && data.message.includes("마이그레이션")) setUnsupported(true);
@@ -7258,17 +7298,21 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     if (!editName.trim()) return;
     setRowBusyId(contactId);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: editRole || "담당자",
-          name: editName.trim(),
-          phone: editPhone.trim(),
-          birthDate: editBirthDate,
-          memo: editMemo.trim()
-        })
-      });
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: editRole || "담당자",
+            name: editName.trim(),
+            phone: editPhone.trim(),
+            birthDate: editBirthDate,
+            memo: editMemo.trim()
+          })
+        },
+        12000
+      );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "연락처 수정에 실패했습니다.");
       setEditingId("");
@@ -7284,7 +7328,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     if (!window.confirm("이 연락처를 삭제할까요?")) return;
     setRowBusyId(contactId);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), { method: "DELETE" });
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), { method: "DELETE" }, 12000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "삭제에 실패했습니다.");
       await loadContacts();
@@ -7420,7 +7464,7 @@ function fetchCustomerOperationsAttachments(customerId: string): Promise<Custome
   const existing = customerOperationsInFlight.get(customerId);
   if (existing) return existing;
 
-  const promise = fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
+  const promise = fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000)
     .then((response) => (response.ok ? response.json() : null))
     .catch(() => null)
     .finally(() => {
@@ -7516,7 +7560,7 @@ function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly c
       formData.append("attachmentType", "loading_position");
       formData.append("title", `배송 적재위치 - ${customerName}`);
 
-      const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
+      const response = await fetchWithTimeout("/api/customer-attachments/upload", { method: "POST", body: formData }, 20000).catch(() => null);
       if (!response?.ok) {
         failedFileNames.push(file.name);
         continue;
