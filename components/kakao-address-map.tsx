@@ -171,6 +171,28 @@ export function KakaoAddressMap({
   const onCenterChangeRef = useRef(onCenterChange);
   const [status, setStatus] = useState<"loading" | "ready" | "fallback">("loading");
   const [fallbackReason, setFallbackReason] = useState("");
+  // 2026-09-07 피드백("자동차가 스르륵 미끄러지듯 이동하는 진짜 부드러운 애니메이션"): 아래 boot
+  // effect는 markersSignature가 바뀔 때마다 지도 인스턴스 자체를 통째로 새로 만듭니다(GPS 폴링처럼
+  // 잦은 변화에는 너무 무겁고, 오버레이도 매번 새로 만들어 이전 위치와 이어붙일 방법이 없어 항상
+  // "순간이동"으로만 보였습니다). 그래서 라이브 차량(tone: "vehicle") 마커는 boot effect가 다루는
+  // "정적" 마커 집합에서 완전히 빼내, 아래 별도의 가벼운 effect에서 기존 오버레이 객체를 유지한 채
+  // requestAnimationFrame으로 좌표만 부드럽게 보간(setPosition 반복 호출)하도록 분리했습니다.
+  const staticMarkers = useMemo(() => markers.filter((marker) => marker.tone !== "vehicle"), [markers]);
+  const vehicleMarkers = useMemo(() => markers.filter((marker) => marker.tone === "vehicle"), [markers]);
+  // 차량마다: 지금 지도에 붙어 있는 CustomOverlay와, 그 오버레이가 마지막으로 가 있던 좌표를
+  // 함께 들고 있어야 "이전 위치 -> 새 위치"를 보간할 기준점이 생깁니다.
+  const vehicleOverlaysRef = useRef<Map<string, { overlay: any; lat: number; lng: number }>>(new Map());
+  // 차량마다 진행 중인 requestAnimationFrame id — 다음 GPS 갱신이 이전 애니메이션이 끝나기 전에
+  // 도착하면(폴링 주기가 애니메이션 시간보다 짧으면) 이전 애니메이션을 취소하고 "지금 위치"에서
+  // 새 목표로 다시 보간을 시작합니다.
+  const vehicleAnimFrameRef = useRef<Map<string, number>>(new Map());
+  // boot effect가 지도 인스턴스를 다시 만들 때마다(정적 마커 구성이 바뀔 때) 늘어나는 카운터입니다.
+  // 이전 지도 인스턴스에 붙어 있던 차량 오버레이는 그 인스턴스와 함께 사라지므로, 이 값이 바뀌면
+  // 아래 차량 effect가 자기 상태를 비우고 새 지도 위에 차량 오버레이를 처음부터 다시 그립니다.
+  const [mapBootId, setMapBootId] = useState(0);
+  // 차량 effect가 "마지막으로 처리한" mapBootId를 기억해뒀다가, 이 값과 최신 mapBootId가 다르면
+  // (지도가 그 사이에 다시 만들어졌으면) 이전 오버레이 참조를 비웁니다.
+  const vehicleAnimBootIdRef = useRef(0);
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
   // 부모(sales-route-map-workspace.tsx)는 markers를 렌더마다 새 배열/새 객체로 다시 만듭니다.
@@ -179,9 +201,12 @@ export function KakaoAddressMap({
   // 주소가 재지오코딩되며, 그 끝에 항상 실행되는 "전체 마커에 맞추기(map.setBounds)"가 사용자가
   // 막 확대했던 화면이나 반경 원 화면을 계속 원래대로 되돌리는 문제가 있었습니다. 실제 내용이
   // 같으면 같은 값을 내는 문자열 키로 바꿔, 마커 구성이 진짜로 바뀔 때만 재생성되게 합니다.
+  // staticMarkers 기준입니다 — 라이브 차량은 위에서 이미 빼냈으니, 차량이 몇 초마다 움직여도 이
+  // 서명은 그대로라 지도가 다시 만들어지지 않습니다(그 대신 차량 좌표가 실제로 바뀌면 아래 차량
+  // effect가 알아서 부드럽게 이동시킵니다).
   const markersSignature = useMemo(
-    () => markers.map((marker) => `${marker.id || ""}|${marker.name || ""}|${marker.address || ""}|${marker.tone || ""}`).join(";;"),
-    [markers]
+    () => staticMarkers.map((marker) => `${marker.id || ""}|${marker.name || ""}|${marker.address || ""}|${marker.tone || ""}`).join(";;"),
+    [staticMarkers]
   );
 
   useEffect(() => {
@@ -228,6 +253,9 @@ export function KakaoAddressMap({
         mapInstanceRef.current = map;
         window.setTimeout(() => map.relayout?.(), 0);
         setStatus("ready");
+        // 새 지도 인스턴스가 생겼으니, 아래 차량 애니메이션 effect가 이전 인스턴스에 붙어 있던
+        // 차량 오버레이 참조를 버리고 새 지도 위에 다시 그리도록 신호를 보냅니다.
+        setMapBootId((value) => value + 1);
 
         // "신규 리드 서치"(네이버 지도 반경 도구 참고): active일 때 지도를 왼쪽 클릭하면 그 지점에
         // 고정 기본 반경(기본 500m)으로 즉시 원을 만들고 onLocked로 부모에 알립니다. 이후 크기
@@ -277,7 +305,7 @@ export function KakaoAddressMap({
         // 건이어도 화면에 다 보이는 게 아니므로 줌 판단에 그대로 쓰면 안 됩니다 — 아주 극단적으로
         // 많을 때만(800개 초과) 확대해도 항상 점으로 유지하는 안전장치로 두고, 평소에는 줌 레벨만
         // 봅니다.
-        const leadMarkerCount = markers.filter((marker) => marker.tone === "lead").length;
+        const leadMarkerCount = staticMarkers.filter((marker) => marker.tone === "lead").length;
         const computeCompactLeadMarkers = (level: number) => leadMarkerCount > 800 || level >= 7;
         let compactLeadMarkers = computeCompactLeadMarkers(map.getLevel());
 
@@ -314,7 +342,17 @@ export function KakaoAddressMap({
         };
 
         await Promise.all(
-          markers.map((marker) => {
+          staticMarkers.map((marker) => {
+            // 2026-09-07 피드백("실시간 라이브 차량의 마커가 안보여") 대응: 아래 지오코딩 경로는
+            // marker.address를 실제 도로명 주소로 간주해 카카오 지오코더에 넘깁니다. 라이브 차량은
+            // 이제 staticMarkers에서 완전히 빠져 이 경로를 타지 않지만(별도의 차량 effect가 좌표를
+            // 직접 씀), 앞으로 좌표를 이미 알고 있는 다른 마커 유형이 추가될 경우를 대비해 lat/lng가
+            // 이미 유효하면 지오코딩을 건너뛰고 그 좌표로 바로 배치하는 이 안전장치는 남겨둡니다.
+            if (Number.isFinite(marker.lat) && Number.isFinite(marker.lng)) {
+              if (!ignore) placeMarkerAtPosition(marker, marker.lat as number, marker.lng as number);
+              return Promise.resolve();
+            }
+
             const cachedPoint = geocodeMemoryCache.get(marker.address);
             if (cachedPoint) {
               if (!ignore) placeMarkerAtPosition(marker, cachedPoint.lat, cachedPoint.lng);
@@ -413,6 +451,113 @@ export function KakaoAddressMap({
     // 좌표로만 처리하고, 클릭 콜백은 onMarkerClickRef로 최신 값을 유지합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appKey, canUseKakao, markersSignature, routePath]);
+
+  // 2026-09-07 피드백("자동차가 스르륵 미끄러지듯 이동하는 진짜 부드러운 애니메이션") 대응.
+  // 위 boot effect와 별개로, 라이브 차량 마커만 여기서 직접 그리고 위치를 갱신합니다. 핵심은
+  // 같은 차량이면 CustomOverlay 객체를 절대 새로 만들지 않고 재사용한다는 점입니다 — 그래야
+  // "이전 위치"가 남아 있어 새 좌표까지 requestAnimationFrame으로 여러 프레임에 걸쳐 나눠
+  // setPosition()을 호출하며 이어붙일 수 있습니다(매번 새로 만들면 이전 위치 정보가 없어
+  // 순간이동으로만 보입니다).
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const kakao = window.kakao;
+    if (status !== "ready" || !map || !kakao?.maps) return;
+
+    // boot effect가 지도를 새로 만들었으면(mapBootId 변경) 이전 지도에 붙어 있던 차량 오버레이는
+    // 이미 사라진 상태이므로, 참조만 비우고 아래에서 전부 새로 그립니다.
+    if (vehicleAnimBootIdRef.current !== mapBootId) {
+      vehicleAnimFrameRef.current.forEach((frameId) => cancelAnimationFrame(frameId));
+      vehicleAnimFrameRef.current.clear();
+      vehicleOverlaysRef.current.clear();
+      vehicleAnimBootIdRef.current = mapBootId;
+    }
+
+    const currentIds = new Set(vehicleMarkers.map((marker) => marker.id).filter(Boolean) as string[]);
+
+    // 더 이상 목록에 없는 차량(직원이 로그아웃했거나 필터에서 빠짐)의 오버레이는 지도에서 치웁니다.
+    vehicleOverlaysRef.current.forEach((entry, id) => {
+      if (currentIds.has(id)) return;
+      entry.overlay.setMap(null);
+      vehicleOverlaysRef.current.delete(id);
+      markerPositionsRef.current.delete(id);
+      markerElementsRef.current.delete(id);
+      const frameId = vehicleAnimFrameRef.current.get(id);
+      if (frameId) cancelAnimationFrame(frameId);
+      vehicleAnimFrameRef.current.delete(id);
+    });
+
+    vehicleMarkers.forEach((marker) => {
+      if (!marker.id || !Number.isFinite(marker.lat) || !Number.isFinite(marker.lng)) return;
+      const targetLat = marker.lat as number;
+      const targetLng = marker.lng as number;
+      const existing = vehicleOverlaysRef.current.get(marker.id);
+
+      if (!existing) {
+        // 처음 보는 차량입니다 — 애니메이션 없이 바로 그 자리에 그립니다.
+        const content = createMarkerOverlay(marker);
+        content.addEventListener("click", () => onMarkerClickRef.current?.(marker));
+        const position = new kakao.maps.LatLng(targetLat, targetLng);
+        const overlay = new kakao.maps.CustomOverlay({ content, map, position, yAnchor: 1.75 });
+        vehicleOverlaysRef.current.set(marker.id, { lat: targetLat, lng: targetLng, overlay });
+        markerPositionsRef.current.set(marker.id, position);
+        markerElementsRef.current.set(marker.id, content);
+        return;
+      }
+
+      // 이미 떠 있는 차량입니다 — 상태 텍스트·색상이 바뀔 수 있으니 내용만 setContent로 갱신하고
+      // (선택 하이라이트가 지워지지 않도록 focusedMarkerId 재적용은 아래 focus effect가 맡습니다),
+      // 오버레이 객체 자체와 지도 위 DOM은 그대로 유지합니다.
+      const nextContent = createMarkerOverlay(marker);
+      nextContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
+      existing.overlay.setContent(nextContent);
+      markerElementsRef.current.set(marker.id, nextContent);
+
+      const samePosition = Math.abs(existing.lat - targetLat) < 1e-9 && Math.abs(existing.lng - targetLng) < 1e-9;
+      if (samePosition) return;
+
+      // 진행 중이던 이전 보간이 있으면 취소하고, "지금 실제로 보이는 위치"에서 새 목표로 다시
+      // 시작합니다(폴링 주기가 애니메이션 시간보다 짧게 들어와도 어색하게 튀지 않도록).
+      const previousFrameId = vehicleAnimFrameRef.current.get(marker.id);
+      if (previousFrameId) cancelAnimationFrame(previousFrameId);
+
+      const vehicleId = marker.id;
+      const fromLat = existing.lat;
+      const fromLng = existing.lng;
+      const startedAt = performance.now();
+      const durationMs = 900;
+
+      const step = (now: number) => {
+        const elapsed = now - startedAt;
+        const progress = Math.min(1, elapsed / durationMs);
+        // ease-out cubic — 출발은 빠르게, 도착 직전엔 감속해 자연스럽게 멈춥니다.
+        const eased = 1 - (1 - progress) ** 3;
+        const lat = fromLat + (targetLat - fromLat) * eased;
+        const lng = fromLng + (targetLng - fromLng) * eased;
+        const position = new kakao.maps.LatLng(lat, lng);
+        existing.overlay.setPosition(position);
+        markerPositionsRef.current.set(vehicleId, position);
+
+        if (progress < 1) {
+          vehicleAnimFrameRef.current.set(vehicleId, requestAnimationFrame(step));
+          return;
+        }
+        existing.lat = targetLat;
+        existing.lng = targetLng;
+        vehicleAnimFrameRef.current.delete(vehicleId);
+      };
+      vehicleAnimFrameRef.current.set(marker.id, requestAnimationFrame(step));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, mapBootId, vehicleMarkers]);
+
+  // 컴포넌트가 사라질 때 진행 중이던 차량 애니메이션 프레임을 전부 취소해, 이미 제거된 지도
+  // 위에 setPosition을 계속 호출하는 일이 없게 합니다.
+  useEffect(() => {
+    return () => {
+      vehicleAnimFrameRef.current.forEach((frameId) => cancelAnimationFrame(frameId));
+      vehicleAnimFrameRef.current.clear();
+    };
+  }, []);
 
   // 마커 선택(focusedMarkerId 변경)은 지도를 다시 만들지 않고, 최초 로드 때 이미 지오코딩해
   // 캐시해둔 좌표로 지도만 살짝 이동시킵니다 — 이게 없으면 마커 클릭마다 위 boot effect 전체가
@@ -895,13 +1040,28 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
   }
 
   if (marker.tone === "vehicle") {
+    // 2026-09-07 피드백("직원들이 많아질수록 보기 쉽게 구현해") 대응으로 라이브 차량마다 서로 다른
+    // 고정 색(vehicleColorForId)을 markerColor로 내려주기 시작했는데, 이 함수가 그 값을 무시하고
+    // 항상 같은 청록색을 그려 지도 위에서는 여전히 구분이 안 됐습니다. 지연 상태만 회색으로 통일하고,
+    // 그 외에는 markerColor를 그대로 씁니다.
     const isDelayed = marker.markerColor === "#64748b";
-    const borderColor = isDelayed ? "#cbd5e1" : "#14b8a6";
-    const haloColor = isDelayed ? "rgba(100,116,139,.24)" : "rgba(20,184,166,.28)";
-    const chipColor = isDelayed ? "#475569" : "#0f766e";
+    const activeColor = marker.markerColor || "#0f766e";
+    const borderColor = isDelayed ? "#cbd5e1" : activeColor;
+    const haloColor = isDelayed ? "rgba(100,116,139,.24)" : hexToRgba(activeColor, 0.28);
+    const chipColor = isDelayed ? "#475569" : activeColor;
+    // 2026-09-07 피드백("진짜 움직이는 것처럼 보고싶음") 대응: 실제 지도상 매끄러운 슬라이딩
+    // 애니메이션은 별도 effect(위 vehicleMarkers 애니메이션)에서 처리하고, 여기서는 마커 자체의
+    // 생김새만 다룹니다. "배송차량 이모티콘으로 만들어서 이동중인거 볼 수 있게, 접속하면 불
+    // 들어온것처럼 가독성 좋게" 피드백 대응: "차"라는 글자 대신 실제 배송트럭 이모지를 쓰고,
+    // 지연되지 않은(정상 수신 중인) 차량은 원 전체가 은은하게 밝아졌다 어두워지길 반복하는
+    // pulse 효과를 줘 "지금 살아서 접속돼 있다"는 느낌을 한눈에 알아볼 수 있게 합니다. 지연된
+    // 차량은 애니메이션 없이 무채색으로 가라앉혀 "지금 안 잡히는 차량"임을 대비시킵니다.
+    const pulseClass = isDelayed ? "" : "animate-pulse";
     return htmlToElement(`
       <button type="button" title="${name}" style="cursor:pointer;background:#ffffff;color:#0f172a;border:2px solid ${borderColor};border-radius:12px;display:flex;align-items:center;gap:7px;padding:7px 10px;box-shadow:0 0 0 5px ${haloColor},0 12px 28px rgba(15,23,42,.24);font-size:12px;font-weight:900;white-space:nowrap;">
-        <span style="width:24px;height:24px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;">차</span>
+        <span class="${pulseClass}" style="position:relative;width:28px;height:28px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;">
+          🚚
+        </span>
         <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;">
           <span style="max-width:96px;overflow:hidden;text-overflow:ellipsis;">${label}</span>
           <span style="margin-top:2px;color:#64748b;font-size:10px;font-weight:800;">${escapeHtml(marker.address)}</span>
@@ -969,6 +1129,18 @@ function htmlToElement(html: string) {
   const template = document.createElement("template");
   template.innerHTML = html.trim();
   return template.content.firstElementChild as HTMLElement;
+}
+
+// 차량마다 다른 markerColor(hex)로 헤일로(box-shadow)를 만들 때 반투명이 필요해 rgba로 바꿉니다.
+// 형식이 안 맞으면(만약을 대비) 안전하게 청록색 헤일로로 되돌립니다.
+function hexToRgba(hex: string, alpha: number): string {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  if (!match) return `rgba(20,184,166,${alpha})`;
+  const value = match[1];
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function gradeStyle(grade: "A" | "B" | "C") {

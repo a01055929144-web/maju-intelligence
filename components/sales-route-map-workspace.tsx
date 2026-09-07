@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { DriverSelectField } from "@/components/driver-select-field";
 import {
@@ -405,6 +405,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     loading: boolean;
     vehicle: StaffVehicleLocation | null;
   }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
+  // 2026-09-07 피드백: "분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도 구현할 수
+  // 있도록해줘" — 팝업(VehicleAnalysisModal)을 열지 않아도, 라이브 차량 목록에서 "경로" 버튼으로
+  // 같은 실제 GPS 이동 경로를 메인 지도에 바로 겹쳐 볼 수 있게 합니다. 한 번에 한 대만 표시합니다
+  // (지도 컴포넌트가 폴리라인 하나만 그리도록 되어 있어, 여러 대를 동시에 겹치면 서로 구분이 안 됨).
+  const [mainMapRouteVehicleId, setMainMapRouteVehicleId] = useState("");
+  const [mainMapRouteEvents, setMainMapRouteEvents] = useState<StaffLocationEvent[]>([]);
+  const [mainMapRouteLoading, setMainMapRouteLoading] = useState(false);
+  const [mainMapRouteError, setMainMapRouteError] = useState("");
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -439,8 +447,25 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     observer.observe(headerNode);
     observer.observe(areaNode);
     recomputeMapHeaderOffset();
-    return () => observer.disconnect();
+    // 2026-09-07 피드백("우측 패널 위쪽에 위치하는데 짤려서 안보임") 대응: ResizeObserver는 헤더
+    // 카드(mapHeaderRef) 자신의 "크기"가 변할 때만 반응합니다. 그런데 이 오프셋 계산은 크기가 아니라
+    // "화면상 실제 위치"(getBoundingClientRect)를 봅니다 — 창 크기 변경처럼 두 요소의 크기는 그대로여도
+    // 화면 위치/레이아웃이 바뀌는 경우까지는 ResizeObserver가 못 잡아, 헤더 카드(z-20, 항상 위)가
+    // 계산이 어긋난 채로 좌우 패널(z-10)의 위쪽을 가려버리는 문제가 있었습니다. window resize에도
+    // 다시 계산하도록 보강합니다.
+    window.addEventListener("resize", recomputeMapHeaderOffset);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", recomputeMapHeaderOffset);
+    };
   }, [recomputeMapHeaderOffset]);
+  // 위 ResizeObserver/resize 리스너로도 놓칠 수 있는 나머지 경우(폰트 로딩으로 인한 리플로우,
+  // 리드 필터 줄이 늘어나는 등rowspan 변화가 있는 렌더 등)를 보강하기 위해, 커밋될 때마다(매 렌더
+  // 이후) 오프셋을 다시 계산합니다. recomputeMapHeaderOffset은 getBoundingClientRect 두 번 읽는 정도라
+  // 가볍고, 값이 그대로면 setState가 리렌더를 유발하지 않아 무한 루프로 이어지지 않습니다.
+  useLayoutEffect(() => {
+    recomputeMapHeaderOffset();
+  });
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -683,8 +708,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     }
   }
 
+  // 2026-09-07 버그 리포트: "리드 표에서는 잘 가져오는데 지도에서는 표시가 안 된다" — 원인은
+  // allLeadsLoadState가 한 번 "ready"가 되면(첫 토글 때 리드가 아직 0건이었던 경우 등) 이후
+  // 새 리드가 수집돼도 idle 상태가 아니라서 이 useEffect가 다시 실행되지 않아 지도가 그 시점의
+  // 낡은(대개 빈) 목록을 계속 보여주던 것이었습니다. "리드" 버튼을 켤 때마다(즉 showAllLeadsOnMap이
+  // false→true로 바뀔 때마다) idle 여부와 무관하게 항상 다시 불러오도록 고쳐, 꺼졌다 켜면 최신
+  // 데이터로 새로고침됩니다.
   useEffect(() => {
-    if (showAllLeadsOnMap && allLeadsLoadState === "idle") void loadAllLeadsForMap();
+    if (showAllLeadsOnMap) void loadAllLeadsForMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAllLeadsOnMap]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
@@ -891,6 +922,45 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       }
     },
     [churnRiskCompanyId]
+  );
+  // 팝업을 열지 않고 메인 지도에 실제 이동 경로만 겹쳐 보여줍니다. 같은 차량을 다시 누르면 꺼집니다.
+  const toggleMainMapRoute = useCallback(
+    async (vehicle: StaffVehicleLocation) => {
+      if (mainMapRouteVehicleId === vehicle.id) {
+        setMainMapRouteVehicleId("");
+        setMainMapRouteEvents([]);
+        setMainMapRouteError("");
+        return;
+      }
+      setMainMapRouteVehicleId(vehicle.id);
+      setMainMapRouteEvents([]);
+      setMainMapRouteError("");
+      setMainMapRouteLoading(true);
+      try {
+        const search = new URLSearchParams({ events: "true", hours: "12", userId: vehicle.userId });
+        if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
+        if (vehicle.driverName) search.set("driverName", vehicle.driverName);
+        if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
+        const response = await fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000);
+        const payload = (await response.json().catch(() => null)) as { events?: StaffLocationEvent[]; error?: string } | null;
+        if (!response.ok) throw new Error(payload?.error || "실제 이동 경로를 불러오지 못했습니다.");
+        setMainMapRouteEvents(payload?.events || []);
+      } catch (error) {
+        setMainMapRouteError(error instanceof Error ? error.message : "실제 이동 경로를 불러오지 못했습니다.");
+      } finally {
+        setMainMapRouteLoading(false);
+      }
+    },
+    [churnRiskCompanyId, mainMapRouteVehicleId]
+  );
+  const mainMapRoutePath = useMemo(
+    () => (mainMapRouteVehicleId ? createLocationRoutePath(mainMapRouteEvents) : []),
+    [mainMapRouteVehicleId, mainMapRouteEvents]
+  );
+  const mainMapRouteMetrics = useMemo(() => summarizeLocationEvents(mainMapRouteEvents), [mainMapRouteEvents]);
+  const mainMapRouteVehicle = useMemo(
+    () => liveVehicleLocations.find((vehicle) => vehicle.id === mainMapRouteVehicleId) || null,
+    [liveVehicleLocations, mainMapRouteVehicleId]
   );
   // 미등록 매장은 메인 지도에만 별도 마커로 합쳐 표시합니다.
   const unregisteredMapMarkers = useMemo(
@@ -2239,9 +2309,46 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                           }
                         : undefined
                     }
+                    routePath={mainMapRoutePath}
                     showList={false}
                   />
                 </div>
+                {/* 2026-09-07 피드백("분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도
+                    구현할 수 있도록해줘"): 라이브 차량 패널에서 "경로" 버튼을 누르면 그 차량의 최근
+                    12시간 GPS 경로를 분석 모달을 열지 않고 메인 지도 위에 바로 그려줍니다. 로딩/에러/
+                    표시 상태를 알려주는 배너를 지도 우상단에 띄우고, 닫기를 누르면 경로를 지웁니다. */}
+                {mainMapRouteVehicleId ? (
+                  <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-xs xl:left-auto xl:right-3">
+                    <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-xs font-black text-slate-950">
+                            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: vehicleColorForId(mainMapRouteVehicleId) }} />
+                            <span className="truncate">{mainMapRouteVehicle?.deliveryVehicle || mainMapRouteVehicle?.driverName || "차량"} 경로</span>
+                          </p>
+                          <p className="mt-1 text-[11px] font-bold text-slate-500">
+                            {mainMapRouteLoading
+                              ? "GPS 경로를 불러오는 중입니다..."
+                              : mainMapRouteError
+                                ? mainMapRouteError
+                                : `실제 이동 ${mainMapRouteMetrics.distanceKm.toLocaleString()}km · ${formatMinutes(mainMapRouteMetrics.durationMinutes)} · GPS ${mainMapRouteEvents.length.toLocaleString()}건`}
+                          </p>
+                        </div>
+                        <button
+                          className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 hover:bg-slate-200"
+                          onClick={() => {
+                            setMainMapRouteVehicleId("");
+                            setMainMapRouteEvents([]);
+                            setMainMapRouteError("");
+                          }}
+                          type="button"
+                        >
+                          닫기
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 {/* 2026-08-28 피드백 대응(지도 필터 조합 결과가 0건이어도 별다른 안내 없이 빈 지도만
                     보임): 배송차량·등급 필터 등으로 거래처가 전부 걸러졌을 때 빈 지도만 덩그러니
                     보이지 않도록, 필터를 초기화할 수 있는 안내 배너를 보여줍니다. 거래처가 아예
@@ -2376,6 +2483,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           >
             {!rightCollapsed ? (
               <LiveVehicleStatusPanel
+                activeRouteVehicleId={mainMapRouteVehicleId}
                 onAnalyze={openVehicleAnalysis}
                 onFocusVehicle={(vehicleId) => {
                   setPreviewLeadId("");
@@ -2388,6 +2496,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   setPreviewStoreId(storeId);
                   setRightPanelTab("stores");
                 }}
+                onToggleRoute={toggleMainMapRoute}
+                routeLoading={mainMapRouteLoading}
                 storeById={storeById}
                 vehicles={liveVehicleLocations}
               />
@@ -4049,18 +4159,28 @@ function VehicleEditForm({
 }
 
 function LiveVehicleStatusPanel({
+  activeRouteVehicleId,
   onAnalyze,
   onFocusVehicle,
   onPreviewStore,
+  onToggleRoute,
+  routeLoading,
   storeById,
   vehicles
 }: {
+  readonly activeRouteVehicleId?: string;
   readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
   readonly onFocusVehicle: (vehicleId: string) => void;
   readonly onPreviewStore: (storeId: string) => void;
+  readonly onToggleRoute?: (vehicle: StaffVehicleLocation) => void;
+  readonly routeLoading?: boolean;
   readonly storeById: Map<string, StoreRow>;
   readonly vehicles: StaffVehicleLocation[];
 }) {
+  // 2026-09-07 피드백("직원들이 많아질수록 보기 쉽게 구현해"): 차량이 5~6대를 넘어가면 스크롤로만
+  // 훑어야 해서 원하는 기사를 찾기 번거로워집니다. 기사명/배송차량 이름으로 즉시 걸러낼 수 있는
+  // 검색창을 목록 위에 둡니다.
+  const [search, setSearch] = useState("");
   const sorted = [...vehicles].sort((a, b) => {
     const staleDiff = Number(a.isStale) - Number(b.isStale);
     if (staleDiff !== 0) return staleDiff;
@@ -4069,6 +4189,10 @@ function LiveVehicleStatusPanel({
     return bTime - aTime;
   });
   const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = normalizedSearch
+    ? sorted.filter((vehicle) => `${vehicle.driverName} ${vehicle.deliveryVehicle}`.toLowerCase().includes(normalizedSearch))
+    : sorted;
   return (
     <section className="border-b border-slate-200/80 bg-white">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -4083,6 +4207,17 @@ function LiveVehicleStatusPanel({
         </div>
         <Badge className="shrink-0 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{sorted.length}대</Badge>
       </div>
+      {sorted.length > 5 ? (
+        <div className="px-3 pb-2">
+          <input
+            className="h-7 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] font-bold text-slate-800 placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:outline-none"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="기사명 또는 배송차량 검색"
+            type="text"
+            value={search}
+          />
+        </div>
+      ) : null}
       <div className="max-h-64 space-y-1 overflow-auto px-3 pb-2">
         {!sorted.length ? (
           <div className="rounded-md border border-amber-100 bg-amber-50 px-2 py-2">
@@ -4090,21 +4225,32 @@ function LiveVehicleStatusPanel({
             <p className="mt-1 text-[10px] font-bold leading-4 text-amber-700">기사 모바일 화면에서 위치 권한을 허용하면 지도에 표시됩니다.</p>
           </div>
         ) : null}
-        {sorted.map((vehicle) => {
+        {sorted.length && !filtered.length ? (
+          <p className="rounded-md bg-slate-50 px-2 py-2 text-[11px] font-bold text-slate-500">&quot;{search}&quot;와 일치하는 차량이 없습니다.</p>
+        ) : null}
+        {filtered.map((vehicle) => {
           const checkedAt = vehicle.lastLocationAt ? new Date(vehicle.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전";
           const ageText = formatVehicleLocationAge(vehicle.lastLocationAt);
           const currentStore = vehicle.currentCustomerId ? storeById.get(vehicle.currentCustomerId) : undefined;
+          const isActiveRoute = activeRouteVehicleId === vehicle.id;
+          const dotColor = vehicle.isStale ? "#94a3b8" : vehicleColorForId(vehicle.id);
           return (
-            <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={vehicle.id}>
+            <div
+              className={`rounded-md border px-2 py-1.5 ${isActiveRoute ? "border-teal-300 bg-teal-50/70 ring-1 ring-inset ring-teal-200" : "border-slate-100 bg-slate-50"}`}
+              key={vehicle.id}
+            >
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
-                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
-                    {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
-                    {ageText ? ` · ${ageText}` : ""}
-                  </p>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
+                    <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                      {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
+                      {ageText ? ` · ${ageText}` : ""}
+                    </p>
+                  </div>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
                   {getVehicleStatusLabel(vehicle)}
                 </span>
               </div>
@@ -4120,6 +4266,19 @@ function LiveVehicleStatusPanel({
                   >
                     지도
                   </button>
+                  {onToggleRoute ? (
+                    <button
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset transition ${
+                        isActiveRoute
+                          ? "bg-slate-900 text-white ring-slate-900 hover:bg-slate-700"
+                          : "bg-white text-slate-600 ring-slate-200 hover:text-teal-700 hover:ring-teal-200"
+                      }`}
+                      onClick={() => onToggleRoute(vehicle)}
+                      type="button"
+                    >
+                      {isActiveRoute && routeLoading ? "불러오는 중" : isActiveRoute ? "경로 끄기" : "경로"}
+                    </button>
+                  ) : null}
                   <button
                     className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
                     onClick={() => onAnalyze(vehicle)}
@@ -5522,15 +5681,39 @@ function PermitLeadMapQuickCard({
             </span>
           </p>
         ) : null}
+        {/* 2026-09-07 피드백("카드에 네이버, 카카오, 구글 글자가 아닌 이모티콘으로 통일하고"):
+            우측 리드 목록/거래처 카드에 이미 쓰던 브랜드컬러 원형 N/K/G 배지로 통일해, "네이버"·
+            "카카오맵"·"구글"이라는 긴 글자 대신 한눈에 브랜드를 알아볼 수 있는 작은 아이콘만 남깁니다. */}
         <div className="mt-2 flex flex-wrap gap-1">
-          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadNaverPlaceUrl} rel="noreferrer" target="_blank">
-            네이버
+          <a
+            aria-label="네이버에서 검색"
+            className="grid h-6 w-6 place-items-center rounded-full bg-[#03C75A] text-[11px] font-black text-white"
+            href={leadNaverPlaceUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="네이버에서 검색"
+          >
+            N
           </a>
-          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadKakaoPlaceUrl} rel="noreferrer" target="_blank">
-            카카오맵
+          <a
+            aria-label="카카오맵에서 검색"
+            className="grid h-6 w-6 place-items-center rounded-full bg-[#FEE500] text-[11px] font-black text-slate-900"
+            href={leadKakaoPlaceUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="카카오맵에서 검색"
+          >
+            K
           </a>
-          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadGooglePlaceUrl} rel="noreferrer" target="_blank">
-            구글
+          <a
+            aria-label="구글에서 검색"
+            className="grid h-6 w-6 place-items-center rounded-full bg-white text-[11px] font-black text-[#EA4335] ring-1 ring-inset ring-slate-200"
+            href={leadGooglePlaceUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="구글에서 검색"
+          >
+            G
           </a>
           {instagramHandle ? (
             <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
@@ -5940,6 +6123,7 @@ export type PermitUploadResult = {
   duplicates: number;
   excludedInactive: number;
   excludedNonTarget: number;
+  excludedStaleAutoLead: number;
   inserted: number;
   skippedNoName: number;
   total: number;
@@ -7848,6 +8032,20 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
   return mergeMarkers(originWithId ? [originWithId, ...storeMarkers] : storeMarkers);
 }
 
+// 2026-09-07 피드백("직원들이 많아질수록 보기 쉽게 구현해"): 활성 차량이 전부 같은 청록색이면
+// 배송기사가 여러 명일 때 지도 위에서도, 목록에서도 "이 마커가 그 사람 것"인지 구분이 안 됩니다.
+// 차량 ID(staff_mobile_devices.id, 로그인마다 안정적으로 유지됨)를 해시해 고정 팔레트에서 색을
+// 골라, 같은 사람은 새로고침해도 항상 같은 색으로 보이게 합니다. 지연(isStale) 차량은 팔레트
+// 대신 회색으로 통일해 "지금 안 잡히는 차량"이라는 상태를 우선 눈에 띄게 합니다.
+const VEHICLE_COLOR_PALETTE = ["#0d9488", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#65a30d", "#0891b2", "#c026d3"];
+export function vehicleColorForId(id: string): string {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  }
+  return VEHICLE_COLOR_PALETTE[hash % VEHICLE_COLOR_PALETTE.length];
+}
+
 function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: Map<string, StoreRow>): KakaoMapMarker[] {
   return locations
     .filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng))
@@ -7865,7 +8063,7 @@ function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: 
         label,
         lat: location.lat,
         lng: location.lng,
-        markerColor: location.isStale ? "#64748b" : "#0d9488",
+        markerColor: location.isStale ? "#64748b" : vehicleColorForId(location.id),
         name: `${driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
         tone: "vehicle" as const,
         x: 50,
