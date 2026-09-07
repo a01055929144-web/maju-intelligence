@@ -105,10 +105,16 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           </div>
         ) : null}
 
-        <div className="grid maju-section-card lg:grid-cols-3">
-          {pipelineActions.map((action) => (
-            <PipelineActionCard key={action.label} {...action} />
-          ))}
+        <div className="maju-section-card">
+          <div className="maju-card-header">
+            <p className="maju-section-title">다음 액션 요약</p>
+            <p className="mt-1 maju-muted-label">견적 · 관심 · 재관리 단계별 다음 할 일</p>
+          </div>
+          <div className="grid lg:grid-cols-3">
+            {pipelineActions.map((action) => (
+              <PipelineActionCard key={action.label} {...action} />
+            ))}
+          </div>
         </div>
 
         <div className="scroll-mt-28" id="pipeline-basis">

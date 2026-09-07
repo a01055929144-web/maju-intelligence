@@ -74,10 +74,16 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           </div>
         </div>
 
-        <div className="grid maju-section-card lg:grid-cols-3">
-          {assistantActions.map((action) => (
-            <AssistantActionCard key={action.label} {...action} />
-          ))}
+        <div className="maju-section-card">
+          <div className="maju-card-header">
+            <p className="maju-section-title">바로가기 요약</p>
+            <p className="mt-1 maju-muted-label">방문 기록 · 견적 후속 · 방문 코스로 바로 이동</p>
+          </div>
+          <div className="grid lg:grid-cols-3">
+            {assistantActions.map((action) => (
+              <AssistantActionCard key={action.label} {...action} />
+            ))}
+          </div>
         </div>
 
         <AssistantBasisPanel
