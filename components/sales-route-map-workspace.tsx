@@ -872,18 +872,41 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
   // (이 블록이 예전에 병합 과정에서 두 벌로 중복 선언돼 빌드가 깨졌던 것을 여기서 하나로 정리했습니다.)
   const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
+  // 2026-09-07 피드백("모바일로 접속했는데 PC는 새로고침해야 불이 들어와 — 실시간 연동이 필요해,
+  // 접속하면 아래에서 팝업이 뜨거나 화면이 조금 강하게 보여졌으면 좋겠어"): 폴링 주기를 15초→8초로
+  // 줄여 체감 지연을 줄이고, 이전 폴링에는 없던 차량(기사)이 새로 나타나면 화면 하단에 "OOO 기사님이
+  // 접속했습니다" 배너를 몇 초간 띄워 새로고침 없이도 바로 눈에 띄게 합니다.
+  const knownVehicleIdsRef = useRef<Set<string> | null>(null);
+  const [justConnectedVehicle, setJustConnectedVehicle] = useState<{ at: number; label: string } | null>(null);
   useEffect(() => {
     setLiveVehicleLocations(staffVehicleLocations);
   }, [staffVehicleLocations]);
   useEffect(() => {
     let cancelled = false;
+    let toastTimer: number | undefined;
     const load = async () => {
       try {
         const params = new URLSearchParams({ completions: "true", hours: "20" });
         if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
         const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
         const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; locations?: StaffVehicleLocation[] } | null;
-        if (!cancelled && response.ok && Array.isArray(payload?.locations)) setLiveVehicleLocations(payload.locations);
+        if (!cancelled && response.ok && Array.isArray(payload?.locations)) {
+          setLiveVehicleLocations(payload.locations);
+          const activeIds = new Set(payload.locations.filter((location) => !location.isStale).map((location) => location.id));
+          const previousIds = knownVehicleIdsRef.current;
+          // 첫 폴링(previousIds === null)에서는 이미 접속해 있던 차량까지 전부 "새로 접속"으로
+          // 오탐하지 않도록 알림 없이 기준선만 세웁니다. 그다음 폴링부터 새로 나타난 차량만 알립니다.
+          if (previousIds) {
+            const newlyConnected = payload.locations.find((location) => !location.isStale && !previousIds.has(location.id));
+            if (newlyConnected) {
+              const label = newlyConnected.driverName || newlyConnected.deliveryVehicle || "기사";
+              setJustConnectedVehicle({ at: Date.now(), label });
+              if (toastTimer) window.clearTimeout(toastTimer);
+              toastTimer = window.setTimeout(() => setJustConnectedVehicle(null), 6000);
+            }
+          }
+          knownVehicleIdsRef.current = activeIds;
+        }
         if (!cancelled && response.ok && Array.isArray(payload?.completions)) setTodayCompletions(payload.completions);
       } catch {
         // 다음 폴링에서 복구합니다. 위치 표시는 운영 보조 기능이라 화면 전체를 막지 않습니다.
@@ -896,9 +919,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     document.addEventListener("visibilitychange", handleVisibilityChange);
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
-    }, 15_000);
+    }, 8_000);
     return () => {
       cancelled = true;
+      if (toastTimer) window.clearTimeout(toastTimer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(timer);
     };
@@ -1611,6 +1635,20 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       } ${isFullscreen ? "!rounded-none" : ""}`}
       ref={workspaceRef}
     >
+      {justConnectedVehicle ? (
+        // 2026-09-07 피드백("접속하면 아래에서 팝업이 뜨거나, 접속하는 화면이 조금 강하게
+        // 보여졌으면 좋겠어"): 직원이 새로 접속(위치 보고 시작)하면 화면 하단 중앙에 눈에 띄는
+        // 배너를 몇 초간 띄웁니다. 새로고침 없이도 바로 알 수 있도록 8초 폴링과 함께 동작합니다.
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-emerald-300 bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-[0_10px_30px_rgba(5,150,105,0.45)]">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+            </span>
+            {justConnectedVehicle.label} 기사님이 접속했습니다
+          </div>
+        </div>
+      ) : null}
       <header className="flex shrink-0 flex-col gap-1.5 border-b border-slate-200 bg-white px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="text-[16px] font-black leading-tight">영업·배송 지도</h2>
@@ -2300,15 +2338,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         return;
                       }
                       if (marker.tone === "vehicle") {
+                        // 2026-09-07 피드백("차량 마커를 클릭했는데 생각지 못한 거래처가 나와, 배송차량의
+                        // 상세 정보가 나와야해"): 예전엔 차량이 현재 작업 중인 거래처가 있으면 차량 정보
+                        // 대신 그 거래처로 바로 넘어가버려서, 정작 차량 마커를 눌러도 차량 상세(운행 경로·
+                        // 완료 내역)를 볼 방법이 없었습니다. 이제 차량 마커는 항상 차량 분석 모달을 엽니다
+                        // — 그 모달 안에 현재 작업 중인 거래처 정보와 "거래처로 이동" 버튼이 이미 있으므로
+                        // 거래처를 보고 싶으면 거기서 한 번 더 누르면 됩니다.
                         const vehicle = liveVehicleLocations.find((location) => `vehicle-${location.id}` === marker.id);
-                        const currentStoreId = vehicle?.currentCustomerId || "";
-                        if (currentStoreId && storeById.has(currentStoreId)) {
-                          setMapFocusId("");
-                          setPreviewLeadId("");
-                          setPreviewStoreId(currentStoreId);
-                          setRightPanelTab("stores");
-                          return;
-                        }
                         if (vehicle) void openVehicleAnalysis(vehicle);
                         return;
                       }
