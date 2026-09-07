@@ -219,6 +219,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
       })
       .filter((marker): marker is KakaoMapMarker => Boolean(marker));
   }, [activeDriver, storeById]);
+  const canRenderMap = Boolean(activeDriver && (activeDriver.events.length > 0 || markers.length > 0));
   const todayIsSelected = selectedDate === todayKey();
 
   return (
@@ -326,11 +327,11 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
           ) : (
             <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1fr_300px]">
               <div className="min-h-[360px] bg-slate-100">
-                {activeDriver?.events.length ? (
+                {canRenderMap ? (
                   <KakaoAddressMap mapClassName="h-full min-h-[360px] rounded-none border-0" markers={markers} routePath={routePath} showList={false} />
                 ) : (
                   <div className="grid h-full min-h-[360px] place-items-center p-6 text-center text-sm font-bold text-slate-500">
-                    {activeDriver ? "이 담당자의 그날 GPS 기록이 없습니다." : "왼쪽 담당자를 선택하면 경로가 표시됩니다."}
+                    {activeDriver ? "이 담당자의 그날 지도 표시 가능한 기록이 없습니다." : "왼쪽 담당자를 선택하면 경로가 표시됩니다."}
                   </div>
                 )}
               </div>

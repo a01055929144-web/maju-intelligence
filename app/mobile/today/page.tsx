@@ -87,7 +87,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
         </header>
 
-        <div className="flex-1 space-y-4 px-5 pb-24 pt-5">
+        <div className="flex-1 space-y-4 px-5 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5">
           <section className="rounded-2xl bg-teal-700 p-4 text-white shadow-[0_16px_36px_rgba(15,118,110,0.22)]">
             <p className="text-xs font-black uppercase text-white/70">Today Route</p>
             <h1 className="mt-2 text-[28px] font-black leading-tight">{heroCopy.title}</h1>
@@ -227,7 +227,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </section>
         </div>
 
-        <footer className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
+        <footer className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
           <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
           <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="거래처" />
           <FooterItem href="/mobile/register" icon={PlusCircle} label="등록" />
@@ -349,7 +349,7 @@ function MobileFieldFlowPanel({
 
 function ActionLink({ href, icon: Icon, label, value }: { href: string; icon: typeof Phone; label: string; value: string }) {
   return (
-    <a className="rounded-lg border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50" href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined}>
+    <a className="flex min-h-[76px] flex-col rounded-lg border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50" href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined}>
       <Icon className="h-4 w-4 text-teal-700" />
       <p className="mt-2 text-xs font-black text-slate-500">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
@@ -359,7 +359,7 @@ function ActionLink({ href, icon: Icon, label, value }: { href: string; icon: ty
 
 function MobileMetric({ icon: Icon, label, value }: { icon: typeof Route; label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
+    <div className="min-h-[92px] rounded-xl border border-slate-200 bg-white p-3">
       <Icon className="h-4 w-4 text-teal-700" />
       <p className="mt-3 text-[11px] font-black text-slate-500">{label}</p>
       <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
@@ -396,7 +396,7 @@ function createKakaoMapSearchUrl(query: string) {
 
 function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
   return (
-    <Link className={`flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-black ${active ? "bg-teal-50 text-teal-800" : "text-slate-400"}`} href={href}>
+    <Link className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-black ${active ? "bg-teal-50 text-teal-800" : "text-slate-400"}`} href={href}>
       <Icon className="h-4 w-4" />
       {label}
     </Link>

@@ -135,7 +135,7 @@ function externalResultId(result: ExternalBusinessResult) {
 // 패널(QuickRegisterDrawer)의 저장 로직과 별개로, 여러 매장을 체크해 한 번에 등록할 때 씁니다.
 async function registerExternalBusinessResult(result: ExternalBusinessResult): Promise<{ id: string; name: string }> {
   const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-  const response = await fetch("/api/customers", {
+  const response = await fetchWithTimeout("/api/customers", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -148,7 +148,7 @@ async function registerExternalBusinessResult(result: ExternalBusinessResult): P
       phone: result.phone,
       validateBusinessNumber: false
     })
-  });
+  }, 12000);
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.message || `${result.name} 등록에 실패했습니다.`);
   // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 여러 곳을 한 번에 등록하는 흐름이라
@@ -6777,11 +6777,11 @@ function StoreDetail({
     setReviewSyncMessage("");
     try {
       const companyId = permitLeadCompanyId();
-      const response = await fetch(`/api/customers/${store.id}/sync-reviews`, {
+      const response = await fetchWithTimeout(`/api/customers/${store.id}/sync-reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(companyId ? { companyId } : {})
-      });
+      }, 20000);
       const payload = (await response.json().catch(() => null)) as {
         message?: string;
         updated?: boolean;
@@ -6816,7 +6816,7 @@ function StoreDetail({
     setPasteSummaryMessage("");
     try {
       const companyId = permitLeadCompanyId();
-      const response = await fetch(`/api/customers/${store.id}/summarize-reviews`, {
+      const response = await fetchWithTimeout(`/api/customers/${store.id}/summarize-reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -6824,7 +6824,7 @@ function StoreDetail({
           rawText: pasteReviewText,
           source: pasteReviewSource
         })
-      });
+      }, 20000);
       const payload = (await response.json().catch(() => null)) as {
         message?: string;
         result?: { summary?: string; keywords?: string[]; source?: string };
@@ -7307,7 +7307,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setIsLoading(true);
     setLoadError("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), { cache: "no-store" });
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), { cache: "no-store" }, 10000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "연락처를 불러오지 못했습니다.");
       setContacts(Array.isArray(data?.contacts) ? data.contacts : []);
@@ -7330,7 +7330,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setIsAdding(true);
     setAddError("");
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), {
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -7340,7 +7340,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
           birthDate: draftBirthDate,
           memo: draftMemo.trim()
         })
-      });
+      }, 12000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 400 && typeof data?.message === "string" && data.message.includes("마이그레이션")) setUnsupported(true);
@@ -7373,7 +7373,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     if (!editName.trim()) return;
     setRowBusyId(contactId);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), {
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -7383,7 +7383,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
           birthDate: editBirthDate,
           memo: editMemo.trim()
         })
-      });
+      }, 12000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "연락처 수정에 실패했습니다.");
       setEditingId("");
@@ -7399,7 +7399,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     if (!window.confirm("이 연락처를 삭제할까요?")) return;
     setRowBusyId(contactId);
     try {
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), { method: "DELETE" });
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), { method: "DELETE" }, 10000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "삭제에 실패했습니다.");
       await loadContacts();
@@ -7535,7 +7535,7 @@ function fetchCustomerOperationsAttachments(customerId: string): Promise<Custome
   const existing = customerOperationsInFlight.get(customerId);
   if (existing) return existing;
 
-  const promise = fetch(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
+  const promise = fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 10000)
     .then((response) => (response.ok ? response.json() : null))
     .catch(() => null)
     .finally(() => {
@@ -7631,7 +7631,7 @@ function LoadingPositionAttachmentBox({ customerId, customerName }: { readonly c
       formData.append("attachmentType", "loading_position");
       formData.append("title", `배송 적재위치 - ${customerName}`);
 
-      const response = await fetch("/api/customer-attachments/upload", { method: "POST", body: formData }).catch(() => null);
+      const response = await fetchWithTimeout("/api/customer-attachments/upload", { method: "POST", body: formData }, 20000).catch(() => null);
       if (!response?.ok) {
         failedFileNames.push(file.name);
         continue;

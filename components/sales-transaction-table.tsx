@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { SalesTransactionItem } from "@/lib/store";
 import { useTableSort } from "@/lib/use-table-sort";
 
@@ -58,7 +59,7 @@ export function SalesTransactionTable({
       if (companyId) params.set("companyId", companyId);
       if (dateFrom) params.set("from", dateFrom);
       if (dateTo) params.set("to", dateTo);
-      const response = await fetch(`/api/revenue/transactions?${params.toString()}`, { cache: "no-store" });
+      const response = await fetchWithTimeout(`/api/revenue/transactions?${params.toString()}`, { cache: "no-store" }, 10000);
       if (!response.ok) throw new Error("추가 거래내역을 불러오지 못했습니다.");
       const payload = await response.json();
       const nextItems: SalesTransactionItem[] = Array.isArray(payload?.sales?.items) ? payload.sales.items : [];

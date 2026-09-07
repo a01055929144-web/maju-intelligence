@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type UnmatchedGroup = {
   customerKey: string;
@@ -40,7 +41,7 @@ export function SalesTransactionMatcher({
   useEffect(() => {
     let cancelled = false;
     setLoadingCustomers(true);
-    fetch(endpoint, { cache: "no-store" })
+    fetchWithTimeout(endpoint, { cache: "no-store" }, 10000)
       .then((res) => (res.ok ? res.json() : { customers: [] }))
       .then((data) => {
         if (cancelled) return;
@@ -76,11 +77,11 @@ export function SalesTransactionMatcher({
       setSubmittingKey(customerKey);
       setMessage(null);
       try {
-        const response = await fetch("/api/revenue/transactions/match", {
+        const response = await fetchWithTimeout("/api/revenue/transactions/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ companyId, customerKey, customerId: targetCustomerId })
-        });
+        }, 12000);
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.message || "매칭 처리에 실패했습니다.");
         setMessage({ tone: "ok", text: `${targetCustomerName}(으)로 ${data?.matchedTransactionCount ?? 0}건을 연결했습니다.` });

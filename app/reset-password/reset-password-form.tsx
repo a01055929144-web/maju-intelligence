@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export function ResetPasswordForm({ token }: { token: string }) {
   const [newPassword, setNewPassword] = useState("");
@@ -22,20 +23,25 @@ export function ResetPasswordForm({ token }: { token: string }) {
     }
 
     setLoading(true);
-    const response = await fetch("/api/auth/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, newPassword })
-    });
-    const data = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
-    setLoading(false);
+    try {
+      const response = await fetchWithTimeout("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, newPassword })
+      }, 10000);
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
 
-    if (!response.ok || !data?.ok) {
-      setError(data?.message || "비밀번호 재설정에 실패했습니다.");
-      return;
+      if (!response.ok || !data?.ok) {
+        setError(data?.message || "비밀번호 재설정에 실패했습니다.");
+        return;
+      }
+
+      setDone(true);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "비밀번호 재설정에 실패했습니다.");
+    } finally {
+      setLoading(false);
     }
-
-    setDone(true);
   }
 
   if (done) {

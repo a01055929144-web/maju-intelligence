@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { SectionHeader } from "@/components/section-header";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type TimelineItem = {
   id: string;
@@ -69,7 +70,7 @@ function useCustomerIdentity(isAdminPreview: boolean) {
   useEffect(() => {
     if (isAdminPreview) return;
     let ignore = false;
-    fetch("/api/customer/me", { cache: "no-store" })
+    fetchWithTimeout("/api/customer/me", { cache: "no-store" }, 8000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (ignore || !payload?.session) return;
@@ -139,7 +140,7 @@ export default function CrmSummaryPage() {
   useEffect(() => {
     let active = true;
 
-    fetch(withCompanyQuery("/api/customer/history-status"), { cache: "no-store" })
+    fetchWithTimeout(withCompanyQuery("/api/customer/history-status"), { cache: "no-store" }, 10000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!active || !payload) return;
@@ -168,7 +169,7 @@ export default function CrmSummaryPage() {
 
       while (truncated && iterations < 20) {
         iterations += 1;
-        const response = await fetch(withCompanyQuery(`/api/customers?offset=${offset}`), { cache: "no-store" });
+        const response = await fetchWithTimeout(withCompanyQuery(`/api/customers?offset=${offset}`), { cache: "no-store" }, 10000);
         if (!response.ok) {
           source = "error";
           break;
@@ -221,9 +222,9 @@ export default function CrmSummaryPage() {
       const merged: Record<string, OperationsSummaryEntry> = {};
       const results = await Promise.all(
         chunk(ids, 150).map(async (batch) => {
-          const response = await fetch(withCompanyQuery(`/api/customer-operations/summary?customerIds=${batch.map(encodeURIComponent).join(",")}`), {
+          const response = await fetchWithTimeout(withCompanyQuery(`/api/customer-operations/summary?customerIds=${batch.map(encodeURIComponent).join(",")}`), {
             cache: "no-store"
-          });
+          }, 10000);
           if (!response.ok) return null;
           return response.json().catch(() => null);
         })
