@@ -214,7 +214,7 @@ export function MobileRegisterWorkspace() {
             {!isSearching && !searchMessage && !results.length ? <p className="text-xs font-bold text-slate-400">검색 결과가 없습니다.</p> : null}
             {results.map((result) => (
               <button
-                className="flex w-full items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50"
+                className="flex min-h-[72px] w-full items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50"
                 key={`${result.name}-${result.address}`}
                 onClick={() => selectResult(result)}
                 type="button"
@@ -412,10 +412,10 @@ function MobileRegisterAttachmentStep({
       ))}
 
       <div className="grid gap-2">
-        <Link className="flex h-11 items-center justify-center rounded-xl bg-teal-700 text-sm font-black text-white" href="/mobile/today">
+        <Link className="flex min-h-12 items-center justify-center rounded-xl bg-teal-700 px-3 py-2 text-sm font-black text-white" href="/mobile/today">
           오늘 코스로 이동
         </Link>
-        <button className="flex h-11 items-center justify-center rounded-xl border border-slate-200 text-sm font-black text-slate-700" onClick={onRegisterAnother} type="button">
+        <button className="flex min-h-12 items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700" onClick={onRegisterAnother} type="button">
           다른 매장 등록하기
         </button>
       </div>
@@ -480,7 +480,7 @@ function AttachmentSlotUploader({
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="font-black text-slate-950">{label}</p>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{description}</p>
         </div>
