@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { GitBranch, Loader2 } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker, KakaoRoutePoint } from "@/components/kakao-address-map";
 import { Button } from "@/components/ui/button";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type RouteSequenceActionProps = {
   readonly buttonLabel?: string;
@@ -56,11 +57,11 @@ export function RouteSequenceAction({
     setIsLoading(true);
     setMessage("");
 
-    const response = await fetch("/api/routes/sequence", {
+    const response = await fetchWithTimeout("/api/routes/sequence", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ destinations: uniqueDestinations, originAddress })
-    }).catch(() => null);
+    }, 20000).catch(() => null);
 
     if (!response?.ok) {
       setMessage("경유 계산 실패");
