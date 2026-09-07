@@ -96,7 +96,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 type MarkerViewMode = "grade" | "vehicle";
-type WorkspaceView = "map" | "customers" | "course" | "leads";
+type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
 export type BulkLeadActionBusy = PermitLeadActionKind | "quoteFollowUp" | "";
 export type LeadOpenDateFilterMode = "all" | "year" | "month" | "custom" | "missing";
@@ -315,11 +315,15 @@ const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; s
   { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치", value: "map" },
   { helper: "검색·상세·편집", icon: Store, label: "거래처", shortLabel: "원장", value: "customers" },
   { helper: "선택·경유·티맵", icon: Navigation, label: "코스", shortLabel: "경유", value: "course" },
-  { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" }
+  { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" },
+  // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
+  // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 탭입니다.
+  { helper: "달력·방문순서·경로", icon: CalendarDays, label: "히스토리", shortLabel: "기록", value: "history" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차와 거래처를 선택해 티맵 도로 기준 방문 순서를 계산합니다.",
   customers: "거래처 원장, 첨부자료, 메모를 관리합니다.",
+  history: "달력에서 날짜를 골라 그날의 담당자별 방문 순서·완료 기록·실제 GPS 경로를 확인합니다.",
   leads: "신규 인허가 데이터와 반경 리드를 관리합니다.",
   map: "거래처 등급, 배송차, 신규 리드를 지도에서 확인합니다."
 };
@@ -873,9 +877,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // (이 블록이 예전에 병합 과정에서 두 벌로 중복 선언돼 빌드가 깨졌던 것을 여기서 하나로 정리했습니다.)
   const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
   // 2026-09-07 피드백("모바일로 접속했는데 PC는 새로고침해야 불이 들어와 — 실시간 연동이 필요해,
-  // 접속하면 아래에서 팝업이 뜨거나 화면이 조금 강하게 보여졌으면 좋겠어"): 폴링 주기를 15초→8초로
-  // 줄여 체감 지연을 줄이고, 이전 폴링에는 없던 차량(기사)이 새로 나타나면 화면 하단에 "OOO 기사님이
-  // 접속했습니다" 배너를 몇 초간 띄워 새로고침 없이도 바로 눈에 띄게 합니다.
+  // 접속하면 아래에서 팝업이 뜨거나 화면이 조금 강하게 보여졌으면 좋겠어" + 후속 피드백 "속도는
+  // 빠를수록 좋은 거야"): 폴링 주기를 15초→8초→4초로 줄여 체감 지연을 최소화했고(기사 앱의 위치
+  // 전송 최소 간격도 함께 8초로 단축, mobile-location-reporter.tsx 참고), 이전 폴링에는 없던
+  // 차량(기사)이 새로 나타나면 화면 하단에 "OOO 기사님이 접속했습니다" 배너를 몇 초간 띄워
+  // 새로고침 없이도 바로 눈에 띄게 합니다.
   const knownVehicleIdsRef = useRef<Set<string> | null>(null);
   const [justConnectedVehicle, setJustConnectedVehicle] = useState<{ at: number; label: string } | null>(null);
   useEffect(() => {
@@ -919,7 +925,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     document.addEventListener("visibilitychange", handleVisibilityChange);
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
-    }, 8_000);
+    }, 4_000);
     return () => {
       cancelled = true;
       if (toastTimer) window.clearTimeout(toastTimer);
@@ -2685,6 +2691,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           stores={allStores}
         />
       ) : null}
+
+      {activeView === "history" ? (
+        <DeliveryHistoryView
+          companyId={churnRiskCompanyId}
+          onOpenStore={(storeId) => {
+            setSelectedId(storeId);
+            setPreviewStoreId(storeId);
+            setRightPanelTab("stores");
+          }}
+          stores={allStores}
+        />
+      ) : null}
       </div>
       {selectedStore ? (
         <StoreDetail
@@ -3331,7 +3349,15 @@ function RouteWorkspaceGuide({
   readonly visibleStoreCount: number;
 }) {
   const viewLabel =
-    activeView === "map" ? "지도 홈" : activeView === "customers" ? "거래처" : activeView === "leads" ? "신규리드" : "방문 코스";
+    activeView === "map"
+      ? "지도 홈"
+      : activeView === "customers"
+        ? "거래처"
+        : activeView === "leads"
+          ? "신규리드"
+          : activeView === "history"
+            ? "히스토리"
+            : "방문 코스";
   const markerLabel = markerViewMode === "grade" ? "등급별 보기" : "차량별 보기";
   const guide =
     !sourceReady
@@ -3344,7 +3370,9 @@ function RouteWorkspaceGuide({
         ? "목록에서 거래처를 누르면 상세 패널에서 원장, 첨부자료, 메모를 편집할 수 있습니다."
         : activeView === "leads"
           ? "사업자 인허가 데이터를 업로드하고, 기존 거래처 주변 반경에서 신규리드를 탐색하세요."
-          : "마커를 선택하면 간략 정보와 상세 이동 버튼이 열립니다.";
+          : activeView === "history"
+            ? "달력에서 날짜를 고르면 그날 담당자별 방문 순서와 실제 이동 경로를 볼 수 있습니다."
+            : "마커를 선택하면 간략 정보와 상세 이동 버튼이 열립니다.";
 
   return (
     <section className="shrink-0 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
@@ -6283,6 +6311,38 @@ export function isPermitLeadUnscored(lead: Pick<PermitLeadItem, "reviewCount" | 
   return lead.reviewCount == null && lead.rating == null && lead.keywordVolume == null;
 }
 
+// 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응입니다.
+// 이 회사의 리드 개념(앞선 피드백 정리) - 신규리드: 개업일자(최신 일자)가 확인되면 신생
+// 사업자로 봄. 영업리드: 개업일은 몰라도 검색량이 많으면 매출이 높을 거래처로 보고 영업
+// 타겟팅함. ingest 시점에 next_action_reasons에 문구로만 박혀 있던 것(리드가 언제 적재됐는지에
+// 따라 최신화가 안 될 수 있음)과 달리, 여기서는 매번 openDate/permitDate 원본값으로 직접
+// 재계산합니다 — 그래서 예전에 잘못 적재된 리드도(위 ingestPermitLeadRows의 isNewLead 계산
+// 버그 수정 전에 들어온 리드 포함) 화면에서는 항상 정확하게 분류됩니다.
+const NEW_LEAD_TYPE_MAX_AGE_DAYS = 90;
+export type PermitLeadType = "new" | "sales";
+export function getPermitLeadType(lead: Pick<PermitLeadItem, "openDate" | "permitDate">): PermitLeadType {
+  const dateText = lead.openDate || lead.permitDate;
+  if (!dateText) return "sales";
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return "sales";
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - NEW_LEAD_TYPE_MAX_AGE_DAYS);
+  return date >= cutoff ? "new" : "sales";
+}
+export const PERMIT_LEAD_TYPE_OPTIONS: Array<{ label: string; value: "all" | PermitLeadType }> = [
+  { label: "전체", value: "all" },
+  { label: "신규리드", value: "new" },
+  { label: "영업리드", value: "sales" }
+];
+export const PERMIT_LEAD_TYPE_LABEL: Record<PermitLeadType, string> = {
+  new: "신규리드",
+  sales: "영업리드"
+};
+export const PERMIT_LEAD_TYPE_DESCRIPTION: Record<PermitLeadType, string> = {
+  new: "개업일이 최근 90일 이내로 확인된 신생 사업자 리드입니다.",
+  sales: "개업일은 확인되지 않지만, 검색량·리뷰 등 활동 지표를 기준으로 영업 타겟팅하는 리드입니다."
+};
+
 export function permitGradeToneClassName(grade: PermitLeadItem["grade"], unscored?: boolean) {
   if (grade === "A") return "bg-emerald-100 text-emerald-800";
   if (grade === "B") return "bg-blue-100 text-blue-800";
@@ -6479,6 +6539,18 @@ const PermitLeadsView = dynamic(() => import("./permit-leads-view").then((module
     <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
       <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
       리드 화면을 불러오는 중입니다…
+    </div>
+  ),
+  ssr: false
+});
+
+// "히스토리" 탭입니다. 달력에서 날짜를 골라 그날의 담당자별 방문 순서·완료 기록·실제 GPS 경로를
+// 보여줍니다(2026-09-07 피드백).
+const DeliveryHistoryView = dynamic(() => import("./delivery-history-view").then((module) => module.DeliveryHistoryView), {
+  loading: () => (
+    <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      히스토리 화면을 불러오는 중입니다…
     </div>
   ),
   ssr: false

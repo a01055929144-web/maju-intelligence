@@ -515,6 +515,23 @@ export type DeliveryCompletionEvent = {
   plannedOrder?: number;
   statusLabel?: string;
 };
+// 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
+// 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응: 특정 과거
+// 날짜의 배송 기록을 담당자별로 묶어서 보여주기 위한 타입입니다.
+export type DeliveryHistoryDriverGroup = {
+  completions: DeliveryCompletionEvent[];
+  deliveryVehicle?: string;
+  driverName: string;
+  events: StaffLocationEvent[];
+  planMatchedThatDay: boolean;
+  plannedCustomerIds: string[];
+};
+export type DeliveryHistoryDay = {
+  date: string;
+  drivers: DeliveryHistoryDriverGroup[];
+  totalCompletions: number;
+  unassignedCompletions: DeliveryCompletionEvent[];
+};
 export type StaffKakaoAcceptInput = {
   avatarUrl?: string;
   email?: string;
@@ -3300,6 +3317,187 @@ function normalizeComparableText(value?: string | null) {
   return (value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+// "YYYY-MM-DD" 하루(KST 기준)를 UTC ISO 문자열 시작/끝 경계로 바꿉니다. 서버 시각은 UTC로
+// 저장되지만 사용자가 달력에서 고르는 날짜는 한국 시간 기준 하루이므로, DB 필터링 전에
+// KST 자정~다음 KST 자정 구간을 UTC로 환산해야 정확한 하루가 조회됩니다.
+function kstDayRangeIso(dateKey: string): { end: string; start: string } {
+  const start = new Date(`${dateKey}T00:00:00+09:00`);
+  const end = new Date(`${dateKey}T23:59:59.999+09:00`);
+  return { end: end.toISOString(), start: start.toISOString() };
+}
+
+// UTC ISO 시각을 KST 기준 "YYYY-MM-DD" 날짜 키로 바꿉니다(달력에 날짜별 건수를 표시할 때 사용).
+function toKstDateKey(iso: string): string {
+  const shifted = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+// 달력에 날짜별 배송완료 건수를 배지로 보여주기 위한 요약입니다. from~to(둘 다 YYYY-MM-DD, KST
+// 기준, inclusive) 구간의 배송완료 메모(customer_notes, note_type=delivery) 건수를 날짜별로 셉니다.
+export async function getDeliveryHistorySummary(companyId: string | undefined, range: { from: string; to: string }): Promise<Record<string, number>> {
+  if (!companyId || !isProductionStoreConfigured()) return {};
+  try {
+    const { start } = kstDayRangeIso(range.from);
+    const { end } = kstDayRangeIso(range.to);
+    const rows = await supabaseRequest<Array<{ created_at: string }>>(
+      `customer_notes?select=created_at&company_id=eq.${encodeURIComponent(companyId)}&note_type=eq.delivery&created_at=gte.${encodeURIComponent(
+        start
+      )}&created_at=lte.${encodeURIComponent(end)}&order=created_at.asc&limit=5000`
+    );
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const key = toKstDateKey(row.created_at);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  } catch {
+    return {};
+  }
+}
+
+// 특정 날짜(KST) 하루의 배송 히스토리를 담당자별로 묶어서 돌려줍니다. 그날 저장된
+// route_plan_confirmations(코스 탭에서 확정한 방문 순서)가 있으면 그것을 "계획한 순서"로 쓰고,
+// 없으면 어느 담당자 소속인지 지금 등록된 거래처의 담당자 값으로만 최선 추정합니다(과거 시점의
+// 실제 담당자와 다를 수 있어 planMatchedThatDay로 그 차이를 구분해서 알려줍니다).
+export async function getDeliveryHistoryForDate(companyId: string | undefined, date: string): Promise<DeliveryHistoryDay> {
+  const empty: DeliveryHistoryDay = { date, drivers: [], totalCompletions: 0, unassignedCompletions: [] };
+  if (!companyId || !isProductionStoreConfigured()) return empty;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return empty;
+
+  try {
+    const { start, end } = kstDayRangeIso(date);
+    const [noteRows, confirmationRows, locationRows, customerMaster] = await Promise.all([
+      supabaseRequest<Array<{ created_at: string; customer_id: string; id: string; memo: string }>>(
+        `customer_notes?select=id,customer_id,memo,created_at&company_id=eq.${encodeURIComponent(companyId)}&note_type=eq.delivery&created_at=gte.${encodeURIComponent(
+          start
+        )}&created_at=lte.${encodeURIComponent(end)}&order=created_at.asc&limit=1000`
+      ),
+      supabaseRequest<Array<{ customer_ids: unknown; driver_name: string }>>(
+        `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${encodeURIComponent(date)}`
+      ).catch(() => []),
+      supabaseRequest<
+        Array<{
+          accuracy_m: number | string | null;
+          delivery_vehicle: string | null;
+          driver_name: string | null;
+          id: string;
+          latitude: number | string;
+          longitude: number | string;
+          recorded_at: string;
+          user_id: string;
+        }>
+      >(
+        `staff_location_events?select=id,user_id,driver_name,delivery_vehicle,latitude,longitude,accuracy_m,recorded_at&company_id=eq.${encodeURIComponent(
+          companyId
+        )}&recorded_at=gte.${encodeURIComponent(start)}&recorded_at=lte.${encodeURIComponent(end)}&order=recorded_at.asc&limit=6000`
+      ).catch(() => []),
+      getCustomerMaster(companyId).catch(() => ({ customers: [] as CustomerMasterItem[], source: "empty" as const, truncated: false }))
+    ]);
+
+    const customerById = new Map(customerMaster.customers.map((customer) => [customer.id, customer]));
+    const driverGroups = new Map<string, DeliveryHistoryDriverGroup>();
+    const ensureDriver = (rawName: string): DeliveryHistoryDriverGroup => {
+      const key = rawName.trim() || "미배정";
+      let group = driverGroups.get(key);
+      if (!group) {
+        group = { completions: [], driverName: key, events: [], planMatchedThatDay: false, plannedCustomerIds: [] };
+        driverGroups.set(key, group);
+      }
+      return group;
+    };
+
+    for (const row of confirmationRows) {
+      if (!Array.isArray(row.customer_ids)) continue;
+      const group = ensureDriver(row.driver_name);
+      group.plannedCustomerIds = row.customer_ids as string[];
+      group.planMatchedThatDay = true;
+    }
+
+    // 그날 실제로 GPS를 보고한 기록에서 담당자별 배송차량을 역추정합니다(그날 시점 기준이라
+    // 지금 등록된 값보다 신뢰도가 높습니다).
+    const vehicleVotesByDriver = new Map<string, Map<string, number>>();
+    for (const row of locationRows) {
+      const driverName = (row.driver_name || "").trim();
+      if (!driverName) continue;
+      const group = ensureDriver(driverName);
+      group.events.push({
+        accuracyMeters: row.accuracy_m === null || row.accuracy_m === undefined ? undefined : Number(row.accuracy_m),
+        deliveryVehicle: row.delivery_vehicle || undefined,
+        driverName,
+        id: row.id,
+        lat: Number(row.latitude),
+        lng: Number(row.longitude),
+        recordedAt: row.recorded_at,
+        userId: row.user_id
+      });
+      if (row.delivery_vehicle) {
+        const votes = vehicleVotesByDriver.get(driverName) || new Map<string, number>();
+        votes.set(row.delivery_vehicle, (votes.get(row.delivery_vehicle) || 0) + 1);
+        vehicleVotesByDriver.set(driverName, votes);
+      }
+    }
+    for (const [driverName, votes] of vehicleVotesByDriver) {
+      const top = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (top) ensureDriver(driverName).deliveryVehicle = top[0];
+    }
+
+    const driverByCustomerId = new Map<string, string>();
+    for (const [driverName, group] of driverGroups) {
+      for (const customerId of group.plannedCustomerIds) driverByCustomerId.set(customerId, driverName);
+    }
+
+    const unassignedCompletions: DeliveryCompletionEvent[] = [];
+    const completionsByDriver = new Map<string, DeliveryCompletionEvent[]>();
+    for (const row of noteRows) {
+      const customer = customerById.get(row.customer_id);
+      // 그날의 확정 순서(route_plan_confirmations)에 이 거래처가 있으면 그 담당자 소속으로 보고,
+      // 없으면(그날 순서를 확정하지 않았거나 나중에 담당자가 바뀐 경우) 지금 등록된 담당자로
+      // 최선 추정합니다 - 이 경우는 과거 실제와 다를 수 있어 planMatchedThatDay=false로 남습니다.
+      const driverName = driverByCustomerId.get(row.customer_id) || (customer?.deliveryManager || "").trim() || undefined;
+      const group = driverName ? ensureDriver(driverName) : undefined;
+      const plannedIndex = group ? group.plannedCustomerIds.indexOf(row.customer_id) : -1;
+      const completion: DeliveryCompletionEvent = {
+        actualOrder: 0,
+        completedAt: row.created_at,
+        customerId: row.customer_id,
+        customerName: customer?.customerName || "거래처",
+        deliveryDriver: driverName,
+        deliveryVehicle: group?.deliveryVehicle || customer?.deliveryVehicle,
+        id: row.id,
+        memoSnippet: summarizeDeliveryMemo(row.memo),
+        plannedOrder: plannedIndex >= 0 ? plannedIndex + 1 : undefined,
+        statusLabel: extractDeliveryStatus(row.memo)
+      };
+      if (!driverName) {
+        unassignedCompletions.push(completion);
+        continue;
+      }
+      const list = completionsByDriver.get(driverName) || [];
+      list.push(completion);
+      completionsByDriver.set(driverName, list);
+    }
+    for (const [driverName, list] of completionsByDriver) {
+      list.forEach((completion, index) => {
+        completion.actualOrder = index + 1;
+      });
+      ensureDriver(driverName).completions = list;
+    }
+    unassignedCompletions.forEach((completion, index) => {
+      completion.actualOrder = index + 1;
+    });
+
+    const drivers = [...driverGroups.values()]
+      .filter((group) => group.completions.length > 0 || group.events.length > 0 || group.plannedCustomerIds.length > 0)
+      .sort((a, b) => b.completions.length - a.completions.length || a.driverName.localeCompare(b.driverName, "ko"));
+
+    const totalCompletions = drivers.reduce((sum, group) => sum + group.completions.length, 0) + unassignedCompletions.length;
+
+    return { date, drivers, totalCompletions, unassignedCompletions };
+  } catch {
+    return empty;
+  }
+}
+
 export function getSystemStatus(): SystemStatus {
   const supabaseConfigured = isProductionStoreConfigured();
   const appUrlConfigured = Boolean(process.env.NEXT_PUBLIC_APP_URL);
@@ -6034,12 +6232,17 @@ export async function ingestPermitLeadRows(
     const existingId = businessNumber ? leadBizNoToId.get(businessNumber) : undefined;
     // isNewLead는 소스와 무관하게 "확인된 최근(90일 내) 개업/인허가일이 있는가"만 봅니다 — 카카오
     // 키워드 탐색(영업리드)은 애초에 날짜가 없어 항상 false이고, gov/seoul 자동 동기화는 날짜가
-    // 있어야 true입니다. 수동 업로드는 담당자가 직접 고른 리드라 날짜가 없어도 신규로 취급합니다
-    // (기존 동작 유지 — AUTO_PERMIT_SYNC_SOURCES에 없는 소스는 이 판정 자체를 건너뜀).
+    // 있어야 true입니다. 수동 업로드는 담당자가 직접 고른 리드라 날짜가 없어도 신규로 취급합니다.
+    // 2026-09-07 재점검: 아래 식이 "isAutoPermitSync ? hasConfirmedRecentDate : true"로 되어
+    // 있었는데, kakao_keyword_search는 AUTO_PERMIT_SYNC_SOURCES에 없어 이 삼항의 : true 쪽을 타서
+    // 항상 isNewLead=true가 나가고 있었습니다 — 바로 위 주석이 말하는 "카카오는 항상 false"와 정반대로
+    // 동작한 실제 버그였습니다(그래서 카카오 리드의 "영업리드(검색량 기반 타겟팅)" 라벨이 실제로는
+    // 한 번도 적용되지 못했습니다). 소스별로 명시적으로 나눠 의도대로 고칩니다.
     const staleCheckDateText = row.openDate || row.permitDate;
     const staleCheckDate = staleCheckDateText ? new Date(staleCheckDateText) : null;
     const hasConfirmedRecentDate = Boolean(staleCheckDate) && !Number.isNaN(staleCheckDate!.getTime()) && staleCheckDate! >= newLeadStaleCutoff;
-    const isNewLead = isAutoPermitSync ? hasConfirmedRecentDate : true;
+    const isKakaoKeywordSource = (options.source || "") === "kakao_keyword_search";
+    const isNewLead = isAutoPermitSync ? hasConfirmedRecentDate : !isKakaoKeywordSource;
     if (isAutoPermitSync && !existingId && !hasConfirmedRecentDate) {
       result.classifiedAsSalesLead += 1;
     }
@@ -6777,8 +6980,13 @@ export type PermitLeadQueues = {
     active: number;
     gradeA: number;
     hasPhone: number;
+    // 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응 집계입니다.
+    // components/sales-route-map-workspace.tsx의 getPermitLeadType과 같은 기준(개업일/인허가일이
+    // 90일 이내로 확인되면 신규, 아니면 영업)입니다.
+    newLeadCount: number;
     quoteFollowUps: number;
     quoteRequests: number;
+    salesLeadCount: number;
     todayNew: number;
     total: number;
   };
@@ -6814,6 +7022,8 @@ export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20)
     })
     .slice(0, limitPerQueue);
 
+  const newLeadCount = active.filter((lead) => hasRecentConfirmedPermitDate(lead.openDate || lead.permitDate)).length;
+
   return {
     callToday,
     dmCandidates,
@@ -6825,12 +7035,25 @@ export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20)
       total: leads.length,
       active: active.length,
       gradeA: active.filter((lead) => lead.grade === "A").length,
+      newLeadCount,
       todayNew: active.filter((lead) => lead.leadPeriod === "today").length,
       quoteFollowUps: quoteFollowUps.length,
       quoteRequests: quoteRequests.length,
+      salesLeadCount: active.length - newLeadCount,
       hasPhone: active.filter((lead) => Boolean(lead.phone)).length
     }
   };
+}
+
+// 신규리드/영업리드 판정(2026-09-07 피드백)의 90일 컷오프입니다. components/sales-route-map-workspace.tsx의
+// getPermitLeadType과 동일한 기준을 서버 쪽 요약 집계(getPermitLeadQueues)에서도 씁니다.
+function hasRecentConfirmedPermitDate(dateText?: string) {
+  if (!dateText) return false;
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - NEW_LEAD_MAX_AGE_DAYS);
+  return date >= cutoff;
 }
 
 export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";

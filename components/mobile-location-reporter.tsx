@@ -12,7 +12,9 @@ type MobileLocationReporterProps = {
 
 type LocationState = "idle" | "ready" | "blocked" | "error";
 
-const LOCATION_POST_INTERVAL_MS = 15_000;
+// 2026-09-07 피드백("속도는 빠를수록 좋은 거야"): 대표 화면의 "접속" 표시가 최대한 빨리
+// 갱신되도록, 기사 앱이 위치를 서버에 올리는 최소 간격을 15초에서 8초로 단축했습니다.
+const LOCATION_POST_INTERVAL_MS = 8_000;
 const LOCATION_QUEUE_STORAGE_KEY = "maju:mobile-location-queue:v1";
 const MAX_QUEUED_LOCATIONS = 20;
 type LocationPostStatus = "active" | "offline" | "paused";

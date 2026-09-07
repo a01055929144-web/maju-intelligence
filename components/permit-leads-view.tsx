@@ -51,6 +51,9 @@ import {
   ListPageSize,
   NearbyPermitLeadResult,
   PERMIT_ACTION_OPTIONS,
+  PERMIT_LEAD_TYPE_DESCRIPTION,
+  PERMIT_LEAD_TYPE_LABEL,
+  PERMIT_LEAD_TYPE_OPTIONS,
   PERMIT_PERIOD_BADGE_LABEL,
   PERMIT_PERIOD_OPTIONS,
   PermitLeadActionIntent,
@@ -58,6 +61,7 @@ import {
   PermitLeadActionResult,
   PermitLeadEnrichResponse,
   PermitLeadSourceStatus,
+  PermitLeadType,
   PermitUploadResult,
   QUOTE_DRAFT_UPDATED_EVENT,
   QUOTE_FOLLOW_UP_STATUS_FILTER,
@@ -75,6 +79,7 @@ import {
   getPermitLeadOpenDate,
   getPermitLeadQuoteSubject,
   getPermitLeadTableAction,
+  getPermitLeadType,
   isPermitLeadInOpenDateFilter,
   isPermitLeadUnscored,
   localStoreKeys,
@@ -101,6 +106,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [viewMode, setViewMode] = useState<"table" | "map">("table");
 
   const [periodFilter, setPeriodFilter] = useState<"all" | PermitLeadPeriod>("all");
+  // 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응입니다.
+  // period(오늘/이번주/이번달/최근 90일)와는 다른 축입니다 — leadTypeFilter는 "개업일이 확인된
+  // 신규리드인지, 날짜 없이 검색량으로 타겟팅하는 영업리드인지"만 가릅니다.
+  const [leadTypeFilter, setLeadTypeFilter] = useState<"all" | PermitLeadType>("all");
   const [openDateFilterMode, setOpenDateFilterMode] = useState<LeadOpenDateFilterMode>("all");
   const [openDateYear, setOpenDateYear] = useState("");
   const [openDateMonth, setOpenDateMonth] = useState("");
@@ -395,6 +404,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     const normalizedKeyword = normalizeLeadSearchToken(keyword);
     return leads
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
+      .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
       .filter((lead) => statusFilter !== QUOTE_FOLLOW_UP_STATUS_FILTER || lead.status === "견적 발송" || lead.status === "재연락 예정")
@@ -409,7 +419,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly]);
+  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -586,6 +596,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   );
   const hasActiveLeadFilters = Boolean(
     periodFilter !== "all" ||
+      leadTypeFilter !== "all" ||
       openDateFilterMode !== "all" ||
       industryFilter ||
       actionFilter ||
@@ -600,6 +611,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   function clearLeadFilters() {
     setPeriodFilter("all");
+    setLeadTypeFilter("all");
     setOpenDateFilterMode("all");
     setOpenDateYear("");
     setOpenDateMonth("");
@@ -820,6 +832,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setStatusFilter("");
     setGradeFilter("");
     setHasPhoneOnly(false);
+    setLeadTypeFilter("all");
     setPeriodFilter("today");
   }
   function focusGradeALeads() {
@@ -829,6 +842,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setStatusFilter("");
     setPeriodFilter("all");
     setHasPhoneOnly(false);
+    setLeadTypeFilter("all");
     setGradeFilter("A");
   }
   function focusPhoneReadyLeads() {
@@ -838,7 +852,29 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setStatusFilter("");
     setPeriodFilter("all");
     setGradeFilter("");
+    setLeadTypeFilter("all");
     setHasPhoneOnly(true);
+  }
+  // 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응 카드입니다.
+  function focusNewLeads() {
+    setShowNearbyOnly(false);
+    setTableSearch("");
+    setActionFilter("");
+    setStatusFilter("");
+    setPeriodFilter("all");
+    setGradeFilter("");
+    setHasPhoneOnly(false);
+    setLeadTypeFilter("new");
+  }
+  function focusSalesLeads() {
+    setShowNearbyOnly(false);
+    setTableSearch("");
+    setActionFilter("");
+    setStatusFilter("");
+    setPeriodFilter("all");
+    setGradeFilter("");
+    setHasPhoneOnly(false);
+    setLeadTypeFilter("sales");
   }
 
   async function handleFileUpload(file: File) {
@@ -1307,13 +1343,30 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   return (
     <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-8">
         <DirectoryStat
           active={!hasActiveLeadFilters}
-          label="신규 리드"
+          // 2026-09-07 수정: 이 카드는 leads 전체(신규+영업 모두 포함, summary.active)를 보여주는데
+          // "신규 리드"라고만 이름 붙어 있어, 방금 추가한 진짜 "신규리드" 카드와 헷갈릴 수 있었습니다.
+          // "전체 리드"로 이름을 고쳐 둘을 명확히 구분합니다.
+          label="전체 리드"
           onClick={focusAllLeads}
-          title="전체 활성 리드를 봅니다."
+          title="전체 활성 리드를 봅니다(신규리드 + 영업리드)."
           value={summary ? `${summary.active.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={leadTypeFilter === "new"}
+          label={PERMIT_LEAD_TYPE_LABEL.new}
+          onClick={focusNewLeads}
+          title={PERMIT_LEAD_TYPE_DESCRIPTION.new}
+          value={summary ? `${summary.newLeadCount.toLocaleString()}곳` : "—"}
+        />
+        <DirectoryStat
+          active={leadTypeFilter === "sales"}
+          label={PERMIT_LEAD_TYPE_LABEL.sales}
+          onClick={focusSalesLeads}
+          title={PERMIT_LEAD_TYPE_DESCRIPTION.sales}
+          value={summary ? `${summary.salesLeadCount.toLocaleString()}곳` : "—"}
         />
         <DirectoryStat
           active={periodFilter === "today"}
@@ -1832,6 +1885,20 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 </option>
               ))}
             </select>
+            {/* 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응
+                필터입니다. 위 기간(오늘/이번주/이번달) 필터와는 별개 축으로, 개업일 확인 여부로만 가릅니다. */}
+            <select
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+              onChange={(event) => setLeadTypeFilter(event.target.value as "all" | PermitLeadType)}
+              title="신규리드(개업일 확인됨) / 영업리드(개업일 미확인, 검색량 기반 타겟팅)를 구분해서 봅니다."
+              value={leadTypeFilter}
+            >
+              {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value === "all" ? "리드 유형 전체" : PERMIT_LEAD_TYPE_LABEL[option.value]}
+                </option>
+              ))}
+            </select>
             <select
               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => {
@@ -2345,7 +2412,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           />
                         </td>
                         <td className="min-w-0 border-r border-slate-100 px-3 py-2">
-                          <p className="truncate font-black text-slate-950">{lead.businessName}</p>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPermitLeadType(lead) === "new" ? "bg-emerald-500" : "bg-violet-500"}`}
+                              title={`${PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]} · ${PERMIT_LEAD_TYPE_DESCRIPTION[getPermitLeadType(lead)]}`}
+                            />
+                            <p className="truncate font-black text-slate-950">{lead.businessName}</p>
+                          </div>
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                           {(() => {
                             const tags = recommendationTagsOf(lead).slice(0, 2);
@@ -2837,8 +2910,16 @@ function PermitLeadDetailPanel({
       <div className="h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="min-w-0">
-            <span className="flex items-center gap-1.5">
+            <span className="flex flex-wrap items-center gap-1.5">
               <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade ? `${lead.grade}등급` : isPermitLeadUnscored(lead) ? "채점 전" : "등급 미달"}</Badge>
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                  getPermitLeadType(lead) === "new" ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"
+                }`}
+                title={PERMIT_LEAD_TYPE_DESCRIPTION[getPermitLeadType(lead)]}
+              >
+                {PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]}
+              </span>
               <span className="text-[11px] font-black text-slate-400">{PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}</span>
             </span>
             <h3 className="mt-1 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
