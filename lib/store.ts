@@ -2456,6 +2456,17 @@ export async function deleteStaffInvitation(
         body: JSON.stringify({ status: "inactive", updated_at: new Date().toISOString() })
       }
     ).catch(() => null);
+
+    // 2026-09-08 피드백("퇴사/해제 시 접근 차단이 되어야 합니다") 대응: 직원을 삭제(퇴사 처리)하면
+    // 이 회사 안에서 그 사람의 GPS 위치 기록도 즉시 지웁니다. 다른 회사 소속 기록은 company_id로
+    // 범위를 좁혀 건드리지 않습니다.
+    await supabaseRequest(
+      `staff_location_events?company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(deletedInvitation.accepted_by)}`,
+      {
+        method: "DELETE",
+        headers: { Prefer: "return=minimal" }
+      }
+    ).catch(() => null);
   }
 
   await writeAdminAuditLog({
@@ -3643,6 +3654,28 @@ export function getSystemStatus(): SystemStatus {
     databaseChecks: [],
     storageChecks: []
   };
+}
+
+// 2026-09-08 피드백("GPS는 직원 감시 이슈가 있으니 동의, 목적, 보관기간, 삭제권한을 서비스
+// 정책과 DB 구조에 반영해야 합니다") 대응: staff_location_events는 그동안 삭제 로직이 전혀 없어
+// 무기한 누적되고 있었습니다. 보관기간을 1년으로 정하고(위치정보법상 "보관기간 명시" 요건
+// 충족), 매일 크론에서 그보다 오래된 기록을 지웁니다. 배송 히스토리 달력(getDeliveryHistoryForDate)
+// 조회 범위보다 훨씬 넉넉해 실제 운영에는 영향이 없습니다.
+const STAFF_LOCATION_EVENT_RETENTION_DAYS = 365;
+
+export async function purgeExpiredStaffLocationEvents(): Promise<{ cutoff: string; deleted: boolean }> {
+  const cutoff = new Date(Date.now() - STAFF_LOCATION_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  if (!isProductionStoreConfigured()) return { cutoff, deleted: false };
+
+  await supabaseRequest(`staff_location_events?recorded_at=lt.${encodeURIComponent(cutoff)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  }).catch((error) => {
+    if (isMissingStaffMobileLocationSchemaError(error)) return null;
+    throw error;
+  });
+
+  return { cutoff, deleted: true };
 }
 
 export async function getSystemDiagnostics(): Promise<SystemStatus> {

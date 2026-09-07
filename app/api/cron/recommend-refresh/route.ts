@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enrichAllCompaniesLeadsMissingContactInfo, refreshAllCompaniesRecommendationScores } from "@/lib/store";
+import { enrichAllCompaniesLeadsMissingContactInfo, purgeExpiredStaffLocationEvents, refreshAllCompaniesRecommendationScores } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +18,11 @@ export const maxDuration = 60;
  * Promise.all로 병렬 실행해 전체 실행시간을 줄입니다.
  *
  * Vercel이 CRON_SECRET Bearer 헤더로 서명한 요청만 실행합니다(app/api/cron/business-status와 동일).
+ *
+ * 2026-09-08 피드백("GPS는 직원 감시 이슈가 있으니... 보관기간을 서비스 정책과 DB 구조에 반영해야
+ * 합니다") 대응: staff_location_events 1년 초과분 삭제도 이 크론에 함께 실행합니다. 새 크론
+ * 엔드포인트를 따로 만들지 않은 이유는 Vercel 크론 슬롯을 아끼기 위함이고, 삭제 쿼리 하나라
+ * 시간 예산에 미치는 영향은 미미합니다.
  */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -28,9 +33,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const [recommendationScoreRefresh, contactInfoBackfill] = await Promise.all([
+  const [recommendationScoreRefresh, contactInfoBackfill, staffLocationRetention] = await Promise.all([
     refreshAllCompaniesRecommendationScores(),
-    enrichAllCompaniesLeadsMissingContactInfo()
+    enrichAllCompaniesLeadsMissingContactInfo(),
+    purgeExpiredStaffLocationEvents()
   ]);
-  return NextResponse.json({ ...recommendationScoreRefresh, contactInfoBackfill });
+  return NextResponse.json({ ...recommendationScoreRefresh, contactInfoBackfill, staffLocationRetention });
 }
