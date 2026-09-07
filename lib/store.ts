@@ -3436,13 +3436,16 @@ export async function getDeliveryHistoryForDate(companyId: string | undefined, d
         vehicleVotesByDriver.set(driverName, votes);
       }
     }
-    for (const [driverName, votes] of vehicleVotesByDriver) {
-      const top = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
+    // Map을 for...of로 직접 순회하면 이 프로젝트의 tsconfig(target: es5, downlevelIteration
+    // 미설정)에서 빌드 타입 에러가 나므로, 이 파일의 다른 곳들과 같은 방식으로 Array.from()으로
+    // 배열로 바꾼 뒤 순회합니다.
+    for (const [driverName, votes] of Array.from(vehicleVotesByDriver)) {
+      const top = Array.from(votes.entries()).sort((a, b) => b[1] - a[1])[0];
       if (top) ensureDriver(driverName).deliveryVehicle = top[0];
     }
 
     const driverByCustomerId = new Map<string, string>();
-    for (const [driverName, group] of driverGroups) {
+    for (const [driverName, group] of Array.from(driverGroups)) {
       for (const customerId of group.plannedCustomerIds) driverByCustomerId.set(customerId, driverName);
     }
 
@@ -3476,7 +3479,7 @@ export async function getDeliveryHistoryForDate(companyId: string | undefined, d
       list.push(completion);
       completionsByDriver.set(driverName, list);
     }
-    for (const [driverName, list] of completionsByDriver) {
+    for (const [driverName, list] of Array.from(completionsByDriver)) {
       list.forEach((completion, index) => {
         completion.actualOrder = index + 1;
       });
@@ -3486,7 +3489,7 @@ export async function getDeliveryHistoryForDate(companyId: string | undefined, d
       completion.actualOrder = index + 1;
     });
 
-    const drivers = [...driverGroups.values()]
+    const drivers = Array.from(driverGroups.values())
       .filter((group) => group.completions.length > 0 || group.events.length > 0 || group.plannedCustomerIds.length > 0)
       .sort((a, b) => b.completions.length - a.completions.length || a.driverName.localeCompare(b.driverName, "ko"));
 
