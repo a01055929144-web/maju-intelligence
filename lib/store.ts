@@ -450,6 +450,10 @@ export type StaffInvitation = {
   status: "pending" | "accepted" | "expired" | "revoked";
   createdAt: string;
   expiresAt?: string;
+  // 2026-09-08 피드백("유효일자, 시간을 표시해주면 좋을 것 같고") 대응: expiresAt은 화면 표시용으로
+  // 이미 한국어 로캘 문자열로 포맷돼 있어(toLocaleString) 클라이언트에서 만료 여부를 다시 계산할 수
+  // 없습니다. 원본 ISO 문자열을 별도로 함께 내려줘서 화면에서 "만료됨" 배지를 계산할 수 있게 합니다.
+  expiresAtIso?: string;
 };
 export type StaffInvitationInput = {
   companyId: string;
@@ -3024,7 +3028,8 @@ function toStaffInvitation(row: {
     role: row.role || "driver",
     status: row.status || "pending",
     createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-    expiresAt: row.expires_at ? new Date(row.expires_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined
+    expiresAt: row.expires_at ? new Date(row.expires_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined,
+    expiresAtIso: row.expires_at || undefined
   };
 }
 

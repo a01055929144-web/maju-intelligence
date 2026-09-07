@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
-import { AlertCircle, CheckCircle2, Copy, Link2, Plus, Send, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
+import { Fragment, useState } from "react";
+import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Minus, Plus, Send, Share2, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
@@ -16,6 +16,23 @@ type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 function isErrorMessage(message: string) {
   return ["실패", "오류", "않", "필요", "맞지", "준비"].some((keyword) => message.includes(keyword));
+}
+
+// 2026-09-08 피드백("직원들 초대하는데 연락처들 여러게 입력하는 것도 고려해") 대응: 초대 생성
+// 폼에서 이름·연락처 쌍을 여러 줄 입력받기 위한 임시 행 타입입니다. 서버에는 여전히 한 명씩
+// 순서대로 요청을 보내며(API가 1건 생성만 지원), 이 id는 화면 목록 key로만 씁니다.
+type InviteRow = { id: string; employeeName: string; employeePhone: string };
+
+function makeEmptyInviteRow(): InviteRow {
+  return { id: Math.random().toString(36).slice(2), employeeName: "", employeePhone: "" };
+}
+
+// 2026-09-08 피드백("유효일자, 시간을 표시해주면 좋을 것 같고") 대응: 초대 상태가 아직 대기 중인데
+// 만료 시각이 지난 경우를 화면에서 바로 알 수 있게 합니다. expiresAtIso는 lib/store.ts에서
+// 새로 내려주는 원본 ISO 문자열입니다.
+function isInviteExpired(invitation: StaffInvitation) {
+  if (invitation.status !== "pending" || !invitation.expiresAtIso) return false;
+  return new Date(invitation.expiresAtIso).getTime() < Date.now();
 }
 
 async function requestStaffJson(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 12000) {
@@ -38,7 +55,9 @@ export function StaffManagementPanel({
   vehicleOptions: string[];
 }) {
   const [invitations, setInvitations] = useState(initialInvitations);
-  const [form, setForm] = useState({ employeeName: "", employeePhone: "", role: "driver" as string });
+  const [inviteRows, setInviteRows] = useState<InviteRow[]>([makeEmptyInviteRow()]);
+  const [inviteRole, setInviteRole] = useState<string>("driver");
+  const [expandedId, setExpandedId] = useState("");
   // 거래처에 실제 등록된 담당자명/배송차량 목록입니다. 화면에서 "+ 새 담당자/배송차 추가"로 입력한
   // 이름은 거래처에 저장되는 값이 아니라 이 직원의 배정 기준(override)으로만 쓰이므로 서버에 다시
   // 등록할 필요 없이 이 세션의 선택지 목록에만 더해서 바로 고를 수 있게 합니다.
@@ -70,26 +89,53 @@ export function StaffManagementPanel({
   const pageEnd = Math.min(invitations.length, currentPage * pageSize);
   const pagedInvitations = invitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  function addInviteRow() {
+    setInviteRows((current) => [...current, makeEmptyInviteRow()]);
+  }
+
+  function removeInviteRow(id: string) {
+    setInviteRows((current) => (current.length > 1 ? current.filter((row) => row.id !== id) : current));
+  }
+
+  function updateInviteRow(id: string, patch: Partial<InviteRow>) {
+    setInviteRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+
+  // 2026-09-08 피드백("연락처들 여러게 입력하는 것도 고려해") 대응: 이름이 입력된 행만 순서대로
+  // 한 명씩 생성 요청을 보냅니다(API가 1건씩만 처리하므로 동시에 여러 곳에서 같은 초대코드
+  // 시드가 겹치지 않도록 순차 처리). 일부만 실패해도 성공한 건은 목록에 반영하고, 실패한
+  // 이름만 모아 메시지로 알려줍니다.
   async function createStaff() {
-    if (!form.employeeName.trim() || creating) return;
+    const targetRows = inviteRows.filter((row) => row.employeeName.trim());
+    if (!targetRows.length || creating) return;
     setCreating(true);
     setMessage("");
 
-    const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
-    setCreating(false);
+    const created: StaffInvitation[] = [];
+    const failed: string[] = [];
 
-    if (!response?.ok) {
-      setMessage(payload?.message || "직원 추가에 실패했습니다.");
-      return;
+    for (const row of targetRows) {
+      const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeName: row.employeeName, employeePhone: row.employeePhone, role: inviteRole })
+      });
+      if (response?.ok) {
+        created.push(payload.invitation as StaffInvitation);
+      } else {
+        failed.push(`${row.employeeName}(${payload?.message || "실패"})`);
+      }
     }
 
-    setInvitations((current) => [payload.invitation as StaffInvitation, ...current]);
-    setForm({ employeeName: "", employeePhone: "", role: "driver" });
-    setMessage(payload.persisted ? "직원 초대 링크 저장이 완료되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요." : "직원 초대가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+    setCreating(false);
+    if (created.length) setInvitations((current) => [...created, ...current]);
+
+    if (!failed.length) {
+      setInviteRows([makeEmptyInviteRow()]);
+      setMessage(created.length > 1 ? `${created.length}명 초대 링크 생성이 완료되었습니다. 각 링크를 복사·공유해 카카오 가입 안내에 사용하세요.` : "직원 초대 링크 저장이 완료되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요.");
+      return;
+    }
+    setMessage(created.length ? `${created.length}명 생성 완료, 실패: ${failed.join(", ")}` : `초대 생성에 실패했습니다: ${failed.join(", ")}`);
   }
 
   async function updateStaff(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -213,6 +259,26 @@ export function StaffManagementPanel({
     setMessage(nextMessage);
   }
 
+  // 2026-09-08 피드백("링크 복사버튼은 있는데 공유버튼도 있으면 좋을 것 같아") 대응: 모바일에서
+  // Web Share API를 지원하면 카카오톡/문자 등 원하는 앱으로 바로 공유하고, 지원하지 않는
+  // 환경(대부분의 데스크톱 브라우저)에서는 기존 복사 동작으로 자연스럽게 대체합니다.
+  async function shareInvite(invitation: StaffInvitation) {
+    const shareData = {
+      text: `${invitation.employeeName}님, 아래 링크로 MAJU 모바일 가입을 진행해주세요.`,
+      title: "MAJU 직원 초대",
+      url: invitation.inviteUrl
+    };
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch {
+        // 사용자가 공유를 취소한 경우 등 — 별도 에러 표시 없이 조용히 둡니다.
+      }
+      return;
+    }
+    await copyText(invitation.inviteUrl, "이 브라우저는 공유 기능을 지원하지 않아 링크를 복사했습니다.");
+  }
+
   return (
     <section className="maju-section-card">
       <div className="maju-card-header flex flex-wrap items-start justify-between gap-3">
@@ -306,102 +372,160 @@ export function StaffManagementPanel({
             </div>
           ) : null}
 
-          {pagedInvitations.map((invitation) => (
-            <div key={invitation.id} className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-black text-slate-950">{invitation.employeeName}</p>
-                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{formatPhoneNumber(invitation.employeePhone) || "연락처 미입력"}</p>
-                </div>
-                <Badge className={invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : invitation.status === "revoked" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
-                  {getStatusLabel(invitation.status)}
-                </Badge>
-              </div>
-
-              <div className="mt-3 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-600 md:grid-cols-[1fr_auto]">
-                <div className="min-w-0">
-                  <p className="font-black text-slate-900">배정 기준</p>
-                  <p className="mt-1 truncate">{getAssignmentLabel(invitation)}</p>
-                </div>
-                {invitation.acceptedBy ? (
-                  <Button
-                    className="h-8 px-2 text-xs"
-                    disabled={!canManageMembers}
-                    onClick={() => copyText(invitation.acceptedBy || "", "직원 고유 ID를 복사했습니다.")}
-                    type="button"
-                    variant="outline"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    ID
-                  </Button>
-                ) : null}
-              </div>
-
-              {invitation.status === "accepted" ? (
-                <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-black text-slate-900">거래처 매칭</p>
-                    {typeof invitation.matchedCustomerCount === "number" ? (
-                      <Badge className={invitation.matchedCustomerCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}>
-                        {invitation.matchedCustomerCount > 0 ? `${invitation.matchedCustomerCount}곳 매칭됨` : "매칭 안 됨"}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                    거래처의 배송담당자/차량 표기가 직원명과 다르면 매칭이 안 됩니다. 그럴 때만 아래에 실제 등록된 담당자명 또는 차량번호를 입력해 수동으로 연결하세요.
-                  </p>
-                  <StaffAssignmentEditor
-                    canEdit={canManageMembers}
-                    invitation={invitation}
-                    managerOptions={managerChoices}
-                    onAddManagerOption={(name) => setManagerChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
-                    onAddVehicleOption={(name) => setVehicleChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
-                    onSave={(patch) => saveAssignment(invitation, patch)}
-                    saving={savingId === invitation.id}
-                    vehicleOptions={vehicleChoices}
-                  />
-                </div>
-              ) : null}
-
-              <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
-                <select
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!canManageMembers || savingId === invitation.id}
-                  value={invitation.role}
-                  onChange={(event) => updateStaff(invitation, { role: event.target.value as StaffInvitation["role"] })}
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role.value} value={role.value}>
-                      {role.label}
-                    </option>
-                  ))}
-                </select>
-                <Button disabled={!canManageMembers || savingId === invitation.id} onClick={() => copyText(invitation.inviteUrl, "초대 링크를 복사했습니다.")} type="button" variant="outline">
-                  <Copy className="h-4 w-4" />
-                  링크
-                </Button>
-                <Button
-                  disabled={!canManageMembers || savingId === invitation.id}
-                  onClick={() => updateStaff(invitation, { status: invitation.status === "revoked" ? "pending" : "revoked" })}
-                  type="button"
-                  variant="outline"
-                >
-                  {savingId === invitation.id ? "저장 중" : invitation.status === "revoked" ? "재활성화" : "비활성화"}
-                </Button>
-                <Button
-                  className="text-rose-700 hover:bg-rose-50"
-                  disabled={!canManageMembers || savingId === invitation.id}
-                  onClick={() => deleteStaff(invitation)}
-                  type="button"
-                  variant="outline"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  삭제
-                </Button>
-              </div>
-              <p className="mt-3 truncate rounded-md bg-slate-50 px-3 py-2 font-mono text-[11px] font-bold text-slate-500">{invitation.inviteUrl}</p>
+          {invitations.length ? (
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[920px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2.5">직원</th>
+                    <th className="px-3 py-2.5">역할</th>
+                    <th className="px-3 py-2.5">상태</th>
+                    <th className="px-3 py-2.5">유효기간</th>
+                    <th className="px-3 py-2.5">배정 매칭</th>
+                    <th className="px-3 py-2.5">초대 링크</th>
+                    <th className="px-3 py-2.5 text-right">관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedInvitations.map((invitation) => {
+                    const expired = isInviteExpired(invitation);
+                    const expanded = expandedId === invitation.id;
+                    return (
+                      <Fragment key={invitation.id}>
+                        <tr className="border-b border-slate-100 align-top hover:bg-slate-50/60">
+                          <td className="max-w-[180px] px-3 py-3">
+                            <p className="truncate font-black text-slate-950">{invitation.employeeName}</p>
+                            <p className="mt-1 truncate text-xs font-bold text-slate-500">{formatPhoneNumber(invitation.employeePhone) || "연락처 미입력"}</p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <select
+                              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={!canManageMembers || savingId === invitation.id}
+                              value={invitation.role}
+                              onChange={(event) => updateStaff(invitation, { role: event.target.value as StaffInvitation["role"] })}
+                            >
+                              {roleOptions.map((role) => (
+                                <option key={role.value} value={role.value}>
+                                  {role.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-3">
+                            <Badge className={invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : invitation.status === "revoked" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
+                              {getStatusLabel(invitation.status)}
+                            </Badge>
+                            {expired ? <p className="mt-1 text-[11px] font-black text-rose-600">기간 만료</p> : null}
+                          </td>
+                          <td className="max-w-[150px] px-3 py-3 text-xs font-bold text-slate-500">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{invitation.expiresAt || "-"}</span>
+                            </span>
+                          </td>
+                          <td className="max-w-[170px] px-3 py-3">
+                            <button
+                              className="block w-full truncate text-left text-xs font-bold text-slate-600 underline decoration-dotted underline-offset-2 hover:text-teal-700"
+                              onClick={() => setExpandedId(expanded ? "" : invitation.id)}
+                              type="button"
+                            >
+                              {getAssignmentLabel(invitation)}
+                            </button>
+                            {invitation.status === "accepted" && typeof invitation.matchedCustomerCount === "number" ? (
+                              <Badge className={`mt-1 ${invitation.matchedCustomerCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                {invitation.matchedCustomerCount > 0 ? `${invitation.matchedCustomerCount}곳 매칭됨` : "매칭 안 됨"}
+                              </Badge>
+                            ) : null}
+                          </td>
+                          <td className="max-w-[220px] px-3 py-3">
+                            <p className="truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] font-bold text-slate-500">{invitation.inviteUrl}</p>
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              <button
+                                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!canManageMembers}
+                                onClick={() => copyText(invitation.inviteUrl, "초대 링크를 복사했습니다.")}
+                                title="링크 복사"
+                                type="button"
+                              >
+                                <Copy className="h-3 w-3" />
+                                복사
+                              </button>
+                              <button
+                                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!canManageMembers}
+                                onClick={() => shareInvite(invitation)}
+                                title="링크 공유"
+                                type="button"
+                              >
+                                <Share2 className="h-3 w-3" />
+                                공유
+                              </button>
+                              {invitation.acceptedBy ? (
+                                <button
+                                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                  disabled={!canManageMembers}
+                                  onClick={() => copyText(invitation.acceptedBy || "", "직원 고유 ID를 복사했습니다.")}
+                                  title="고유 ID 복사"
+                                  type="button"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                  ID
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!canManageMembers || savingId === invitation.id}
+                                onClick={() => updateStaff(invitation, { status: invitation.status === "revoked" ? "pending" : "revoked" })}
+                                type="button"
+                              >
+                                {savingId === invitation.id ? "저장 중" : invitation.status === "revoked" ? "재활성화" : "비활성화"}
+                              </button>
+                              <button
+                                className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!canManageMembers || savingId === invitation.id}
+                                onClick={() => deleteStaff(invitation)}
+                                type="button"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {expanded ? (
+                          <tr className="border-b border-slate-100 bg-slate-50/60">
+                            <td className="px-3 py-3" colSpan={7}>
+                              <p className="text-xs font-black text-slate-900">배정 기준 수동 연결</p>
+                              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                                거래처의 배송담당자/차량 표기가 직원명과 다르면 자동 매칭이 안 됩니다. 그럴 때만 실제 등록된 담당자명 또는 차량번호를 입력해 수동으로 연결하세요.
+                              </p>
+                              {invitation.status === "accepted" ? (
+                                <StaffAssignmentEditor
+                                  canEdit={canManageMembers}
+                                  invitation={invitation}
+                                  managerOptions={managerChoices}
+                                  onAddManagerOption={(name) => setManagerChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
+                                  onAddVehicleOption={(name) => setVehicleChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
+                                  onSave={(patch) => saveAssignment(invitation, patch)}
+                                  saving={savingId === invitation.id}
+                                  vehicleOptions={vehicleChoices}
+                                />
+                              ) : (
+                                <p className="mt-2 text-xs font-bold text-slate-400">가입 완료 후 연결할 수 있습니다.</p>
+                              )}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))}
+          ) : null}
           {!invitations.length ? (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm font-bold leading-6 text-slate-500">
               아직 등록된 직원 초대가 없습니다. 오른쪽에서 직원명을 입력해 카카오 가입 링크를 먼저 생성하세요.
@@ -421,22 +545,46 @@ export function StaffManagementPanel({
           </div>
           {canManageMembers ? (
             <div className="mt-4 grid gap-3">
-              <input
-                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                placeholder="직원명"
-                value={form.employeeName}
-                onChange={(event) => setForm((prev) => ({ ...prev, employeeName: event.target.value }))}
-              />
-              <input
-                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                placeholder="연락처"
-                value={form.employeePhone}
-                onChange={(event) => setForm((prev) => ({ ...prev, employeePhone: event.target.value }))}
-              />
+              <p className="-mb-1 text-xs font-bold leading-5 text-slate-500">여러 명을 한 번에 초대하려면 아래에 줄을 추가해 이름·연락처를 입력하세요.</p>
+              <div className="grid gap-2">
+                {inviteRows.map((row) => (
+                  <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5" key={row.id}>
+                    <input
+                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                      placeholder="직원명"
+                      value={row.employeeName}
+                      onChange={(event) => updateInviteRow(row.id, { employeeName: event.target.value })}
+                    />
+                    <input
+                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                      placeholder="연락처"
+                      value={row.employeePhone}
+                      onChange={(event) => updateInviteRow(row.id, { employeePhone: event.target.value })}
+                    />
+                    <button
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={inviteRows.length <= 1}
+                      onClick={() => removeInviteRow(row.id)}
+                      title="이 줄 삭제"
+                      type="button"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="inline-flex h-9 w-fit items-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50"
+                onClick={addInviteRow}
+                type="button"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                연락처 추가
+              </button>
               <select
                 className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                value={form.role}
-                onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as StaffInvitation["role"] }))}
+                value={inviteRole}
+                onChange={(event) => setInviteRole(event.target.value)}
               >
                 {roleOptions.map((role) => (
                   <option key={role.value} value={role.value}>
@@ -444,10 +592,15 @@ export function StaffManagementPanel({
                   </option>
                 ))}
               </select>
-              <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용입니다.</p>
-              <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!form.employeeName.trim() || creating} onClick={createStaff} type="button">
+              <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용이며, 위 모든 줄에 동일하게 적용됩니다.</p>
+              <Button
+                className="h-11 bg-teal-700 font-black hover:bg-teal-800"
+                disabled={!inviteRows.some((row) => row.employeeName.trim()) || creating}
+                onClick={createStaff}
+                type="button"
+              >
                 {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
-                {creating ? "추가 중" : "직원 추가"}
+                {creating ? "추가 중" : inviteRows.filter((row) => row.employeeName.trim()).length > 1 ? "직원 일괄 추가" : "직원 추가"}
               </Button>
 
               <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-white p-3">
