@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   Camera,
+  CheckCircle2,
   Copy,
+  GripVertical,
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -41,6 +43,7 @@ import {
 } from "./sales-route-map-workspace";
 
 export function TodayCourseView({
+  completedStoreIds,
   dataRegistrationHref,
   fuelPrices,
   markers,
@@ -58,6 +61,10 @@ export function TodayCourseView({
   stores,
   vehicles
 }: {
+  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘 배송완료 기록이 있는
+  // 거래처 id 집합입니다. 아래 "선택한 경유지" 카드에 완료 배지를 표시하고, 아직 완료되지 않은
+  // 카드 중 순서상 가장 앞선 곳을 "다음 배송지"로 강조하는 데 씁니다.
+  readonly completedStoreIds?: Set<string>;
   readonly dataRegistrationHref: string;
   /** 2026-08-24 피드백: "출발지에서 거래처, 거래처에서의 경유지까지 예상 유류비 나와야할 텐데" — 구간별
    * 예상 유류비 계산에 씁니다. */
@@ -96,17 +103,31 @@ export function TodayCourseView({
   const [currentLocationOrigin, setCurrentLocationOrigin] = useState("");
   const [currentLocationMessage, setCurrentLocationMessage] = useState("");
   const [deliveryProofs, setDeliveryProofs] = useState<Record<string, DeliveryProof[]>>(() => readLocalJson(localStoreKeys.deliveryProofs, {}));
+  // 드래그로 순서를 바꾸는 동안 "지금 잡고 있는 카드"의 id를 들고 있습니다.
+  const [dragStoreId, setDragStoreId] = useState<string | null>(null);
   const isVehicleScoped = selectedVehicleId !== "all";
   const selectedDriver = selectedVehicle?.driver || "배송차 선택 필요";
   const orderedStores = [...stores].sort((a, b) => a.order - b.order);
   const orderedStoreIds = orderedStores.map((store) => store.id).join("|");
   const selectedRouteIdSet = new Set(selectedRouteStoreIds);
-  const selectedRouteStoresAll = orderedStores.filter((store) => selectedRouteIdSet.has(store.id));
+  // 2026-09-07 피드백("각 담당자들이 배송처를 자유롭게 순차적으로 배송할 수 있도록... 카드를
+  // 드래그해서 움직인다고 생각하면 좋을 것 같아") 대응: 예전에는 선택된 경유지를 항상 거래처의
+  // 저장된 order 필드 순서로만 보여줘서, 방문 순서를 바꾸려면 다시 등록 화면에서 값을 고쳐야
+  // 했습니다. 이제는 selectedRouteStoreIds 배열의 순서(=클릭으로 추가한 순서, 그리고 아래
+  // 드래그로 직접 바꾼 순서)를 그대로 방문 순서로 씁니다.
+  const storeByIdForRoute = new Map(orderedStores.map((store) => [store.id, store]));
+  const selectedRouteStoresAll = selectedRouteStoreIds
+    .map((id) => storeByIdForRoute.get(id))
+    .filter((store): store is StoreRow => Boolean(store));
   const routeBatchCount = Math.max(1, Math.ceil(selectedRouteStoresAll.length / tmapWaypointLimit));
   const activeRouteBatchIndex = Math.min(routeBatchIndex, routeBatchCount - 1);
   const routeBatchStart = activeRouteBatchIndex * tmapWaypointLimit;
   const selectedRouteStores = selectedRouteStoresAll.slice(routeBatchStart, routeBatchStart + tmapWaypointLimit);
   const activeRouteIdSet = new Set(selectedRouteStores.map((store) => store.id));
+  // 2026-09-07 피드백("완료 후 다음 배송코스 그다음 또 그다음처럼") 대응: 순서상 아직 완료되지
+  // 않은 첫 번째 경유지를 "다음 배송지"로 표시해, 방금 하나를 완료하면 자연스럽게 그다음 카드가
+  // 강조되도록 합니다.
+  const nextPendingStoreId = selectedRouteStoresAll.find((store) => !completedStoreIds?.has(store.id))?.id;
   const selectedRouteTotals = getStoreTotals(selectedRouteStores);
   const routeDistanceKm = routeSequence?.totalDistanceKm ?? selectedRouteTotals.distanceKm;
   const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? selectedRouteTotals.durationMinutes;
@@ -220,6 +241,23 @@ export function TodayCourseView({
       if (current.includes(storeId)) return current.filter((id) => id !== storeId);
       return [...current, storeId];
     });
+  };
+  // 2026-09-07 피드백("카드를 드래그해서 움직인다고 생각하면 좋을 것 같아") 대응: "선택한 경유지"
+  // 카드를 잡아 다른 카드 위에 놓으면 그 위치로 순서를 옮깁니다. 드래그로 순서를 바꾸면 이전에
+  // 계산해둔 티맵 경로(routeSequence)는 더 이상 이 순서와 맞지 않으므로 함께 비워, 아래 "코스
+  // 확정" 버튼이 항상 지금 화면에 보이는 순서 그대로를 저장하게 합니다.
+  const moveRouteStore = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    setSelectedRouteStoreIds((current) => {
+      const fromIndex = current.indexOf(draggedId);
+      const toIndex = current.indexOf(targetId);
+      if (fromIndex === -1 || toIndex === -1) return current;
+      const next = [...current];
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, draggedId);
+      return next;
+    });
+    setRouteSequence(null);
   };
   const selectDefaultRouteStores = () => {
     setRouteBatchIndex(0);
@@ -713,23 +751,75 @@ export function TodayCourseView({
                 </div>
                 {selectedRouteStores.length ? (
                   <div className="space-y-2">
-                    {selectedRouteStores.map((store, index) => (
-                      <button
-                        className={`w-full rounded-md border p-3 text-left transition hover:bg-white ${
-                          store.id === routeSelectedStore?.id ? "border-teal-300 bg-teal-50 shadow-sm ring-1 ring-teal-100" : "border-slate-200 bg-white/80"
+                    {/* 2026-09-07 피드백("자유롭게 순차적으로 배송... 카드를 드래그해서 움직인다고
+                        생각하면 좋을 것 같아"): 카드를 잡아 다른 카드 자리에 놓으면 그 위치로
+                        방문 순서가 바로 바뀝니다(draggable 네이티브 드래그, 별도 라이브러리 없음). */}
+                    {selectedRouteStores.map((store, index) => {
+                      const isCompleted = Boolean(completedStoreIds?.has(store.id));
+                      const isNextStop = store.id === nextPendingStoreId;
+                      const isDragging = dragStoreId === store.id;
+                      return (
+                      <div
+                        className={`w-full rounded-md border p-3 text-left transition hover:bg-white ${isDragging ? "opacity-50" : ""} ${
+                          isCompleted
+                            ? "border-emerald-200 bg-emerald-50/70"
+                            : isNextStop
+                              ? "border-teal-400 bg-teal-50 shadow-sm ring-2 ring-teal-200"
+                              : store.id === routeSelectedStore?.id
+                                ? "border-teal-300 bg-teal-50 shadow-sm ring-1 ring-teal-100"
+                                : "border-slate-200 bg-white/80"
                         }`}
+                        draggable
                         key={store.id}
                         onClick={() => openRouteStore(store.id)}
-                        type="button"
+                        onDragEnd={() => setDragStoreId(null)}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                        }}
+                        onDragStart={(event) => {
+                          setDragStoreId(store.id);
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          if (dragStoreId) moveRouteStore(dragStoreId, store.id);
+                          setDragStoreId(null);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") openRouteStore(store.id);
+                        }}
+                        role="button"
+                        tabIndex={0}
                       >
-                        <div className="flex items-start gap-3">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-teal-700 text-xs font-black text-white shadow-sm">{routeBatchStart + index + 1}</span>
+                        <div className="flex items-start gap-2">
+                          <span className="mt-1 shrink-0 cursor-grab text-slate-300 hover:text-slate-500" title="드래그해서 순서 변경">
+                            <GripVertical className="h-4 w-4" />
+                          </span>
+                          <span className="flex items-start gap-3">
+                          {isCompleted ? (
+                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-600 text-white shadow-sm">
+                              <CheckCircle2 className="h-4 w-4" />
+                            </span>
+                          ) : (
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black text-white shadow-sm ${isNextStop ? "bg-teal-500" : "bg-teal-700"}`}>
+                              {routeBatchStart + index + 1}
+                            </span>
+                          )}
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
+                              {isCompleted ? (
+                                <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">완료</span>
+                              ) : isNextStop ? (
+                                <span className="shrink-0 rounded-full bg-teal-600 px-1.5 py-0.5 text-[10px] font-black text-white">다음 배송지</span>
+                              ) : null}
+                            </span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                             <span className="mt-2 block text-xs font-bold text-slate-400">
                               출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원
                             </span>
+                          </span>
                           </span>
                           <span className="flex shrink-0 flex-col items-end gap-2">
                             <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
@@ -754,8 +844,9 @@ export function TodayCourseView({
                             </span>
                           </span>
                         </div>
-                      </button>
-                    ))}
+                      </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="maju-empty-state bg-white p-4">

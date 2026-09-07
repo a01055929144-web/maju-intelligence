@@ -3666,6 +3666,14 @@ export async function upsertCustomerMaster(
 ) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
+  // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 거래처 다건
+  // 재배정(bulkUpdateDeliveryManager/bulkUpdateDeliveryVehicle)은 이미 trim()해서 저장하는데,
+  // 거래처 단건 저장 경로인 이 함수만 입력값을 그대로 저장해왔습니다. CRM 타임라인 상세 편집의
+  // 자유 입력 담당자 필드나 엑셀 일괄 등록에서 앞뒤 공백이 섞여 들어오면, 눈에는 똑같아 보이는
+  // "김철수"와 "김철수 "가 서로 다른 값으로 저장되어 담당자·배송차 드롭다운에 같은 사람/차량이
+  // 여러 개로 쪼개져 나타났습니다. 모든 저장 경로가 같은 규칙을 쓰도록 여기서도 trim()합니다.
+  const deliveryManager = input.deliveryManager?.trim() || "";
+  const deliveryVehicle = input.deliveryVehicle?.trim() || "";
   const resolvedPlaceLinks = await resolvePlaceLinks(
     {
       address: input.address || "",
@@ -3700,9 +3708,9 @@ export async function upsertCustomerMaster(
       business_status_checked_at: null,
       customer_name: customerName,
       delivery_km: input.deliveryKm || 0,
-      delivery_manager: input.deliveryManager || null,
+      delivery_manager: deliveryManager || null,
       delivery_minutes: input.deliveryMinutes || null,
-      delivery_vehicle: input.deliveryVehicle || null,
+      delivery_vehicle: deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
@@ -3806,7 +3814,7 @@ export async function upsertCustomerMaster(
     company_id: id,
     customer_name: customerName,
     delivery_km: input.deliveryKm || 0,
-    delivery_manager: input.deliveryManager || null,
+    delivery_manager: deliveryManager || null,
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
@@ -3827,7 +3835,7 @@ export async function upsertCustomerMaster(
     menu_summary: input.menuSummary || null
   };
   const deliveryVehicleField = {
-    delivery_vehicle: input.deliveryVehicle || null
+    delivery_vehicle: deliveryVehicle || null
   };
   // 리뷰 요약/키워드는 아직 자동 수집 파이프라인이 없어 수동 입력값만 반영합니다.
   // undefined면(즉 이 저장 요청에서 손대지 않은 값이면) 기존 값을 덮어쓰지 않도록 payload에서 뺍니다.
@@ -5904,9 +5912,25 @@ export type PermitLeadIngestResult = {
   excludedInactive: number;
   excludedNonTarget: number;
   skippedNoName: number;
+  excludedStaleAutoLead: number;
 };
 
 const PERMIT_LEAD_UPDATE_CONCURRENCY = 8;
+
+// 2026-09-07 피드백("신규리드는 인허가 일자가 최신일자로 쌓여야하는데 너무 과거 데이터까지 같이
+// 가져오고 있어. 과거데이터들은 영업리드 데이터... 신규오픈 매장이 아닌 검색량이 높은 매장 순을
+// 가져올 때 필요한거야"): 행정안전부/서울시 공공데이터 API는 "최근 변경분"만 걸러주는 파라미터가
+// 없어(lib/gov-restaurant.ts, lib/seoul-restaurant.ts 주석 참고) LAST_MDFCN_PNT/LASTMODTS(레코드가
+// 마지막으로 "손댄" 시각)만으로 걸러냅니다. 그런데 이 값은 실제 개업일과 무관합니다 — 수년 전에
+// 개업한 매장이 주소 정정·휴업/폐업 처리 등으로 레코드가 "최근 수정"되면, 개업일 자체는 옛날인데도
+// 다시 걸려서 "신규 리드"로 새로 들어오는 문제가 있었습니다. "신규 리드"는 개업일 기준 실제
+// 최근 오픈 매장만 쌓여야 하고, 오래된 매장은 (검색량 기반) 영업리드 탐색의 몫입니다. 그래서
+// 자동 수집 소스(gov_restaurant_api/seoul_opendata_api)에서 "아직 한 번도 못 본" 사업자를 새로
+// 신규 리드로 추가할 때만, 개업일(없으면 인허가일)이 이 기준(90일) 안일 때로 제한합니다. 이미
+// 리드로 추적 중인 사업자의 상태 갱신(폐업 처리 등)은 날짜와 무관하게 그대로 반영하고, 수동
+// 업로드(manual_upload)나 영업리드 탐색(kakao_keyword_search)은 이 제한과 무관합니다.
+const AUTO_PERMIT_SYNC_SOURCES = new Set(["gov_restaurant_api", "seoul_opendata_api"]);
+const NEW_LEAD_MAX_AGE_DAYS = 90;
 
 /**
  * 사업자 인허가 데이터 업로드(엑셀/CSV) 결과를 일괄 적재합니다. 이미 저장된 사업자번호는
@@ -5926,9 +5950,14 @@ export async function ingestPermitLeadRows(
     duplicates: 0,
     excludedInactive: 0,
     excludedNonTarget: 0,
-    skippedNoName: 0
+    skippedNoName: 0,
+    excludedStaleAutoLead: 0
   };
   if (!rows.length || !isProductionStoreConfigured()) return result;
+
+  const isAutoPermitSync = AUTO_PERMIT_SYNC_SOURCES.has(options.source || "");
+  const newLeadStaleCutoff = new Date();
+  newLeadStaleCutoff.setDate(newLeadStaleCutoff.getDate() - NEW_LEAD_MAX_AGE_DAYS);
 
   await upsertCompany(companyId, "마주식자재");
 
@@ -5981,6 +6010,26 @@ export async function ingestPermitLeadRows(
 
     const isDuplicate = businessNumber ? customerBizNoSet.has(businessNumber) : false;
     if (isDuplicate) result.duplicates += 1;
+
+    // 자동 동기화(gov/seoul)로 아직 한 번도 못 본 사업자를 새로 추가하려는데 개업일(없으면
+    // 인허가일)이 90일보다 오래됐다면, 실제로는 "레코드가 최근 손질됐을 뿐인 오래된 매장"이므로
+    // 신규 리드로 쌓지 않고 건너뜁니다. 위 상수 선언부 주석 참고.
+    // 2026-09-07 피드백("개시일이 미확인 것들 확인이 필요해"): 처음엔 날짜를 아예 못 읽은 행(원본에
+    // 개업일·인허가일 자체가 비어있는 경우)은 "너무 오래됐다"는 조건(staleCheckDate < cutoff)에
+    // 걸리지 않아 이 필터를 그냥 통과했습니다 — 그 결과 "언제 생겼는지도 확인 안 되는" 매장이
+    // "확인됐고 최근"인 매장과 똑같이 신규 리드로 들어오는 모순이 있었습니다. 신규 리드로 인정하려면
+    // "최근 개업했다는 게 확인된" 날짜가 있어야 하므로, 날짜가 아예 없거나 파싱이 안 되는 경우도
+    // 오래된 것과 동일하게 제외합니다(확인 불가 = 신규라고 보장할 수 없음).
+    const existingId = businessNumber ? leadBizNoToId.get(businessNumber) : undefined;
+    if (isAutoPermitSync && !existingId) {
+      const staleCheckDateText = row.openDate || row.permitDate;
+      const staleCheckDate = staleCheckDateText ? new Date(staleCheckDateText) : null;
+      const hasConfirmedRecentDate = Boolean(staleCheckDate) && !Number.isNaN(staleCheckDate!.getTime()) && staleCheckDate! >= newLeadStaleCutoff;
+      if (!hasConfirmedRecentDate) {
+        result.excludedStaleAutoLead += 1;
+        continue;
+      }
+    }
 
     // 프레시니스는 인허가일보다 개업일을 우선 씁니다("신규 리드는 개업일자가 중요하다"는 피드백,
     // 2026-08-24) — 인허가를 미리 받고 나중에 문을 여는 경우가 흔해서, 개업일이 실제 "방금 생긴
@@ -6053,7 +6102,6 @@ export async function ingestPermitLeadRows(
       updated_at: new Date().toISOString()
     };
 
-    const existingId = businessNumber ? leadBizNoToId.get(businessNumber) : undefined;
     if (existingId) updates.push({ id: existingId, payload });
     else inserts.push(payload);
   }
@@ -6089,7 +6137,8 @@ const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   duplicates: 0,
   excludedInactive: 0,
   excludedNonTarget: 0,
-  skippedNoName: 0
+  skippedNoName: 0,
+  excludedStaleAutoLead: 0
 };
 
 export type GovRestaurantSyncResult = {
@@ -6378,7 +6427,8 @@ const EMPTY_KEYWORD_SWEEP_INGEST: PermitLeadIngestResult = {
   duplicates: 0,
   excludedInactive: 0,
   excludedNonTarget: 0,
-  skippedNoName: 0
+  skippedNoName: 0,
+  excludedStaleAutoLead: 0
 };
 
 function normalizeLeadNameForDedupe(value: string) {

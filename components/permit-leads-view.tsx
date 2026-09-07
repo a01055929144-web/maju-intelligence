@@ -853,7 +853,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        setGovSyncWarning(payload?.message || "자동 수집에 실패했습니다.");
+        // 2026-09-07 피드백("자동 수집에 실패했습니다" 원인 확인 요청): payload가 비어있으면
+        // 서버가 우리 라우트의 JSON 응답이 아니라 플랫폼 자체 에러 페이지(대개 함수 실행 시간
+        // 초과)를 내려줬다는 뜻입니다 — 상태 코드라도 같이 보여줘 다음에 같은 일이 생기면 원인을
+        // 더 빨리 좁힐 수 있게 합니다.
+        setGovSyncWarning(payload?.message || `자동 수집에 실패했습니다 (응답 코드 ${response.status}). 처리 시간이 길어져 시간 초과됐을 수 있습니다 — 잠시 후 다시 시도해주세요.`);
         return;
       }
       setGovSyncResult(payload);
@@ -880,7 +884,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        setSeoulSyncWarning(payload?.message || "자동 수집에 실패했습니다.");
+        setSeoulSyncWarning(payload?.message || `자동 수집에 실패했습니다 (응답 코드 ${response.status}). 처리 시간이 길어져 시간 초과됐을 수 있습니다 — 잠시 후 다시 시도해주세요.`);
         return;
       }
       setSeoulSyncResult(payload);
@@ -1432,6 +1436,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <span className="text-emerald-700">신규 {govSyncResult.ingest.inserted.toLocaleString()}</span>
                     <span className="text-blue-700">갱신 {govSyncResult.ingest.updated.toLocaleString()}</span>
                     <span className="text-slate-400">중복 {govSyncResult.ingest.duplicates.toLocaleString()}</span>
+                    {govSyncResult.ingest.excludedStaleAutoLead ? (
+                      <span className="text-slate-400" title="개업일(인허가일)이 90일보다 오래됐거나, 개업일·인허가일 자체가 확인되지 않아 최근 개업 여부를 확인할 수 없어 신규 리드로 쌓지 않고 제외한 건수입니다.">
+                        오래된/개시일 미확인 매장 제외 {govSyncResult.ingest.excludedStaleAutoLead.toLocaleString()}
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
                 {govSyncWarning ? <p className="text-xs font-bold text-amber-800">전국 공공데이터 · {govSyncWarning}</p> : null}
@@ -1441,6 +1450,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <span className="text-emerald-700">신규 {seoulSyncResult.ingest.inserted.toLocaleString()}</span>
                     <span className="text-blue-700">갱신 {seoulSyncResult.ingest.updated.toLocaleString()}</span>
                     <span className="text-slate-400">중복 {seoulSyncResult.ingest.duplicates.toLocaleString()}</span>
+                    {seoulSyncResult.ingest.excludedStaleAutoLead ? (
+                      <span className="text-slate-400" title="개업일(인허가일)이 90일보다 오래됐거나, 개업일·인허가일 자체가 확인되지 않아 최근 개업 여부를 확인할 수 없어 신규 리드로 쌓지 않고 제외한 건수입니다.">
+                        오래된/개시일 미확인 매장 제외 {seoulSyncResult.ingest.excludedStaleAutoLead.toLocaleString()}
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
                 {seoulSyncWarning ? <p className="text-xs font-bold text-amber-800">서울시 공공데이터 · {seoulSyncWarning}</p> : null}

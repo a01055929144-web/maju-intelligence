@@ -23,12 +23,17 @@ export default async function CompanySettingsPage() {
 
   // 직원 배정 기준(담당자명/배송차량)을 자유 입력이 아니라 실제 거래처에 등록된 값 중에서
   // 고르게 하기 위한 목록입니다. 새 이름이 필요하면 화면에서 바로 추가할 수 있습니다.
-  const managerOptions = Array.from(new Set(customerMaster.customers.map((customer) => customer.deliveryManager).filter((value): value is string => Boolean(value)))).sort((a, b) =>
-    a.localeCompare(b, "ko")
-  );
-  const vehicleOptions = Array.from(new Set(customerMaster.customers.map((customer) => customer.deliveryVehicle).filter((value): value is string => Boolean(value)))).sort((a, b) =>
-    a.localeCompare(b, "ko")
-  );
+  // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+  // 이제 trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된
+  // 기존 거래처 레코드가 있으면 눈에는 똑같아 보이는 값이 서로 다른 옵션으로 두 번 나타납니다.
+  // 목록을 만들 때도 trim() 기준으로 모아 이런 레거시 중복이 드롭다운에 더 이상 갈라져 보이지
+  // 않도록 합니다(저장된 원본 값 자체를 고치는 것은 아니며, 표시만 정리합니다).
+  const managerOptions = Array.from(
+    new Set(customerMaster.customers.map((customer) => customer.deliveryManager?.trim()).filter((value): value is string => Boolean(value)))
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+  const vehicleOptions = Array.from(
+    new Set(customerMaster.customers.map((customer) => customer.deliveryVehicle?.trim()).filter((value): value is string => Boolean(value)))
+  ).sort((a, b) => a.localeCompare(b, "ko"));
 
   return (
     <CustomerAppShell

@@ -131,10 +131,17 @@ function rotateStartPage(totalPages: number, pagesPerRun: number): number {
 // 행만으로 즉시 반환합니다(다음 실행이 rotateStartPage로 이어서 훑으므로 데이터 유실은 아니고
 // 진행이 느려질 뿐입니다).
 const FETCH_CONCURRENCY = 5;
-// 스캔 자체 예산은 30초로 잡아, 이후 이어지는 DB 적재(ingest) 단계까지 합쳐도 Vercel 함수 제한
-// 60초 안에 여유 있게 끝나도록 합니다(서울시 쪽 라이브 테스트에서 45초 예산 + ingest로 총 48.9초까지
-// 나온 적이 있어 안전 마진을 더 키웠습니다, 2026-08-19).
-const TIME_BUDGET_MS = 30_000;
+// 2026-09-07 피드백("자동 수집에 실패했습니다" — 화면에 뜬 문구가 서버가 실제로 내려주는 어떤
+// 에러 메시지와도 일치하지 않아, 응답이 JSON이 아니었다는 뜻입니다. 즉 라우트가 던진 에러가
+// 아니라 Vercel 함수 실행 시간 제한에 걸려 죽었을 가능성이 가장 큽니다). 예전에 "45초 스캔 +
+// ingest로 총 48.9초"까지 나온 적이 있다는 기록으로 볼 때 60초 한도에 여유가 있었지만, 그날그날
+// 회전 구간(rotateStartPage)에 "최근 변경분"이 유난히 많이 몰리면 스캔한 행 수만큼 DB 적재
+// (ingest) 시간도 비례해 늘어나 가끔 60초를 넘길 수 있습니다. 스캔 예산을 20초로 더 줄이고,
+// 한 번에 적재할 행 수에도 상한(MAX_ROWS_PER_RUN)을 둬 ingest 소요 시간을 예측 가능한 범위로
+// 묶습니다 — 상한에 걸려 못 다 훑은 나머지는 데이터가 사라지는 게 아니라 다음 실행(rotateStartPage가
+// 이어서 훑음)으로 미뤄질 뿐입니다.
+const TIME_BUDGET_MS = 20_000;
+const MAX_ROWS_PER_RUN = 4000;
 
 export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 150): Promise<GovRestaurantRow[]> {
   if (!isGovRestaurantApiConfigured()) return [];
@@ -152,6 +159,7 @@ export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 150):
   const rows: GovRestaurantRow[] = [];
   for (let i = 0; i < pageNumbers.length; i += FETCH_CONCURRENCY) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+    if (rows.length >= MAX_ROWS_PER_RUN) break;
     const batch = pageNumbers.slice(i, i + FETCH_CONCURRENCY);
     const pages = await Promise.all(batch.map((pageNo) => (pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo))));
     for (const page of pages) {
@@ -168,5 +176,5 @@ export async function fetchRecentGovRestaurantRows(days = 3, pagesPerRun = 150):
     }
   }
 
-  return rows;
+  return rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows;
 }

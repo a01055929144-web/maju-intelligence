@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { DriverSelectField } from "@/components/driver-select-field";
 import {
@@ -405,6 +405,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     loading: boolean;
     vehicle: StaffVehicleLocation | null;
   }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
+  // 2026-09-07 피드백: "분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도 구현할 수
+  // 있도록해줘" — 팝업(VehicleAnalysisModal)을 열지 않아도, 라이브 차량 목록에서 "경로" 버튼으로
+  // 같은 실제 GPS 이동 경로를 메인 지도에 바로 겹쳐 볼 수 있게 합니다. 한 번에 한 대만 표시합니다
+  // (지도 컴포넌트가 폴리라인 하나만 그리도록 되어 있어, 여러 대를 동시에 겹치면 서로 구분이 안 됨).
+  const [mainMapRouteVehicleId, setMainMapRouteVehicleId] = useState("");
+  const [mainMapRouteEvents, setMainMapRouteEvents] = useState<StaffLocationEvent[]>([]);
+  const [mainMapRouteLoading, setMainMapRouteLoading] = useState(false);
+  const [mainMapRouteError, setMainMapRouteError] = useState("");
   const [statsExpanded, setStatsExpanded] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -439,8 +447,25 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     observer.observe(headerNode);
     observer.observe(areaNode);
     recomputeMapHeaderOffset();
-    return () => observer.disconnect();
+    // 2026-09-07 피드백("우측 패널 위쪽에 위치하는데 짤려서 안보임") 대응: ResizeObserver는 헤더
+    // 카드(mapHeaderRef) 자신의 "크기"가 변할 때만 반응합니다. 그런데 이 오프셋 계산은 크기가 아니라
+    // "화면상 실제 위치"(getBoundingClientRect)를 봅니다 — 창 크기 변경처럼 두 요소의 크기는 그대로여도
+    // 화면 위치/레이아웃이 바뀌는 경우까지는 ResizeObserver가 못 잡아, 헤더 카드(z-20, 항상 위)가
+    // 계산이 어긋난 채로 좌우 패널(z-10)의 위쪽을 가려버리는 문제가 있었습니다. window resize에도
+    // 다시 계산하도록 보강합니다.
+    window.addEventListener("resize", recomputeMapHeaderOffset);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", recomputeMapHeaderOffset);
+    };
   }, [recomputeMapHeaderOffset]);
+  // 위 ResizeObserver/resize 리스너로도 놓칠 수 있는 나머지 경우(폰트 로딩으로 인한 리플로우,
+  // 리드 필터 줄이 늘어나는 등rowspan 변화가 있는 렌더 등)를 보강하기 위해, 커밋될 때마다(매 렌더
+  // 이후) 오프셋을 다시 계산합니다. recomputeMapHeaderOffset은 getBoundingClientRect 두 번 읽는 정도라
+  // 가볍고, 값이 그대로면 setState가 리렌더를 유발하지 않아 무한 루프로 이어지지 않습니다.
+  useLayoutEffect(() => {
+    recomputeMapHeaderOffset();
+  });
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -683,8 +708,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     }
   }
 
+  // 2026-09-07 버그 리포트: "리드 표에서는 잘 가져오는데 지도에서는 표시가 안 된다" — 원인은
+  // allLeadsLoadState가 한 번 "ready"가 되면(첫 토글 때 리드가 아직 0건이었던 경우 등) 이후
+  // 새 리드가 수집돼도 idle 상태가 아니라서 이 useEffect가 다시 실행되지 않아 지도가 그 시점의
+  // 낡은(대개 빈) 목록을 계속 보여주던 것이었습니다. "리드" 버튼을 켤 때마다(즉 showAllLeadsOnMap이
+  // false→true로 바뀔 때마다) idle 여부와 무관하게 항상 다시 불러오도록 고쳐, 꺼졌다 켜면 최신
+  // 데이터로 새로고침됩니다.
   useEffect(() => {
-    if (showAllLeadsOnMap && allLeadsLoadState === "idle") void loadAllLeadsForMap();
+    if (showAllLeadsOnMap) void loadAllLeadsForMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAllLeadsOnMap]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
@@ -737,11 +768,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
   // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
   const vehicleNameOptions = useMemo(() => {
+    // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+    // trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된
+    // 기존 거래처 레코드가 있으면 눈에는 똑같아 보이는 배송차 이름이 서로 다른 옵션으로 두 번
+    // 나타납니다. trim() 기준으로 모아 이런 레거시 중복이 드롭다운에 갈라져 보이지 않게 합니다.
     const names = new Set<string>();
     allStores.forEach((store) => {
-      if (store.deliveryVehicleName) names.add(store.deliveryVehicleName);
+      const trimmed = store.deliveryVehicleName?.trim();
+      if (trimmed) names.add(trimmed);
     });
-    manualVehicles.forEach((name) => names.add(name));
+    manualVehicles.forEach((name) => {
+      const trimmed = name.trim();
+      if (trimmed) names.add(trimmed);
+    });
     return Array.from(names).sort();
   }, [allStores, manualVehicles]);
   const registeredStoreNames = useMemo(() => new Set(allStores.map((store) => store.name.trim().toLowerCase())), [allStores]);
@@ -829,18 +868,27 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
-  const markers = useMemo(() => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta), [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores]);
+  const markers = useMemo(
+    () => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta, completedStoreIdsToday),
+    [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores, completedStoreIdsToday]
+  );
   useEffect(() => {
     setLiveVehicleLocations(staffVehicleLocations);
   }, [staffVehicleLocations]);
+  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘(최근 20시간) 안에 배송완료로
+  // 기록된 거래처 id 목록입니다. 라이브 차량 위치와 같은 폴링 주기를 타도록 같은 요청에
+  // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
+  const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const search = churnRiskCompanyId ? `?companyId=${encodeURIComponent(churnRiskCompanyId)}` : "";
-        const response = await fetchWithTimeout(`/api/staff/location${search}`, { cache: "no-store" }, 8000);
-        const payload = (await response.json().catch(() => null)) as { locations?: StaffVehicleLocation[] } | null;
+        const params = new URLSearchParams({ completions: "true", hours: "20" });
+        if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
+        const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
+        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; locations?: StaffVehicleLocation[] } | null;
         if (!cancelled && response.ok && Array.isArray(payload?.locations)) setLiveVehicleLocations(payload.locations);
+        if (!cancelled && response.ok && Array.isArray(payload?.completions)) setTodayCompletions(payload.completions);
       } catch {
         // 다음 폴링에서 복구합니다. 위치 표시는 운영 보조 기능이라 화면 전체를 막지 않습니다.
       }
@@ -859,6 +907,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       window.clearInterval(timer);
     };
   }, [churnRiskCompanyId]);
+  const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
   const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehicleLocations, storeById), [liveVehicleLocations, storeById]);
   const liveVehicleSummary = useMemo(() => {
     const active = liveVehicleLocations.filter((location) => !location.isStale).length;
@@ -891,6 +940,45 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       }
     },
     [churnRiskCompanyId]
+  );
+  // 팝업을 열지 않고 메인 지도에 실제 이동 경로만 겹쳐 보여줍니다. 같은 차량을 다시 누르면 꺼집니다.
+  const toggleMainMapRoute = useCallback(
+    async (vehicle: StaffVehicleLocation) => {
+      if (mainMapRouteVehicleId === vehicle.id) {
+        setMainMapRouteVehicleId("");
+        setMainMapRouteEvents([]);
+        setMainMapRouteError("");
+        return;
+      }
+      setMainMapRouteVehicleId(vehicle.id);
+      setMainMapRouteEvents([]);
+      setMainMapRouteError("");
+      setMainMapRouteLoading(true);
+      try {
+        const search = new URLSearchParams({ events: "true", hours: "12", userId: vehicle.userId });
+        if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
+        if (vehicle.driverName) search.set("driverName", vehicle.driverName);
+        if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
+        const response = await fetchWithTimeout(`/api/staff/location?${search.toString()}`, { cache: "no-store" }, 10000);
+        const payload = (await response.json().catch(() => null)) as { events?: StaffLocationEvent[]; error?: string } | null;
+        if (!response.ok) throw new Error(payload?.error || "실제 이동 경로를 불러오지 못했습니다.");
+        setMainMapRouteEvents(payload?.events || []);
+      } catch (error) {
+        setMainMapRouteError(error instanceof Error ? error.message : "실제 이동 경로를 불러오지 못했습니다.");
+      } finally {
+        setMainMapRouteLoading(false);
+      }
+    },
+    [churnRiskCompanyId, mainMapRouteVehicleId]
+  );
+  const mainMapRoutePath = useMemo(
+    () => (mainMapRouteVehicleId ? createLocationRoutePath(mainMapRouteEvents) : []),
+    [mainMapRouteVehicleId, mainMapRouteEvents]
+  );
+  const mainMapRouteMetrics = useMemo(() => summarizeLocationEvents(mainMapRouteEvents), [mainMapRouteEvents]);
+  const mainMapRouteVehicle = useMemo(
+    () => liveVehicleLocations.find((vehicle) => vehicle.id === mainMapRouteVehicleId) || null,
+    [liveVehicleLocations, mainMapRouteVehicleId]
   );
   // 미등록 매장은 메인 지도에만 별도 마커로 합쳐 표시합니다.
   const unregisteredMapMarkers = useMemo(
@@ -2239,9 +2327,46 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                           }
                         : undefined
                     }
+                    routePath={mainMapRoutePath}
                     showList={false}
                   />
                 </div>
+                {/* 2026-09-07 피드백("분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도
+                    구현할 수 있도록해줘"): 라이브 차량 패널에서 "경로" 버튼을 누르면 그 차량의 최근
+                    12시간 GPS 경로를 분석 모달을 열지 않고 메인 지도 위에 바로 그려줍니다. 로딩/에러/
+                    표시 상태를 알려주는 배너를 지도 우상단에 띄우고, 닫기를 누르면 경로를 지웁니다. */}
+                {mainMapRouteVehicleId ? (
+                  <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-xs xl:left-auto xl:right-3">
+                    <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-xs font-black text-slate-950">
+                            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: vehicleColorForId(mainMapRouteVehicleId) }} />
+                            <span className="truncate">{mainMapRouteVehicle?.deliveryVehicle || mainMapRouteVehicle?.driverName || "차량"} 경로</span>
+                          </p>
+                          <p className="mt-1 text-[11px] font-bold text-slate-500">
+                            {mainMapRouteLoading
+                              ? "GPS 경로를 불러오는 중입니다..."
+                              : mainMapRouteError
+                                ? mainMapRouteError
+                                : `실제 이동 ${mainMapRouteMetrics.distanceKm.toLocaleString()}km · ${formatMinutes(mainMapRouteMetrics.durationMinutes)} · GPS ${mainMapRouteEvents.length.toLocaleString()}건`}
+                          </p>
+                        </div>
+                        <button
+                          className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 hover:bg-slate-200"
+                          onClick={() => {
+                            setMainMapRouteVehicleId("");
+                            setMainMapRouteEvents([]);
+                            setMainMapRouteError("");
+                          }}
+                          type="button"
+                        >
+                          닫기
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 {/* 2026-08-28 피드백 대응(지도 필터 조합 결과가 0건이어도 별다른 안내 없이 빈 지도만
                     보임): 배송차량·등급 필터 등으로 거래처가 전부 걸러졌을 때 빈 지도만 덩그러니
                     보이지 않도록, 필터를 초기화할 수 있는 안내 배너를 보여줍니다. 거래처가 아예
@@ -2376,6 +2501,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           >
             {!rightCollapsed ? (
               <LiveVehicleStatusPanel
+                activeRouteVehicleId={mainMapRouteVehicleId}
+                completions={todayCompletions}
                 onAnalyze={openVehicleAnalysis}
                 onFocusVehicle={(vehicleId) => {
                   setPreviewLeadId("");
@@ -2388,6 +2515,8 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   setPreviewStoreId(storeId);
                   setRightPanelTab("stores");
                 }}
+                onToggleRoute={toggleMainMapRoute}
+                routeLoading={mainMapRouteLoading}
                 storeById={storeById}
                 vehicles={liveVehicleLocations}
               />
@@ -2452,11 +2581,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       {activeView === "customers" ? (
         <CustomerDirectoryView
           dataRegistrationHref={dataRegistrationHref}
+          driverOptions={deliveryDefaults.drivers}
           fuelPrices={fuelPrices}
           onSelectStore={setSelectedId}
           selectedStoreId={selectedId}
           sourceReady={sourceReady}
           stores={visibleStores}
+          vehicleOptions={vehicleNameOptions}
         />
       ) : null}
 
@@ -2480,6 +2611,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
 
       {activeView === "course" ? (
         <TodayCourseView
+          completedStoreIds={completedStoreIdsToday}
           dataRegistrationHref={dataRegistrationHref}
           fuelPrices={fuelPrices}
           markers={markers}
@@ -4049,18 +4181,32 @@ function VehicleEditForm({
 }
 
 function LiveVehicleStatusPanel({
+  activeRouteVehicleId,
+  completions,
   onAnalyze,
   onFocusVehicle,
   onPreviewStore,
+  onToggleRoute,
+  routeLoading,
   storeById,
   vehicles
 }: {
+  readonly activeRouteVehicleId?: string;
+  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘 배송완료 기록 전체(회사
+  // 전체, 특정 차량으로 좁히지 않음)를 받아 아래에서 차량별 담당자·배송차 이름으로 매칭해 셉니다.
+  readonly completions: DeliveryCompletionEvent[];
   readonly onAnalyze: (vehicle: StaffVehicleLocation) => void;
   readonly onFocusVehicle: (vehicleId: string) => void;
   readonly onPreviewStore: (storeId: string) => void;
+  readonly onToggleRoute?: (vehicle: StaffVehicleLocation) => void;
+  readonly routeLoading?: boolean;
   readonly storeById: Map<string, StoreRow>;
   readonly vehicles: StaffVehicleLocation[];
 }) {
+  // 2026-09-07 피드백("직원들이 많아질수록 보기 쉽게 구현해"): 차량이 5~6대를 넘어가면 스크롤로만
+  // 훑어야 해서 원하는 기사를 찾기 번거로워집니다. 기사명/배송차량 이름으로 즉시 걸러낼 수 있는
+  // 검색창을 목록 위에 둡니다.
+  const [search, setSearch] = useState("");
   const sorted = [...vehicles].sort((a, b) => {
     const staleDiff = Number(a.isStale) - Number(b.isStale);
     if (staleDiff !== 0) return staleDiff;
@@ -4069,6 +4215,10 @@ function LiveVehicleStatusPanel({
     return bTime - aTime;
   });
   const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = normalizedSearch
+    ? sorted.filter((vehicle) => `${vehicle.driverName} ${vehicle.deliveryVehicle}`.toLowerCase().includes(normalizedSearch))
+    : sorted;
   return (
     <section className="border-b border-slate-200/80 bg-white">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -4083,6 +4233,17 @@ function LiveVehicleStatusPanel({
         </div>
         <Badge className="shrink-0 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{sorted.length}대</Badge>
       </div>
+      {sorted.length > 5 ? (
+        <div className="px-3 pb-2">
+          <input
+            className="h-7 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] font-bold text-slate-800 placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:outline-none"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="기사명 또는 배송차량 검색"
+            type="text"
+            value={search}
+          />
+        </div>
+      ) : null}
       <div className="max-h-64 space-y-1 overflow-auto px-3 pb-2">
         {!sorted.length ? (
           <div className="rounded-md border border-amber-100 bg-amber-50 px-2 py-2">
@@ -4090,27 +4251,43 @@ function LiveVehicleStatusPanel({
             <p className="mt-1 text-[10px] font-bold leading-4 text-amber-700">기사 모바일 화면에서 위치 권한을 허용하면 지도에 표시됩니다.</p>
           </div>
         ) : null}
-        {sorted.map((vehicle) => {
+        {sorted.length && !filtered.length ? (
+          <p className="rounded-md bg-slate-50 px-2 py-2 text-[11px] font-bold text-slate-500">&quot;{search}&quot;와 일치하는 차량이 없습니다.</p>
+        ) : null}
+        {filtered.map((vehicle) => {
           const checkedAt = vehicle.lastLocationAt ? new Date(vehicle.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전";
           const ageText = formatVehicleLocationAge(vehicle.lastLocationAt);
           const currentStore = vehicle.currentCustomerId ? storeById.get(vehicle.currentCustomerId) : undefined;
+          const isActiveRoute = activeRouteVehicleId === vehicle.id;
+          const dotColor = vehicle.isStale ? "#94a3b8" : vehicleColorForId(vehicle.id);
+          const completedCount = completions.filter(
+            (completion) =>
+              (vehicle.driverName && completion.deliveryDriver === vehicle.driverName) || (vehicle.deliveryVehicle && completion.deliveryVehicle === vehicle.deliveryVehicle)
+          ).length;
           return (
-            <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={vehicle.id}>
+            <div
+              className={`rounded-md border px-2 py-1.5 ${isActiveRoute ? "border-teal-300 bg-teal-50/70 ring-1 ring-inset ring-teal-200" : "border-slate-100 bg-slate-50"}`}
+              key={vehicle.id}
+            >
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
-                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
-                    {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
-                    {ageText ? ` · ${ageText}` : ""}
-                  </p>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
+                    <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                      {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
+                      {ageText ? ` · ${ageText}` : ""}
+                    </p>
+                  </div>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
                   {getVehicleStatusLabel(vehicle)}
                 </span>
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
                   {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
+                  {completedCount ? <span className="font-black text-emerald-600"> · 완료 {completedCount}곳</span> : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
@@ -4120,6 +4297,19 @@ function LiveVehicleStatusPanel({
                   >
                     지도
                   </button>
+                  {onToggleRoute ? (
+                    <button
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset transition ${
+                        isActiveRoute
+                          ? "bg-slate-900 text-white ring-slate-900 hover:bg-slate-700"
+                          : "bg-white text-slate-600 ring-slate-200 hover:text-teal-700 hover:ring-teal-200"
+                      }`}
+                      onClick={() => onToggleRoute(vehicle)}
+                      type="button"
+                    >
+                      {isActiveRoute && routeLoading ? "불러오는 중" : isActiveRoute ? "경로 끄기" : "경로"}
+                    </button>
+                  ) : null}
                   <button
                     className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
                     onClick={() => onAnalyze(vehicle)}
@@ -4610,18 +4800,22 @@ function LeadListPanel({
 
 function CustomerDirectoryView({
   dataRegistrationHref,
+  driverOptions,
   fuelPrices,
   onSelectStore,
   selectedStoreId,
   sourceReady,
-  stores
+  stores,
+  vehicleOptions
 }: {
   readonly dataRegistrationHref: string;
+  readonly driverOptions: string[];
   readonly fuelPrices: FuelPriceByType;
   readonly onSelectStore: (storeId: string) => void;
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
+  readonly vehicleOptions: string[];
 }) {
   const router = useRouter();
   const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
@@ -4660,9 +4854,21 @@ function CustomerDirectoryView({
     }
   }
   const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
+  // 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게 필요할
+  // 것 같아. 하나하나 옮기려니까 너무 힘드네") 대응: 담당자/배송차로 목록을 좁혀두면 "전체 선택"
+  // 만으로 그 그룹 전체를 한 번에 고를 수 있습니다(체크박스로 부분 선택도 그대로 가능).
+  const [directoryManagerFilter, setDirectoryManagerFilter] = useState("");
+  const [directoryVehicleFilter, setDirectoryVehicleFilter] = useState("");
+  const filteredStores = useMemo(() => {
+    return stores.filter((store) => {
+      if (directoryManagerFilter && (store.deliveryDriver || "") !== directoryManagerFilter) return false;
+      if (directoryVehicleFilter && (store.deliveryVehicleName || "") !== directoryVehicleFilter) return false;
+      return true;
+    });
+  }, [stores, directoryManagerFilter, directoryVehicleFilter]);
   const sortedStores = useMemo(() => {
-    if (!sortKey) return stores;
-    const decorated = stores.map((store) => ({
+    if (!sortKey) return filteredStores;
+    const decorated = filteredStores.map((store) => ({
       logisticsCost: estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2,
       store
     }));
@@ -4680,7 +4886,7 @@ function CustomerDirectoryView({
       return sortDirection === "asc" ? diff : -diff;
     });
     return decorated.map((item) => item.store);
-  }, [stores, sortKey, sortDirection, deliveryPricePerLiter]);
+  }, [filteredStores, sortKey, sortDirection, deliveryPricePerLiter]);
   function SortableHeader({
     className = "",
     label,
@@ -4721,6 +4927,67 @@ function CustomerDirectoryView({
   const [mergingKey, setMergingKey] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState("");
   const [pendingMergeGroup, setPendingMergeGroup] = useState<StoreRow[] | null>(null);
+
+  // 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게 필요할
+  // 것 같아. 하나하나 옮기려니까 너무 힘드네") 대응: 지금까지는 거래처를 한 곳씩 열어 담당자/배송차를
+  // 고쳐야 했습니다. 위 directoryManagerFilter/directoryVehicleFilter로 목록을 좁힌 뒤 "전체 선택"으로
+  // 그 그룹 전체를 한 번에, 또는 체크박스로 원하는 거래처만 골라, 다른 담당자/배송차로 한 번에
+  // 옮길 수 있게 합니다.
+  const [selectedStoreIds, setSelectedStoreIds] = useState<Set<string>>(new Set());
+  const [bulkTargetManager, setBulkTargetManager] = useState("");
+  const [bulkTargetVehicle, setBulkTargetVehicle] = useState("");
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [bulkError, setBulkError] = useState("");
+
+  function toggleSelectStore(storeId: string) {
+    setSelectedStoreIds((current) => {
+      const next = new Set(current);
+      if (next.has(storeId)) next.delete(storeId);
+      else next.add(storeId);
+      return next;
+    });
+  }
+
+  async function runBulkReassign() {
+    const targetManager = bulkTargetManager.trim();
+    const targetVehicle = bulkTargetVehicle.trim();
+    const customerIds = Array.from(selectedStoreIds);
+    if (!customerIds.length || (!targetManager && !targetVehicle)) return;
+    setBulkApplying(true);
+    setBulkError("");
+    setBulkMessage("");
+    try {
+      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
+      if (targetManager) {
+        const response = await fetch("/api/customers/bulk-manager", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: companyId || undefined, customerIds, deliveryManager: targetManager })
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || "담당자 일괄 변경에 실패했습니다.");
+      }
+      if (targetVehicle) {
+        const response = await fetch("/api/customers/bulk-vehicle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: companyId || undefined, customerIds, deliveryVehicle: targetVehicle })
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || "배송차 일괄 변경에 실패했습니다.");
+      }
+      setBulkMessage(`${customerIds.length.toLocaleString()}곳을 이동했습니다.`);
+      setSelectedStoreIds(new Set());
+      setBulkTargetManager("");
+      setBulkTargetVehicle("");
+      router.refresh();
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : "일괄 이동에 실패했습니다.");
+    } finally {
+      setBulkApplying(false);
+    }
+  }
 
   function completenessScore(store: StoreRow) {
     return [store.businessRegistrationNumber, store.deliveryDriver, store.deliveryVehicleName, store.phone, store.representativeName, store.accessMethodType, store.loadingPosition].filter(
@@ -4816,6 +5083,104 @@ function CustomerDirectoryView({
         </div>
       ) : null}
 
+      {/* 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게
+          필요할 것 같아. 하나하나 옮기려니까 너무 힘드네"): 담당자/배송차로 목록을 좁힌 뒤 "전체
+          선택"으로 그 그룹 전체를, 또는 표의 체크박스로 원하는 거래처만 골라 다른 담당자·배송차로
+          한 번에 옮길 수 있습니다. */}
+      {sourceReady && stores.length ? (
+        <div className="mt-3 flex shrink-0 flex-col gap-2.5 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="shrink-0 text-xs font-black text-teal-900">담당자/배송차 일괄 이동</p>
+            <select
+              className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+              onChange={(event) => setDirectoryManagerFilter(event.target.value)}
+              value={directoryManagerFilter}
+            >
+              <option value="">담당자 전체</option>
+              {driverOptions.map((driver) => (
+                <option key={driver} value={driver}>
+                  {driver}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+              onChange={(event) => setDirectoryVehicleFilter(event.target.value)}
+              value={directoryVehicleFilter}
+            >
+              <option value="">배송차 전체</option>
+              {vehicleOptions.map((vehicle) => (
+                <option key={vehicle} value={vehicle}>
+                  {vehicle}
+                </option>
+              ))}
+            </select>
+            <button
+              className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
+              onClick={() => {
+                const allVisibleSelected = sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id));
+                setSelectedStoreIds(allVisibleSelected ? new Set() : new Set(sortedStores.map((store) => store.id)));
+              }}
+              type="button"
+            >
+              {sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id)) ? "전체 해제" : `보이는 ${sortedStores.length.toLocaleString()}곳 전체 선택`}
+            </button>
+            {selectedStoreIds.size ? <span className="text-xs font-black text-teal-900">{selectedStoreIds.size.toLocaleString()}곳 선택됨</span> : null}
+          </div>
+          {selectedStoreIds.size ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-teal-200 pt-2.5">
+              <span className="shrink-0 text-xs font-bold text-teal-900">이동할 곳:</span>
+              <select
+                className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+                onChange={(event) => setBulkTargetManager(event.target.value)}
+                value={bulkTargetManager}
+              >
+                <option value="">담당자 변경 안 함</option>
+                {driverOptions.map((driver) => (
+                  <option key={driver} value={driver}>
+                    {driver}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+                onChange={(event) => setBulkTargetVehicle(event.target.value)}
+                value={bulkTargetVehicle}
+              >
+                <option value="">배송차 변경 안 함</option>
+                {vehicleOptions.map((vehicle) => (
+                  <option key={vehicle} value={vehicle}>
+                    {vehicle}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="maju-button-primary h-8 shrink-0 px-3 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={bulkApplying || (!bulkTargetManager.trim() && !bulkTargetVehicle.trim())}
+                onClick={runBulkReassign}
+                type="button"
+              >
+                {bulkApplying ? "이동 중..." : `${selectedStoreIds.size.toLocaleString()}곳 이동`}
+              </button>
+              <button
+                className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
+                disabled={bulkApplying}
+                onClick={() => {
+                  setSelectedStoreIds(new Set());
+                  setBulkTargetManager("");
+                  setBulkTargetVehicle("");
+                }}
+                type="button"
+              >
+                선택 해제
+              </button>
+            </div>
+          ) : null}
+          {bulkError ? <p className="text-xs font-bold text-rose-700">{bulkError}</p> : null}
+          {bulkMessage ? <p className="text-xs font-bold text-emerald-700">{bulkMessage}</p> : null}
+        </div>
+      ) : null}
+
       <div className="maju-section-card mt-4 !overflow-visible">
         {!sourceReady ? (
           <OperationalEmptyState
@@ -4831,6 +5196,18 @@ function CustomerDirectoryView({
               <table className="w-full min-w-[1520px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
+                    <th className="w-[36px] border-r border-slate-200 px-3 py-3">
+                      <input
+                        aria-label="현재 보이는 거래처 전체 선택"
+                        checked={sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id))}
+                        className="h-3.5 w-3.5 accent-teal-700"
+                        onChange={() => {
+                          const allVisibleSelected = sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id));
+                          setSelectedStoreIds(allVisibleSelected ? new Set() : new Set(sortedStores.map((store) => store.id)));
+                        }}
+                        type="checkbox"
+                      />
+                    </th>
                     <SortableHeader className="w-[28%]" label="거래처" sortKeyValue="name" />
                     <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" />
                     <SortableHeader className="w-[96px]" label="매출등급" sortKeyValue="grade" />
@@ -4873,6 +5250,15 @@ function CustomerDirectoryView({
                         if (event.key === "Enter" || event.key === " ") onSelectStore(store.id);
                       }}
                     >
+                      <td className="border-r border-slate-100 px-3 py-3" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          aria-label={`${store.name} 선택`}
+                          checked={selectedStoreIds.has(store.id)}
+                          className="h-3.5 w-3.5 accent-teal-700"
+                          onChange={() => toggleSelectStore(store.id)}
+                          type="checkbox"
+                        />
+                      </td>
                       <td className="min-w-0 border-r border-slate-100 px-4 py-3">
                         <p className="truncate font-black text-slate-950">{store.name}</p>
                         <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
@@ -5522,15 +5908,39 @@ function PermitLeadMapQuickCard({
             </span>
           </p>
         ) : null}
+        {/* 2026-09-07 피드백("카드에 네이버, 카카오, 구글 글자가 아닌 이모티콘으로 통일하고"):
+            우측 리드 목록/거래처 카드에 이미 쓰던 브랜드컬러 원형 N/K/G 배지로 통일해, "네이버"·
+            "카카오맵"·"구글"이라는 긴 글자 대신 한눈에 브랜드를 알아볼 수 있는 작은 아이콘만 남깁니다. */}
         <div className="mt-2 flex flex-wrap gap-1">
-          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadNaverPlaceUrl} rel="noreferrer" target="_blank">
-            네이버
+          <a
+            aria-label="네이버에서 검색"
+            className="grid h-6 w-6 place-items-center rounded-full bg-[#03C75A] text-[11px] font-black text-white"
+            href={leadNaverPlaceUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="네이버에서 검색"
+          >
+            N
           </a>
-          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadKakaoPlaceUrl} rel="noreferrer" target="_blank">
-            카카오맵
+          <a
+            aria-label="카카오맵에서 검색"
+            className="grid h-6 w-6 place-items-center rounded-full bg-[#FEE500] text-[11px] font-black text-slate-900"
+            href={leadKakaoPlaceUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="카카오맵에서 검색"
+          >
+            K
           </a>
-          <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={leadGooglePlaceUrl} rel="noreferrer" target="_blank">
-            구글
+          <a
+            aria-label="구글에서 검색"
+            className="grid h-6 w-6 place-items-center rounded-full bg-white text-[11px] font-black text-[#EA4335] ring-1 ring-inset ring-slate-200"
+            href={leadGooglePlaceUrl}
+            rel="noreferrer"
+            target="_blank"
+            title="구글에서 검색"
+          >
+            G
           </a>
           {instagramHandle ? (
             <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
@@ -7726,14 +8136,19 @@ function createDeliveryVehiclesFromStores(
   const UNASSIGNED_KEY = "__unassigned__";
 
   stores.forEach((store) => {
-    const driver = store.deliveryDriver || "";
+    // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+    // trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된
+    // 기존 거래처 레코드가 있으면 눈에는 같은 담당자/배송차인데 그룹 키만 미세하게 달라 서로 다른
+    // 배송차 카드로 쪼개져 보입니다. trim() 기준으로 그룹핑해 이런 레거시 중복을 합칩니다.
+    const driver = (store.deliveryDriver || "").trim();
     const area = store.deliveryArea || store.region || "미분류";
     // routeSeedStores(서버 원본 데이터)에는 deliveryVehicleName이 아니라 deliveryVehicle 필드로
     // 값이 들어옵니다(RoutePlanStop.deliveryVehicle). deliveryVehicleName은 createDeliveryStoreRows가
     // 그룹핑 이후 화면 표시용으로 파생시키는 필드라 여기서는 아직 존재하지 않아, 이 값으로 확인하면
     // 항상 비어 있어 그룹핑이 담당자 기준 자동 그룹으로만 폴백해버립니다.
-    const vehicleKey = store.deliveryVehicle || driver || UNASSIGNED_KEY;
-    if (store.deliveryVehicle) explicitVehicleKeys.add(vehicleKey);
+    const trimmedVehicle = (store.deliveryVehicle || "").trim();
+    const vehicleKey = trimmedVehicle || driver || UNASSIGNED_KEY;
+    if (trimmedVehicle) explicitVehicleKeys.add(vehicleKey);
     groups.set(vehicleKey, [...(groups.get(vehicleKey) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
   });
 
@@ -7820,7 +8235,13 @@ function createVehicleMarkerMeta(vehicles: DeliveryVehicle[]) {
   }, {});
 }
 
-function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mode: MarkerViewMode, vehicleMeta: Record<string, { color: string; label: string }>): KakaoMapMarker[] {
+function createMarkers(
+  existingMarkers: KakaoMapMarker[],
+  stores: StoreRow[],
+  mode: MarkerViewMode,
+  vehicleMeta: Record<string, { color: string; label: string }>,
+  completedStoreIds: Set<string> = new Set()
+): KakaoMapMarker[] {
   const origin = existingMarkers.find((marker) => marker.tone === "origin");
   const originWithId = origin ? { ...origin, id: origin.id || originMarkerId } : undefined;
   const storeMarkers = spreadMarkers(
@@ -7829,6 +8250,7 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
 
       return {
         address: store.address || `${store.region} ${store.name}`,
+        completed: completedStoreIds.has(store.id),
         grade: mode === "grade" ? store.grade : undefined,
         id: store.id,
         label: mode === "vehicle" ? vehicle?.label || "?" : store.grade,
@@ -7848,6 +8270,20 @@ function createMarkers(existingMarkers: KakaoMapMarker[], stores: StoreRow[], mo
   return mergeMarkers(originWithId ? [originWithId, ...storeMarkers] : storeMarkers);
 }
 
+// 2026-09-07 피드백("직원들이 많아질수록 보기 쉽게 구현해"): 활성 차량이 전부 같은 청록색이면
+// 배송기사가 여러 명일 때 지도 위에서도, 목록에서도 "이 마커가 그 사람 것"인지 구분이 안 됩니다.
+// 차량 ID(staff_mobile_devices.id, 로그인마다 안정적으로 유지됨)를 해시해 고정 팔레트에서 색을
+// 골라, 같은 사람은 새로고침해도 항상 같은 색으로 보이게 합니다. 지연(isStale) 차량은 팔레트
+// 대신 회색으로 통일해 "지금 안 잡히는 차량"이라는 상태를 우선 눈에 띄게 합니다.
+const VEHICLE_COLOR_PALETTE = ["#0d9488", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#65a30d", "#0891b2", "#c026d3"];
+export function vehicleColorForId(id: string): string {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  }
+  return VEHICLE_COLOR_PALETTE[hash % VEHICLE_COLOR_PALETTE.length];
+}
+
 function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: Map<string, StoreRow>): KakaoMapMarker[] {
   return locations
     .filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng))
@@ -7865,7 +8301,7 @@ function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: 
         label,
         lat: location.lat,
         lng: location.lng,
-        markerColor: location.isStale ? "#64748b" : "#0d9488",
+        markerColor: location.isStale ? "#64748b" : vehicleColorForId(location.id),
         name: `${driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
         tone: "vehicle" as const,
         x: 50,
@@ -8141,11 +8577,17 @@ function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {
   // 배송차 안에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우), 배송차의 대표
   // 담당자(vehicle.driver)만 모으면 일부 담당자를 놓칠 수 있습니다. 각 배송차에 실제로 배정된
   // 모든 거래처의 담당자를 함께 모아 정확한 담당자 목록을 만듭니다.
+  // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+  // trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된 기존
+  // 거래처 레코드가 있으면 눈에는 똑같아 보이는 담당자 이름이 서로 다른 옵션으로 두 번 나타납니다.
+  // trim() 기준으로 모아 이런 레거시 중복이 드롭다운에 갈라져 보이지 않게 합니다.
   const driverSet = new Set<string>();
   vehicles.forEach((vehicle) => {
-    if (vehicle.driver) driverSet.add(vehicle.driver);
+    const trimmedDriver = vehicle.driver?.trim();
+    if (trimmedDriver) driverSet.add(trimmedDriver);
     vehicle.stops.forEach((stop) => {
-      if (stop.deliveryDriver) driverSet.add(stop.deliveryDriver);
+      const trimmedStopDriver = stop.deliveryDriver?.trim();
+      if (trimmedStopDriver) driverSet.add(trimmedStopDriver);
     });
   });
   const drivers = Array.from(driverSet).sort();
