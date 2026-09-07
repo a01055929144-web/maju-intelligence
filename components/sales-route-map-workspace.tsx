@@ -768,11 +768,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 담당자와 별개로 거래처에 직접 지정된 배송차 이름들 + 아직 배정 전인 배송차(manualVehicles)를
   // 합쳐, "배송차" 드롭다운에서 고를 수 있는 선택지 목록을 만듭니다.
   const vehicleNameOptions = useMemo(() => {
+    // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+    // trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된
+    // 기존 거래처 레코드가 있으면 눈에는 똑같아 보이는 배송차 이름이 서로 다른 옵션으로 두 번
+    // 나타납니다. trim() 기준으로 모아 이런 레거시 중복이 드롭다운에 갈라져 보이지 않게 합니다.
     const names = new Set<string>();
     allStores.forEach((store) => {
-      if (store.deliveryVehicleName) names.add(store.deliveryVehicleName);
+      const trimmed = store.deliveryVehicleName?.trim();
+      if (trimmed) names.add(trimmed);
     });
-    manualVehicles.forEach((name) => names.add(name));
+    manualVehicles.forEach((name) => {
+      const trimmed = name.trim();
+      if (trimmed) names.add(trimmed);
+    });
     return Array.from(names).sort();
   }, [allStores, manualVehicles]);
   const registeredStoreNames = useMemo(() => new Set(allStores.map((store) => store.name.trim().toLowerCase())), [allStores]);
@@ -7910,14 +7918,19 @@ function createDeliveryVehiclesFromStores(
   const UNASSIGNED_KEY = "__unassigned__";
 
   stores.forEach((store) => {
-    const driver = store.deliveryDriver || "";
+    // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+    // trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된
+    // 기존 거래처 레코드가 있으면 눈에는 같은 담당자/배송차인데 그룹 키만 미세하게 달라 서로 다른
+    // 배송차 카드로 쪼개져 보입니다. trim() 기준으로 그룹핑해 이런 레거시 중복을 합칩니다.
+    const driver = (store.deliveryDriver || "").trim();
     const area = store.deliveryArea || store.region || "미분류";
     // routeSeedStores(서버 원본 데이터)에는 deliveryVehicleName이 아니라 deliveryVehicle 필드로
     // 값이 들어옵니다(RoutePlanStop.deliveryVehicle). deliveryVehicleName은 createDeliveryStoreRows가
     // 그룹핑 이후 화면 표시용으로 파생시키는 필드라 여기서는 아직 존재하지 않아, 이 값으로 확인하면
     // 항상 비어 있어 그룹핑이 담당자 기준 자동 그룹으로만 폴백해버립니다.
-    const vehicleKey = store.deliveryVehicle || driver || UNASSIGNED_KEY;
-    if (store.deliveryVehicle) explicitVehicleKeys.add(vehicleKey);
+    const trimmedVehicle = (store.deliveryVehicle || "").trim();
+    const vehicleKey = trimmedVehicle || driver || UNASSIGNED_KEY;
+    if (trimmedVehicle) explicitVehicleKeys.add(vehicleKey);
     groups.set(vehicleKey, [...(groups.get(vehicleKey) || []), { ...store, deliveryDriver: driver, deliveryArea: area }]);
   });
 
@@ -8339,11 +8352,17 @@ function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {
   // 배송차 안에 담당자가 여러 명 섞여 있을 수 있어(같은 트럭을 나눠 쓰는 경우), 배송차의 대표
   // 담당자(vehicle.driver)만 모으면 일부 담당자를 놓칠 수 있습니다. 각 배송차에 실제로 배정된
   // 모든 거래처의 담당자를 함께 모아 정확한 담당자 목록을 만듭니다.
+  // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
+  // trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된 기존
+  // 거래처 레코드가 있으면 눈에는 똑같아 보이는 담당자 이름이 서로 다른 옵션으로 두 번 나타납니다.
+  // trim() 기준으로 모아 이런 레거시 중복이 드롭다운에 갈라져 보이지 않게 합니다.
   const driverSet = new Set<string>();
   vehicles.forEach((vehicle) => {
-    if (vehicle.driver) driverSet.add(vehicle.driver);
+    const trimmedDriver = vehicle.driver?.trim();
+    if (trimmedDriver) driverSet.add(trimmedDriver);
     vehicle.stops.forEach((stop) => {
-      if (stop.deliveryDriver) driverSet.add(stop.deliveryDriver);
+      const trimmedStopDriver = stop.deliveryDriver?.trim();
+      if (trimmedStopDriver) driverSet.add(trimmedStopDriver);
     });
   });
   const drivers = Array.from(driverSet).sort();

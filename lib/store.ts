@@ -3666,6 +3666,14 @@ export async function upsertCustomerMaster(
 ) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
+  // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 거래처 다건
+  // 재배정(bulkUpdateDeliveryManager/bulkUpdateDeliveryVehicle)은 이미 trim()해서 저장하는데,
+  // 거래처 단건 저장 경로인 이 함수만 입력값을 그대로 저장해왔습니다. CRM 타임라인 상세 편집의
+  // 자유 입력 담당자 필드나 엑셀 일괄 등록에서 앞뒤 공백이 섞여 들어오면, 눈에는 똑같아 보이는
+  // "김철수"와 "김철수 "가 서로 다른 값으로 저장되어 담당자·배송차 드롭다운에 같은 사람/차량이
+  // 여러 개로 쪼개져 나타났습니다. 모든 저장 경로가 같은 규칙을 쓰도록 여기서도 trim()합니다.
+  const deliveryManager = input.deliveryManager?.trim() || "";
+  const deliveryVehicle = input.deliveryVehicle?.trim() || "";
   const resolvedPlaceLinks = await resolvePlaceLinks(
     {
       address: input.address || "",
@@ -3700,9 +3708,9 @@ export async function upsertCustomerMaster(
       business_status_checked_at: null,
       customer_name: customerName,
       delivery_km: input.deliveryKm || 0,
-      delivery_manager: input.deliveryManager || null,
+      delivery_manager: deliveryManager || null,
       delivery_minutes: input.deliveryMinutes || null,
-      delivery_vehicle: input.deliveryVehicle || null,
+      delivery_vehicle: deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
@@ -3806,7 +3814,7 @@ export async function upsertCustomerMaster(
     company_id: id,
     customer_name: customerName,
     delivery_km: input.deliveryKm || 0,
-    delivery_manager: input.deliveryManager || null,
+    delivery_manager: deliveryManager || null,
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
@@ -3827,7 +3835,7 @@ export async function upsertCustomerMaster(
     menu_summary: input.menuSummary || null
   };
   const deliveryVehicleField = {
-    delivery_vehicle: input.deliveryVehicle || null
+    delivery_vehicle: deliveryVehicle || null
   };
   // 리뷰 요약/키워드는 아직 자동 수집 파이프라인이 없어 수동 입력값만 반영합니다.
   // undefined면(즉 이 저장 요청에서 손대지 않은 값이면) 기존 값을 덮어쓰지 않도록 payload에서 뺍니다.
