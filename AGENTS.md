@@ -66,3 +66,24 @@ npm run build
 - **Follow-up**: 이번 스코프 밖이라 손대지 않았지만 발견한 이슈(있다면)
 
 이 보고를 받은 Claude가 QA를 진행하므로, 실제로 확인하지 않은 내용을 "정상"이라고 적지 않는다.
+
+## 6. DDD Implementation Rules (Modular Monolith)
+
+(2026-09-12 추가) MAJU는 **DDD 기반 Modular Monolith** 구조로 구현한다. 전체 원칙(Core Domains, Layer 정의, 의존성 방향, 예시 구조)은 `CLAUDE.md` 11절에 있으니 새 기능을 시작하기 전에 반드시 읽는다. Core Principle: **Page is not Domain** — 페이지별로 개발하되, 페이지별로 로직을 쌓지 않는다.
+
+Codex는 새 기능을 구현할 때 반드시 다음 순서를 따른다.
+
+1. Owner Domain 확인
+2. Domain model 확인
+3. 필요한 Use Case 정의
+4. Repository interface 확인
+5. Infrastructure 구현
+6. UI 연결
+7. 테스트
+8. build
+
+**UI부터 구현하지 않는다.** 페이지 컴포넌트 안에 비즈니스 로직이나 Supabase 쿼리를 새로 추가하지 않는다 — 예를 들어 `영업·배송 코스` 페이지라도 `route 계산` / `vehicle 배정` / `delivery 우선순위` 같은 로직을 페이지 안에 직접 넣지 않고, 각 Domain과 Application Use Case로 분리한다.
+
+기존 코드가 현재 DDD 구조가 아니라면 전체를 재작성하지 않는다. **이번 수정 범위부터 점진적으로 DDD 구조를 적용한다(Strangler Pattern).** 작업 시작 전에 이번 기능의 Owner Domain과 Related Domain을 먼저 정의하고, 수정할 파일 구조(어떤 domain/application/infrastructure/UI 파일이 생기거나 바뀌는지)를 제시한 뒤 구현한다.
+
+작업 지시에 별도 언급이 없어도 다음 원칙은 모든 작업에 항상 적용된다: "이 작업은 반드시 DDD 기반 Modular Monolith 원칙으로 구현한다. 페이지 컴포넌트 안에 비즈니스 로직이나 Supabase 쿼리를 새로 추가하지 말고, Domain → Application Use Case → Infrastructure → UI 순서로 책임을 분리한다. 기존 코드가 DDD 구조가 아니라면 전체를 재작성하지 말고 이번 수정 범위부터 점진적으로 적용한다."

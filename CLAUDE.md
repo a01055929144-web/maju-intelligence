@@ -95,3 +95,108 @@ Summary(현재 상태 요약) / Findings(발견된 문제) / Root Cause / Severi
 ## 10. Claude Must Not
 
 원인 확인 없이 코드 수정 / 관련 없는 대규모 리팩터링 / 기존 기능 임의 삭제 / DB schema 임의 변경 / production DB 직접 수정 / 임시 workaround를 최종 해결책으로 사용 / UI에서 DB 오류 숨기기 / 테스트하지 않은 상태에서 "해결됨" 판단.
+
+## 11. DDD Implementation Rules (Modular Monolith)
+
+(2026-09-12 추가) MAJU는 **DDD 기반 Modular Monolith** 구조로 구현한다. 페이지 단위로 기능을 개발하되, 비즈니스 로직의 소유권은 페이지가 아니라 Domain에 있다.
+
+**Core Principle: Page is not Domain.** 페이지는 Domain 기능을 보여주는 UI일 뿐, 비즈니스 규칙과 데이터의 소유권은 Domain에 있어야 한다.
+
+### 11-1. Core Domains
+
+customer / lead / sales / route / delivery / analytics / organization
+
+### 11-2. Layer Responsibility
+
+- **Domain** — 비즈니스 규칙과 핵심 모델. Entity, Value Object, Domain Service, Domain Rule, Business Validation을 포함한다. React, Supabase, UI Component, API 호출 코드를 **포함하지 않는다.**
+- **Application** — Use Case(예: `CreateCustomer`, `UpdateCustomer`, `CreateRoute`, `OptimizeRoute`, `RegisterLead`, `AssignDelivery`)를 담당한다. 여러 Domain 객체를 조합해 실제 업무 흐름을 수행한다.
+- **Infrastructure** — 외부 시스템 연결(Supabase, Kakao Map, 외부 API, Storage, Repository 구현체, AI API)을 담당한다. Domain이 Infrastructure에 직접 의존하지 않도록 한다.
+- **Presentation / UI** — Page, Component, Form, Table, Modal, View State를 담당한다. 비즈니스 규칙을 직접 구현하지 않고, Application Layer의 Use Case를 호출하는 역할만 한다.
+
+### 11-3. Dependency Direction
+
+```
+UI → Application → Domain
+```
+
+Infrastructure는 Domain/Application이 정의한 interface를 구현한다. **Domain은 React, Next.js, Supabase를 알아서는 안 된다.**
+
+### 11-4. Page Development Rule
+
+페이지를 개발할 때 먼저 **Owner Domain**을 결정한다. 예: `영업·배송 코스` 페이지 → Owner Domain: `route` / Related Domain: `customer`, `delivery`. 페이지에서 route 비즈니스 규칙을 직접 구현하지 않는다 — route 관련 로직은 반드시 route Domain 또는 Application Layer에 둔다.
+
+### 11-5. Example Structure
+
+```text
+src/
+  domains/
+    customer/
+      domain/
+      application/
+      infrastructure/
+    lead/
+      domain/
+      application/
+      infrastructure/
+    route/
+      domain/
+      application/
+      infrastructure/
+    delivery/
+      domain/
+      application/
+      infrastructure/
+  app/
+  components/
+```
+
+BAD:
+
+```text
+sales-route-page.tsx
+  ├─ Supabase query
+  ├─ 경로 계산
+  ├─ 차량 배정
+  ├─ 배송 우선순위 계산
+  └─ UI rendering
+```
+
+GOOD:
+
+```text
+sales-route-page.tsx
+  → createRouteUseCase()
+  → assignVehicleUseCase()
+  → optimizeRouteUseCase()
+
+route/domain, route/application, route/infrastructure
+```
+
+### 11-6. Cross Domain Rule
+
+Domain 간 직접 내부 구현을 참조하지 않는다.
+
+- BAD: `route → customer 내부 DB query 직접 호출`
+- GOOD: `route application → customer interface/use case`
+
+### 11-7. Shared Code
+
+공통 코드라는 이유로 무조건 `/utils`에 넣지 않는다. 먼저 특정 Domain의 책임인지 확인한다. 정말 여러 Domain에서 공통으로 쓰는 기술적 기능(날짜 formatter, 공통 error type, HTTP helper 등)만 shared 영역에 둔다. **비즈니스 규칙은 shared로 빼지 않는다.**
+
+### 11-8. Refactoring Rule (Strangler Pattern)
+
+기존 MAJU 코드가 완전한 DDD 구조가 아니더라도 한 번에 전체를 재작성하지 않는다. 새 기능 또는 수정하는 영역부터 점진적으로 DDD 구조를 적용한다 — 기존 코드는 유지하면서 수정되는 기능부터 Domain/Application/Infrastructure 구조로 옮긴다.
+
+### 11-9. Claude Review Rule
+
+Claude는 각 페이지를 검토할 때 반드시 다음을 확인한다.
+
+1. Owner Domain은 무엇인가
+2. 비즈니스 로직이 UI에 들어가 있지 않은가
+3. Supabase 호출이 UI에 과도하게 존재하지 않는가
+4. Domain 간 강결합이 존재하지 않는가
+5. Entity와 DB Row를 동일 개념으로 취급하고 있지 않은가
+6. Application Use Case가 필요한가
+7. Repository 추상화가 필요한가
+
+검토 후, Codex가 구현할 수 있도록 8절 Codex Handoff 형식에 **Owner Domain / Related Domain**을 명시해 DDD 기준의 작업 지시서를 작성한다.
