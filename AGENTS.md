@@ -13,6 +13,10 @@
 
 `docs/pages/` 안의 정식 파일명은 **kebab-case**(예: `map-and-route.md`, `customers.md`)다. 숫자+영문대문자 형식(예: `01_MAP_HOME.md`)으로 된 파일이 보이면 과거 병행 작업 중 생긴 중복본이니 열어서 상단에 DEPRECATED 배너가 있는지 확인하고, 있으면 무시한 채 배너가 가리키는 kebab-case 파일을 따른다.
 
+## 0-1. Claude ↔ Codex 역할 분담
+
+`CLAUDE.md` 8-1절에 역할 분담표가 있다. 요지: 원인 불명 버그 조사·영향범위 분석·구조 설계·DB 위험 검토는 Claude가 먼저 하고, 실제 코드 수정·여러 파일 일괄 변경·테스트·typecheck/lint/build·git 작업은 Codex가 담당한다. Codex가 작업 중 스코프를 벗어난 구조적 문제(God Component, 도메인 경계 위반, 원인 불명 버그 등)를 발견하면 직접 고치지 말고 `docs/pages/<page>.md`의 TODO/KNOWN ISSUES에 기록하고 보고한다.
+
 ## 1. 스코프 규칙
 
 - 각 페이지 md의 **Allowed Files**에 없는 파일은 건드리지 않는다.
