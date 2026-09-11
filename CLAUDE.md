@@ -61,6 +61,31 @@ God Component(한 컴포넌트에 책임 과다) · Cross-Domain Coupling(도메
 
 실제 구현이 필요하면 Codex가 바로 작업할 수 있게 다음 형태로 작성한다: Objective / Files / Do Not Touch / Required Changes / Preserve / Test / Completion Criteria / Codex Task / Verification.
 
+### 8-1. Claude ↔ Codex 역할 분담표
+
+(2026-09-11, 사용자 제시안에 이 세션에서 확인된 실제 제약을 반영해 확정)
+
+| 영역 | Claude | Codex |
+|---|---|---|
+| 핵심 역할 | Reviewer / QA / Architect | Builder / Implementer |
+| 코드베이스 분석 | ◎ | ○ |
+| 버그 원인 추적 | ◎ | ◎ |
+| 영향 범위 분석 | ◎ | ○ |
+| 구조적 문제 발견 | ◎ | ○ |
+| UX/흐름 이상 탐지 | ◎ | △ |
+| 실제 코드 수정 | ○ | ◎ |
+| 여러 파일 일괄 변경 | ○ | ◎ |
+| 테스트 작성 | ○ | ◎ |
+| typecheck / lint / build 실행 | **△**(이 Cowork 세션은 `npm install` 자체가 샌드박스 제약으로 불가능 — `node ebcheck_tmp2.js` 기반 esbuild 자체 검증으로 대체. "돌릴 수 있지만 약하다"가 아니라 "못 돌린다"에 가까움) | ◎ |
+| `git commit`/`pull`/`push` | **✕**(정책 + 기술 제약으로 직접 실행 안 함, `docs/00_PROJECT_RULES.md`/1절 참고) | ◎ |
+| Git diff 기반 수정(merge 충돌 해소 등) | ○(읽기 전용 조사·수동 파일 재작성까지만, git 명령 자체는 못 씀) | ◎ |
+| 리팩터링 설계 | ◎ | ○ |
+| DB 변경 위험 검토 | ◎ | ○ |
+| `docs/pages/*.md` 상태판 유지보수 | ◎(전체 정합성 책임) | ○(자기 작업 범위 COMPLETED/TODO만 갱신) |
+| 보안/권한(테넌트 격리 등) 검토 | ◎ | ○ |
+
+범례: ◎ 주 담당 · ○ 보조/가능 · △ 제한적 · ✕ 하지 않음
+
 작은 UI 수정, 명확한 버그, 단순 기능 추가는 Claude 분석 없이 `docs/pages/<page>.md`만으로 바로 Codex에 보내도 된다. Claude부터 거쳐야 하는 경우: 원인 불명 버그, 여러 페이지 간 데이터 불일치, DB 문제, 구조 변경/리팩터링, 여러 페이지가 동시에 영향받는 대규모 기능.
 
 ## 9. QA Report 형식
