@@ -365,6 +365,9 @@ export default function CrmTimelinePage() {
   const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
   const [previewAttachment, setPreviewAttachment] = useState<{ mimeType: string; title: string; url: string } | null>(null);
   const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
+  const [attachmentsTruncated, setAttachmentsTruncated] = useState(false);
+  const [notesTruncated, setNotesTruncated] = useState(false);
+  const [isLoadingMoreOperations, setIsLoadingMoreOperations] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [newMemo, setNewMemo] = useState("");
   const [newNextAction, setNewNextAction] = useState("");
@@ -372,6 +375,7 @@ export default function CrmTimelinePage() {
   const [newAttachmentType, setNewAttachmentType] = useState("loading_position");
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
   const [newAttachmentFiles, setNewAttachmentFiles] = useState<File[]>([]);
+  const attachmentRequiresSecureUpload = newAttachmentType === "identity_document" || newAttachmentType === "bank_account";
   const [addressQuery, setAddressQuery] = useState("");
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
@@ -437,17 +441,50 @@ export default function CrmTimelinePage() {
         if (!active || !payload) return;
         setCustomerAttachments(payload.attachments || []);
         setCustomerNotes(payload.notes || []);
+        setAttachmentsTruncated(Boolean(payload.attachmentsTruncated));
+        setNotesTruncated(Boolean(payload.notesTruncated));
       })
       .catch(() => {
         if (!active) return;
         setCustomerAttachments([]);
         setCustomerNotes([]);
+        setAttachmentsTruncated(false);
+        setNotesTruncated(false);
       });
 
     return () => {
       active = false;
     };
   }, [selectedCustomer?.id]);
+
+  async function loadMoreCustomerOperations() {
+    if (!selectedCustomer.id || isLoadingMoreOperations || (!attachmentsTruncated && !notesTruncated)) return;
+    setIsLoadingMoreOperations(true);
+    try {
+      const params = new URLSearchParams({
+        attachmentOffset: String(customerAttachments.length),
+        customerId: selectedCustomer.id,
+        noteOffset: String(customerNotes.length)
+      });
+      const response = await fetchWithTimeout(withCompanyQuery(`/api/customer-operations?${params.toString()}`), { cache: "no-store" }, 12000);
+      if (!response.ok) throw new Error("이전 원장 기록을 불러오지 못했습니다.");
+      const payload = await response.json();
+      setCustomerAttachments((previous) => {
+        const knownIds = new Set(previous.map((item) => item.id));
+        return [...previous, ...(payload.attachments || []).filter((item: CustomerAttachmentView) => !knownIds.has(item.id))];
+      });
+      setCustomerNotes((previous) => {
+        const knownIds = new Set(previous.map((item) => item.id));
+        return [...previous, ...(payload.notes || []).filter((item: CustomerNoteView) => !knownIds.has(item.id))];
+      });
+      setAttachmentsTruncated(Boolean(payload.attachmentsTruncated));
+      setNotesTruncated(Boolean(payload.notesTruncated));
+    } catch (error) {
+      setAttachmentMessage(error instanceof Error ? error.message : "이전 원장 기록을 불러오지 못했습니다.");
+    } finally {
+      setIsLoadingMoreOperations(false);
+    }
+  }
 
   const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const filteredCustomers = useMemo(() => {
@@ -571,6 +608,8 @@ export default function CrmTimelinePage() {
     customerAttachments.filter((attachment) => attachment.attachmentType === "business_license").length || (selectedCustomer.businessLicenseFileUrl ? 1 : 0);
   const bankAccountAttachments =
     customerAttachments.filter((attachment) => attachment.attachmentType === "bank_account").length || (selectedCustomer.bankAccountFileUrl ? 1 : 0);
+  const identityDocumentAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "identity_document").length;
+  const deliveryProofAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "delivery_proof").length;
   const masterFileAttachments = [
     !customerAttachments.some((attachment) => attachment.attachmentType === "business_license") && selectedCustomer.businessLicenseFileUrl
       ? {
@@ -619,6 +658,20 @@ export default function CrmTimelinePage() {
       label: "통장사본",
       required: true,
       type: "bank_account"
+    },
+    {
+      count: identityDocumentAttachments,
+      description: "필요한 거래처만 보안 파일 업로드로 보관합니다.",
+      label: "신분증",
+      required: false,
+      type: "identity_document"
+    },
+    {
+      count: deliveryProofAttachments,
+      description: "현장 배송완료 사진과 서류를 이력으로 보관합니다.",
+      label: "배송완료 증빙",
+      required: false,
+      type: "delivery_proof"
     }
   ];
   const operationalChecks = [
@@ -662,7 +715,6 @@ export default function CrmTimelinePage() {
   const historyCount = customerNotes.length || selectedCustomer.memoCount;
   const nextActionCount = customerNotes.filter((note) => note.nextAction).length;
   const latestNote = customerNotes[0];
-  const deliveryProofAttachments = customerAttachments.filter((attachment) => attachment.attachmentType === "delivery_proof").length;
   const fieldRecordSummary = {
     attachmentCount: customerAttachments.length,
     deliveryProofCount: deliveryProofAttachments,
@@ -1808,12 +1860,15 @@ export default function CrmTimelinePage() {
                             onChange={(event) => {
                               setNewAttachmentType(event.target.value);
                               setNewAttachmentTitle(attachmentTitleFromType(event.target.value));
+                              if (event.target.value === "identity_document" || event.target.value === "bank_account") setNewAttachmentUrl("");
                             }}
                             value={newAttachmentType}
                           >
                             <option value="loading_position">배송 적재위치 사진/영상</option>
                             <option value="business_license">사업자등록증</option>
+                            <option value="identity_document">신분증</option>
                             <option value="bank_account">통장사본</option>
+                            <option value="delivery_proof">배송완료 증빙</option>
                             <option value="etc">기타 첨부자료</option>
                           </select>
                         </label>
@@ -1870,14 +1925,15 @@ export default function CrmTimelinePage() {
                             <span className="text-xs font-black text-slate-500">외부 URL로 등록</span>
                             <input
                               className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                              disabled={attachmentRequiresSecureUpload}
                               onChange={(event) => setNewAttachmentUrl(event.target.value)}
-                              placeholder="이미 업로드된 파일 URL"
+                              placeholder={attachmentRequiresSecureUpload ? "민감자료는 파일 업로드만 가능" : "이미 업로드된 파일 URL"}
                               value={newAttachmentUrl}
                             />
                           </label>
                           <button
                             className="maju-button-secondary mt-2 inline-flex h-10 w-full items-center justify-center gap-2 px-4 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                            disabled={!newAttachmentTitle.trim() || !newAttachmentUrl.trim() || isAttachmentSaving}
+                            disabled={attachmentRequiresSecureUpload || !newAttachmentTitle.trim() || !newAttachmentUrl.trim() || isAttachmentSaving}
                             onClick={saveAttachment}
                             type="button"
                           >
@@ -1922,10 +1978,22 @@ export default function CrmTimelinePage() {
                         <>
                           <AttachmentRow icon={PackageCheck} label="적재위치 사진/영상" value="미등록 · 자료 추가에서 업로드" />
                           <AttachmentRow icon={FileText} label="사업자등록증" value="미등록 · OCR 또는 파일 업로드" />
+                          <AttachmentRow icon={FileText} label="신분증" value="미등록 · 보안 파일 업로드" />
                           <AttachmentRow icon={FileText} label="통장사본" value="미등록 · 파일 업로드" />
+                          <AttachmentRow icon={PackageCheck} label="배송완료 증빙" value="미등록 · 필요 시 파일 업로드" />
                         </>
                       )}
                     </div>
+                    {attachmentsTruncated ? (
+                      <button
+                        className="maju-button-secondary m-3 w-[calc(100%-1.5rem)] justify-center disabled:opacity-60"
+                        disabled={isLoadingMoreOperations}
+                        onClick={() => void loadMoreCustomerOperations()}
+                        type="button"
+                      >
+                        {isLoadingMoreOperations ? "불러오는 중..." : "이전 첨부자료 50건 더 보기"}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -2025,6 +2093,16 @@ export default function CrmTimelinePage() {
                     </div>
                   )}
                 </div>
+                {notesTruncated ? (
+                  <button
+                    className="maju-button-secondary m-3 w-[calc(100%-1.5rem)] justify-center disabled:opacity-60"
+                    disabled={isLoadingMoreOperations}
+                    onClick={() => void loadMoreCustomerOperations()}
+                    type="button"
+                  >
+                    {isLoadingMoreOperations ? "불러오는 중..." : "이전 메모 50건 더 보기"}
+                  </button>
+                ) : null}
               </div>
 
               <div className="maju-section-card overflow-hidden">
@@ -3032,6 +3110,7 @@ function AttachmentPreviewModal({
 
 function attachmentLabel(type: string, title: string) {
   if (type === "business_license") return "사업자등록증";
+  if (type === "identity_document") return "신분증";
   if (type === "bank_account") return "통장사본";
   if (type === "loading_position") return "배송 적재위치 사진/영상";
   if (type === "delivery_proof") return "배송완료 증빙";
@@ -3047,6 +3126,7 @@ function noteTypeLabel(type: string) {
 
 function attachmentTitleFromType(type: string) {
   if (type === "business_license") return "사업자등록증";
+  if (type === "identity_document") return "신분증";
   if (type === "bank_account") return "통장사본";
   if (type === "loading_position") return "배송 적재위치 사진/영상";
   if (type === "delivery_proof") return "배송완료 증빙";
