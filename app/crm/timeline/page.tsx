@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type Ref, useEffect, useMemo, useRef, useState } from "react";
+import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -228,19 +228,37 @@ export default function CrmTimelinePage() {
   const [customersTruncated, setCustomersTruncated] = useState(false);
   const [isLoadingMoreCustomers, setIsLoadingMoreCustomers] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
+  // 2026-09-11 버그 수정: 이전에는 401/5xx/타임아웃 등 API 실패가 전부 "진짜 0건"과
+  // 동일하게 customerSource="empty"|"error" + customers=[]로 접혀서, 데이터가 실제로
+  // 있는 회사도 화면엔 구분 없이 "거래처 원장 비어 있음"처럼 보였습니다
+  // (docs/pages/customers.md KNOWN ISSUES, qa-report-customers-zero-count.md 참고).
+  // 실패 사유 메시지를 별도로 들고 있다가 눈에 띄는 배너로 보여주고, 재시도 버튼을 제공합니다.
+  const [customerLoadError, setCustomerLoadError] = useState("");
 
-  useEffect(() => {
+  const loadCustomers = useCallback(() => {
     let active = true;
+    setCustomerSource("loading");
+    setCustomerLoadError("");
 
     fetchWithTimeout(withCompanyQuery("/api/customers"), { cache: "no-store" }, 12000)
-      .then((response) => {
-        if (!response.ok) return null;
-        return response.json();
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        return { ok: response.ok, payload, status: response.status };
       })
-      .then((payload) => {
+      .then(({ ok, payload, status }) => {
         if (!active) return;
+        if (!ok || payload?.source === "error") {
+          setCustomerSource("error");
+          setCustomerLoadError(
+            (payload && typeof payload.message === "string" && payload.message) ||
+              `거래처 원장을 불러오지 못했습니다 (HTTP ${status}). 네트워크 상태를 확인하고 다시 시도해주세요.`
+          );
+          setCustomers([]);
+          setSelectedIndex(0);
+          return;
+        }
         if (payload?.source !== "supabase") {
-          setCustomerSource(payload?.source === "empty" ? "empty" : "error");
+          setCustomerSource("empty");
           setCustomers([]);
           setSelectedIndex(0);
           return;
@@ -256,9 +274,12 @@ export default function CrmTimelinePage() {
         setOperationFilter(requestedFilter);
         setSelectedIndex(requestedIndex >= 0 ? requestedIndex : filteredIndex >= 0 ? filteredIndex : 0);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
         setCustomerSource("error");
+        setCustomerLoadError(
+          error instanceof Error ? error.message : "거래처 원장을 불러오지 못했습니다. 네트워크 상태를 확인하고 다시 시도해주세요."
+        );
         setCustomers([]);
       });
 
@@ -266,6 +287,11 @@ export default function CrmTimelinePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const cancel = loadCustomers();
+    return cancel;
+  }, [loadCustomers]);
 
   const loadMoreCustomers = async () => {
     if (isLoadingMoreCustomers || !customersTruncated) return;
@@ -1213,6 +1239,9 @@ export default function CrmTimelinePage() {
                 onClear={clearOperationFilter}
                 selectedPosition={selectedFilteredPosition}
               />
+              {customerSource === "error" ? (
+                <CustomerLoadErrorBanner message={customerLoadError} onRetry={loadCustomers} />
+              ) : null}
               <LedgerListStatusStrip
                 customerSource={customerSource}
                 gradeFilter={gradeFilter}
@@ -1382,9 +1411,19 @@ export default function CrmTimelinePage() {
               })}
               {!filteredCustomers.length ? (
                 <div className="maju-empty-state m-4">
-                  <p className="text-sm font-black text-slate-700">{hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}</p>
+                  <p className="text-sm font-black text-slate-700">
+                    {customerSource === "error"
+                      ? "거래처 원장을 불러오지 못했습니다."
+                      : hasCustomers
+                        ? "조건에 맞는 거래처가 없습니다."
+                        : "등록된 거래처가 없습니다."}
+                  </p>
                   <p className="mt-1 text-xs font-bold text-slate-400">
-                    {hasCustomers ? "검색어, 등급 또는 운영 필터를 바꿔보세요." : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
+                    {customerSource === "error"
+                      ? "실제로 거래처가 없는 것이 아니라 API 오류일 수 있습니다. 위의 다시 시도 버튼을 눌러주세요."
+                      : hasCustomers
+                        ? "검색어, 등급 또는 운영 필터를 바꿔보세요."
+                        : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
                   </p>
                 </div>
               ) : null}
@@ -2253,6 +2292,7 @@ function LedgerListStatusStrip({
     gradeFilter !== "all" ? `등급: ${gradeFilter}` : "",
     operationFilter !== "all" ? `상태: ${operationFilterLabel(operationFilter)}` : ""
   ].filter(Boolean);
+  const isError = customerSource === "error";
   const sourceLabel =
     customerSource === "loading"
       ? "원장 불러오는 중"
@@ -2260,15 +2300,20 @@ function LedgerListStatusStrip({
         ? "거래처 원장"
         : customerSource === "empty"
           ? "거래처 원장 비어 있음"
-          : "거래처 원장 미연결";
+          : "거래처 원장 불러오기 실패";
+  const secondaryLabel = hasCustomers ? `${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳` : isError ? "위 안내 참고" : "등록 필요";
 
   return (
-    <div className={`mt-3 rounded-md border px-3 py-2 ${hasCustomers ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"}`}>
+    <div
+      className={`mt-3 rounded-md border px-3 py-2 ${
+        hasCustomers ? "border-slate-200 bg-white" : isError ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
+      }`}
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${hasCustomers ? "bg-emerald-500" : "bg-amber-500"}`} />
-          <p className={`truncate text-xs font-black ${hasCustomers ? "text-slate-700" : "text-amber-900"}`}>
-            {sourceLabel} · {hasCustomers ? `${visibleCount.toLocaleString()}/${totalCount.toLocaleString()}곳` : "등록 필요"}
+          <span className={`h-2 w-2 shrink-0 rounded-full ${hasCustomers ? "bg-emerald-500" : isError ? "bg-red-500" : "bg-amber-500"}`} />
+          <p className={`truncate text-xs font-black ${hasCustomers ? "text-slate-700" : isError ? "text-red-900" : "text-amber-900"}`}>
+            {sourceLabel} · {secondaryLabel}
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -2279,12 +2324,38 @@ function LedgerListStatusStrip({
               </span>
             ))
           ) : (
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${hasCustomers ? "bg-emerald-50 text-emerald-700" : "bg-white text-amber-800"}`}>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
+                hasCustomers ? "bg-emerald-50 text-emerald-700" : isError ? "bg-white text-red-800" : "bg-white text-amber-800"
+              }`}
+            >
               전체 원장 기준
             </span>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CustomerLoadErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+        <p className="text-xs font-bold leading-5 text-red-900">
+          거래처 원장을 불러오지 못했습니다. 실제로 거래처가 0곳이라는 뜻이 아닙니다 — 서버/네트워크 오류일 수 있으니 다시 시도해주세요.
+          {message ? <span className="mt-1 block text-[11px] font-semibold text-red-700">{message}</span> : null}
+        </p>
+      </div>
+      <button
+        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 text-xs font-black text-red-700 transition hover:bg-red-100"
+        onClick={onRetry}
+        type="button"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        다시 시도
+      </button>
     </div>
   );
 }

@@ -13,8 +13,27 @@ export async function GET(request: NextRequest) {
 
   const offsetParam = request.nextUrl.searchParams.get("offset");
   const offset = offsetParam ? Math.max(0, Number.parseInt(offsetParam, 10) || 0) : 0;
-  const result = await getCustomerMaster(scope.companyId, { assignmentKeys: getCustomerAssignmentKeys(scope.customerSession), offset });
-  return NextResponse.json(result);
+
+  try {
+    const result = await getCustomerMaster(scope.companyId, { assignmentKeys: getCustomerAssignmentKeys(scope.customerSession), offset });
+    return NextResponse.json(result);
+  } catch (error) {
+    // 2026-09-11 버그 수정: 이 예외를 못 잡으면 Next.js가 일반 500(HTML) 응답을 만들고,
+    // 클라이언트(app/crm/timeline/page.tsx)는 !response.ok를 "거래처 0건"과 동일하게
+    // 처리해버려서 실제로는 데이터가 있는 회사도 원장이 빈 것처럼 보였습니다
+    // (docs/pages/customers.md KNOWN ISSUES 참고). 진짜 empty(source:"empty")와
+    // 구분되는 명시적인 에러 응답을 내려줍니다.
+    console.error("[api/customers] getCustomerMaster failed", error);
+    return NextResponse.json(
+      {
+        customers: [],
+        message: error instanceof Error ? error.message : "거래처 원장을 불러오지 못했습니다.",
+        source: "error",
+        truncated: false
+      },
+      { status: 502 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
