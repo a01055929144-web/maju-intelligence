@@ -4435,11 +4435,9 @@ function LiveVehicleStatusPanel({
             <Truck className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0">
-<<<<<<< HEAD
-            {/* 병합 노트(2026-09-12): origin b083f38(Codex)은 displayName 필드가 없던 옛 버전이라 conflict.
-                lib/store.ts의 StaffVehicleLocation.displayName(로컬 전용 기능)을 유지하는 쪽으로 해소. */}
-=======
->>>>>>> 6f6161d9b8723fb002b2634c82bd42aad8645d01
+            {/* 병합 노트(2026-09-12): origin(Codex)은 displayName 필드가 없는 옛 버전이 계속 이어지고 있어
+                pull할 때마다 이 지점에서 conflict가 납니다. lib/store.ts의
+                StaffVehicleLocation.displayName(로컬 전용 기능)을 유지하는 쪽으로 계속 해소해야 합니다. */}
             <p className="truncate text-xs font-black text-slate-950">{selectedVehicle ? selectedVehicle.displayName : "라이브 차량 요약"}</p>
             <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대 · {STAFF_LOCATION_FRESHNESS_MINUTES}분 기준</p>
           </div>

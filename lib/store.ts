@@ -3158,14 +3158,12 @@ function toStaffVehicleLocation(row: {
   const lastLocationAt = row.last_location_at || undefined;
   const staleMs = lastLocationAt ? Date.now() - new Date(lastLocationAt).getTime() : Number.POSITIVE_INFINITY;
   const isStale = staleMs > STAFF_LOCATION_FRESHNESS_MINUTES * 60 * 1000;
-<<<<<<< HEAD
-  // 병합 노트(2026-09-12): origin b083f38(Codex)은 이 식별자 우선순위 로직 자체가 없는 옛 버전을
-  // 유지하고 있었고, C:\maju-deploy 로컬에만 있던 기능이라 merge conflict가 났습니다. 아래 로직은
-  // getStaffVehicleLocations()의 identity(담당자/직원명) 조인과 StaffVehicleLocation.displayName /
-  // assignedManagerName 필드, 그리고 UI(sales-route-map-workspace.tsx)의 displayName 표시가 모두
-  // 이 값에 의존하고 있어 origin 쪽(빈 블록)을 취하면 빌드가 깨지므로 로컬 버전을 그대로 유지합니다.
-=======
->>>>>>> 6f6161d9b8723fb002b2634c82bd42aad8645d01
+  // 병합 노트(2026-09-12): origin(Codex)에는 이 식별자 우선순위 로직 자체가 없는 옛 버전이 계속
+  // 이어지고 있고, C:\maju-deploy 로컬에만 있던 기능이라 pull할 때마다 이 지점에서 merge conflict가
+  // 납니다. 아래 로직은 getStaffVehicleLocations()의 identity(담당자/직원명) 조인과
+  // StaffVehicleLocation.displayName / assignedManagerName 필드, 그리고 UI
+  // (sales-route-map-workspace.tsx)의 displayName 표시가 모두 이 값에 의존하고 있어 origin 쪽(빈 블록)을
+  // 취하면 빌드가 깨지므로, 다음에 또 이 conflict가 나더라도 반드시 이 로컬 버전을 유지해야 합니다.
   const usableName = (value?: string) => {
     const name = value?.trim() || "";
     return /^(개인 사용자|배송기사|모바일 직원)$/.test(name) ? "" : name;
