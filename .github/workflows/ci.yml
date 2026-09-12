@@ -28,6 +28,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: API authentication boundaries
+        run: npm run check:auth-boundaries
+
       - name: Dependency security audit
         run: npm audit --audit-level=high
 

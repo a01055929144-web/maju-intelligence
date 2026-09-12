@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint . --quiet",
     "test": "vitest run",
+    "check:auth-boundaries": "node scripts/check-api-auth-boundaries.mjs",
     "check:production-env": "node scripts/check-production-env.mjs",
     "ops:check-env": "node scripts/check-production-env.mjs",
     "ops:migrate": "node scripts/apply-supabase-migrations.mjs",
