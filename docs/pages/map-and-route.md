@@ -60,7 +60,12 @@ customer (거래처 마커), lead (신규 리드 오버레이), analytics (요�
 - 배송 히스토리 월간 캘린더 + 확정 순서 vs 실제 GPS 경로 비교
 
 ## Task (이번에 진행할 작업이 있으면 여기 채움)
-_(현재 비어있음 — 신규 작업 지시 시 이 섹션에 구체적 요구사항 기입)_
+**(2026-09-12 검토 요청, 미착수) 라이브 차량 패널을 배송담당자 필터 쪽으로 통합하는 방향 검토**
+- 사용자 요청: "차량 라이브가 많아지면 필터 구분이 좋지 않아보이네, 배송 담당필터 자리에 옮기는 방향 검토해"
+- 현재 구조: 지도 위에 좌측 `DeliveryAssignmentPanel`(배송담당자 필터 — 관리자가 등록한 담당자/차량 목록, 정적)과 우측 `LiveVehicleStatusPanel`(라이브 차량 — 실시간 GPS, 동적)이 서로 다른 카드로 떠 있음. 둘 다 "담당자/차량" 정보를 다루지만 이름 표시 소스가 다름(좌측은 관리자가 등록한 정식 이름, 우측은 최근까지 세션 닉네임이었다가 이번 세션에서 invitedEmployeeName 우선으로 수정됨).
+- Claude 검토 의견(구현 전 설계 단계): 우측 패널을 통째로 없애기보다, 좌측 배송담당자 필터의 각 담당자 행에 실시간 상태(활성/지연 점, 마지막 수신 시각, GPS 오차)를 배지로 붙이는 방향을 권장. 근거: (1) 좌측 목록이 이미 정식 이름 기준으로 안정적으로 정렬돼 있어 이름 불일치 문제가 구조적으로 사라짐 (2) 담당자 수가 늘어도 목록이 하나로 합쳐져 좌우 스크롤 비교가 필요 없어짐. 다만 (a) 담당자 필터에 등록되지 않은 "미배정" 라이브 차량(예: 정식 담당자로 등록 안 된 계정이 GPS를 켠 경우)을 위한 별도 그룹이 필요하고 (b) `onFocusVehicle`/`onAnalyze`/`onToggleRoute`/`onPreviewStore` 등 우측 패널의 인터랙션 핸들러를 좌측 패널로 옮기거나 공유해야 해서, `components/sales-route-map-workspace.tsx`(8,857줄 God Component) 안에서 상태/핸들러 배선을 다시 짜는 중간 규모 작업임.
+- Owner Domain: route / Related Domain: delivery.
+- 다음 단계: 사용자 확인 후 Codex Handoff(8절 형식)로 상세 작업 지시서 작성 예정. 아직 실제 코드 변경 없음.
 
 ## Completion
 - 기능 정상 동작
@@ -97,6 +102,8 @@ ACTIVE
 
 ## KNOWN ISSUES
 - 다만 `lib/store.ts`의 `getDeliveryHistoryForDate`가 `route_plan_confirmations`가 없는 날짜는 "현재 등록된 담당자 배정"으로 추정 표시함 — 과거 실제 배정과 다를 수 있음을 UI에 명시했는지 재확인 필요.
+- 개인/오너가 초대 없이 만든 워크스페이스 계정은 `staff_invitations.employee_name`이 아예 없어, 그 계정의 카카오 닉네임이 비어 있으면 라이브 차량 패널에 여전히 "개인 사용자"로 표시됨(아래 FIXED 3차 참고). 정식 해결은 개인/오너 모바일 계정용 편집 가능한 표시 이름 필드 추가가 필요 — 제품 결정 대기, `qa/priority-scan-2026-09-11.md`에도 기록.
+- 라이브 차량 패널(우측)과 배송담당자 필터(좌측)가 담당자/차량 정보를 서로 다른 카드에 중복 표시함. 라이브 차량이 많아질수록 두 목록을 오가며 비교해야 해서 가독성이 떨어짐(사용자 피드백, 2026-09-12) — 아래 Task 섹션에 통합 방향 검토 내용 기록.
 
 ## FIXED (2026-09-12)
 - **증상**: 지도 탭에서 "전체 리드 보기"를 켜면 지도가 텅 빈 것처럼 보임(마커/값이 안 불러와지는 것처럼 보임). 하단 리드 목록에서 특정 매장을 클릭하면 그제서야 지도에 나타남(사용자 보고: "영업 리드 선택할때 지도랑 값들이 안불러와져", "여전히 안나와, 아래 하단에 리드 매장 선택하면 그때 보여지네").
@@ -119,3 +126,15 @@ ACTIVE
 - **Test Scenario(사용자 확인 필요)**: 세종 소재 리드가 있는 상태에서 지도 "전체 리드 보기" 켜고 지역 드롭다운을 열어 "세종특별자치시" 항목이 정상적으로 뜨는지, 선택 시 세종 리드만 정상적으로 필터링되는지 확인.
 - **Verification**: 클라우드 클론에서 `npx tsc --noEmit` PASS, `npm run build` PASS, `npm test`(vitest 28건) 전부 PASS. Node로 `세종특별자치시 ...`/`세종시 ...`/`세종특별자치시 조치원읍 ...` 등 샘플 주소를 직접 실행해 올바른 결과 확인. `C:\maju-deploy`에서 `node ebcheck_tmp2.js` OK, `git show HEAD` 대비 중괄호/괄호/대괄호 균형 비교로 구조적 정합성 확인, 두 저장소 diff가 완전히 동일함을 확인.
 - **Files**: `components/sales-route-map-workspace.tsx` (`push-latest.bat` git add 목록에 이미 포함).
+
+## FIXED (2026-09-12, 3차 — 라이브 차량 이름)
+- **증상**: 우측 "라이브 차량" 패널에 뜨는 기사 이름이 실제 배송담당자와 안 맞음 — 지역명이 이름 자리에 뜨거나(예: "의정부"), 아무 의미 없는 "개인 사용자"가 뜨는 경우가 있음(사용자 보고: "우측 라이브 차량도 이름이 안맞아").
+- **Root Cause**: `app/api/staff/location/route.ts`의 POST 핸들러가 위치를 갱신할 때마다 `driverName: session.name`을 그대로 `staff_mobile_devices.driver_name`에 저장했음. `session.name`은 카카오/네이버/구글 로그인 닉네임 — 직원이 언제든 바꿀 수 있고, 닉네임 자체가 없으면 `개인 사용자`로 대체됨(`createPersonalKakaoWorkspace`/`createPersonalOAuthWorkspace`). 반면 좌측 "배송담당자 필터"에 뜨는 이름은 관리자가 등록한 정식 이름(`DeliveryVehicle.driver`)이라 서로 다른 소스를 쓰고 있었음 — 오늘 먼저 고친 카카오 초대 자동매칭 버그(2차 항목, `docs/pages/mobile-join.md` FIXED 참고)와 근본 원인이 같은 계열: 세션에 저장된 닉네임을 신뢰 가능한 식별자처럼 재사용한 것.
+- **Trigger**: 초대로 가입한 직원이 카카오/네이버/구글 닉네임을 실제 이름과 다르게 설정했거나(지역명, 별명 등) 닉네임이 비어 있는 상태에서 모바일로 위치 전송(GPS 폴링)을 할 때마다 매번 재현됨 — 특정 조건이 아니라 그 계정이 위치를 보낼 때마다 지속적으로 발생.
+- **Impact**: 지도(`/dashboard`) 탭의 "라이브 차량" 패널 표시에만 영향. 배송 완료 카운트 매칭(`completions.deliveryDriver === vehicle.driverName`)에도 간접 영향 — 닉네임이 실제 이름과 다르면 완료 건수 매칭도 같이 어긋났을 가능성이 있음(이번 수정으로 함께 해소됨). DB의 `company_id`/`user_id` 등 실제 위치 좌표 자체는 항상 올바른 계정 것이었으므로 위치 자체가 틀리게 표시된 적은 없음 — 순수 표시 이름 문제.
+- **Fix**: 오늘 카카오 초대 매칭 버그를 고치며 `CustomerSession`에 추가한 `invitedEmployeeName`(초대 시 관리자가 입력한 정식 이름, `normalizeInvitedEmployeeName`으로 "직원"/"모바일 직원" 같은 기본값은 제외)을 재사용. `app/api/staff/location/route.ts` POST 핸들러가 `driverName: session.invitedEmployeeName || session.name`으로 정식 이름을 우선 쓰고, 정식 이름이 없는 계정(초대 없이 만든 개인/오너 워크스페이스 등)만 기존처럼 닉네임으로 대체. `staff_mobile_devices`는 사용자당 한 행을 갱신(upsert)하는 구조라 다음 GPS 핑부터 바로 반영됨 — 과거 데이터 마이그레이션 불필요.
+- **Regression Risk**: 낮음. 순수 additive 변경(대체 우선순위만 추가)이라 `invitedEmployeeName`이 없는 기존 계정은 동작 변화 없음. 표시 이름만 바뀌고 위치 좌표/차량 매칭 키(`deliveryVehicle`)는 그대로라 지도 마커 위치, 경로 조회, 분석 모달 등 다른 기능에는 영향 없음.
+- **Known follow-up(이번에 해결 안 됨)**: 초대 없이 만든 개인/오너 워크스페이스 계정은 `employee_name` 자체가 없어 카카오 닉네임이 비어 있으면 여전히 "개인 사용자"로 표시됨(KNOWN ISSUES 참고). 정식 해결은 개인/오너 계정용 표시 이름 편집 기능이 필요 — 제품 결정 필요, 이번 스코프에서는 미포함.
+- **Test Scenario(사용자 확인 필요)**: 닉네임이 실제 이름과 다른 초대 계정으로 모바일에서 위치 전송을 다시 시작해, 몇 초 뒤 라이브 차량 패널에 정식 이름이 뜨는지 확인. 완료 건수 카운트도 같이 정상 매칭되는지 확인.
+- **Verification**: 클라우드 클론 `npx tsc --noEmit` PASS, `npm run build` PASS, `npm test`(vitest 28건) 전부 PASS. `C:\maju-deploy`에서 `node ebcheck_tmp2.js` OK, `git show HEAD` 대비 괄호/중괄호/대괄호 균형 비교로 구조적 정합성 확인, 두 저장소 diff 완전 동일. **실제 모바일 기기로 재현 확인은 못 함 — 사용자 테스트 필요.**
+- **Files**: `app/api/staff/location/route.ts`(`push-latest.bat` git add 목록에 이미 포함, 추가 조치 불필요).
