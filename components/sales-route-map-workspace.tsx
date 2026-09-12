@@ -74,7 +74,8 @@ import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/l
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import {
+import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
+import type {
   ChurnRiskCustomer,
   CustomerContactItem,
   DeliveryCompletionEvent,
@@ -86,7 +87,6 @@ import {
   PossibleDuplicateCustomer,
   RoutePlan,
   RoutePlanStop,
-  STAFF_LOCATION_FRESHNESS_MINUTES,
   StaffLocationEvent,
   StaffVehicleLocation
 } from "@/lib/store";

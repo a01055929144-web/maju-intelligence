@@ -19,6 +19,8 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
+export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -483,7 +485,6 @@ export type StaffMobileLocationInput = {
   userAgent?: string;
   userId: string;
 };
-export const STAFF_LOCATION_FRESHNESS_MINUTES = 5;
 export type StaffVehicleLocation = {
   accuracyMeters?: number;
   currentCustomerId?: string;
