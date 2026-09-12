@@ -21,6 +21,7 @@ const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 const memoryAttempts = new Map<string, AttemptRecord>();
+const memoryRequestAttempts = new Map<string, AttemptRecord>();
 
 type SupabaseConfig = { serviceRoleKey: string; url: string };
 
@@ -138,4 +139,50 @@ export async function clearLoginThrottle(identifier: string): Promise<void> {
   }
 
   memoryAttempts.delete(key);
+}
+
+/**
+ * Public, read-only endpoints still need a request-volume ceiling even when their lookup
+ * token has sufficient entropy. This consumes every request (successful or not), unlike
+ * the login limiter above which records only authentication failures.
+ */
+export async function consumeRequestRateLimit(
+  identifier: string,
+  options: { limit?: number; lockoutMs?: number; windowMs?: number } = {}
+): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
+  const limit = Math.max(1, options.limit || 30);
+  const lockoutMs = Math.max(1_000, options.lockoutMs || 10 * 60 * 1000);
+  const windowMs = Math.max(1_000, options.windowMs || 10 * 60 * 1000);
+  const key = `request:${identifier.trim().toLowerCase()}`;
+  const now = Date.now();
+
+  if (getSupabaseConfig()) {
+    const rows = await supabaseThrottleRequest<ThrottleRow[]>(`?identifier=eq.${encodeURIComponent(key)}&select=*`);
+    const existing = rows?.[0];
+    const lockedUntilMs = existing?.locked_until ? new Date(existing.locked_until).getTime() : 0;
+    if (Number.isFinite(lockedUntilMs) && lockedUntilMs > now) {
+      return { allowed: false, retryAfterSeconds: Math.ceil((lockedUntilMs - now) / 1000) };
+    }
+
+    const withinWindow = Boolean(existing) && now - new Date(existing!.first_failure_at).getTime() <= windowMs;
+    const attempts = withinWindow ? existing!.failures + 1 : 1;
+    const firstFailureAt = withinWindow ? existing!.first_failure_at : new Date(now).toISOString();
+    const lockedUntil = attempts > limit ? new Date(now + lockoutMs).toISOString() : null;
+    await supabaseThrottleRequest(`?on_conflict=identifier`, {
+      body: JSON.stringify([{ failures: attempts, first_failure_at: firstFailureAt, identifier: key, locked_until: lockedUntil, updated_at: new Date(now).toISOString() }]),
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      method: "POST"
+    });
+    return lockedUntil ? { allowed: false, retryAfterSeconds: Math.ceil(lockoutMs / 1000) } : { allowed: true };
+  }
+
+  const existing = memoryRequestAttempts.get(key);
+  if (existing?.lockedUntil && existing.lockedUntil > now) {
+    return { allowed: false, retryAfterSeconds: Math.ceil((existing.lockedUntil - now) / 1000) };
+  }
+  const withinWindow = Boolean(existing) && now - existing!.firstFailureAt <= windowMs;
+  const attempts = withinWindow ? existing!.failures + 1 : 1;
+  const lockedUntil = attempts > limit ? now + lockoutMs : null;
+  memoryRequestAttempts.set(key, { failures: attempts, firstFailureAt: withinWindow ? existing!.firstFailureAt : now, lockedUntil });
+  return lockedUntil ? { allowed: false, retryAfterSeconds: Math.ceil(lockoutMs / 1000) } : { allowed: true };
 }
