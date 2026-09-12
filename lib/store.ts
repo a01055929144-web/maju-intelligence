@@ -486,8 +486,10 @@ export type StaffMobileLocationInput = {
 export const STAFF_LOCATION_FRESHNESS_MINUTES = 5;
 export type StaffVehicleLocation = {
   accuracyMeters?: number;
+  assignedManagerName?: string;
   currentCustomerId?: string;
   deliveryVehicle?: string;
+  displayName: string;
   driverName: string;
   id: string;
   isStale: boolean;
@@ -3144,18 +3146,30 @@ function toStaffVehicleLocation(row: {
   last_seen_at?: string | null;
   location_status?: string | null;
   user_id: string;
-}): StaffVehicleLocation | null {
+}, identity?: { assignedManagerName?: string; assignedVehicle?: string; employeeName?: string; userName?: string }): StaffVehicleLocation | null {
   const lat = Number(row.last_lat);
   const lng = Number(row.last_lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const lastLocationAt = row.last_location_at || undefined;
   const staleMs = lastLocationAt ? Date.now() - new Date(lastLocationAt).getTime() : Number.POSITIVE_INFINITY;
   const isStale = staleMs > STAFF_LOCATION_FRESHNESS_MINUTES * 60 * 1000;
+  const usableName = (value?: string) => {
+    const name = value?.trim() || "";
+    return /^(개인 사용자|배송기사|모바일 직원)$/.test(name) ? "" : name;
+  };
+  const displayName =
+    usableName(identity?.assignedManagerName) ||
+    usableName(identity?.employeeName) ||
+    usableName(identity?.userName) ||
+    usableName(row.driver_name || undefined) ||
+    "이름 미등록 직원";
   return {
     accuracyMeters: row.last_accuracy_m === null || row.last_accuracy_m === undefined ? undefined : Number(row.last_accuracy_m),
+    assignedManagerName: identity?.assignedManagerName,
     currentCustomerId: row.current_customer_id || undefined,
-    deliveryVehicle: row.delivery_vehicle || undefined,
-    driverName: row.driver_name || "배송기사",
+    deliveryVehicle: identity?.assignedVehicle || row.delivery_vehicle || undefined,
+    displayName,
+    driverName: displayName,
     id: row.id,
     isStale,
     lastLocationAt,
@@ -3184,6 +3198,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
         accuracyMeters: input.accuracyMeters,
         currentCustomerId: input.currentCustomerId,
         deliveryVehicle: input.deliveryVehicle,
+        displayName: input.driverName || "이름 미등록 직원",
         driverName: input.driverName || "배송기사",
         id: input.userId,
         isStale: false,
@@ -3294,7 +3309,39 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
         companyId
       )}${userFilter}&last_lat=not.is.null&last_lng=not.is.null&order=last_location_at.desc&limit=100`
     );
-    return rows.map(toStaffVehicleLocation).filter((location): location is StaffVehicleLocation => Boolean(location));
+    const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter(Boolean)));
+    const userIdFilter = userIds.map((id) => encodeURIComponent(id)).join(",");
+    const [userRows, invitationRows] = userIds.length
+      ? await Promise.all([
+          supabaseRequest<Array<{ id: string; name: string | null }>>(`app_users?select=id,name&id=in.(${userIdFilter})`).catch(() => []),
+          supabaseRequest<
+            Array<{
+              accepted_by: string | null;
+              assigned_manager_name: string | null;
+              assigned_vehicle: string | null;
+              employee_name: string | null;
+            }>
+          >(
+            `staff_invitations?select=accepted_by,employee_name,assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=in.(${userIdFilter})&status=eq.accepted&order=accepted_at.desc`
+          ).catch(() => [])
+        ])
+      : [[], []];
+    const userNameById = new Map(userRows.map((row) => [row.id, row.name || undefined]));
+    const invitationByUserId = new Map<string, (typeof invitationRows)[number]>();
+    invitationRows.forEach((row) => {
+      if (row.accepted_by && !invitationByUserId.has(row.accepted_by)) invitationByUserId.set(row.accepted_by, row);
+    });
+    return rows
+      .map((row) => {
+        const invitation = invitationByUserId.get(row.user_id);
+        return toStaffVehicleLocation(row, {
+          assignedManagerName: invitation?.assigned_manager_name || undefined,
+          assignedVehicle: invitation?.assigned_vehicle || undefined,
+          employeeName: invitation?.employee_name || undefined,
+          userName: userNameById.get(row.user_id)
+        });
+      })
+      .filter((location): location is StaffVehicleLocation => Boolean(location));
   } catch (error) {
     if (isMissingStaffMobileLocationSchemaError(error)) return [];
     throw error;

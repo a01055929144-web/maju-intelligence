@@ -507,6 +507,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
+  const [selectedLiveVehicleId, setSelectedLiveVehicleId] = useState("");
   const [recalculatingDistances, setRecalculatingDistances] = useState(false);
   const [distanceRecalcError, setDistanceRecalcError] = useState("");
   // 지도 탭에서 바로 켜는 "반경 리드" — 리드 탭의 리드 탐색과 같은 API를 쓰지만,
@@ -942,7 +943,14 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     () => createMarkers(mapMarkers, visibleStores, markerViewMode, vehicleMarkerMeta, completedStoreIdsToday),
     [mapMarkers, markerViewMode, vehicleMarkerMeta, visibleStores, completedStoreIdsToday]
   );
-  const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehicleLocations, storeById), [liveVehicleLocations, storeById]);
+  const selectedLiveVehicle = liveVehicleLocations.find((location) => location.id === selectedLiveVehicleId);
+  const liveVehiclesForMap = useMemo(() => {
+    if (selectedLiveVehicleId) return liveVehicleLocations.filter((location) => location.id === selectedLiveVehicleId);
+    if (vehicleFilterId === "all") return liveVehicleLocations;
+    const deliveryVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
+    return deliveryVehicle ? liveVehicleLocations.filter((location) => liveVehicleMatchesDeliveryGroup(location, deliveryVehicle)) : liveVehicleLocations;
+  }, [deliveryVehicles, liveVehicleLocations, selectedLiveVehicleId, vehicleFilterId]);
+  const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehiclesForMap, storeById), [liveVehiclesForMap, storeById]);
   const liveVehicleSummary = useMemo(() => {
     const active = liveVehicleLocations.filter((location) => !location.isStale).length;
     const stale = liveVehicleLocations.filter((location) => location.isStale).length;
@@ -1226,10 +1234,23 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   }, []);
   const selectVehicle = (vehicleId: string) => {
     setVehicleFilterId(vehicleId);
+    setSelectedLiveVehicleId("");
     setGradeFilter("all");
     setMapFocusId("");
     setPreviewStoreId("");
     setSelectedId("");
+  };
+  const selectLiveVehicle = (location: StaffVehicleLocation) => {
+    const matchingGroup = deliveryVehicles.find((vehicle) => liveVehicleMatchesDeliveryGroup(location, vehicle));
+    setVehicleFilterId(matchingGroup?.id || "all");
+    setSelectedLiveVehicleId(location.id);
+    setGradeFilter("all");
+    setPreviewLeadId("");
+    setPreviewStoreId("");
+    setSelectedId("");
+    setMapFocusId(`vehicle-${location.id}`);
+    setMarkerViewMode("vehicle");
+    if (mainMapRouteVehicleId !== location.id) void toggleMainMapRoute(location);
   };
 
   const focusOrigin = () => {
@@ -2578,11 +2599,25 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
               onAddDriver={addManualDriver}
               onDeleteVehicle={deleteVehicle}
-              onSelectVehicle={selectVehicle}
+              onSelectLiveVehicle={selectLiveVehicle}
+              onSelectVehicle={(vehicleId) => {
+                if (vehicleId === "all") {
+                  selectVehicle("all");
+                  const routedVehicle = liveVehicleLocations.find((location) => location.id === mainMapRouteVehicleId);
+                  if (routedVehicle) void toggleMainMapRoute(routedVehicle);
+                  return;
+                }
+                const group = deliveryVehicles.find((vehicle) => vehicle.id === vehicleId);
+                const liveVehicle = group && liveVehicleLocations.find((location) => liveVehicleMatchesDeliveryGroup(location, group));
+                if (liveVehicle) selectLiveVehicle(liveVehicle);
+                else selectVehicle(vehicleId);
+              }}
               onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
               onUpdateVehicle={updateVehicle}
               selectedVehicleId={vehicleFilterId}
+              selectedLiveVehicleId={selectedLiveVehicleId}
               totalStores={allStores.length}
+              liveVehicles={liveVehicleLocations}
               vehicles={deliveryVehicles}
             />
           </div>
@@ -2611,6 +2646,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 }}
                 onToggleRoute={toggleMainMapRoute}
                 routeLoading={mainMapRouteLoading}
+                selectedVehicle={selectedLiveVehicle}
                 storeById={storeById}
                 vehicles={liveVehicleLocations}
               />
@@ -3071,23 +3107,29 @@ function ConfirmDialog({
 function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
+  liveVehicles,
   onAddDriver,
   onDeleteVehicle,
+  onSelectLiveVehicle,
   onSelectVehicle,
   onToggleCollapsed,
   onUpdateVehicle,
   selectedVehicleId,
+  selectedLiveVehicleId,
   totalStores,
   vehicles
 }: {
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
+  readonly liveVehicles: StaffVehicleLocation[];
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onDeleteVehicle: (vehicle: DeliveryVehicle) => Promise<{ ok: boolean; message?: string }>;
+  readonly onSelectLiveVehicle: (vehicle: StaffVehicleLocation) => void;
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly selectedVehicleId: string;
+  readonly selectedLiveVehicleId: string;
   readonly totalStores: number;
   readonly vehicles: DeliveryVehicle[];
 }) {
@@ -3096,6 +3138,13 @@ function DeliveryAssignmentPanel({
   const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<{ vehicleId: string; message: string } | null>(null);
   const [pendingDeleteVehicle, setPendingDeleteVehicle] = useState<DeliveryVehicle | null>(null);
+  const [liveSearch, setLiveSearch] = useState("");
+  const [liveStatusFilter, setLiveStatusFilter] = useState<"all" | "active" | "stale">("all");
+  const normalizedLiveSearch = liveSearch.trim().toLowerCase();
+  const filteredLiveVehicles = [...liveVehicles]
+    .filter((location) => liveStatusFilter === "all" || (liveStatusFilter === "active" ? !location.isStale : location.isStale))
+    .filter((location) => !normalizedLiveSearch || `${location.displayName} ${location.deliveryVehicle || ""}`.toLowerCase().includes(normalizedLiveSearch))
+    .sort((a, b) => Number(a.isStale) - Number(b.isStale));
 
   // 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아") 대응: 삭제 버튼을 누르면 바로
   // window.confirm()을 띄우던 예전 방식 대신, 화면 안에 확인 모달(ConfirmDialog)을 띄우도록 2단계로
@@ -3154,6 +3203,53 @@ function DeliveryAssignmentPanel({
         >
           <PanelLeftClose className="h-4 w-4" />
         </button>
+      </div>
+      <div className="space-y-2 border-b border-slate-200 bg-slate-50/70 p-3">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+          <input
+            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-xs font-bold text-slate-800 outline-none focus:border-teal-300"
+            onChange={(event) => setLiveSearch(event.target.value)}
+            placeholder="라이브 담당자·차량 검색"
+            value={liveSearch}
+          />
+        </label>
+        <div className="grid grid-cols-3 gap-1">
+          {(["all", "active", "stale"] as const).map((status) => {
+            const count = status === "all" ? liveVehicles.length : liveVehicles.filter((location) => (status === "active" ? !location.isStale : location.isStale)).length;
+            const label = status === "all" ? "전체" : status === "active" ? "활성" : "지연";
+            return (
+              <button
+                className={`rounded-md px-2 py-1.5 text-[11px] font-black ${liveStatusFilter === status ? "bg-teal-700 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200"}`}
+                key={status}
+                onClick={() => setLiveStatusFilter(status)}
+                type="button"
+              >
+                {label} {count}
+              </button>
+            );
+          })}
+        </div>
+        <div className="max-h-40 space-y-1 overflow-auto">
+          {filteredLiveVehicles.map((location) => (
+            <button
+              className={`flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left ${selectedLiveVehicleId === location.id ? "border-teal-300 bg-teal-50 ring-1 ring-teal-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+              key={location.id}
+              onClick={() => onSelectLiveVehicle(location)}
+              type="button"
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: location.isStale ? "#94a3b8" : vehicleColorForId(location.id) }} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-black text-slate-900">{location.displayName}</span>
+                <span className="block truncate text-[10px] font-bold text-slate-500">{location.deliveryVehicle || "차량 미배정"} · {formatVehicleLocationAge(location.lastLocationAt) || "수신 전"}</span>
+              </span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${location.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                {location.isStale ? "지연" : "활성"}
+              </span>
+            </button>
+          ))}
+          {!filteredLiveVehicles.length ? <p className="rounded-md bg-white px-2 py-2 text-center text-[11px] font-bold text-slate-500">조건에 맞는 라이브 차량이 없습니다.</p> : null}
+        </div>
       </div>
       <div className="border-b border-slate-100 p-3">
         <button
@@ -4304,6 +4400,7 @@ function LiveVehicleStatusPanel({
   onPreviewStore,
   onToggleRoute,
   routeLoading,
+  selectedVehicle,
   storeById,
   vehicles
 }: {
@@ -4316,13 +4413,10 @@ function LiveVehicleStatusPanel({
   readonly onPreviewStore: (storeId: string) => void;
   readonly onToggleRoute?: (vehicle: StaffVehicleLocation) => void;
   readonly routeLoading?: boolean;
+  readonly selectedVehicle?: StaffVehicleLocation;
   readonly storeById: Map<string, StoreRow>;
   readonly vehicles: StaffVehicleLocation[];
 }) {
-  // 2026-09-07 피드백("직원들이 많아질수록 보기 쉽게 구현해"): 차량이 5~6대를 넘어가면 스크롤로만
-  // 훑어야 해서 원하는 기사를 찾기 번거로워집니다. 기사명/배송차량 이름으로 즉시 걸러낼 수 있는
-  // 검색창을 목록 위에 둡니다.
-  const [search, setSearch] = useState("");
   const sorted = [...vehicles].sort((a, b) => {
     const staleDiff = Number(a.isStale) - Number(b.isStale);
     if (staleDiff !== 0) return staleDiff;
@@ -4331,10 +4425,7 @@ function LiveVehicleStatusPanel({
     return bTime - aTime;
   });
   const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
-  const normalizedSearch = search.trim().toLowerCase();
-  const filtered = normalizedSearch
-    ? sorted.filter((vehicle) => `${vehicle.driverName} ${vehicle.deliveryVehicle}`.toLowerCase().includes(normalizedSearch))
-    : sorted;
+  const filtered = selectedVehicle ? [selectedVehicle] : [];
   return (
     <section className="border-b border-slate-200/80 bg-white">
       <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -4343,23 +4434,12 @@ function LiveVehicleStatusPanel({
             <Truck className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-xs font-black text-slate-950">라이브 차량</p>
+            <p className="truncate text-xs font-black text-slate-950">{selectedVehicle ? selectedVehicle.displayName : "라이브 차량 요약"}</p>
             <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대 · {STAFF_LOCATION_FRESHNESS_MINUTES}분 기준</p>
           </div>
         </div>
         <Badge className="shrink-0 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{sorted.length}대</Badge>
       </div>
-      {sorted.length > 5 ? (
-        <div className="px-3 pb-2">
-          <input
-            className="h-7 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] font-bold text-slate-800 placeholder:text-slate-400 focus:border-teal-300 focus:bg-white focus:outline-none"
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="기사명 또는 배송차량 검색"
-            type="text"
-            value={search}
-          />
-        </div>
-      ) : null}
       <div className="max-h-64 space-y-1 overflow-auto px-3 pb-2">
         {!sorted.length ? (
           <div className="rounded-md border border-amber-100 bg-amber-50 px-2 py-2">
@@ -4367,8 +4447,8 @@ function LiveVehicleStatusPanel({
             <p className="mt-1 text-[10px] font-bold leading-4 text-amber-700">기사 모바일 화면에서 위치 권한을 허용하면 지도에 표시됩니다.</p>
           </div>
         ) : null}
-        {sorted.length && !filtered.length ? (
-          <p className="rounded-md bg-slate-50 px-2 py-2 text-[11px] font-bold text-slate-500">&quot;{search}&quot;와 일치하는 차량이 없습니다.</p>
+        {sorted.length && !selectedVehicle ? (
+          <p className="rounded-md bg-slate-50 px-2 py-2 text-[11px] font-bold leading-5 text-slate-500">좌측 배송담당자 필터에서 라이브 차량을 선택하면 현재 위치와 운행 상세가 표시됩니다.</p>
         ) : null}
         {filtered.map((vehicle) => {
           const checkedAt = vehicle.lastLocationAt ? new Date(vehicle.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전";
@@ -4389,9 +4469,9 @@ function LiveVehicleStatusPanel({
                 <div className="flex min-w-0 items-center gap-1.5">
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
                   <div className="min-w-0">
-                    <p className="truncate text-[11px] font-black text-slate-900">{vehicle.deliveryVehicle || vehicle.driverName}</p>
+                    <p className="truncate text-[11px] font-black text-slate-900">{vehicle.displayName}</p>
                     <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
-                      {currentStore ? `작업 ${currentStore.name}` : vehicle.driverName} · {checkedAt}
+                      {vehicle.deliveryVehicle || "차량 미배정"} · {currentStore ? `작업 ${currentStore.name}` : "현재 작업 없음"} · {checkedAt}
                       {ageText ? ` · ${ageText}` : ""}
                     </p>
                   </div>
@@ -4402,7 +4482,7 @@ function LiveVehicleStatusPanel({
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
-                  {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
+                  현재 {vehicle.lat.toFixed(5)}, {vehicle.lng.toFixed(5)} · {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
                   {completedCount ? <span className="font-black text-emerald-600"> · 완료 {completedCount}곳</span> : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
@@ -8634,6 +8714,16 @@ export function vehicleColorForId(id: string): string {
     hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
   }
   return VEHICLE_COLOR_PALETTE[hash % VEHICLE_COLOR_PALETTE.length];
+}
+
+function liveVehicleMatchesDeliveryGroup(location: StaffVehicleLocation, vehicle: DeliveryVehicle) {
+  const locationKeys = [location.assignedManagerName, location.displayName, location.deliveryVehicle]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean);
+  const vehicleKeys = [vehicle.name, vehicle.driver, ...vehicle.stops.flatMap((stop) => [stop.deliveryDriver, stop.deliveryVehicle])]
+    .map((value) => value?.trim().toLowerCase())
+    .filter(Boolean);
+  return locationKeys.some((key) => vehicleKeys.includes(key));
 }
 
 function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: Map<string, StoreRow>): KakaoMapMarker[] {
