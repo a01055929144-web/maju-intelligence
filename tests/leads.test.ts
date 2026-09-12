@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import { enrichLeadRecommendations } from "../lib/leads";
+import { enrichLeadRecommendations, normalizeKakaoCategoryIndustry } from "../lib/leads";
 import type { LeadRecommendation } from "../lib/analysis";
 
 const sampleLeads: LeadRecommendation[] = [
   { name: "성수동 한식 A", region: "성수동", score: 90, reasons: ["배송반경", "예상매출", "업종 적합"], industry: "한식" },
   { name: "성수동 신규오픈 B", region: "성수동", score: 85, reasons: ["신규오픈", "White Space", "경쟁사 미확인"], industry: "한식" }
 ];
+
+describe("normalizeKakaoCategoryIndustry", () => {
+  it("maps detailed Kakao categories to MAJU industry buckets", () => {
+    expect(normalizeKakaoCategoryIndustry("곱창전골")).toBe("한식");
+    expect(normalizeKakaoCategoryIndustry("맥주,호프")).toBe("주점");
+    expect(normalizeKakaoCategoryIndustry("베이커리")).toBe("카페/디저트");
+    expect(normalizeKakaoCategoryIndustry("")).toBe("미분류");
+  });
+});
 
 describe("enrichLeadRecommendations", () => {
   it("returns leads unchanged when no Kakao REST key is configured", async () => {

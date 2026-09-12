@@ -30,6 +30,23 @@ export type LeadDuplicateMatch = {
   reason: "사업자번호 일치" | "상호명·전화번호 일치" | "상호명·주소 일치";
 };
 
+/** Converts Kakao's detailed place category into the smaller industry buckets used by MAJU. */
+export function normalizeKakaoCategoryIndustry(category: string) {
+  const value = category.trim();
+  if (!value) return "미분류";
+  const rules: ReadonlyArray<[string, RegExp]> = [
+    ["한식", /한식|국밥|해장국|백반|찌개|탕|곰탕|설렁탕|분식|족발|보쌈|삼겹살|갈비|곱창/],
+    ["카페/디저트", /카페|커피|디저트|베이커리|제과|빵/],
+    ["일식", /일식|이자카야|스시|초밥|라멘|돈카츠|우동|회/],
+    ["중식", /중식|중국요리|마라|양꼬치|짬뽕|짜장/],
+    ["프랜차이즈/배달", /치킨|피자|버거|패스트푸드/],
+    ["주점", /주점|포차|호프|술집|바$/],
+    ["양식", /양식|파스타|스테이크|브런치/],
+    ["뷔페/단체급식", /뷔페|단체급식|구내식당|케이터링/]
+  ];
+  return rules.find(([, pattern]) => pattern.test(value))?.[0] || value;
+}
+
 function normalizeDuplicateText(value: string | null | undefined) {
   return (value || "").toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }

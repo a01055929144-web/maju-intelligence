@@ -87,7 +87,6 @@ import type {
   PossibleDuplicateCustomer,
   RoutePlan,
   RoutePlanStop,
-  STAFF_LOCATION_FRESHNESS_MINUTES,
   StaffLocationEvent,
   StaffVehicleLocation
 } from "@/lib/store";
