@@ -74,7 +74,8 @@ import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/l
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import {
+import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
+import type {
   ChurnRiskCustomer,
   CustomerContactItem,
   DeliveryCompletionEvent,
@@ -4434,6 +4435,8 @@ function LiveVehicleStatusPanel({
             <Truck className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0">
+            {/* 병합 노트(2026-09-12): origin b083f38(Codex)은 displayName 필드가 없던 옛 버전이라 conflict.
+                lib/store.ts의 StaffVehicleLocation.displayName(로컬 전용 기능)을 유지하는 쪽으로 해소. */}
             <p className="truncate text-xs font-black text-slate-950">{selectedVehicle ? selectedVehicle.displayName : "라이브 차량 요약"}</p>
             <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대 · {STAFF_LOCATION_FRESHNESS_MINUTES}분 기준</p>
           </div>

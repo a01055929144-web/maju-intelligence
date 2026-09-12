@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { getRevenuePipeline, type RevenuePipeline } from "@/lib/store";
 
 const emptyPipeline: RevenuePipeline = {
@@ -18,6 +18,9 @@ export async function GET(request: NextRequest) {
 
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  if (!scopeHasCapability(scope, "view_company_operations")) {
+    return NextResponse.json({ message: "회사 전체 예상매출 파이프라인은 대표 또는 관리자만 조회할 수 있습니다." }, { status: 403 });
   }
 
   try {

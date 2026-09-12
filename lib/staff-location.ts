@@ -1,0 +1,1 @@
+export const STAFF_LOCATION_FRESHNESS_MINUTES = 5;

@@ -19,6 +19,8 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
+export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -483,7 +485,10 @@ export type StaffMobileLocationInput = {
   userAgent?: string;
   userId: string;
 };
-export const STAFF_LOCATION_FRESHNESS_MINUTES = 5;
+// 병합 노트(2026-09-12): origin b083f38(Codex)이 이 상수를 lib/staff-location.ts로 추출하고
+// 파일 위쪽에서 `export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location"`로 재노출하도록
+// 리팩터링했는데, git이 이 파일 안쪽의 기존 inline 선언(줄이 멀리 떨어져 있어 conflict로 잡히지 않음)과
+// 자동 병합하면서 "Multiple exports with the same name" 중복 선언이 됐던 것을 제거했습니다(값은 동일하게 5).
 export type StaffVehicleLocation = {
   accuracyMeters?: number;
   assignedManagerName?: string;
@@ -3153,6 +3158,11 @@ function toStaffVehicleLocation(row: {
   const lastLocationAt = row.last_location_at || undefined;
   const staleMs = lastLocationAt ? Date.now() - new Date(lastLocationAt).getTime() : Number.POSITIVE_INFINITY;
   const isStale = staleMs > STAFF_LOCATION_FRESHNESS_MINUTES * 60 * 1000;
+  // 병합 노트(2026-09-12): origin b083f38(Codex)은 이 식별자 우선순위 로직 자체가 없는 옛 버전을
+  // 유지하고 있었고, C:\maju-deploy 로컬에만 있던 기능이라 merge conflict가 났습니다. 아래 로직은
+  // getStaffVehicleLocations()의 identity(담당자/직원명) 조인과 StaffVehicleLocation.displayName /
+  // assignedManagerName 필드, 그리고 UI(sales-route-map-workspace.tsx)의 displayName 표시가 모두
+  // 이 값에 의존하고 있어 origin 쪽(빈 블록)을 취하면 빌드가 깨지므로 로컬 버전을 그대로 유지합니다.
   const usableName = (value?: string) => {
     const name = value?.trim() || "";
     return /^(개인 사용자|배송기사|모바일 직원)$/.test(name) ? "" : name;
