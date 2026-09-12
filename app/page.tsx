@@ -328,15 +328,16 @@ export default function Home() {
     if (response?.ok) {
       setDuplicateNotice(null);
       const customerId = String(payload?.customer?.id || "");
+      const persisted = payload?.persisted === true && Boolean(customerId);
       setLastManualCustomerHref(customerId ? customerHistoryHref(customerId) : "/crm/timeline");
       setLastManualCustomer(customerId ? { id: customerId, name: String(nextRow.customerName || nextRow.name || "신규 거래처") } : null);
-      setManualSaveMessage(payload?.persisted === false ? "검수 목록에는 반영됐습니다. 저장 상태는 관리자 시스템 점검에서 확인하세요." : "저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다.");
+      setManualSaveMessage(persisted ? "저장했습니다. 거래처 히스토리에서 바로 확인할 수 있습니다." : "검수 목록에는 반영됐지만 저장 식별자를 확인하지 못했습니다. 관리자 시스템 상태를 확인해주세요.");
       setRegistrationStatus({
-        actionLabel: payload?.persisted === false ? "저장 확인" : "저장 완료",
-        description: payload?.persisted === false ? "입력값은 화면에 반영됐지만 저장 여부는 추가 확인이 필요합니다." : "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다.",
-        nextAction: customerId ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "거래처 히스토리 화면에서 저장 결과를 확인하세요.",
-        status: payload?.persisted === false ? "warning" : "success",
-        title: payload?.persisted === false ? "저장 확인이 필요합니다." : "수기 등록이 완료됐습니다."
+        actionLabel: persisted ? "저장 완료" : "저장 확인",
+        description: persisted ? "거래처 원장에 저장됐고 히스토리 화면에서 확인할 수 있습니다." : "입력값은 화면에 반영됐지만 서버 저장 식별자가 없어 추가 확인이 필요합니다.",
+        nextAction: persisted ? "히스토리에서 확인하거나 추가 거래처를 계속 등록하세요." : "관리자 시스템 상태를 확인한 뒤 다시 저장하세요.",
+        status: persisted ? "success" : "warning",
+        title: persisted ? "수기 등록이 완료됐습니다." : "저장 확인이 필요합니다."
       });
       await refreshUploadHistory();
     } else if (response?.status === 401) {
@@ -484,7 +485,7 @@ export default function Home() {
 
     if (response?.ok) {
       const payload = await response.json().catch(() => null);
-      const persisted = Boolean(payload?.persisted);
+      const persisted = Boolean(payload?.persisted && payload?.uploadedFileId && payload?.importId && payload?.reportId);
       setPipelineMeta({
         rows: payload?.pipeline?.rows || nextRows.length,
         qualityScore: payload?.pipeline?.qualityScore || 0,
@@ -5028,7 +5029,9 @@ function isUploadTemplateType(value: string | null): value is UploadTemplateType
 
 function uploadHistoryEndpoint() {
   const companyId = getAdminCompanyIdFromUrl();
-  return companyId ? `/api/upload-history?companyId=${encodeURIComponent(companyId)}` : "/api/upload-history";
+  const params = new URLSearchParams({ limit: "100", offset: "0" });
+  if (companyId) params.set("companyId", companyId);
+  return `/api/upload-history?${params.toString()}`;
 }
 
 function customerMasterEndpoint() {

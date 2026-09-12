@@ -21,6 +21,9 @@ type UploadHistoryItem = {
   createdAt: string;
 };
 
+const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
+type HistoryPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
+
 function getAdminCompanyIdFromUrl() {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("companyId") || "";
@@ -68,17 +71,24 @@ export default function CustomerDataManagementPage() {
   const [uploads, setUploads] = useState<UploadHistoryItem[]>([]);
   const [uploadsLoaded, setUploadsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<HistoryPageSize>(10);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     let active = true;
-    const endpoint = adminCompanyId ? `/api/upload-history?companyId=${encodeURIComponent(adminCompanyId)}` : "/api/upload-history";
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String((page - 1) * pageSize) });
+    if (adminCompanyId) params.set("companyId", adminCompanyId);
+    const endpoint = `/api/upload-history?${params.toString()}`;
 
     setLoadError(false);
+    setUploadsLoaded(false);
     fetchWithTimeout(endpoint, { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
       .then((payload) => {
         if (!active) return;
         setUploads(Array.isArray(payload?.uploads) ? payload.uploads : []);
+        setHasMore(Boolean(payload?.hasMore));
         setUploadsLoaded(true);
       })
       .catch(() => {
@@ -90,7 +100,11 @@ export default function CustomerDataManagementPage() {
     return () => {
       active = false;
     };
-  }, [adminCompanyId]);
+  }, [adminCompanyId, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [adminCompanyId, pageSize]);
 
   const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
 
@@ -119,12 +133,29 @@ export default function CustomerDataManagementPage() {
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
         <div className="maju-section-card">
-          <div className="border-b border-slate-200/80 p-4">
-            <h2 className="flex items-center gap-2 text-base font-black text-slate-950">
-              <Save className="h-4 w-4 text-teal-700" />
-              업로드 이력
-            </h2>
-            <p className="mt-1 text-xs font-bold text-slate-500">과거 데이터 업로드 작업의 파일명, 처리 건수, 시각, 처리 결과입니다.</p>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 p-4">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-black text-slate-950">
+                <Save className="h-4 w-4 text-teal-700" />
+                업로드 이력
+              </h2>
+              <p className="mt-1 text-xs font-bold text-slate-500">과거 데이터 업로드 작업의 파일명, 처리 건수, 시각, 처리 결과입니다.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                보기
+                <select
+                  className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
+                  onChange={(event) => setPageSize(Number(event.target.value) as HistoryPageSize)}
+                  value={pageSize}
+                >
+                  {LIST_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}개</option>)}
+                </select>
+              </label>
+              <span className="rounded-full bg-slate-50 px-2 py-1 text-xs font-black text-slate-500">{uploads.length ? `${(page - 1) * pageSize + 1}-${(page - 1) * pageSize + uploads.length}` : "0"}</span>
+              <button className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 disabled:opacity-40" disabled={page <= 1 || !uploadsLoaded} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">이전</button>
+              <button className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 disabled:opacity-40" disabled={!hasMore || !uploadsLoaded} onClick={() => setPage((value) => value + 1)} type="button">다음</button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             {!uploadsLoaded ? (

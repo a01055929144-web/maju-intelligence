@@ -35,7 +35,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   const [lastSentAt, setLastSentAt] = useState("");
   const [lastAccuracyMeters, setLastAccuracyMeters] = useState<number | null>(null);
   const [queuedCount, setQueuedCount] = useState(0);
-  const isFlushingRef = useRef(false);
+  const flushPromiseRef = useRef<Promise<void> | null>(null);
   const lastPostAtRef = useRef(0);
   const lastContextPostKeyRef = useRef("");
   const latestPositionRef = useRef<GeolocationPosition | null>(null);
@@ -66,34 +66,43 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
     }
   }, []);
 
-  const flushQueuedLocations = useCallback(async () => {
-    if (isFlushingRef.current || typeof window === "undefined" || navigator.onLine === false) return;
-    const queue = readLocationQueue();
-    if (!queue.length) {
-      setQueuedCount(0);
-      return;
-    }
-    isFlushingRef.current = true;
-    const remaining = [...queue];
-    try {
-      while (remaining.length) {
-        const payload = remaining[0];
-        await sendPayload(payload);
-        remaining.shift();
+  const flushQueuedLocations = useCallback((): Promise<void> => {
+    if (flushPromiseRef.current) return flushPromiseRef.current;
+    if (typeof window === "undefined" || navigator.onLine === false) return Promise.resolve();
+
+    const task = (async () => {
+      const remaining = [...readLocationQueue()];
+      if (!remaining.length) {
+        setQueuedCount(0);
+        return;
+      }
+      try {
+        while (remaining.length) {
+          const payload = remaining[0];
+          await sendPayload(payload);
+          remaining.shift();
+          writeLocationQueue(remaining);
+          setQueuedCount(remaining.length);
+        }
+        setDetail("");
+        setState("ready");
+        setLastSentAt(formatLocationTime(new Date()));
+      } catch (error) {
         writeLocationQueue(remaining);
         setQueuedCount(remaining.length);
+        setDetail(error instanceof Error ? error.message : "저장 대기 중인 위치가 있습니다.");
+        setState("error");
+        throw error;
       }
-      setDetail("");
-      setState("ready");
-      setLastSentAt(formatLocationTime(new Date()));
-    } catch (error) {
-      writeLocationQueue(remaining);
-      setQueuedCount(remaining.length);
-      setDetail(error instanceof Error ? error.message : "저장 대기 중인 위치가 있습니다.");
-      setState("error");
-    } finally {
-      isFlushingRef.current = false;
-    }
+    })();
+
+    flushPromiseRef.current = task;
+    void task
+      .finally(() => {
+        if (flushPromiseRef.current === task) flushPromiseRef.current = null;
+      })
+      .catch(() => undefined);
+    return task;
   }, [sendPayload]);
 
   const postPosition = useCallback(
@@ -115,7 +124,13 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         status
       };
 
-      sendPayload(payload)
+      const sendCurrentPosition = async () => {
+        // 과거 대기 좌표를 먼저 시간순으로 저장해야 이전 좌표가 현재 위치를 덮지 않습니다.
+        if (status === "active") await flushQueuedLocations();
+        await sendPayload(payload);
+      };
+
+      sendCurrentPosition()
         .then(async () => {
           setDetail("");
           setState("ready");
@@ -180,8 +195,8 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
       if (latestPositionRef.current) postPosition(latestPositionRef.current, true, "paused");
     };
     const handleFocus = () => requestCurrentPosition(true);
-    const handleOnline = () => {
-      flushQueuedLocations();
+    const handleOnline = async () => {
+      await flushQueuedLocations();
       requestCurrentPosition(true);
     };
     const handleOffline = () => {

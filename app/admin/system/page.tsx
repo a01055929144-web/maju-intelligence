@@ -14,19 +14,86 @@ const statusLabels = {
   missing: "누락"
 };
 
-export default async function AdminSystemPage() {
+function singleParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+function getCredentialSafety() {
+  const issues = [
+    (!process.env.ADMIN_EMAIL || process.env.ADMIN_EMAIL === "admin@maju.local") && "관리자 이메일이 기본값이거나 누락되었습니다.",
+    (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === "maju-admin-2026") && "관리자 비밀번호가 기본값이거나 누락되었습니다.",
+    (!process.env.CUSTOMER_EMAIL || process.env.CUSTOMER_EMAIL === "owner@maju.local") && "고객사 이메일이 기본값이거나 누락되었습니다.",
+    (!process.env.CUSTOMER_PASSWORD || process.env.CUSTOMER_PASSWORD === "maju-owner-2026") && "고객사 비밀번호가 기본값이거나 누락되었습니다.",
+    (!process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_SESSION_SECRET.length < 32) && "관리자 세션 시크릿이 누락되었거나 32자보다 짧습니다."
+  ].filter((issue): issue is string => Boolean(issue));
+
+  return { issues, safe: issues.length === 0 };
+}
+
+export default async function AdminSystemPage({
+  searchParams
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const [system, auditLogs] = await Promise.all([getSystemDiagnostics(), getAdminAuditLogs().catch(() => [])]);
-  const sensitiveAuditCount = auditLogs.filter((log) => auditHasSensitiveChange(log.metadata)).length;
-  const dataAuditCount = auditLogs.filter((log) => auditActionTone(log.action) === "data").length;
-  const accountAuditCount = auditLogs.filter((log) => auditActionTone(log.action) === "account").length;
+  const params = await searchParams;
+  const auditCompany = singleParam(params.auditCompany);
+  const auditQuery = singleParam(params.auditQuery).trim().toLowerCase();
+  const auditTone = singleParam(params.auditTone);
+  const [system, auditResult] = await Promise.all([
+    getSystemDiagnostics(),
+    getAdminAuditLogs(undefined, 50)
+      .then((logs) => ({ error: "", logs }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error.message : "감사 로그를 불러오지 못했습니다.", logs: [] }))
+  ]);
+  const auditLogs = auditResult.logs;
+  const auditCompanies = Array.from(new Map(auditLogs.filter((log) => log.companyId).map((log) => [log.companyId, log.company])).entries()).sort((a, b) => a[1].localeCompare(b[1], "ko"));
+  const filteredAuditLogs = auditLogs.filter((log) => {
+    const tone = auditHasSensitiveChange(log.metadata) ? "danger" : auditActionTone(log.action);
+    const matchesCompany = !auditCompany || log.companyId === auditCompany;
+    const matchesTone = !auditTone || tone === auditTone;
+    const matchesQuery = !auditQuery || [log.actorName, log.company, auditActionLabel(log.action), auditMetadataSummary(log.metadata)]
+      .some((value) => value.toLowerCase().includes(auditQuery));
+    return matchesCompany && matchesTone && matchesQuery;
+  });
+  const sensitiveAuditCount = filteredAuditLogs.filter((log) => auditHasSensitiveChange(log.metadata)).length;
+  const dataAuditCount = filteredAuditLogs.filter((log) => auditActionTone(log.action) === "data").length;
+  const accountAuditCount = filteredAuditLogs.filter((log) => auditActionTone(log.action) === "account").length;
   const databaseReady = system.mode === "production-db" && system.databaseChecks.length > 0 && system.databaseChecks.every((check) => check.status === "ready");
   const storageReady = system.storageChecks.length > 0 && system.storageChecks.every((check) => check.status === "ready");
-  const authReady = system.adminConfigured && system.customerConfigured;
+  const credentialSafety = getCredentialSafety();
+  const authReady = system.adminConfigured && system.customerConfigured && credentialSafety.safe;
   const deployReady = system.appUrlConfigured;
   const operationDataReady = system.databaseChecks.some((check) => check.name === "정제 거래처" && Number(check.count || 0) > 0);
+  const privacyOperations = [
+    {
+      detail: storageReady ? "비공개 customer-attachments 버킷 연결이 확인되었습니다." : "Storage 연결과 비공개 버킷 정책을 확인하세요.",
+      label: "민감 첨부파일 저장소",
+      ready: storageReady
+    },
+    {
+      detail: "첨부파일 열람 API가 회사 경로와 담당 거래처 권한을 확인한 뒤 단기 서명 URL을 발급합니다.",
+      label: "첨부파일 접근 통제",
+      ready: true
+    },
+    {
+      detail: "직원 위치 이벤트는 365일 보관 후 일일 크론에서 삭제하도록 설정되어 있습니다.",
+      label: "위치정보 보관기간",
+      ready: true
+    },
+    {
+      detail: process.env.CRON_SECRET ? "CRON_SECRET이 설정되어 자동 정리 요청을 인증할 수 있습니다." : "CRON_SECRET이 없어 자동 위치정보 정리를 실행할 수 없습니다.",
+      label: "위치정보 자동 정리 인증",
+      ready: Boolean(process.env.CRON_SECRET)
+    },
+    {
+      detail: "최근 정리 성공 시각과 삭제 건수는 아직 별도 운영 로그로 저장하지 않습니다.",
+      label: "최근 정리 실행 증적",
+      ready: false
+    }
+  ];
   const launchGates = [
     {
       description: databaseReady ? "Supabase 테이블 연결과 카운트 확인이 완료되었습니다." : "Supabase 환경변수와 schema.sql 적용, 테이블 카운트를 확인하세요.",
@@ -34,7 +101,7 @@ export default async function AdminSystemPage() {
       ready: databaseReady
     },
     {
-      description: authReady ? "관리자와 고객사 로그인 환경값이 설정되었습니다." : "관리자/고객사 인증값과 세션 시크릿을 운영값으로 교체하세요.",
+      description: authReady ? "관리자와 고객사 인증값이 기본값이 아니며 세션 시크릿 강도 기준을 충족합니다." : "관리자/고객사 기본 자격증명과 세션 시크릿 강도를 확인하세요.",
       label: "권한 분리",
       ready: authReady
     },
@@ -186,9 +253,62 @@ export default async function AdminSystemPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Database} label="데이터 모드" value={system.mode === "production-db" ? "실 DB" : "저장 확인 필요"} />
           <Metric icon={ServerCog} label="앱 URL" value={system.appUrlConfigured ? "설정됨" : "미설정"} />
-          <Metric icon={KeyRound} label="관리자 인증" value={system.adminConfigured ? "운영값" : "기본값"} />
-          <Metric icon={ShieldAlert} label="고객사 인증" value={system.customerConfigured ? "운영값" : "기본값"} />
+          <Metric icon={KeyRound} label="관리자 인증" value={system.adminConfigured && !credentialSafety.issues.some((issue) => issue.startsWith("관리자")) ? "안전" : "점검 필요"} />
+          <Metric icon={ShieldAlert} label="고객사 인증" value={system.customerConfigured && !credentialSafety.issues.some((issue) => issue.startsWith("고객사")) ? "안전" : "점검 필요"} />
         </div>
+
+        <Card className={credentialSafety.safe ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              자격증명·Secret 노출 안전 점검
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {credentialSafety.safe ? (
+              <p className="text-sm font-bold leading-6 text-emerald-800">기본 자격증명을 사용하지 않으며 세션 시크릿 길이 기준을 충족합니다. 실제 값은 관리자 화면과 API 응답에 표시하지 않습니다.</p>
+            ) : (
+              <div className="grid gap-2">
+                {credentialSafety.issues.map((issue) => (
+                  <div className="flex items-start gap-2 text-sm font-bold leading-6 text-amber-900" key={issue}>
+                    <AlertTriangle className="mt-1 h-4 w-4 shrink-0" />
+                    <span>{issue}</span>
+                  </div>
+                ))}
+                <p className="mt-2 text-xs font-semibold text-amber-800">환경변수 이름과 상태만 표시되며 저장된 값과 길이는 브라우저로 전달하지 않습니다.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-primary" />
+                  민감 파일·위치정보 운영 상태
+                </CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">민감 첨부파일 접근 통제와 직원 위치정보 보관·삭제 정책을 운영 기준으로 확인합니다.</p>
+              </div>
+              <Badge className={privacyOperations.every((item) => item.ready) ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                {privacyOperations.filter((item) => item.ready).length}/{privacyOperations.length} 확인
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {privacyOperations.map((item) => (
+              <div className={`rounded-md border p-4 ${item.ready ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`} key={item.label}>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-black text-slate-950">{item.label}</p>
+                  {item.ready ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />}
+                </div>
+                <Badge className={`mt-3 ${item.ready ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{item.ready ? "확인" : "조치 필요"}</Badge>
+                <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">{item.detail}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -343,13 +463,48 @@ export default async function AdminSystemPage() {
                   고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
                 </p>
               </div>
-              <Badge className={auditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
-                {auditLogs.length ? `${auditLogs.length}건 확인` : "기록 대기"}
+              <Badge className={filteredAuditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
+                {filteredAuditLogs.length ? `${filteredAuditLogs.length}/${auditLogs.length}건 표시` : "조건에 맞는 기록 없음"}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            {auditLogs.length ? (
+            {auditResult.error ? (
+              <div className="mb-4 flex items-start gap-3 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-800">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                감사 로그 조회 실패: {auditResult.error}
+              </div>
+            ) : null}
+
+            <form action="/admin/system" className="mb-4 grid gap-3 rounded-md border border-border bg-muted/30 p-4 md:grid-cols-[1fr_180px_180px_auto]" method="get">
+              <label className="grid gap-1.5">
+                <span className="text-xs font-black text-muted-foreground">검색</span>
+                <input className="h-10 rounded-md border border-input bg-white px-3 text-sm" defaultValue={singleParam(params.auditQuery)} name="auditQuery" placeholder="작업, 수행자, 고객사" />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-black text-muted-foreground">고객사</span>
+                <select className="h-10 rounded-md border border-input bg-white px-3 text-sm" defaultValue={auditCompany} name="auditCompany">
+                  <option value="">전체 고객사</option>
+                  {auditCompanies.map(([companyId, company]) => <option key={companyId} value={companyId}>{company}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-black text-muted-foreground">작업 유형</span>
+                <select className="h-10 rounded-md border border-input bg-white px-3 text-sm" defaultValue={auditTone} name="auditTone">
+                  <option value="">전체 작업</option>
+                  <option value="account">계정/권한</option>
+                  <option value="data">데이터 변경</option>
+                  <option value="danger">민감 작업</option>
+                  <option value="default">기타</option>
+                </select>
+              </label>
+              <div className="flex items-end gap-2">
+                <button className="h-10 rounded-md bg-slate-950 px-4 text-sm font-black text-white" type="submit">조회</button>
+                <Link className="inline-flex h-10 items-center rounded-md border border-border bg-white px-3 text-sm font-black text-slate-700" href="/admin/system">초기화</Link>
+              </div>
+            </form>
+
+            {filteredAuditLogs.length ? (
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-3">
                   <AuditSummaryTile label="계정/권한 작업" tone="account" value={accountAuditCount} />
@@ -365,7 +520,7 @@ export default async function AdminSystemPage() {
                     <span>수행자</span>
                   </div>
                   <div className="divide-y divide-border">
-                    {auditLogs.map((log) => {
+                    {filteredAuditLogs.map((log) => {
                       const tone = auditHasSensitiveChange(log.metadata) ? "danger" : auditActionTone(log.action);
 
                       return (
@@ -390,9 +545,9 @@ export default async function AdminSystemPage() {
               </div>
             ) : (
               <div className="rounded-md border border-dashed border-border bg-muted/35 p-4">
-                <p className="text-sm font-black text-slate-900">아직 표시할 감사 로그가 없습니다.</p>
+                <p className="text-sm font-black text-slate-900">표시할 감사 로그가 없습니다.</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  거래처 마스터나 매출 거래내역을 저장하면 업로드 분석 기록이 이곳에 남습니다. 운영 전환 후에는 고객사별 변경 이력을 여기서 확인합니다.
+                  {auditLogs.length ? "검색어나 필터 조건을 바꿔 다시 조회하세요." : "거래처 마스터나 매출 거래내역을 저장하면 변경 이력이 이곳에 남습니다."}
                 </p>
               </div>
             )}

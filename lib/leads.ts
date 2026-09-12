@@ -16,6 +16,69 @@ type RealBusinessCandidate = {
   placeUrl: string;
 };
 
+export type LeadDuplicateCandidate = {
+  id: string;
+  customerName: string;
+  businessNumber?: string | null;
+  address?: string | null;
+  phone?: string | null;
+};
+
+export type LeadDuplicateMatch = {
+  customerId: string;
+  customerName: string;
+  reason: "사업자번호 일치" | "상호명·전화번호 일치" | "상호명·주소 일치";
+};
+
+function normalizeDuplicateText(value: string | null | undefined) {
+  return (value || "").toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function normalizeDuplicatePhone(value: string | null | undefined) {
+  return (value || "").replace(/\D/g, "");
+}
+
+function normalizeDuplicateBusinessNumber(value: string | null | undefined) {
+  return (value || "").replace(/\D/g, "");
+}
+
+/**
+ * 리드와 기존 거래처의 확정 중복만 판정합니다. 전화번호나 주소만 같은 경우(대표번호·공용 주소)는
+ * 다른 지점일 수 있으므로 반드시 정규화된 상호명까지 같을 때만 중복으로 봅니다.
+ */
+export function findLeadCustomerDuplicate(
+  lead: { businessName: string; businessNumber?: string | null; address?: string | null; phone?: string | null },
+  customers: readonly LeadDuplicateCandidate[]
+): LeadDuplicateMatch | null {
+  const businessNumber = normalizeDuplicateBusinessNumber(lead.businessNumber);
+  const name = normalizeDuplicateText(lead.businessName);
+  const phone = normalizeDuplicatePhone(lead.phone);
+  const address = normalizeDuplicateText(lead.address);
+
+  for (const customer of customers) {
+    const customerBusinessNumber = normalizeDuplicateBusinessNumber(customer.businessNumber);
+    const isPlaceholderBusinessNumber = /^(\d)\1{9}$/.test(businessNumber);
+    if (businessNumber.length === 10 && !isPlaceholderBusinessNumber && businessNumber === customerBusinessNumber) {
+      return { customerId: customer.id, customerName: customer.customerName, reason: "사업자번호 일치" };
+    }
+  }
+
+  if (!name) return null;
+  for (const customer of customers) {
+    if (name !== normalizeDuplicateText(customer.customerName)) continue;
+    const customerPhone = normalizeDuplicatePhone(customer.phone);
+    if (phone.length >= 8 && phone === customerPhone) {
+      return { customerId: customer.id, customerName: customer.customerName, reason: "상호명·전화번호 일치" };
+    }
+    const customerAddress = normalizeDuplicateText(customer.address);
+    if (address.length >= 5 && address === customerAddress) {
+      return { customerId: customer.id, customerName: customer.customerName, reason: "상호명·주소 일치" };
+    }
+  }
+
+  return null;
+}
+
 function normalizeNameForCompare(value: string) {
   return value.toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }

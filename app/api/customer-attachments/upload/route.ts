@@ -5,6 +5,18 @@ import { canAccessAssignedCustomer, uploadCustomerAttachmentFile } from "@/lib/s
 export const dynamic = "force-dynamic";
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  "bank_account",
+  "business_license",
+  "delivery_proof",
+  "identity_document",
+  "loading_position",
+  "etc"
+]);
+
+function isAllowedMimeType(mimeType: string) {
+  return mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType === "application/pdf";
+}
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData().catch(() => null);
@@ -28,6 +40,14 @@ export async function POST(request: NextRequest) {
 
   if (!(file instanceof File)) {
     return NextResponse.json({ message: "업로드할 파일을 선택해주세요." }, { status: 400 });
+  }
+
+  if (!ALLOWED_ATTACHMENT_TYPES.has(attachmentType)) {
+    return NextResponse.json({ message: "지원하지 않는 첨부자료 유형입니다." }, { status: 400 });
+  }
+
+  if (!isAllowedMimeType(file.type)) {
+    return NextResponse.json({ message: "이미지, PDF, MP4, MOV 파일만 등록할 수 있습니다." }, { status: 415 });
   }
 
   if (file.size > MAX_UPLOAD_SIZE) {
@@ -55,6 +75,17 @@ export async function POST(request: NextRequest) {
         uploaded: false
       },
       { status: 500 }
+    );
+  }
+
+  if (!result.uploaded || !result.persisted || !result.attachment?.id) {
+    return NextResponse.json(
+      {
+        message: "파일과 거래처 원장의 연결을 확인하지 못했습니다. Storage와 DB 연결 상태를 확인해주세요.",
+        storageReady: false,
+        uploaded: false
+      },
+      { status: 503 }
     );
   }
 

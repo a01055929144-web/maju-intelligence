@@ -9,6 +9,7 @@ export type WorkspaceCapability =
   | "manage_routes"
   | "manage_sales"
   | "view_reports"
+  | "view_company_operations"
   | "capture_field_updates"
   | "manage_billing";
 
@@ -34,9 +35,15 @@ export const workspaceTypeLabels: Record<WorkspaceType, string> = {
 const roleCapabilities: Record<WorkspaceRole, WorkspaceCapability[]> = {
   owner: allWorkspaceCapabilities(),
   manager: allWorkspaceCapabilities(),
-  sales: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members" && capability !== "manage_billing"),
-  driver: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members" && capability !== "manage_billing"),
-  member: allWorkspaceCapabilities().filter((capability) => capability !== "manage_members" && capability !== "manage_billing")
+  sales: allWorkspaceCapabilities().filter(
+    (capability) => capability !== "manage_members" && capability !== "manage_billing" && capability !== "view_company_operations"
+  ),
+  driver: allWorkspaceCapabilities().filter(
+    (capability) => capability !== "manage_members" && capability !== "manage_billing" && capability !== "view_company_operations"
+  ),
+  member: allWorkspaceCapabilities().filter(
+    (capability) => capability !== "manage_members" && capability !== "manage_billing" && capability !== "view_company_operations"
+  )
 };
 
 export function normalizeWorkspaceRole(role?: string | null): WorkspaceRole {
@@ -60,6 +67,7 @@ function allWorkspaceCapabilities(): WorkspaceCapability[] {
     "manage_routes",
     "manage_sales",
     "view_reports",
+    "view_company_operations",
     "capture_field_updates",
     "manage_billing"
   ];

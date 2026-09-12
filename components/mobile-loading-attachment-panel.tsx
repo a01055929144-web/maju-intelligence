@@ -78,8 +78,13 @@ export function MobileLoadingAttachmentPanel({
       return;
     }
 
-    const payload = (await response.json().catch(() => null)) as { attachment?: Attachment } | null;
-    if (payload?.attachment) setAttachments((current) => [payload.attachment!, ...current]);
+    const payload = (await response.json().catch(() => null)) as { attachment?: Attachment; persisted?: boolean; uploaded?: boolean } | null;
+    if (!payload?.attachment || payload.persisted !== true || payload.uploaded !== true) {
+      setSaveState("error");
+      setSaveErrorMessage("파일이 원장에 연결됐는지 확인하지 못했습니다. 다시 시도해주세요.");
+      return;
+    }
+    setAttachments((current) => [payload.attachment!, ...current]);
     setSaveState("saved");
   }
 

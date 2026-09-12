@@ -94,6 +94,30 @@ import {
   withPermitLeadCompanyQuery
 } from "@/components/sales-route-map-workspace";
 
+function getPermitLeadRecommendationTags(lead: PermitLeadItem, topIndustries: readonly string[] = []): string[] {
+  const tags: string[] = [];
+  if (lead.leadPeriod === "today" || lead.leadPeriod === "week") tags.push("개업 임박");
+  const routeFit = lead.scoreBreakdown?.route_fit_score ?? 0;
+  if (routeFit >= 15) tags.push("기거래처 인근");
+  else if (routeFit >= 11) tags.push("기거래처 근접");
+  if ((lead.scoreBreakdown?.top_industry_match ?? 0) >= 1 || topIndustries.includes(lead.industryPrimary)) tags.push("주력 업종");
+  if ((lead.scoreBreakdown?.place_activity_score ?? 0) >= 10) tags.push("리뷰 활발");
+  if ((lead.scoreBreakdown?.keyword_demand_score ?? 0) >= 10) tags.push("검색 수요 높음");
+  return tags;
+}
+
+function getLeadInstagramWebSearchUrl(lead: PermitLeadItem): string {
+  const regionTokens = (lead.address || lead.jurisdiction || "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(" ");
+  const query = [`"${lead.businessName}"`, regionTokens, lead.industryPrimary, "인스타그램", "site:instagram.com"]
+    .filter(Boolean)
+    .join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
 // 2026-08-24 피드백: "전반적으로 속도가 더뎌, 빠른 속도가 중요할 것 같아" — 신규 리드 탭(PermitLeadsView +
 // PermitLeadDetailPanel)이 지도 홈 컴포넌트 파일의 약 4분의 1을 차지하고 있어서, 지도·거래처·코스
 // 탭만 보는 사용자도 이 코드를 전부 내려받고 있었습니다. next/dynamic으로 별도 청크로 분리해,
@@ -464,17 +488,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   // "왜 이 리드를 추천하는지"를 짧은 태그로 보여줍니다(2026-08-24 피드백: "거래 성사 확률이 높은
   // 곳을 추천해야 한다" — 등급 알파벳만으로는 담당자가 이유를 알 수 없어서 추가). route_fit_score/
   // industry_fit_score는 refreshPermitLeadRecommendationScores가 채운 값을 그대로 읽고, 업종 일치
-  // 여부는 "추천 점수 갱신"을 이번 세션에서 실행했을 때만(recommendTopIndustries) 정확히 표시됩니다.
-  function recommendationTagsOf(lead: PermitLeadItem): string[] {
-    const tags: string[] = [];
-    if (lead.leadPeriod === "today" || lead.leadPeriod === "week") tags.push("개업 임박");
-    const routeFit = lead.scoreBreakdown?.route_fit_score ?? 0;
-    if (routeFit >= 15) tags.push("기거래처 인근");
-    else if (routeFit >= 11) tags.push("기거래처 근접");
-    if (recommendTopIndustries.includes(lead.industryPrimary)) tags.push("주력 업종");
-    return tags;
-  }
-
+  // 여부는 추천 갱신 때 score_breakdown에 저장한 신호를 우선 사용하고, 방금 갱신한 응답값은
+  // 구버전 데이터가 다시 저장되기 전까지의 호환용 fallback으로만 사용합니다.
   function businessAttractivenessOf(lead: PermitLeadItem): number {
     const keywordPoints = Math.min(15, Math.round(keywordVolumeOf(lead) / 5));
     const ratingPoints = lead.rating ? Math.round((Math.min(lead.rating, 5) / 5) * 8) : 0;
@@ -2421,7 +2436,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           </div>
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                           {(() => {
-                            const tags = recommendationTagsOf(lead).slice(0, 2);
+                            const tags = getPermitLeadRecommendationTags(lead, recommendTopIndustries).slice(0, 2);
                             return tags.length ? (
                               <div className="mt-0.5 flex flex-nowrap items-center gap-1 overflow-hidden">
                                 {tags.map((tag) => (
@@ -2609,6 +2624,7 @@ function PermitLeadDetailPanel({
   const leadWithSavedInstagram = { ...lead, instagramUrl: savedInstagramUrl };
   const instagramHandle = getLeadInstagramHandle(leadWithSavedInstagram);
   const instagramUrl = getLeadInstagramSearchUrl(leadWithSavedInstagram);
+  const instagramWebSearchUrl = getLeadInstagramWebSearchUrl(leadWithSavedInstagram);
   const fallbackPlaceLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
   const quoteSubject = useMemo<QuoteSubject>(
     () => ({
@@ -2967,10 +2983,18 @@ function PermitLeadDetailPanel({
                   {instagramHandle ? `${instagramHandle} 저장됨` : "인스타 ID를 확인한 뒤 저장하면 검색·DM 작업에 반영됩니다."}
                 </p>
               </div>
-              <a className="maju-button-secondary h-8 shrink-0 px-2 text-xs" href={instagramUrl} rel="noreferrer" target="_blank">
-                <ExternalLink className="h-3.5 w-3.5" />
-                검색
-              </a>
+              <div className="flex shrink-0 gap-1.5">
+                <a className="maju-button-secondary h-8 px-2 text-xs" href={instagramUrl} rel="noreferrer" target="_blank">
+                  <Instagram className="h-3.5 w-3.5" />
+                  인스타
+                </a>
+                {!instagramHandle ? (
+                  <a className="maju-button-secondary h-8 px-2 text-xs" href={instagramWebSearchUrl} rel="noreferrer" target="_blank" title="상호명·지역·업종으로 인스타 계정을 웹에서 교차 검색합니다.">
+                    <Search className="h-3.5 w-3.5" />
+                    웹 검색
+                  </a>
+                ) : null}
+              </div>
             </div>
             <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
               <input
@@ -3226,14 +3250,23 @@ function PermitLeadDetailPanel({
             <PermitDetailRow label="인스타" value={instagramHandle || "검색 필요"} />
           </div>
 
-          {lead.nextActionReasons.length ? (
+          {getPermitLeadRecommendationTags(lead).length || lead.nextActionReasons.length ? (
             <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3">
-              <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">추천 근거</p>
+              <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">우선 방문 사유</p>
+              {getPermitLeadRecommendationTags(lead).length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {getPermitLeadRecommendationTags(lead).map((reason) => (
+                    <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-200" key={reason}>{reason}</span>
+                  ))}
+                </div>
+              ) : null}
+              {lead.nextActionReasons.length ? (
               <ul className="mt-1.5 space-y-1 text-xs font-bold text-teal-900">
                 {lead.nextActionReasons.slice(0, 3).map((reason) => (
                   <li key={reason}>· {reason}</li>
                 ))}
               </ul>
+              ) : null}
             </div>
           ) : null}
 

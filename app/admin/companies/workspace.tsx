@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, Save, Search, Send, Smartphone, Trash2, UploadCloud, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, RefreshCw, Save, Search, Send, Smartphone, Trash2, UploadCloud, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/sortable-th";
@@ -14,6 +14,27 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 type Props = {
   initialCompanies: ManagedCompanyAccount[];
   source: "empty" | "supabase";
+};
+
+type CompanyDiagnosticResult = {
+  checkedAt: string;
+  checks: Array<{ detail: string; label: string; ok: boolean; value: string }>;
+  companyId: string;
+  latencyMs: number;
+  ok: boolean;
+  recommendations: string[];
+  source: "empty" | "supabase";
+  summary: {
+    consistencyScore: number;
+    dashboardCustomers: number;
+    masterCustomers: number;
+    missingAddressCustomers: number;
+    passedChecks: number;
+    routeStops: number;
+    salesMatchRate: number;
+    salesUnmatchedCustomerCount: number;
+    totalChecks: number;
+  };
 };
 
 const emptyCompany: ManagedCompanyAccountInput = {
@@ -56,6 +77,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
+  const [diagnostic, setDiagnostic] = useState<CompanyDiagnosticResult | null>(null);
+  const [diagnosticError, setDiagnosticError] = useState("");
+  const [diagnosing, setDiagnosing] = useState(false);
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -84,6 +108,8 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   function selectCompany(company: ManagedCompanyAccount) {
     setSelectedId(company.id);
     setMessage("");
+    setDiagnostic(null);
+    setDiagnosticError("");
     const next = {
       id: company.id,
       name: company.name,
@@ -101,8 +127,41 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   function startNewCompany() {
     setSelectedId("new");
     setMessage("");
+    setDiagnostic(null);
+    setDiagnosticError("");
     setForm(emptyCompany);
     setFormBaseline(emptyCompany);
+  }
+
+  async function runCompanyDiagnostic() {
+    if (!selectedCompany) return;
+
+    setDiagnosing(true);
+    setDiagnosticError("");
+    setDiagnostic(null);
+
+    try {
+      const response = await fetch(`/api/customer/data-consistency?companyId=${encodeURIComponent(selectedCompany.id)}`, {
+        cache: "no-store"
+      });
+      const payload = (await response.json().catch(() => null)) as (CompanyDiagnosticResult & { message?: string }) | null;
+
+      if (!response.ok || !payload?.summary || !Array.isArray(payload.checks)) {
+        setDiagnosticError(payload?.message || "고객사 데이터 진단을 완료하지 못했습니다.");
+        return;
+      }
+
+      if (payload.companyId !== selectedCompany.id) {
+        setDiagnosticError("선택한 고객사와 진단 결과의 회사 기준이 일치하지 않습니다.");
+        return;
+      }
+
+      setDiagnostic(payload);
+    } catch {
+      setDiagnosticError("진단 API에 연결하지 못했습니다. 관리자 세션과 서버 상태를 확인해주세요.");
+    } finally {
+      setDiagnosing(false);
+    }
   }
 
   function update<K extends keyof ManagedCompanyAccountInput>(key: K, value: ManagedCompanyAccountInput[K]) {
@@ -805,6 +864,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           ) : null}
 
           {selectedCompany ? (
+            <CompanyDiagnosticPanel diagnostic={diagnostic} error={diagnosticError} loading={diagnosing} onRun={runCompanyDiagnostic} />
+          ) : null}
+
+          {selectedCompany ? (
             <div className="rounded-lg border border-slate-200 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
                 <div>
@@ -1146,6 +1209,100 @@ function DataMetric({
       <Icon className="mb-3 h-4 w-4 text-primary" />
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className={`${compact ? "text-sm leading-5" : "text-2xl"} mt-1 font-black text-slate-950`}>{value}</p>
+    </div>
+  );
+}
+
+function CompanyDiagnosticPanel({ diagnostic, error, loading, onRun }: {
+  diagnostic: CompanyDiagnosticResult | null;
+  error: string;
+  loading: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-black">회사별 데이터 격리 진단</p>
+            {diagnostic ? (
+              <Badge className={diagnostic.ok ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                {diagnostic.ok ? "정상" : "점검 필요"}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">
+            선택한 회사 ID 하나를 기준으로 대시보드, 거래처 원장, 코스, 지도, 매출 연결 상태를 비교합니다.
+          </p>
+        </div>
+        <Button disabled={loading} onClick={onRun} type="button" variant="outline">
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "진단 중" : diagnostic ? "다시 진단" : "진단 실행"}
+        </Button>
+      </div>
+
+      {error ? (
+        <div className="m-4 flex items-start gap-3 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-bold leading-6 text-rose-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      ) : null}
+
+      {!diagnostic && !error ? (
+        <div className="p-4 text-sm font-semibold leading-6 text-muted-foreground">
+          진단은 조회만 수행하며 데이터를 변경하지 않습니다. 운영 이상이 의심될 때 실행하세요.
+        </div>
+      ) : null}
+
+      {diagnostic ? (
+        <div className="space-y-4 p-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <DiagnosticMetric label="일관성 점수" value={`${diagnostic.summary.consistencyScore}%`} />
+            <DiagnosticMetric label="통과 항목" value={`${diagnostic.summary.passedChecks}/${diagnostic.summary.totalChecks}`} />
+            <DiagnosticMetric label="원장 / 대시보드" value={`${diagnostic.summary.masterCustomers.toLocaleString()} / ${diagnostic.summary.dashboardCustomers.toLocaleString()}곳`} />
+            <DiagnosticMetric label="매출 매칭률" value={`${diagnostic.summary.salesMatchRate}%`} />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {diagnostic.checks.map((check) => (
+              <div className={`rounded-md border p-4 ${check.ok ? "border-emerald-100 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`} key={check.label}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {check.ok ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />}
+                    <p className="text-sm font-black text-slate-950">{check.label}</p>
+                  </div>
+                  <span className="shrink-0 text-xs font-black text-slate-700">{check.value}</span>
+                </div>
+                <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">{check.detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-black text-slate-950">권장 조치</p>
+            <div className="mt-3 grid gap-2">
+              {diagnostic.recommendations.map((recommendation) => (
+                <div className="flex items-start gap-2 text-xs font-bold leading-5 text-slate-700" key={recommendation}>
+                  <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span>{recommendation}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] font-semibold text-muted-foreground">
+              {new Date(diagnostic.checkedAt).toLocaleString("ko-KR")} · {diagnostic.latencyMs.toLocaleString()}ms · {diagnostic.source === "supabase" ? "실서버 원장" : "원장 미연결"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function DiagnosticMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
     </div>
   );
 }

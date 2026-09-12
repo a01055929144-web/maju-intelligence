@@ -471,8 +471,13 @@ function AttachmentSlotUploader({
       return;
     }
 
-    const payload = (await response.json().catch(() => null)) as { attachment?: AttachmentItem } | null;
-    if (payload?.attachment) onUploaded(payload.attachment);
+    const payload = (await response.json().catch(() => null)) as { attachment?: AttachmentItem; persisted?: boolean; uploaded?: boolean } | null;
+    if (!payload?.attachment || payload.persisted !== true || payload.uploaded !== true) {
+      setSaveState("error");
+      setErrorMessage("파일이 거래처 원장에 연결됐는지 확인하지 못했습니다. 다시 시도해주세요.");
+      return;
+    }
+    onUploaded(payload.attachment);
     setSaveState("saved");
   }
 

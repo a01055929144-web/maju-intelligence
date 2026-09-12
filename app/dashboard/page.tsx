@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
-import { getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan } from "@/lib/store";
 
@@ -17,6 +17,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
   const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
@@ -25,14 +26,20 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     getCompanyOriginAddress(companyId),
     getChurnRiskCustomers(companyId).catch(() => []),
     getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
-    getStaffVehicleLocations(companyId).catch(() => [])
+    isScopedStaffView && !customerSession?.userId
+      ? Promise.resolve([])
+      : getStaffVehicleLocations(companyId, { userId: isScopedStaffView ? customerSession?.userId : undefined }).catch(() => [])
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   // 2026-08-31 피드백 대응: 회원가입 단계는 물류 출발지 주소를 받지 않아, 고객사가 회사 설정에서
   // 직접 채우기 전까지는 모든 배송/영업 거리 계산이 조용히 기본값(마주식자재 창고 주소)으로
   // 이뤄집니다. 고객사 화면에서는 이를 알아챌 방법이 없었으므로 배너로 알립니다.
   const showOriginAddressBanner = Boolean(customerSession) && !company.originAddress?.trim();
-  const churnRiskCustomerIds = new Set(churnRiskCustomers.map((customer) => customer.customerId));
+  const visibleCustomerIds = new Set(customerMaster.customers.map((customer) => customer.id));
+  const visibleChurnRiskCustomers = isScopedStaffView
+    ? churnRiskCustomers.filter((customer) => visibleCustomerIds.has(customer.customerId))
+    : churnRiskCustomers;
+  const churnRiskCustomerIds = new Set(visibleChurnRiskCustomers.map((customer) => customer.customerId));
   const baseMapMarkers = hasOperationalCustomerMaster
     ? createCustomerLedgerMapMarkers(originAddress, customerMaster.customers)
     : createRouteMapMarkers(originAddress, routePlan.groups.flatMap((group) => group.stops));
@@ -59,7 +66,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       <section className="mx-auto flex w-full max-w-[1760px] flex-col xl:h-full xl:min-h-0">
         <SalesRouteMapWorkspace
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
-          churnRiskCustomers={churnRiskCustomers}
+          churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
           mapMarkers={mapMarkers}
           routePlan={routePlan}

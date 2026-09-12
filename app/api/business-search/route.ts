@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
+import { normalizeKakaoCategoryIndustry } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,13 @@ export async function GET(request: NextRequest) {
   const results = (payload.documents || [])
     .map((item) => {
       const placeUrl = item.place_url || (item.id ? `https://place.map.kakao.com/${item.id}` : "");
-      // category_name은 "음식점 > 곱창,막창 > 곱창전골" 형태라 가장 구체적인 마지막 구간만 업종으로 사용합니다.
-      const industry = item.category_name?.split(">").map((part) => part.trim()).filter(Boolean).pop() || "";
+      // category_name은 "음식점 > 곱창,막창 > 곱창전골" 형태라 가장 구체적인 마지막 구간을 우선 쓰되,
+      // 이건 카카오 자체의 업소 유형 분류라 우리 업종 taxonomy와 다를 수 있어(예: "맥주,호프")
+      // normalizeKakaoCategoryIndustry로 기존 버킷에 맞춥니다(2026-09-12, "업종 필터에 한식이
+      // 나와야 하는데 맥주,호프가 나온다" 피드백 — 헤즈업 강남점 사례). 담당자가 등록 화면에서
+      // 이 값을 여전히 직접 수정할 수 있으니, 정규화는 어디까지나 더 나은 기본값을 주는 것입니다.
+      const rawCategoryLeaf = item.category_name?.split(">").map((part) => part.trim()).filter(Boolean).pop() || "";
+      const industry = normalizeKakaoCategoryIndustry(rawCategoryLeaf);
 
       return {
         address: item.address_name || "",

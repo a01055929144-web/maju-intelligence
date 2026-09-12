@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
-import { getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin } from "./store";
+import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
@@ -93,7 +93,25 @@ export async function getAdminSession() {
 
 export async function getCustomerSession() {
   const cookieStore = await cookies();
-  return decodeSession<CustomerSession>(cookieStore.get(CUSTOMER_COOKIE_NAME)?.value);
+  const session = decodeSession<CustomerSession>(cookieStore.get(CUSTOMER_COOKIE_NAME)?.value);
+  if (!session?.userId) return session;
+
+  try {
+    const membership = await getActiveCustomerMembership({ companyId: session.companyId, userId: session.userId });
+    if (!membership.active) return null;
+    const workspaceRole = normalizeWorkspaceRole(membership.role || session.workspaceRole);
+    const role: CustomerSession["role"] = workspaceRole === "owner" ? "owner" : "member";
+    return {
+      ...session,
+      assignedManagerName: membership.assignedManagerName,
+      assignedVehicle: membership.assignedVehicle,
+      role,
+      workspaceRole
+    };
+  } catch (error) {
+    console.error("Customer membership validation failed:", error);
+    return null;
+  }
 }
 
 export async function requireAdminSession() {
