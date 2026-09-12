@@ -11,6 +11,14 @@ export type KakaoMapMarker = {
   // note_type=delivery)이 있는 거래처 마커에 작은 완료 배지를 그리기 위한 플래그입니다. tone: "customer"
   // 마커에만 의미가 있습니다.
   readonly completed?: boolean;
+  // 2026-09-12 버그 수정("리드 선택하면 지도가 안 보이다가 목록에서 클릭하면 그제서야 보임"): "전체
+  // 리드 보기"(반경 제한 없음)를 켜면 활성 리드가 여러 시군구/전국에 걸쳐 있을 수 있어, 이 마커들까지
+  // 초기 화면 맞추기(map.setBounds)에 포함되면 거래처가 실제로 몰려 있는 배송권역이 아니라 리드가
+  // 흩어진 훨씬 넓은 범위에 맞춰 지도가 극단적으로 축소돼(마커가 다 점으로만 보여 사실상 빈 화면처럼
+  // 보임) 버립니다. 이 플래그가 있는 마커는 지도에는 계속 그려지지만(클릭하면 focusedMarkerId로 그
+  // 위치까지 정상 이동), 마커가 하나 이상일 때의 기본 화면 맞추기 계산에서는 제외됩니다 — 반경이
+  // 제한된 "반경 리드" 마커에는 이 플래그를 붙이지 않아 그쪽 동작은 그대로입니다.
+  readonly excludeFromAutoBounds?: boolean;
   readonly grade?: "A" | "B" | "C";
   readonly id?: string;
   readonly label: string;
@@ -291,12 +299,16 @@ export function KakaoAddressMap({
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
+        // 2026-09-12 버그 수정: excludeFromAutoBounds 마커(전체 리드 보기)를 제외한, 기본 화면
+        // 맞추기에 실제로 써야 할 마커만 담는 별도 bounds. KakaoMapMarker 타입 정의 쪽 주석 참고.
+        const primaryBounds = new kakao.maps.LatLngBounds();
         markerPositionsRef.current = new Map();
         markerElementsRef.current = new Map();
         highlightedElementRef.current = null;
         leadOverlayEntriesRef.current = [];
         let focusedPosition: any = null;
         let found = 0;
+        let primaryFound = 0;
         const roadPathSegments = splitRoutePath(routePath).map((segment) => segment.map((point) => new kakao.maps.LatLng(point.lat, point.lng)));
         const hasRoadPath = roadPathSegments.some((segment) => segment.length >= 2);
 
@@ -336,6 +348,10 @@ export function KakaoAddressMap({
 
           bounds.extend(position);
           found += 1;
+          if (!marker.excludeFromAutoBounds) {
+            primaryBounds.extend(position);
+            primaryFound += 1;
+          }
           if (marker.id) {
             markerPositionsRef.current.set(marker.id, position);
             markerElementsRef.current.set(marker.id, overlayContent);
@@ -424,12 +440,18 @@ export function KakaoAddressMap({
           map.setCenter(bounds.getSouthWest());
           map.setLevel(5);
         } else {
-          map.setBounds(bounds);
+          // 2026-09-12 버그 수정("리드 선택하면 지도가 안 보이다가 목록에서 클릭하면 그제서야 보임"):
+          // "전체 리드 보기"를 켜면 리드가 전국에 흩어져 있을 수 있어, bounds(전체) 기준으로 맞추면
+          // 지도가 극단적으로 축소돼 사실상 빈 화면처럼 보입니다. excludeFromAutoBounds가 없는
+          // 마커(거래처, 반경 리드 등)만 담은 primaryBounds가 있으면 그것으로 화면을 맞춥니다.
+          map.setBounds(primaryFound > 0 ? primaryBounds : bounds);
         }
 
         window.setTimeout(() => {
           map.relayout?.();
-          if (hasRoadPath || found > 1) map.setBounds(bounds);
+          if (hasRoadPath || found > 1) {
+            map.setBounds(hasRoadPath || primaryFound === 0 ? bounds : primaryBounds);
+          }
           if (!hasRoadPath && focusedPosition) {
             map.setCenter(focusedPosition);
             map.setLevel(5);

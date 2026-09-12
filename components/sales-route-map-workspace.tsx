@@ -1124,7 +1124,13 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         lat: Number.isFinite(lead.latitude) ? lead.latitude : undefined,
         lng: Number.isFinite(lead.longitude) ? lead.longitude : undefined,
         x: 0,
-        y: 0
+        y: 0,
+        // 2026-09-12 버그 수정("리드 선택하면 지도가 안 보이다가 목록에서 클릭하면 그제서야 보임"):
+        // "전체 리드 보기"는 반경 제한이 없어 리드가 전국에 흩어질 수 있습니다. 이 마커들까지 초기
+        // 화면 맞추기에 포함되면 지도가 극단적으로 축소돼 사실상 빈 화면처럼 보이므로 제외합니다
+        // (kakao-address-map.tsx의 KakaoMapMarker.excludeFromAutoBounds 참고). 반경이 제한된
+        // "반경 리드"(leadRadiusMapMarkers)에는 이 플래그를 붙이지 않아 그쪽 동작은 그대로입니다.
+        excludeFromAutoBounds: true
       }));
   }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
   // 2026-08-30 피드백: 오른쪽 패널 "신규 리드" 탭에 쓸 목록입니다 — 실제로 지도에 마커로 떠 있는
