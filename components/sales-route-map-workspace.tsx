@@ -5513,6 +5513,18 @@ export function normalizeLeadSearchToken(value: string) {
 const SIDO_PREFIX_PATTERN =
   /^(서울특별시|서울|부산광역시|부산|대구광역시|대구|인천광역시|인천|광주광역시|광주|대전광역시|대전|울산광역시|울산|세종특별자치시|세종|경기도|경기|강원특별자치도|강원도|강원|충청북도|충북|충청남도|충남|전북특별자치도|전라북도|전북|전라남도|전남|경상북도|경북|경상남도|경남|제주특별자치도|제주)\s*/;
 
+// 2026-09-12 버그 수정("지역 시군구 필터가 값이 제대로 안들어 간 경우가 있어"): 세종특별자치시는
+// 우리나라에서 유일하게 시/도 바로 아래에 시/군/구 단위 없이 읍/면/동으로 바로 이어지는 광역
+// 행정구역입니다. 아래 SIDO_PREFIX_PATTERN으로 "세종특별자치시"/"세종"을 떼어내고 나면 그다음
+// 토큰은 "조치원읍"·"한누리대로" 같은 읍/면/동/도로명이라 (시|군|구)로 끝나는 패턴에 안 걸려
+// sigungu가 항상 빈 문자열이 되고, 그 결과 세종 리드는 "지역" 드롭다운에 아예 나타나지 않고
+// 다른 지역을 고르면 목록에서도 조용히 사라집니다. 더 나쁘게는, 주소가 축약형 "세종시 ..."로
+// 시작하면 SIDO_PREFIX_PATTERN이 "세종"만 떼어내(원본에 "세종특별자치시"가 아니라 "세종시"라고만
+// 적혀 있어 전체 일치가 안 됨) 그 뒤에 남는 "시" 한 글자가 (시|군|구)로 끝나는 토큰으로 오인식되어
+// sigungu="시"라는 의미 없는 값이 들어갑니다. 세종은 시/군/구 단위가 없다는 점 자체가 다른
+// 광역단체와 다르므로, 별도 분기로 광역단체 이름 자체를 시군구값으로 취급합니다.
+const SEJONG_PREFIX_PATTERN = /^세종(특별자치시|시)?(\s|$)/;
+
 /** 도로명주소 문자열에서 시군구/동을 뽑아 지도 리드를 지역별로 묶는 데 씁니다(2026-08-24 피드백:
  * "시군구, 동 구분하여 리드 구분을 하게끔 만들것" — 네이버 부동산의 지역 드릴다운 참고). 정확한
  * 행정구역 API 없이 문자열 패턴만으로 추출하는 근사치라, 시/군/구가 겹치는 드문 표기(고양시
@@ -5527,6 +5539,10 @@ function parseLeadRegion(address?: string): { dong: string; sigungu: string } {
   const parenMatch = trimmed.match(/\(([^()]*)\)\s*$/);
   const dongRaw = parenMatch?.[1]?.split(",")[0]?.trim() || "";
   const dong = /(동|리|가)\d*$/.test(dongRaw) ? dongRaw : "";
+
+  if (SEJONG_PREFIX_PATTERN.test(trimmed)) {
+    return { dong, sigungu: "세종특별자치시" };
+  }
 
   const withoutSido = trimmed.replace(SIDO_PREFIX_PATTERN, "").trim();
   const firstToken = withoutSido.split(/\s+/)[0] || "";

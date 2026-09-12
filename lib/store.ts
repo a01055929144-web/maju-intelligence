@@ -561,6 +561,12 @@ export type StaffKakaoAcceptResult = {
   workspaceType: "company";
   assignedManagerName?: string;
   assignedVehicle?: string;
+  // 2026-09-12 버그 수정("카카오톡 초대 가입시 배송담당자랑 배송차 배송이 매끄럽지 못해"): 위 name은
+  // 카카오/네이버/구글 프로필의 실시간 닉네임(직원이 자유롭게 바꿀 수 있음)이라, 관리자가 초대 생성
+  // 시 입력한 정식 이름(거래처 배송담당자 표기와 실제로 일치하는 값)과 다른 경우가 흔합니다.
+  // getCustomerAssignmentKeys가 자동 매칭 후보에 이 값도 함께 쓸 수 있도록 별도로 내려줍니다 —
+  // "직원"/"모바일 직원" 같은 기본값은 제외(normalizeInvitedEmployeeName 참고).
+  invitedEmployeeName?: string;
 };
 export type PersonalKakaoWorkspaceResult = {
   companyId: string;
@@ -576,6 +582,10 @@ export type PersonalKakaoWorkspaceResult = {
   workspaceType: "personal" | "company";
   assignedManagerName?: string;
   assignedVehicle?: string;
+  // StaffKakaoAcceptResult와 타입을 맞추기 위한 필드입니다 — 초대 없이 개인/오너로 로그인하는
+  // 경로(createPersonalKakaoWorkspace/createPersonalOAuthWorkspace)에는 애초에 "초대 시 입력한
+  // 이름"이라는 개념이 없어 항상 undefined입니다.
+  invitedEmployeeName?: string;
 };
 export type OAuthProvider = "naver" | "google";
 export type LinkedOAuthProvider = OAuthProvider | "kakao";
@@ -2531,6 +2541,15 @@ function isCompanyClosedStatus(status?: string | null) {
   return Boolean(status) && !["active", "fallback"].includes(status as string);
 }
 
+// 2026-09-12 버그 수정: createStaffInvitation은 관리자가 이름을 비워두면 "직원"을 기본값으로
+// 저장합니다(입력칸 자체가 없는 것과 구분하기 위한 placeholder). 이런 기본값을 자동 매칭 후보로
+// 쓰면 우연히 같은 이름의 거래처 담당자 표기와 뜬금없이 일치할 위험이 있어 걸러냅니다.
+function normalizeInvitedEmployeeName(name?: string | null): string | undefined {
+  const trimmed = (name || "").trim();
+  if (!trimmed || trimmed === "직원" || trimmed === "모바일 직원") return undefined;
+  return trimmed;
+}
+
 export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): Promise<StaffKakaoAcceptResult> {
   const inviteCode = input.inviteCode.trim();
   const kakaoUserId = input.kakaoUserId.trim();
@@ -2629,7 +2648,8 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       workspaceRole: existingMembership.role || invitation.role || "member",
       workspaceType: "company",
       assignedManagerName: assignment?.assignedManagerName || invitation.assigned_manager_name || undefined,
-      assignedVehicle: assignment?.assignedVehicle || invitation.assigned_vehicle || undefined
+      assignedVehicle: assignment?.assignedVehicle || invitation.assigned_vehicle || undefined,
+      invitedEmployeeName: normalizeInvitedEmployeeName(invitation.employee_name)
     };
   }
 
@@ -2674,7 +2694,8 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     workspaceRole: invitation.role || "member",
     workspaceType: "company",
     assignedManagerName: invitation.assigned_manager_name || undefined,
-    assignedVehicle: invitation.assigned_vehicle || undefined
+    assignedVehicle: invitation.assigned_vehicle || undefined,
+    invitedEmployeeName: normalizeInvitedEmployeeName(invitation.employee_name)
   };
 }
 
@@ -2901,7 +2922,8 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
       workspaceRole: existingMembership.role || invitation.role || "member",
       workspaceType: "company",
       assignedManagerName: assignment?.assignedManagerName || invitation.assigned_manager_name || undefined,
-      assignedVehicle: assignment?.assignedVehicle || invitation.assigned_vehicle || undefined
+      assignedVehicle: assignment?.assignedVehicle || invitation.assigned_vehicle || undefined,
+      invitedEmployeeName: normalizeInvitedEmployeeName(invitation.employee_name)
     };
   }
 
@@ -2946,7 +2968,8 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
     workspaceRole: invitation.role || "member",
     workspaceType: "company",
     assignedManagerName: invitation.assigned_manager_name || undefined,
-    assignedVehicle: invitation.assigned_vehicle || undefined
+    assignedVehicle: invitation.assigned_vehicle || undefined,
+    invitedEmployeeName: normalizeInvitedEmployeeName(invitation.employee_name)
   };
 }
 

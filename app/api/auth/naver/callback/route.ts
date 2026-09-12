@@ -74,7 +74,8 @@ export async function GET(request: NextRequest) {
       workspaceRole: normalizedRole,
       workspaceType: result.workspaceType,
       assignedManagerName: result.assignedManagerName,
-      assignedVehicle: result.assignedVehicle
+      assignedVehicle: result.assignedVehicle,
+      invitedEmployeeName: result.invitedEmployeeName
     }, { remember: true });
 
     return NextResponse.redirect(new URL(isOwner ? "/dashboard" : "/mobile/today", request.url));

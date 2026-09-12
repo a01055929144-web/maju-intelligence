@@ -27,6 +27,13 @@ export type CustomerSession = {
   // getCustomerAssignmentKeys가 이 값도 매칭 후보로 함께 사용합니다.
   assignedManagerName?: string;
   assignedVehicle?: string;
+  // 2026-09-12 버그 수정("카카오톡 초대 가입시 배송담당자랑 배송차 배송이 매끄럽지 못해"): name은
+  // 카카오/네이버/구글 프로필의 실시간 닉네임이라 직원이 언제든 바꿀 수 있어, 관리자가 초대 생성 시
+  // 입력한 정식 이름과 다른 경우가 흔합니다. 그 결과 위 assignedManagerName/assignedVehicle을 매번
+  // 수동으로 지정해줘야만 배송 목록이 매칭되는 문제가 있었습니다. 이 값은 그 정식 이름을 자동
+  // 매칭 후보로 추가해, 관리자가 애초에 거래처 담당자 표기와 같은 이름으로 초대했다면 닉네임이
+  // 무엇이든 수동 개입 없이 바로 매칭되게 합니다(lib/store.ts의 normalizeInvitedEmployeeName 참고).
+  invitedEmployeeName?: string;
 };
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
@@ -173,7 +180,14 @@ export function shouldScopeCustomerData(session: CustomerSession | null) {
 export function getCustomerAssignmentKeys(session: CustomerSession | null) {
   if (!session) return undefined;
   if (!shouldScopeCustomerData(session)) return undefined;
-  return [session.userId, session.name, session.email, session.assignedManagerName, session.assignedVehicle]
+  return [
+    session.userId,
+    session.name,
+    session.email,
+    session.assignedManagerName,
+    session.assignedVehicle,
+    session.invitedEmployeeName
+  ]
     .map((value) => value?.trim())
     .filter(Boolean) as string[];
 }
