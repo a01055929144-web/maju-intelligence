@@ -7324,7 +7324,7 @@ function StoreDetail({
                   {reviewSyncMessage ? <p className="text-[11px] font-bold text-teal-600">{reviewSyncMessage}</p> : null}
                   <div className="maju-filter-box space-y-2 border-slate-200 bg-white px-3 py-3">
                     <p className="text-xs font-black text-slate-500">
-                      네이버·카카오 리뷰 붙여넣기 — 위 "외부 거래처 정보"의 링크를 열어 리뷰를 확인한 뒤, 리뷰 텍스트를 복사해서 아래에 붙여넣고 버튼을 누르면 AI가 즉시 요약합니다.
+                      네이버·카카오 리뷰 붙여넣기 — 위 &quot;외부 거래처 정보&quot;의 링크를 열어 리뷰를 확인한 뒤, 리뷰 텍스트를 복사해서 아래에 붙여넣고 버튼을 누르면 AI가 즉시 요약합니다.
                     </p>
                     <div className="flex items-center gap-2">
                       <select

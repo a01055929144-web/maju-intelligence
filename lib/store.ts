@@ -3937,8 +3937,6 @@ export async function getCustomerMaster(
     reviews_updated_at?: string | null;
     updated_at?: string | null;
   };
-  let rows: CustomerMasterRow[];
-
   // 가장 완전한 select부터 시도하고, 컬럼이 없다는 에러(42703/does not exist)를 만나면 더 좁은
   // select로 재시도합니다. 어떤 컬럼 이름을 특정해서 매칭하지 않고 "컬럼 없음" 에러 자체를 generic하게
   // 판별하는 이유: PostgREST는 select= 목록을 검증할 때 처음 걸리는 컬럼 하나만 에러 메시지에 담기
@@ -3968,7 +3966,7 @@ export async function getCustomerMaster(
     }
   }
   if (!fetched) throw lastFetchError instanceof Error ? lastFetchError : new Error(String(lastFetchError));
-  rows = fetched;
+  const rows = fetched;
 
   const customers = rows.map((row, index) => toCustomerMasterItem(row, offset + index));
   const scopedCustomers = filterCustomersByAssignment(customers, options?.assignmentKeys);

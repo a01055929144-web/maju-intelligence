@@ -3099,7 +3099,7 @@ function AttachmentPreviewModal({
           ) : (
             <div className="maju-empty-state p-6">
               <p className="text-sm font-black text-slate-800">이 형식은 화면 미리보기를 지원하지 않습니다.</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">위의 "새창에서 열기"를 눌러 확인하세요.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">위의 &quot;새창에서 열기&quot;를 눌러 확인하세요.</p>
             </div>
           )}
         </div>

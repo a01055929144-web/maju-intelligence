@@ -1647,7 +1647,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             ) : null}
             {showSourceDetails ? (
               <p className="text-[11px] font-semibold leading-4 text-slate-400">
-                "전국 공공데이터"는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, "서울시 공공데이터"는
+                &quot;전국 공공데이터&quot;는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, &quot;서울시 공공데이터&quot;는
                 서울 열린데이터광장(서울시만 약 53만 건, SEOUL_OPENDATA_API_KEY 필요)에서 가져오며 좌표를 직접 변환해 채워 더 빠릅니다. 미설정된
                 소스는 건너뛰고 설정된 소스만 수집합니다 — 두 API 모두 최근 변경분만 걸러주지 않아 한 번에 전체를 다 훑을 수 없어, 매일 다른
                 구간을 훑도록 되어 있고 완전 커버리지까지 시간이 걸릴 수 있습니다.
