@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getRequestAuthScope, shouldScopeCustomerData } from "@/lib/auth";
 import { getDeliveryHistoryForDate, getDeliveryHistorySummary } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,12 @@ export async function GET(request: NextRequest) {
   const scope = await getRequestAuthScope(request);
   if (!scope.ok || !scope.companyId) {
     return NextResponse.json({ error: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
+  }
+  if (shouldScopeCustomerData(scope.customerSession)) {
+    return NextResponse.json(
+      { error: "전체 배송 히스토리는 대표 또는 관리자만 조회할 수 있습니다." },
+      { headers: noStoreHeaders, status: 403 }
+    );
   }
 
   const mode = request.nextUrl.searchParams.get("mode") === "summary" ? "summary" : "detail";

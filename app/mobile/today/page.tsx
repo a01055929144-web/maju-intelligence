@@ -116,6 +116,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             visibleStops={todayStops.length}
           />
 
+          <MobileFieldFlowNav customerId={selectedStop?.id} />
+
           {selectedStop ? (
             <section className="scroll-mt-24 overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]" id="selected-customer">
               <div className="border-b border-teal-100 bg-teal-50 p-4">
@@ -255,6 +257,38 @@ function MobileRouteContextBar({
         ))}
       </div>
     </section>
+  );
+}
+
+function MobileFieldFlowNav({ customerId }: { customerId?: string }) {
+  const selectedCustomerPath = customerId ? `/mobile/today?customer=${encodeURIComponent(customerId)}` : "/mobile/today";
+  const steps = [
+    { href: "/mobile/today#route-list", label: "코스" },
+    { href: `${selectedCustomerPath}#selected-customer`, label: "매장" },
+    { href: `${selectedCustomerPath}#contact-actions`, label: "지도·전화" },
+    { href: `${selectedCustomerPath}#loading-position`, label: "적재" },
+    { href: `${selectedCustomerPath}#delivery-proof`, label: "완료·사진" },
+    { href: `${selectedCustomerPath}#visit-memo`, label: "메모" }
+  ];
+
+  return (
+    <nav aria-label="현장 처리 순서" className="overflow-x-auto rounded-xl border border-teal-100 bg-teal-50/70 px-2 py-2">
+      <ol className="flex min-w-max items-center">
+        {steps.map((step, index) => (
+          <li className="flex items-center" key={step.label}>
+            {index ? <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-teal-300" /> : null}
+            <Link
+              aria-disabled={!customerId && index > 0}
+              className={`inline-flex min-h-10 items-center rounded-lg px-2.5 text-xs font-black ${!customerId && index > 0 ? "pointer-events-none text-slate-300" : "text-teal-800 hover:bg-white"}`}
+              href={step.href}
+            >
+              <span className="mr-1.5 text-[10px] text-teal-500">{index + 1}</span>
+              {step.label}
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 

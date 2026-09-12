@@ -32,7 +32,7 @@ export function MobileRouteActionPanel({
   }
 
   return (
-    <section className="rounded-xl border border-teal-200 bg-teal-50/70 p-4">
+    <section className="scroll-mt-24 rounded-xl border border-teal-200 bg-teal-50/70 p-4" id="contact-actions">
       <div className="flex items-start gap-3">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-700 text-white">
           <Navigation className="h-5 w-5" />

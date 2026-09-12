@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerSession, getRequestAuthScope } from "@/lib/auth";
+import { getCustomerSession, getRequestAuthScope, shouldScopeCustomerData } from "@/lib/auth";
 import { getDeliveryCompletionEvents, getStaffLocationEvents, getStaffVehicleLocations, upsertStaffMobileLocation } from "@/lib/store";
 
 export async function GET(request: NextRequest) {
@@ -9,19 +9,29 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const locations = await getStaffVehicleLocations(scope.companyId);
+    const isScopedStaffView = shouldScopeCustomerData(scope.customerSession);
+    const scopedUserId = isScopedStaffView ? scope.customerSession?.userId : undefined;
+    const locations = isScopedStaffView && !scopedUserId
+      ? []
+      : await getStaffVehicleLocations(scope.companyId, { userId: scopedUserId });
     const includeEvents = request.nextUrl.searchParams.get("events") === "true";
-    const events = includeEvents
+    const requestedUserId = request.nextUrl.searchParams.get("userId") || undefined;
+    const eventUserId = isScopedStaffView ? scopedUserId : requestedUserId;
+    const events = includeEvents && (!isScopedStaffView || Boolean(eventUserId))
       ? await getStaffLocationEvents(scope.companyId, {
           hours: Number(request.nextUrl.searchParams.get("hours")) || 12,
-          userId: request.nextUrl.searchParams.get("userId") || undefined
+          userId: eventUserId
         })
-      : undefined;
+      : includeEvents ? [] : undefined;
     const includeCompletions = request.nextUrl.searchParams.get("completions") === "true";
     const completions = includeCompletions
       ? await getDeliveryCompletionEvents(scope.companyId, {
-          deliveryVehicle: request.nextUrl.searchParams.get("deliveryVehicle") || undefined,
-          driverName: request.nextUrl.searchParams.get("driverName") || undefined,
+          deliveryVehicle: isScopedStaffView
+            ? scope.customerSession?.assignedVehicle
+            : request.nextUrl.searchParams.get("deliveryVehicle") || undefined,
+          driverName: isScopedStaffView
+            ? scope.customerSession?.assignedManagerName || scope.customerSession?.name
+            : request.nextUrl.searchParams.get("driverName") || undefined,
           hours: Number(request.nextUrl.searchParams.get("hours")) || 12
         })
       : undefined;
@@ -57,6 +67,7 @@ export async function POST(request: NextRequest) {
       driverName: session.name,
       lat,
       lng,
+      recordedAt: typeof body?.recordedAt === "string" ? body.recordedAt : undefined,
       status,
       userAgent: request.headers.get("user-agent") || undefined,
       userId: session.userId

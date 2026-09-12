@@ -4,6 +4,8 @@ import { addCustomerAttachment, addCustomerNote, canAccessAssignedCustomer, getC
 
 export const dynamic = "force-dynamic";
 
+const STORAGE_ONLY_ATTACHMENT_TYPES = new Set(["bank_account", "identity_document"]);
+
 export async function GET(request: NextRequest) {
   const scope = await getRequestAuthScope(request);
   if (!scope.ok) {
@@ -19,7 +21,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "담당 거래처에만 접근할 수 있습니다." }, { status: 403 });
   }
 
-  const result = await getCustomerOperations(customerId, scope.companyId);
+  const attachmentOffset = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("attachmentOffset") || "0", 10) || 0);
+  const noteOffset = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("noteOffset") || "0", 10) || 0);
+  const result = await getCustomerOperations(customerId, scope.companyId, { attachmentOffset, noteOffset });
   return NextResponse.json(result);
 }
 
@@ -53,6 +57,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (body.action === "attachment") {
+    if (STORAGE_ONLY_ATTACHMENT_TYPES.has(body.attachmentType || "") && body.fileUrl) {
+      return NextResponse.json(
+        { message: "신분증과 통장사본은 보안을 위해 파일 업로드로만 등록할 수 있습니다." },
+        { status: 400 }
+      );
+    }
     const result = await addCustomerAttachment(
       {
         attachmentType: body.attachmentType || "etc",

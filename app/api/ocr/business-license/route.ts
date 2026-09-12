@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+const MAX_OCR_FILE_SIZE = 10 * 1024 * 1024;
 
 // 실제 OCR 공급자(CLOVA/Upstage/OpenAI Vision) 연동은 아직 붙어있지 않습니다. 환경변수가
 // 등록돼 있어도 이 라우트는 어떤 OCR API도 호출하지 않으므로, "추출값"이라는 이름으로
@@ -9,11 +11,25 @@ export const dynamic = "force-dynamic";
 // 직접 값을 입력하도록 안내합니다. 실제 OCR을 연결하면 이 자리에서 공급자 API를 호출하고
 // 그 결과를 extracted에 채우도록 바꾸면 됩니다.
 export async function POST(request: NextRequest) {
+  const scope = await getRequestAuthScope(request);
+  if (!scope.ok) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  if (!scopeHasCapability(scope, "manage_customers")) {
+    return NextResponse.json({ message: "거래처 서류를 확인할 권한이 없습니다." }, { status: 403 });
+  }
+
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ message: "사업자등록증 이미지 또는 PDF 파일을 업로드하세요." }, { status: 400 });
+  }
+  if (file.size > MAX_OCR_FILE_SIZE) {
+    return NextResponse.json({ message: "OCR 확인 파일은 최대 10MB까지 업로드할 수 있습니다." }, { status: 413 });
+  }
+  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+    return NextResponse.json({ message: "사업자등록증 이미지 또는 PDF 파일만 확인할 수 있습니다." }, { status: 415 });
   }
 
   return NextResponse.json({

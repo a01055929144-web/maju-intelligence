@@ -86,6 +86,7 @@ import {
   PossibleDuplicateCustomer,
   RoutePlan,
   RoutePlanStop,
+  STAFF_LOCATION_FRESHNESS_MINUTES,
   StaffLocationEvent,
   StaffVehicleLocation
 } from "@/lib/store";
@@ -538,6 +539,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
+  const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("all");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
   // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
@@ -569,6 +571,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     showAllLeadsOnMap,
     allLeadsLoadState,
     mapLeadIndustryFilter,
+    mapLeadTypeFilter,
     mapLeadOpenDateStart,
     mapLeadOpenDateEnd,
     showDismissedLeadsOnMap,
@@ -1025,7 +1028,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       })),
     [unregisteredResults]
   );
-  // 지도 탭에서 "신규 리드 반경 체크"를 켰을 때만 리드를 마커로 함께 보여줍니다(기본은 꺼짐 — 거래처 마커만).
+  // 지도 탭에서 "리드 반경 체크"를 켰을 때만 리드를 마커로 함께 보여줍니다(기본은 꺼짐 — 거래처 마커만).
   const leadRadiusMapMarkers: KakaoMapMarker[] = useMemo(() => {
     if (!leadRadiusOpen || !leadRadiusResult) return [];
     return leadRadiusResult.leads
@@ -1034,7 +1037,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         address: lead.address!,
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
-        label: `${lead.distanceKm}km`,
+        label: `${getPermitLeadType(lead) === "new" ? "신규" : "영업"} ${lead.distanceKm}km`,
         name: lead.businessName,
         tone: "lead" as const,
         // 2026-09-07 피드백("신규 리드가 의정부쪽으로 모여져있어서") 대응: 저장된 위경도가 있으면
@@ -1088,8 +1091,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     setMapLeadRegionDong("");
   }
   const filteredAllLeadsForMap = useMemo(() => {
-    if (!mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
+      if (mapLeadTypeFilter !== "all" && getPermitLeadType(lead) !== mapLeadTypeFilter) return false;
       if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
       if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
         if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
@@ -1101,7 +1105,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
       }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -1113,7 +1117,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         address: lead.address!,
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
-        label: "신규",
+        label: getPermitLeadType(lead) === "new" ? "신규" : "영업",
         // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
         // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
         nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
@@ -1133,14 +1137,19 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         excludeFromAutoBounds: true
       }));
   }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
-  // 2026-08-30 피드백: 오른쪽 패널 "신규 리드" 탭에 쓸 목록입니다 — 실제로 지도에 마커로 떠 있는
-  // 리드와 같은 소스(반경 검색 결과 우선, 없으면 "전체 리드 보기")를 그대로 사용해 목록과 지도가
-  // 항상 같은 리드를 가리키게 합니다.
+  // 우측 목록은 원본 조회 결과가 아니라 실제 생성된 지도 마커 ID를 기준으로 만듭니다. 반경과 전체
+  // 보기를 함께 켠 경우 두 집합을 합치고, 주소가 없어 마커를 만들 수 없는 리드는 목록에서도 제외합니다.
   const leadsForRightPanel = useMemo(() => {
-    if (leadRadiusOpen && leadRadiusResult?.leads.length) return leadRadiusResult.leads;
-    if (showAllLeadsOnMap) return filteredAllLeadsForMap;
-    return [];
-  }, [leadRadiusOpen, leadRadiusResult, showAllLeadsOnMap, filteredAllLeadsForMap]);
+    const visibleLeadIds = new Set([...leadRadiusMapMarkers, ...allLeadsMapMarkers].map((marker) => marker.id));
+    if (!visibleLeadIds.size) return [];
+    const candidates = [...(leadRadiusResult?.leads || []), ...filteredAllLeadsForMap];
+    const seen = new Set<string>();
+    return candidates.filter((lead) => {
+      if (!visibleLeadIds.has(lead.id) || seen.has(lead.id)) return false;
+      seen.add(lead.id);
+      return true;
+    });
+  }, [leadRadiusResult, filteredAllLeadsForMap, leadRadiusMapMarkers, allLeadsMapMarkers]);
   // 리드가 지도에서 사라지면(반경 검색 종료·전체 리드 보기 끔) 탭이 빈 리드 목록에 멈춰있지
   // 않도록, 실제로 리드가 있을 때만 "leads" 탭을 유지합니다.
   const activeRightPanelTab: "stores" | "leads" = rightPanelTab === "leads" && leadsForRightPanel.length ? "leads" : "stores";
@@ -1148,6 +1157,16 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
     () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers, ...liveVehicleMarkers],
     [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleMarkers]
   );
+  const visibleMapLayerCounts = useMemo(() => {
+    const leadMarkers = [...leadRadiusMapMarkers, ...allLeadsMapMarkers];
+    return {
+      customers: markers.filter((marker) => marker.tone === "customer").length,
+      newLeads: leadMarkers.filter((marker) => marker.label?.startsWith("신규")).length,
+      salesLeads: leadMarkers.filter((marker) => marker.label?.startsWith("영업")).length,
+      activeVehicles: liveVehicleLocations.filter((location) => !location.isStale).length,
+      staleVehicles: liveVehicleLocations.filter((location) => location.isStale).length
+    };
+  }, [markers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleLocations]);
   const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
@@ -1681,7 +1700,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   leadRadiusOpen ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-teal-800 hover:bg-teal-50"
                 }`}
                 onClick={() => setLeadRadiusOpen((value) => !value)}
-                title="지도를 클릭해 원하는 지점 주변 반경 안의 신규 리드를 찾습니다."
+                title="지도를 클릭해 원하는 지점 주변 반경 안의 신규·영업 리드를 찾습니다."
                 type="button"
               >
                 <Radar className="h-4 w-4" />
@@ -1699,7 +1718,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                     return next;
                   })
                 }
-                title="지도에 활성 신규 리드 전체를 표시합니다."
+                title="지도에 활성 신규·영업 리드 전체를 표시합니다."
                 type="button"
               >
                 <Layers className="h-4 w-4" />
@@ -1752,7 +1771,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           <button
             className="flex h-11 shrink-0 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-900 shadow-[0_8px_18px_rgba(15,118,110,0.12)] transition hover:border-teal-300 hover:bg-teal-100"
             onClick={() => setMarkerViewMode("vehicle")}
-            title={`최근 수신 ${liveVehicleSummary.latestLabel}`}
+            title={`최근 수신 ${liveVehicleSummary.latestLabel} · ${STAFF_LOCATION_FRESHNESS_MINUTES}분 이내 활성, 초과 시 지연`}
             type="button"
           >
             <Truck className="h-4 w-4 shrink-0 text-teal-700" />
@@ -2059,7 +2078,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
               </span>
               <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200">
-                {sourceReady ? `${visibleStores.length}/${allStores.length}곳` : "등록 필요"}
+                {sourceReady
+                  ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}${visibleMapLayerCounts.staleVehicles ? `(+지연 ${visibleMapLayerCounts.staleVehicles})` : ""}`
+                  : "등록 필요"}
               </span>
             </div>
           </div>
@@ -2241,6 +2262,18 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             </span>
             <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 청록 테두리·★ = 기거래처 인근 리드." />
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+              {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
+                <button
+                  className={`h-8 px-2.5 text-[11px] font-black transition ${mapLeadTypeFilter === option.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                  key={option.value}
+                  onClick={() => setMapLeadTypeFilter(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               <button
                 className={`h-8 px-2.5 text-[11px] font-black transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
                 onClick={() => setShowDismissedLeadsOnMap(false)}
@@ -2295,10 +2328,11 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             >
               조회
             </button>
-            {mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
+            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
               <button
                 className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
                 onClick={() => {
+                  setMapLeadTypeFilter("all");
                   setMapLeadIndustryFilter("");
                   setMapLeadRegionSigungu("");
                   setMapLeadRegionDong("");
@@ -2483,7 +2517,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         menuNotes: targetStore.menuSummary,
                         name: targetStore.name,
                         outboundNotes: buildOutboundItemNotes(resolveDisplayIndustry(targetStore)),
-                        phone: targetStore.phone
+                        phone: targetStore.phone,
+                        reviewKeywords: targetStore.reviewKeywords,
+                        reviewSummary: targetStore.reviewSummary
                       })
                     }
                     onSave={(edit) => updateStore(previewStore.id, edit)}
@@ -2597,7 +2633,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   onClick={() => setRightPanelTab("leads")}
                   type="button"
                 >
-                  신규 리드 {leadsForRightPanel.length.toLocaleString()}
+                  리드 {leadsForRightPanel.length.toLocaleString()}
                 </button>
               </div>
             ) : null}
@@ -2611,7 +2647,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                 }}
                 onToggleCollapsed={() => setRightCollapsed((value) => !value)}
                 selectedLeadId={previewLeadId}
-                title={showDismissedLeadsOnMap ? "숨김 리드" : "신규 리드"}
+                title={showDismissedLeadsOnMap ? "숨김 리드" : mapLeadTypeFilter === "all" ? "전체 리드" : PERMIT_LEAD_TYPE_LABEL[mapLeadTypeFilter]}
               />
             ) : (
               <StoreManagementPanel
@@ -2772,7 +2808,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           vehicleOptions={vehicleNameOptions}
         />
       ) : null}
-      {quoteSubject ? <QuoteDrawer companyName={companyName} onClose={() => setQuoteSubject(null)} subject={quoteSubject} /> : null}
+      {quoteSubject ? <QuoteDrawer companyId={churnRiskCompanyId} companyName={companyName} onClose={() => setQuoteSubject(null)} subject={quoteSubject} /> : null}
     </div>
   );
 }
@@ -4308,7 +4344,7 @@ function LiveVehicleStatusPanel({
           </span>
           <div className="min-w-0">
             <p className="truncate text-xs font-black text-slate-950">라이브 차량</p>
-            <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대</p>
+            <p className="truncate text-[11px] font-bold text-slate-500">활성 {activeCount}대 · 지연 {Math.max(0, sorted.length - activeCount)}대 · {STAFF_LOCATION_FRESHNESS_MINUTES}분 기준</p>
           </div>
         </div>
         <Badge className="shrink-0 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{sorted.length}대</Badge>
@@ -5413,6 +5449,8 @@ export type QuoteSubject = {
   outboundNotes?: string[];
   phone?: string;
   reviewCount?: number;
+  reviewKeywords?: string[];
+  reviewSummary?: string;
   instagramUrl?: string;
 };
 type QuoteRow = { id: string; item: string; qty: number; unitPrice: number };
@@ -5811,6 +5849,16 @@ function PermitLeadMapQuickCard({
     }
   }
 
+  async function copyLeadDmScript() {
+    if (!lead) return;
+    try {
+      await navigator.clipboard.writeText(buildLeadDmScript(lead));
+      setMessage("리드 맞춤 DM 문구를 복사했습니다.");
+    } catch {
+      setMessage("복사 권한이 없어 DM 문구를 복사하지 못했습니다.");
+    }
+  }
+
   function onDragHandleMouseDown(event: MouseEvent) {
     event.preventDefault();
     const startX = event.clientX;
@@ -6044,8 +6092,12 @@ function PermitLeadMapQuickCard({
             </a>
           ) : null}
         </div>
-        {message ? <p className="mt-1.5 text-[11px] font-bold text-rose-600">{message}</p> : null}
+        {message ? <p className={`mt-1.5 text-[11px] font-bold ${message.includes("복사했습니다") ? "text-teal-700" : "text-rose-600"}`}>{message}</p> : null}
         <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <button className="maju-button-secondary col-span-2 h-8 justify-center text-xs" onClick={() => void copyLeadDmScript()} type="button">
+            <MessageSquareText className="h-3.5 w-3.5" />
+            맞춤 DM 문구 복사
+          </button>
           <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
             견적서 작성
           </button>
@@ -6060,21 +6112,80 @@ function PermitLeadMapQuickCard({
 
 /** 업종/메뉴 정보를 바탕으로 견적서 초안을 만드는 공용 드로어입니다. 신규 리드 카드·거래처 카드
  * 어디서나 열 수 있고, 저장은 하지 않고 화면에서 편집 후 엑셀로 내려받는 v1입니다. */
-function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly companyName?: string; readonly onClose: () => void; readonly subject: QuoteSubject }) {
+function QuoteDrawer({
+  companyId,
+  companyName = "당사",
+  onClose,
+  subject
+}: {
+  readonly companyId?: string;
+  readonly companyName?: string;
+  readonly onClose: () => void;
+  readonly subject: QuoteSubject;
+}) {
   const draftKey = quoteDraftId(subject);
   const initialDraft = readQuoteDraft(subject);
   const [rows, setRows] = useState<QuoteRow[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry));
   const [menuNotes, setMenuNotes] = useState(initialDraft?.menuNotes || subject.menuNotes || "");
   const [quoteMessage, setQuoteMessage] = useState("");
   const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
+  const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(10);
+  const [recommendationBasis, setRecommendationBasis] = useState("");
+  const [isRecommending, setIsRecommending] = useState(false);
+  const quoteImageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const draft = readQuoteDraft(subject);
     setRows(draft?.rows || buildQuoteDraftRows(subject.industry));
     setMenuNotes(draft?.menuNotes || subject.menuNotes || "");
     setSavedAt(draft?.savedAt || "");
+    setRecommendationBasis("");
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
   }, [draftKey, subject]);
+
+  async function applyRecommendedProducts(count: 10 | 20 | 30) {
+    setRecommendationCount(count);
+    setIsRecommending(true);
+    setQuoteMessage("");
+    try {
+      const response = await fetch("/api/assistant/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          count,
+          industry: subject.industry,
+          menuSummary: menuNotes,
+          reviewKeywords: subject.reviewKeywords,
+          reviewSummary: subject.reviewSummary
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        recommendations?: Array<{ item?: string; reason?: string }>;
+        sourceLabel?: string;
+      } | null;
+      if (!response.ok || !payload?.recommendations) {
+        setQuoteMessage(payload?.message || "추천 품목을 불러오지 못했습니다.");
+        return;
+      }
+      setRows(
+        payload.recommendations.map((recommendation, index) => ({
+          id: `recommended-${Date.now()}-${index}`,
+          item: recommendation.item || "",
+          qty: 1,
+          unitPrice: 0
+        }))
+      );
+      setRecommendationBasis(payload.sourceLabel || "추천 데이터 기반");
+      setSavedAt("");
+      setQuoteMessage(`${payload.recommendations.length}개 추천 품목을 적용했습니다.`);
+    } catch {
+      setQuoteMessage("추천 품목 요청 중 오류가 발생했습니다.");
+    } finally {
+      setIsRecommending(false);
+    }
+  }
 
   function updateRow(id: string, patch: Partial<QuoteRow>) {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -6102,6 +6213,26 @@ function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly co
     await writeXlsxFileModule
       .default([headerRow, ...dataRows, totalRow], { sheet: "견적서" })
       .toFile(`${subject.name}_견적서.xlsx`);
+  }
+
+  async function downloadQuoteImage() {
+    if (!quoteImageRef.current) return;
+    setQuoteMessage("");
+    try {
+      const { toPng } = await import("html-to-image");
+      const dataUrl = await toPng(quoteImageRef.current, {
+        backgroundColor: "#ffffff",
+        pixelRatio: 2
+      });
+      const link = document.createElement("a");
+      const safeName = subject.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "거래처";
+      link.download = `${safeName}_견적서.png`;
+      link.href = dataUrl;
+      link.click();
+      setQuoteMessage("견적서 이미지를 저장했습니다.");
+    } catch {
+      setQuoteMessage("견적서 이미지 생성에 실패했습니다.");
+    }
   }
 
   async function copyQuoteText() {
@@ -6213,6 +6344,29 @@ function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly co
             />
           </div>
 
+          <div className="rounded-lg border border-teal-100 bg-teal-50/50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-black text-teal-900">메뉴·리뷰 기반 추천</p>
+                <p className="mt-1 text-[11px] font-semibold text-teal-700">원하는 품목 수를 누르면 현재 목록을 추천 결과로 바꿉니다.</p>
+              </div>
+              {recommendationBasis ? <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">{recommendationBasis}</span> : null}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {([10, 20, 30] as const).map((count) => (
+                <button
+                  className={`h-8 rounded-md border text-xs font-black transition ${recommendationCount === count && recommendationBasis ? "border-teal-700 bg-teal-700 text-white" : "border-teal-200 bg-white text-teal-800 hover:border-teal-400"}`}
+                  disabled={isRecommending}
+                  key={count}
+                  onClick={() => void applyRecommendedProducts(count)}
+                  type="button"
+                >
+                  {isRecommending && recommendationCount === count ? "추천 중..." : `${count}개 추천`}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-lg border border-slate-200">
             <table className="w-full border-separate border-spacing-0 text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
@@ -6284,7 +6438,7 @@ function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly co
             <Download className="h-4 w-4" />
             엑셀로 다운로드
           </button>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2">
             <button className="maju-button-secondary justify-center text-xs" onClick={() => void copyQuoteText()} type="button">
               <Copy className="h-4 w-4" />
               문안 복사
@@ -6292,6 +6446,10 @@ function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly co
             <button className="maju-button-secondary justify-center text-xs" onClick={saveQuoteDraft} type="button">
               <CheckCircle2 className="h-4 w-4" />
               초안 저장
+            </button>
+            <button className="maju-button-secondary justify-center text-xs" onClick={() => void downloadQuoteImage()} type="button">
+              <FileImage className="h-4 w-4" />
+              이미지 저장
             </button>
             <button className="maju-button-secondary justify-center text-xs" onClick={printQuoteDraft} type="button">
               <FileImage className="h-4 w-4" />
@@ -6305,6 +6463,51 @@ function QuoteDrawer({ companyName = "당사", onClose, subject }: { readonly co
           <p className="text-[11px] font-semibold text-slate-400">
             단가는 자동으로 채워지지 않습니다 — 실제 협상가를 직접 입력한 뒤 다운로드하거나 PDF로 저장하세요.
           </p>
+
+          <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[760px] bg-white p-10 text-slate-950" ref={quoteImageRef}>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">MAJU Intelligence</p>
+            <div className="mt-3 flex items-end justify-between border-b-2 border-slate-900 pb-4">
+              <div>
+                <h1 className="text-3xl font-black">식자재 납품 견적서</h1>
+                <p className="mt-2 text-sm font-bold text-slate-500">{subject.name} 귀중</p>
+              </div>
+              <div className="text-right text-xs font-bold leading-5 text-slate-500">
+                <p>공급사: {companyName}</p>
+                <p>작성일: {new Date().toLocaleDateString("ko-KR")}</p>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-4 text-xs font-bold text-slate-600">
+              <p>업종: {subject.industry || "미분류"}</p>
+              <p>연락처: {subject.phone || "확인 필요"}</p>
+              <p className="col-span-2">주소: {subject.address || "확인 필요"}</p>
+              <p className="col-span-2">메뉴·리뷰 메모: {menuNotes || "현장 확인 후 업데이트"}</p>
+            </div>
+            <table className="mt-6 w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-3">품목명·규격</th>
+                  <th className="w-20 p-3 text-right">수량</th>
+                  <th className="w-28 p-3 text-right">단가</th>
+                  <th className="w-32 p-3 text-right">공급가액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.filter((row) => row.item.trim()).map((row) => (
+                  <tr className="border-b border-slate-200" key={`image-${row.id}`}>
+                    <td className="p-3 font-bold">{row.item}</td>
+                    <td className="p-3 text-right">{row.qty.toLocaleString()}</td>
+                    <td className="p-3 text-right">{row.unitPrice ? `${row.unitPrice.toLocaleString()}원` : "협의"}</td>
+                    <td className="p-3 text-right font-black">{row.unitPrice ? `${(row.qty * row.unitPrice).toLocaleString()}원` : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-5 flex items-center justify-between rounded-lg bg-teal-50 px-5 py-4">
+              <span className="text-sm font-black text-teal-900">견적 합계</span>
+              <span className="text-xl font-black text-teal-900">{total.toLocaleString()}원</span>
+            </div>
+            <p className="mt-6 text-xs font-semibold leading-5 text-slate-500">본 문서는 상담용 초안입니다. 실제 단가, 규격, 납품 주기와 결제 조건은 협의 후 확정됩니다.</p>
+          </div>
         </div>
       </div>
     </div>

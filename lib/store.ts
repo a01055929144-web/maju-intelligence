@@ -5,7 +5,7 @@ import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seo
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
-import { enrichLeadRecommendations } from "./leads";
+import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
@@ -478,10 +478,12 @@ export type StaffMobileLocationInput = {
   driverName?: string;
   lat: number;
   lng: number;
+  recordedAt?: string;
   status?: "active" | "paused" | "offline";
   userAgent?: string;
   userId: string;
 };
+export const STAFF_LOCATION_FRESHNESS_MINUTES = 5;
 export type StaffVehicleLocation = {
   accuracyMeters?: number;
   currentCustomerId?: string;
@@ -2459,13 +2461,7 @@ export async function deleteStaffInvitation(
 
   const rows = await staffStoreRequest(
     supabaseRequest<Array<{ id: string; employee_name: string | null; accepted_by: string | null }>>(
-      `staff_invitations?select=id,employee_name,accepted_by&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`,
-      {
-        method: "DELETE",
-        headers: {
-          Prefer: "return=representation"
-        }
-      }
+      `staff_invitations?select=id,employee_name,accepted_by&id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}&limit=1`
     )
   );
 
@@ -2482,7 +2478,7 @@ export async function deleteStaffInvitation(
         },
         body: JSON.stringify({ status: "inactive", updated_at: new Date().toISOString() })
       }
-    ).catch(() => null);
+    );
 
     // 2026-09-08 피드백("퇴사/해제 시 접근 차단이 되어야 합니다") 대응: 직원을 삭제(퇴사 처리)하면
     // 이 회사 안에서 그 사람의 GPS 위치 기록도 즉시 지웁니다. 다른 회사 소속 기록은 company_id로
@@ -2495,6 +2491,13 @@ export async function deleteStaffInvitation(
       }
     ).catch(() => null);
   }
+
+  await staffStoreRequest(
+    supabaseRequest(`staff_invitations?id=eq.${encodeURIComponent(input.invitationId)}&company_id=eq.${encodeURIComponent(input.companyId)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" }
+    })
+  );
 
   await writeAdminAuditLog({
     companyId: input.companyId,
@@ -2531,6 +2534,40 @@ async function getStaffAssignmentOverride(
   return {
     assignedManagerName: row.assigned_manager_name || undefined,
     assignedVehicle: row.assigned_vehicle || undefined
+  };
+}
+
+export async function getActiveCustomerMembership(input: { companyId: string; userId: string }): Promise<{
+  active: boolean;
+  assignedManagerName?: string;
+  assignedVehicle?: string;
+  role?: StaffInvitation["role"] | "owner" | "member";
+}> {
+  if (!input.companyId || !input.userId) return { active: false };
+  if (!isProductionStoreConfigured()) return { active: true };
+
+  const rows = await supabaseRequest<
+    Array<{
+      role: StaffInvitation["role"] | "owner" | "member";
+      app_users: { status: string | null } | null;
+      companies: { status: string | null } | null;
+    }>
+  >(
+    `company_members?select=role,app_users(status),companies(status)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
+      input.userId
+    )}&status=eq.active&limit=1`
+  );
+  const member = rows[0];
+  if (!member || member.app_users?.status === "inactive" || isCompanyClosedStatus(member.companies?.status)) {
+    return { active: false };
+  }
+
+  const assignment = await getStaffAssignmentOverride(input.companyId, input.userId);
+  return {
+    active: true,
+    assignedManagerName: assignment?.assignedManagerName,
+    assignedVehicle: assignment?.assignedVehicle,
+    role: member.role || "member"
   };
 }
 
@@ -2670,7 +2707,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
         user_id: user.id
       }
     ])
-  }).catch(() => null);
+  });
 
   await staffStoreRequest(supabaseRequest(`staff_invitations?id=eq.${encodeURIComponent(invitation.id)}`, {
     method: "PATCH",
@@ -2944,7 +2981,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
         user_id: user.id
       }
     ])
-  }).catch(() => null);
+  });
 
   await staffStoreRequest(supabaseRequest(`staff_invitations?id=eq.${encodeURIComponent(invitation.id)}`, {
     method: "PATCH",
@@ -3113,7 +3150,7 @@ function toStaffVehicleLocation(row: {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const lastLocationAt = row.last_location_at || undefined;
   const staleMs = lastLocationAt ? Date.now() - new Date(lastLocationAt).getTime() : Number.POSITIVE_INFINITY;
-  const isStale = staleMs > 5 * 60 * 1000;
+  const isStale = staleMs > STAFF_LOCATION_FRESHNESS_MINUTES * 60 * 1000;
   return {
     accuracyMeters: row.last_accuracy_m === null || row.last_accuracy_m === undefined ? undefined : Number(row.last_accuracy_m),
     currentCustomerId: row.current_customer_id || undefined,
@@ -3135,6 +3172,12 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
   if (!input.userId) throw new Error("실제 직원 계정으로 로그인해야 위치를 저장할 수 있습니다.");
   if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) throw new Error("유효한 위치 좌표가 필요합니다.");
 
+  const receivedAt = new Date();
+  const parsedRecordedAt = input.recordedAt ? new Date(input.recordedAt) : receivedAt;
+  const recordedAt = Number.isFinite(parsedRecordedAt.getTime()) && parsedRecordedAt.getTime() <= receivedAt.getTime() + 60_000
+    ? parsedRecordedAt.toISOString()
+    : receivedAt.toISOString();
+
   if (!isProductionStoreConfigured()) {
     return {
       location: {
@@ -3144,8 +3187,8 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
         driverName: input.driverName || "배송기사",
         id: input.userId,
         isStale: false,
-        lastLocationAt: new Date().toISOString(),
-        lastSeenAt: new Date().toISOString(),
+        lastLocationAt: recordedAt,
+        lastSeenAt: receivedAt.toISOString(),
         lat: input.lat,
         lng: input.lng,
         status: input.status || "active",
@@ -3155,7 +3198,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
     };
   }
 
-  const now = new Date().toISOString();
+  const now = receivedAt.toISOString();
   try {
     const rows = await supabaseRequest<
       Array<{
@@ -3186,7 +3229,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
           last_accuracy_m: Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : null,
           last_lat: input.lat,
           last_lng: input.lng,
-          last_location_at: now,
+          last_location_at: recordedAt,
           last_seen_at: now,
           location_status: input.status || "active",
           platform: "mobile_web",
@@ -3210,7 +3253,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
             driver_name: input.driverName || null,
             latitude: input.lat,
             longitude: input.lng,
-            recorded_at: now,
+            recorded_at: recordedAt,
             user_id: input.userId
           }
         ])
@@ -3228,8 +3271,9 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
   }
 }
 
-export async function getStaffVehicleLocations(companyId?: string): Promise<StaffVehicleLocation[]> {
+export async function getStaffVehicleLocations(companyId?: string, options: { userId?: string } = {}): Promise<StaffVehicleLocation[]> {
   if (!companyId || !isProductionStoreConfigured()) return [];
+  const userFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
   try {
     const rows = await supabaseRequest<
       Array<{
@@ -3248,7 +3292,7 @@ export async function getStaffVehicleLocations(companyId?: string): Promise<Staf
     >(
       `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(
         companyId
-      )}&last_lat=not.is.null&last_lng=not.is.null&order=last_location_at.desc&limit=100`
+      )}${userFilter}&last_lat=not.is.null&last_lng=not.is.null&order=last_location_at.desc&limit=100`
     );
     return rows.map(toStaffVehicleLocation).filter((location): location is StaffVehicleLocation => Boolean(location));
   } catch (error) {
@@ -4743,13 +4787,22 @@ export async function removeCompanyJobTitle(companyId: string, jobTitleId: strin
   }).catch(() => null);
 }
 
-export async function getCustomerOperations(customerId: string, companyId?: string) {
+export async function getCustomerOperations(
+  customerId: string,
+  companyId?: string,
+  options: { attachmentOffset?: number; noteOffset?: number } = {}
+) {
   const id = companyId || getDefaultCompanyId();
+  const attachmentOffset = Math.max(0, Math.floor(options.attachmentOffset || 0));
+  const noteOffset = Math.max(0, Math.floor(options.noteOffset || 0));
+  const pageSize = 50;
 
   if (!isProductionStoreConfigured() || customerId.startsWith("sample-") || customerId.startsWith("local-")) {
     return {
       attachments: [],
+      attachmentsTruncated: false,
       notes: [],
+      notesTruncated: false,
       source: "empty" as const
     };
   }
@@ -4767,7 +4820,7 @@ export async function getCustomerOperations(customerId: string, companyId?: stri
     >(
       `customer_notes?select=id,note_type,memo,next_action,created_by_name,created_at&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(
         customerId
-      )}&order=created_at.desc&limit=50`
+      )}&order=created_at.desc&limit=${pageSize + 1}&offset=${noteOffset}`
     ),
     supabaseRequest<
       Array<{
@@ -4782,13 +4835,15 @@ export async function getCustomerOperations(customerId: string, companyId?: stri
     >(
       `customer_attachments?select=id,attachment_type,title,file_url,mime_type,storage_path,created_at&company_id=eq.${encodeURIComponent(
         id
-      )}&customer_id=eq.${encodeURIComponent(customerId)}&order=created_at.desc&limit=50`
+      )}&customer_id=eq.${encodeURIComponent(customerId)}&order=created_at.desc&limit=${pageSize + 1}&offset=${attachmentOffset}`
     )
   ]);
 
   return {
-    attachments: attachments.map(toCustomerAttachmentItem),
-    notes: notes.map(toCustomerNoteItem),
+    attachments: attachments.slice(0, pageSize).map(toCustomerAttachmentItem),
+    attachmentsTruncated: attachments.length > pageSize,
+    notes: notes.slice(0, pageSize).map(toCustomerNoteItem),
+    notesTruncated: notes.length > pageSize,
     source: "supabase" as const
   };
 }
@@ -5249,6 +5304,16 @@ export async function createCustomerAttachmentSignedUrl(storagePath: string) {
   const config = getSupabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
   return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
+}
+
+export async function getCustomerAttachmentOwnerByStoragePath(companyId: string, storagePath: string): Promise<string | null> {
+  if (!companyId || !storagePath || !isProductionStoreConfigured()) return null;
+
+  const rows = await supabaseRequest<Array<{ customer_id: string }>>(
+    `customer_attachments?select=customer_id&company_id=eq.${encodeURIComponent(companyId)}&storage_path=eq.${encodeURIComponent(storagePath)}&limit=1`
+  );
+
+  return rows[0]?.customer_id || null;
 }
 
 async function countTableRows(table: string, name: string, description: string): Promise<DatabaseCheck> {
@@ -6249,14 +6314,10 @@ export async function ingestPermitLeadRows(
   await upsertCompany(companyId, "마주식자재");
 
   const businessNumbers = Array.from(new Set(rows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)));
-  const [existingCustomersByBizNo, existingLeadsByBizNo] = await Promise.all([
-    businessNumbers.length
-      ? supabaseRequest<Array<{ id: string; business_registration_number: string }>>(
-          `normalized_customers?select=id,business_registration_number&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=in.(${businessNumbers
-            .map(encodeURIComponent)
-            .join(",")})`
-        ).catch(() => [])
-      : Promise.resolve([]),
+  const [existingCustomerRows, existingLeadsByBizNo] = await Promise.all([
+    supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null; address: string | null; phone: string | null }>>(
+      `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}`
+    ).catch(() => []),
     businessNumbers.length
       ? supabaseRequest<Array<{ id: string; business_number: string; keyword_volume: number | null; review_count: number | null; rating: number | null }>>(
           `business_permit_leads?select=id,business_number,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${businessNumbers
@@ -6265,7 +6326,13 @@ export async function ingestPermitLeadRows(
         ).catch(() => [])
       : Promise.resolve([])
   ]);
-  const customerBizNoSet = new Set(existingCustomersByBizNo.map((row) => row.business_registration_number));
+  const duplicateCandidates: LeadDuplicateCandidate[] = existingCustomerRows.map((row) => ({
+    id: row.id,
+    customerName: row.customer_name,
+    businessNumber: row.business_registration_number,
+    address: row.address,
+    phone: row.phone
+  }));
   const leadBizNoToId = new Map(existingLeadsByBizNo.map((row) => [row.business_number, row.id]));
   // 재수집(업데이트) 시 이미 보강된 검색량/리뷰 값을 점수 계산에 계속 반영하기 위한 조회맵입니다.
   // 이게 없으면 크론이 매일 같은 리드를 재수집할 때마다 keyword_demand_score/place_activity_score가
@@ -6295,7 +6362,11 @@ export async function ingestPermitLeadRows(
     const classification = classifyPermitLeadIndustry(row.industry || "", businessName);
     if (!classification.isTarget) result.excludedNonTarget += 1;
 
-    const isDuplicate = businessNumber ? customerBizNoSet.has(businessNumber) : false;
+    const duplicateMatch = findLeadCustomerDuplicate(
+      { businessName, businessNumber, address: row.address, phone: row.phone },
+      duplicateCandidates
+    );
+    const isDuplicate = Boolean(duplicateMatch);
     if (isDuplicate) result.duplicates += 1;
 
     // 자동 동기화(gov/seoul)로 아직 한 번도 못 본 사업자인데 개업일(없으면 인허가일)이 90일보다
@@ -6382,13 +6453,14 @@ export async function ingestPermitLeadRows(
       industry_primary: classification.primary,
       industry_tags: classification.tags,
       is_target_industry: classification.isTarget,
+      matched_customer_id: duplicateMatch?.customerId || null,
       is_duplicate: isDuplicate,
       exclude_reason: !isActive
         ? "폐업·휴업 등 비활성 상태"
         : !classification.isTarget
           ? "영업 대상 업종 아님"
           : isDuplicate
-            ? "이미 등록된 거래처(사업자번호 일치)"
+            ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
       status: excluded ? "제외" : "신규 수집",
       next_action: nextAction.action,
@@ -7588,6 +7660,44 @@ export async function convertPermitLeadToCustomer(
   const lead = rows[0];
   if (!lead) return { ok: false, message: "리드를 찾을 수 없습니다." };
 
+  // 수집 이후 거래처가 새로 등록됐을 수 있으므로 전환 직전에 동일한 규칙으로 다시 검사합니다.
+  const customerRows = await supabaseRequest<
+    Array<{ id: string; customer_name: string; business_registration_number: string | null; address: string | null; phone: string | null }>
+  >(
+    `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}`
+  ).catch(() => []);
+  const duplicateMatch = findLeadCustomerDuplicate(
+    { businessName: lead.business_name, businessNumber: lead.business_number, address: lead.address, phone: lead.phone },
+    customerRows.map((row) => ({
+      id: row.id,
+      customerName: row.customer_name,
+      businessNumber: row.business_registration_number,
+      address: row.address,
+      phone: row.phone
+    }))
+  );
+  if (duplicateMatch) {
+    const reason = `이미 등록된 거래처(${duplicateMatch.reason})`;
+    await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        exclude_reason: reason,
+        is_duplicate: true,
+        matched_customer_id: duplicateMatch.customerId,
+        next_action: "제외 검토",
+        next_action_reasons: [reason],
+        status: "제외",
+        updated_at: new Date().toISOString()
+      })
+    });
+    return {
+      ok: false,
+      customerId: duplicateMatch.customerId,
+      message: `${duplicateMatch.customerName} 거래처와 중복되어 전환하지 않았습니다. (${duplicateMatch.reason})`
+    };
+  }
+
   const created = await upsertCustomerMaster(
     {
       customerName: lead.business_name,
@@ -7833,7 +7943,7 @@ export async function refreshPermitLeadRecommendationScores(companyId: string, r
     // "성사 확률이 높은 곳"을 상위 업종 일치 리드로 자연스럽게 끌어올리기 위함입니다.
     const industryFit = industryMatchesTop && lead.isTargetIndustry ? 20 : baseIndustryFit;
 
-    const scoreBreakdown = computePermitLeadScoreBreakdown({
+    const scoreBreakdown: Record<string, number> = computePermitLeadScoreBreakdown({
       leadPeriod: lead.leadPeriod,
       isTarget: lead.isTargetIndustry,
       industryKnown,
@@ -7846,6 +7956,9 @@ export async function refreshPermitLeadRecommendationScores(companyId: string, r
     scoreBreakdown.industry_fit_score = industryFit;
     scoreBreakdown.route_fit_score = routeFitScoreFromDistanceKm(lead.distanceKm);
     const scoreTotal = Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0);
+    // 점수에는 더하지 않는 설명용 신호입니다. 화면 세션의 topIndustries 응답에 의존하지 않고도
+    // 새로고침 후 동일한 "주력 업종" 추천 사유를 복원할 수 있도록 score_breakdown에 함께 보존합니다.
+    scoreBreakdown.top_industry_match = industryMatchesTop && lead.isTargetIndustry ? 1 : 0;
 
     return {
       id: lead.id,
@@ -9653,10 +9766,15 @@ function getOperationalScoringWeights(): AdminDashboardPayload["scoringWeights"]
   ];
 }
 
-export async function getUploadHistory(companyId?: string): Promise<UploadHistoryItem[]> {
+export async function getUploadHistory(
+  companyId?: string,
+  options: { limit?: number; offset?: number } = {}
+): Promise<UploadHistoryItem[]> {
   if (!isProductionStoreConfigured()) return [];
 
   const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+  const limit = Math.max(1, Math.min(Math.floor(options.limit || 12), 101));
+  const offset = Math.max(0, Math.floor(options.offset || 0));
   const rows = await supabaseRequest<
     Array<{
       id: string;
@@ -9671,7 +9789,7 @@ export async function getUploadHistory(companyId?: string): Promise<UploadHistor
       ai_reports: Array<{ id: string; health_score: number }>;
     }>
   >(
-    `customer_imports?select=id,company_id,row_count,status,quality_score,duplicate_count,created_at,companies(name),uploaded_files(original_filename),ai_reports(id,health_score)${companyFilter}&order=created_at.desc&limit=12`
+    `customer_imports?select=id,company_id,row_count,status,quality_score,duplicate_count,created_at,companies(name),uploaded_files(original_filename),ai_reports(id,health_score)${companyFilter}&order=created_at.desc&limit=${limit}&offset=${offset}`
   );
 
   return rows.map((row) => ({
