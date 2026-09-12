@@ -93,23 +93,6 @@ export default async function ReportDetailPage({
     }
   ].sort((a, b) => a.score - b.score);
   const primaryAction = scoreActions[0];
-  const operationLinks = [
-    {
-      description: "사업자 상태, 배송주소, 적재위치, 메모를 보완합니다.",
-      href: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
-      label: "거래처 원장 정리"
-    },
-    {
-      description: "White Space 지역과 오늘 방문 매장을 코스로 연결합니다.",
-      href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
-      label: "방문·배송 코스 계산"
-    },
-    {
-      description: "매출 거래원장을 다시 업로드해 등급과 품목 변화를 갱신합니다.",
-      href: companyId ? `/?companyId=${encodeURIComponent(companyId)}` : "/",
-      label: "데이터 업데이트"
-    }
-  ];
   const dataConfidence = Math.min(100, Math.max(45, Math.round(report.customers * 0.8 + report.regions * 4 + (report.totalRevenue > 0 ? 20 : 0))));
   const isAdminPreview = Boolean(adminSession && !customerSession);
 
@@ -279,24 +262,6 @@ export default async function ReportDetailPage({
           </CardContent>
         </Card>
 
-        <Card className="border-teal-100 bg-teal-50/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              리포트 후 바로 실행할 작업
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3">
-            {operationLinks.map((item) => (
-              <Link key={item.label} className="group rounded-md border border-teal-100 bg-white p-4 transition hover:border-teal-300 hover:bg-teal-50" href={item.href}>
-                <p className="text-sm font-black text-slate-950">{item.label}</p>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{item.description}</p>
-                <span className="mt-4 inline-flex text-xs font-black text-teal-800 transition group-hover:translate-x-0.5">작업 열기</span>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-
         <div className="grid gap-6 lg:grid-cols-3">
           <ReportBlock title="거래처 분포" icon={MapPin}>
             {report.regionDistribution.slice(0, 6).map((item) => (
@@ -367,7 +332,7 @@ function ReportBasisPanel({
   ];
 
   return (
-    <div className="maju-section-card">
+    <Card className="overflow-hidden">
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">진단 기준</p>
@@ -394,7 +359,7 @@ function ReportBasisPanel({
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
