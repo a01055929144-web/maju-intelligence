@@ -2597,6 +2597,29 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             <DeliveryAssignmentPanel
               collapsed={leftCollapsed}
               fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
+              liveVehicleDetails={
+                <LiveVehicleStatusPanel
+                  activeRouteVehicleId={mainMapRouteVehicleId}
+                  completions={todayCompletions}
+                  onAnalyze={openVehicleAnalysis}
+                  onFocusVehicle={(vehicleId) => {
+                    setPreviewLeadId("");
+                    setPreviewStoreId("");
+                    setMapFocusId(`vehicle-${vehicleId}`);
+                    setMarkerViewMode("vehicle");
+                  }}
+                  onPreviewStore={(storeId) => {
+                    setPreviewLeadId("");
+                    setPreviewStoreId(storeId);
+                    setRightPanelTab("stores");
+                  }}
+                  onToggleRoute={toggleMainMapRoute}
+                  routeLoading={mainMapRouteLoading}
+                  selectedVehicle={selectedLiveVehicle}
+                  storeById={storeById}
+                  vehicles={liveVehicleLocations}
+                />
+              }
               onAddDriver={addManualDriver}
               onDeleteVehicle={deleteVehicle}
               onSelectLiveVehicle={selectLiveVehicle}
@@ -2628,29 +2651,6 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
-            {!rightCollapsed ? (
-              <LiveVehicleStatusPanel
-                activeRouteVehicleId={mainMapRouteVehicleId}
-                completions={todayCompletions}
-                onAnalyze={openVehicleAnalysis}
-                onFocusVehicle={(vehicleId) => {
-                  setPreviewLeadId("");
-                  setPreviewStoreId("");
-                  setMapFocusId(`vehicle-${vehicleId}`);
-                  setMarkerViewMode("vehicle");
-                }}
-                onPreviewStore={(storeId) => {
-                  setPreviewLeadId("");
-                  setPreviewStoreId(storeId);
-                  setRightPanelTab("stores");
-                }}
-                onToggleRoute={toggleMainMapRoute}
-                routeLoading={mainMapRouteLoading}
-                selectedVehicle={selectedLiveVehicle}
-                storeById={storeById}
-                vehicles={liveVehicleLocations}
-              />
-            ) : null}
             {!rightCollapsed && leadsForRightPanel.length ? (
               <div className="flex items-center gap-1 border-b border-slate-200/80 bg-slate-50 p-1.5">
                 <button
@@ -3107,6 +3107,7 @@ function ConfirmDialog({
 function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
+  liveVehicleDetails,
   liveVehicles,
   onAddDriver,
   onDeleteVehicle,
@@ -3121,6 +3122,7 @@ function DeliveryAssignmentPanel({
 }: {
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
+  readonly liveVehicleDetails: ReactNode;
   readonly liveVehicles: StaffVehicleLocation[];
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onDeleteVehicle: (vehicle: DeliveryVehicle) => Promise<{ ok: boolean; message?: string }>;
@@ -3251,6 +3253,7 @@ function DeliveryAssignmentPanel({
           {!filteredLiveVehicles.length ? <p className="rounded-md bg-white px-2 py-2 text-center text-[11px] font-bold text-slate-500">조건에 맞는 라이브 차량이 없습니다.</p> : null}
         </div>
       </div>
+      {liveVehicleDetails}
       <div className="border-b border-slate-100 p-3">
         <button
           className={`w-full rounded-md border px-3 py-2.5 text-left transition ${
