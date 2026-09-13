@@ -359,9 +359,22 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
 
                 {activeDriver ? (
                   <>
-                    {!activeDriver.planMatchedThatDay && activeDriver.completions.length ? (
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-black text-slate-700">{activeDriver.driverName}</p>
+                      <Badge
+                        className={
+                          activeDriver.planMatchedThatDay
+                            ? "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100"
+                            : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200"
+                        }
+                      >
+                        {activeDriver.planMatchedThatDay ? "당일 확정 코스" : "현재 배정 기준 추정"}
+                      </Badge>
+                    </div>
+                    {!activeDriver.planMatchedThatDay ? (
                       <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] font-bold leading-4 text-amber-800">
-                        이 날짜엔 코스 확정 기록이 없어, 계획 순서는 현재 등록된 담당자 값으로 추정한 것입니다.
+                        이 날짜에는 코스 확정 기록이 없습니다. 아래 담당자 구분과 계획 순서는 현재 거래처 배정을 기준으로 한 참고값이며,
+                        당시 실제 배정과 다를 수 있습니다.
                       </p>
                     ) : null}
                     <div className="mt-3 grid grid-cols-2 gap-2">
