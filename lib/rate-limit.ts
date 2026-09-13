@@ -1,3 +1,5 @@
+import { createHash } from "crypto";
+
 /**
  * Login/signup/forgot-password throttling.
  *
@@ -151,8 +153,8 @@ export async function consumeRequestRateLimit(
   options: { limit?: number; lockoutMs?: number; windowMs?: number } = {}
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
   const limit = Math.max(1, options.limit || 30);
-  const lockoutMs = Math.max(1_000, options.lockoutMs || 10 * 60 * 1000);
-  const windowMs = Math.max(1_000, options.windowMs || 10 * 60 * 1000);
+  const windowMs = Math.max(1_000, options.windowMs || 60 * 1000);
+  const lockoutMs = Math.max(1_000, options.lockoutMs || windowMs);
   const key = `request:${identifier.trim().toLowerCase()}`;
   const now = Date.now();
 
@@ -185,4 +187,12 @@ export async function consumeRequestRateLimit(
   const lockedUntil = attempts > limit ? now + lockoutMs : null;
   memoryRequestAttempts.set(key, { failures: attempts, firstFailureAt: withinWindow ? existing!.firstFailureAt : now, lockedUntil });
   return lockedUntil ? { allowed: false, retryAfterSeconds: Math.ceil(lockoutMs / 1000) } : { allowed: true };
+}
+
+/** Returns a privacy-preserving, namespaced key for public endpoint rate limits. */
+export function getRequestRateLimitKey(request: Request, namespace: string): string {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const clientAddress = forwardedFor || request.headers.get("x-real-ip")?.trim() || "unknown";
+  const addressHash = createHash("sha256").update(clientAddress).digest("hex");
+  return `${namespace}:${addressHash}`;
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, ClipboardEdit, FileText, MessageSquareText, Route, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, ClipboardEdit, Download, FileText, MessageSquareText, Route, Sparkles, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CopyTextButton } from "@/components/copy-text-button";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -25,6 +25,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
   const drafts = await getSalesAssistantDrafts(companyId);
   const followUps = drafts.filter((draft) => draft.type === "follow-up").length;
   const quotes = drafts.filter((draft) => draft.type === "quote").length;
+  const hasLiveDraftData = drafts.length > 0;
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const assistantActions = [
     {
@@ -100,9 +101,14 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
                 실행 초안
               </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">담당자가 검토 후 사용합니다.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">담당자가 검토 후 사용합니다. 텍스트 저장으로 초안을 기기에 보관할 수 있습니다.</p>
             </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{drafts.length.toLocaleString()}개</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
+                {hasLiveDraftData ? "실제 방문 기록 기반" : "실데이터 없음"}
+              </Badge>
+              <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{drafts.length.toLocaleString()}개</Badge>
+            </div>
           </div>
           <div className="divide-y divide-slate-100">
             {drafts.map((draft) => (
@@ -116,9 +122,20 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                   <p className="mt-1 text-xs font-bold text-slate-400">영업 후속 대상</p>
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-black text-slate-950">{draft.title}</p>
-                    <CopyTextButton text={draft.body} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CopyTextButton text={draft.body} />
+                      <a
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50"
+                        download={`영업-초안-${draft.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`}
+                        href={`data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${draft.title}\n거래처: ${draft.leadName}\n지역: ${draft.region}\n유형: ${typeLabels[draft.type]}\n\n${draft.body}\n\n다음 액션: ${draft.nextAction}\n`)}`}
+                        aria-label={`${draft.leadName} ${draft.title} 텍스트 저장`}
+                      >
+                        <Download aria-hidden="true" className="h-3.5 w-3.5" />
+                        텍스트 저장
+                      </a>
+                    </div>
                   </div>
                   <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">{draft.body}</p>
                 </div>
@@ -132,7 +149,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               <div className="p-10 text-center">
                 <Sparkles className="mx-auto mb-3 h-8 w-8 text-teal-700" />
                 <p className="font-black text-slate-950">생성할 후속 초안이 없습니다.</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">방문 결과를 먼저 기록하면 초안이 생성됩니다.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">샘플 문구를 표시하지 않습니다. 실제 방문 결과를 기록하면 해당 데이터로 초안이 생성됩니다.</p>
               </div>
             ) : null}
           </div>

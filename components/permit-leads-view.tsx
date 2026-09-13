@@ -219,7 +219,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
   const [keywordVolumeConfigured, setKeywordVolumeConfigured] = useState(true);
 
-  type LeadTableSortKey = "businessName" | "confidence" | "grade" | "industryPrimary" | "instagram" | "nextAction" | "openDate" | "phone" | "review" | "status";
+  type LeadTableSortKey = "businessName" | "priority" | "grade" | "industryPrimary" | "instagram" | "nextAction" | "openDate" | "phone" | "review" | "status";
   const [tableSortKey, setTableSortKey] = useState<LeadTableSortKey | null>(null);
   const [tableSortDirection, setTableSortDirection] = useState<"asc" | "desc">("asc");
   function toggleTableSort(key: LeadTableSortKey) {
@@ -227,7 +227,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       setTableSortDirection((current) => (current === "asc" ? "desc" : "asc"));
     } else {
       setTableSortKey(key);
-      setTableSortDirection("asc");
+      setTableSortDirection(key === "priority" || key === "grade" || key === "review" ? "desc" : "asc");
     }
   }
 
@@ -503,13 +503,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
   const tableSortedLeads = useMemo(() => {
     if (!tableSortKey) return null;
-    const decorated = filteredLeads.map((lead) => ({ confidence: getLeadConfidence(lead).score, lead }));
+    const decorated = filteredLeads.map((lead) => ({ lead }));
     decorated.sort((a, b) => {
       let diff = 0;
       if (tableSortKey === "businessName") diff = a.lead.businessName.localeCompare(b.lead.businessName, "ko");
       else if (tableSortKey === "industryPrimary") diff = (a.lead.industryPrimary || "").localeCompare(b.lead.industryPrimary || "", "ko");
       else if (tableSortKey === "grade") diff = (gradeSortWeight[a.lead.grade || ""] || 0) - (gradeSortWeight[b.lead.grade || ""] || 0);
-      else if (tableSortKey === "confidence") diff = a.confidence - b.confidence;
+      else if (tableSortKey === "priority") diff = (a.lead.scoreTotal || 0) - (b.lead.scoreTotal || 0);
       else if (tableSortKey === "instagram") diff = (getLeadInstagramHandle(a.lead) ? 1 : 0) - (getLeadInstagramHandle(b.lead) ? 1 : 0);
       else if (tableSortKey === "phone") diff = (a.lead.phone ? 1 : 0) - (b.lead.phone ? 1 : 0);
       else if (tableSortKey === "review") diff = (a.lead.rating || 0) - (b.lead.rating || 0) || (a.lead.reviewCount || 0) - (b.lead.reviewCount || 0);
@@ -2377,7 +2377,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                       sortKeyValue="grade"
                       title="인허가 신선도·업종 적합도·리뷰활동·연락처 확보 여부를 합산한 리드 우선순위 등급입니다(A 85점↑ · B 70점↑ · C 55점↑). 거래처 매출등급과는 별개 기준입니다."
                     />
-                    <LeadSortableHeader className="w-[84px]" label="안정도" sortKeyValue="confidence" />
+                    <LeadSortableHeader
+                      className="w-[84px]"
+                      label="우선순위"
+                      sortKeyValue="priority"
+                      title="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다. 처음 누르면 높은 점수부터 정렬합니다."
+                    />
                     <LeadSortableHeader className="w-[110px]" label="인스타" sortKeyValue="instagram" />
                     <LeadSortableHeader className="w-[118px]" label="전화" sortKeyValue="phone" />
                     <LeadSortableHeader
@@ -2456,14 +2461,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
                         </td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
-                          {(() => {
-                            const confidence = getLeadConfidence(lead);
-                            return (
-                              <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-800">
-                                {confidence.score} · {confidence.label}
-                              </span>
-                            );
-                          })()}
+                          <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-800">
+                            {isPermitLeadUnscored(lead) ? "채점 전" : `${lead.scoreTotal.toLocaleString()}점`}
+                          </span>
                         </td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <a
@@ -3499,8 +3499,13 @@ function PermitLeadQueueCard({
           const confidence = getLeadConfidence(lead);
           return (
             <span className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5" key={lead.id}>
-              <span className="min-w-0 truncate text-xs font-black text-slate-800">{lead.businessName}</span>
-              <span className="shrink-0 text-[11px] font-black text-teal-700">{confidence.score}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-black text-slate-800">{lead.businessName}</span>
+                <span className="mt-0.5 block text-[10px] font-semibold leading-4 text-slate-500">
+                  {confidence.reasons.length ? `우선순위 근거 · ${confidence.reasons.slice(0, 2).join(" · ")}` : "우선순위 근거 확인 필요"}
+                </span>
+              </span>
+              <span className="shrink-0 text-[11px] font-black text-teal-700" title={`리드 신뢰도 ${confidence.score}점 · ${confidence.label}`}>{confidence.score}</span>
             </span>
           );
         })}

@@ -75,9 +75,9 @@ ACTIVE
 - [x] 매출 거래 매칭(`sales-transaction-matcher`) 연동
 - [x] 거래처 0건 표시 버그 수정(2026-09-11, Claude 분석+구현 — 아래 KNOWN ISSUES 참고. 실제 typecheck/lint/build는 사용자/Codex 확인 필요)
 - [x] 첨부파일 종류별 필수 누락/운영 보완/조회 실패 상태 구분
+- [x] 신규 거래처 저장 시 동일 사업체 활성 리드를 자동 제외해 거래처→리드 교차 중복 정리
 
 ## TODO
-- [ ] 거래처-리드 교차 중복 병합 로직 추가(같은 매장이 거래처와 리드에 동시 존재하는 케이스, `docs/pages/leads.md`와 공동 작업 필요)
 - [ ] 거래처 0건 표시 버그 수정 후 `npx tsc --noEmit` / `npm run lint` / `npm run build` PASS 확인(Claude Cowork 세션은 `npm install`이 레지스트리 정책으로 막혀 있어 실행 불가 — esbuild 수준 문법 검사와 중괄호/괄호 균형 체크만 완료한 상태)
 
 ## KNOWN ISSUES

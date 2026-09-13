@@ -403,6 +403,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
   const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
   const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const [liveVehicleConnectionError, setLiveVehicleConnectionError] = useState("");
   const [vehicleAnalysis, setVehicleAnalysis] = useState<{
     completions: DeliveryCompletionEvent[];
     events: StaffLocationEvent[];
@@ -899,8 +900,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
         const params = new URLSearchParams({ completions: "true", hours: "20" });
         if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
         const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
-        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; locations?: StaffVehicleLocation[] } | null;
+        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; error?: string; locations?: StaffVehicleLocation[] } | null;
+        if (!response.ok) throw new Error(payload?.error || "라이브 차량 위치를 불러오지 못했습니다.");
         if (!cancelled && response.ok && Array.isArray(payload?.locations)) {
+          setLiveVehicleConnectionError("");
           setLiveVehicleLocations(payload.locations);
           const activeIds = new Set(payload.locations.filter((location) => !location.isStale).map((location) => location.id));
           const previousIds = knownVehicleIdsRef.current;
@@ -918,8 +921,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
           knownVehicleIdsRef.current = activeIds;
         }
         if (!cancelled && response.ok && Array.isArray(payload?.completions)) setTodayCompletions(payload.completions);
-      } catch {
-        // 다음 폴링에서 복구합니다. 위치 표시는 운영 보조 기능이라 화면 전체를 막지 않습니다.
+      } catch (error) {
+        // 마지막 정상 좌표는 유지하되 통신 실패를 명확히 표시합니다. 다음 4초 폴링이 성공하면 자동 복구됩니다.
+        if (!cancelled) setLiveVehicleConnectionError(error instanceof Error ? error.message : "라이브 차량 연결이 지연되고 있습니다.");
       }
     };
     void load();
@@ -2412,7 +2416,10 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                         // — 그 모달 안에 현재 작업 중인 거래처 정보와 "거래처로 이동" 버튼이 이미 있으므로
                         // 거래처를 보고 싶으면 거기서 한 번 더 누르면 됩니다.
                         const vehicle = liveVehicleLocations.find((location) => `vehicle-${location.id}` === marker.id);
-                        if (vehicle) void openVehicleAnalysis(vehicle);
+                        if (vehicle) {
+                          selectLiveVehicle(vehicle);
+                          void openVehicleAnalysis(vehicle);
+                        }
                         return;
                       }
                       if (!marker.id || marker.tone === "origin") return;
@@ -2620,6 +2627,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
                   vehicles={liveVehicleLocations}
                 />
               }
+              liveVehicleError={liveVehicleConnectionError}
               onAddDriver={addManualDriver}
               onDeleteVehicle={deleteVehicle}
               onSelectLiveVehicle={selectLiveVehicle}
@@ -3108,6 +3116,7 @@ function DeliveryAssignmentPanel({
   collapsed,
   fuelTypeConfiguredByVehicleId,
   liveVehicleDetails,
+  liveVehicleError,
   liveVehicles,
   onAddDriver,
   onDeleteVehicle,
@@ -3123,6 +3132,7 @@ function DeliveryAssignmentPanel({
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
   readonly liveVehicleDetails: ReactNode;
+  readonly liveVehicleError: string;
   readonly liveVehicles: StaffVehicleLocation[];
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onDeleteVehicle: (vehicle: DeliveryVehicle) => Promise<{ ok: boolean; message?: string }>;
@@ -3207,6 +3217,12 @@ function DeliveryAssignmentPanel({
         </button>
       </div>
       <div className="space-y-2 border-b border-slate-200 bg-slate-50/70 p-3">
+        {liveVehicleError ? (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-bold leading-4 text-amber-800" role="status">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>라이브 연결 지연 · 마지막 정상 위치를 표시 중입니다. {liveVehicleError}</span>
+          </div>
+        ) : null}
         <label className="relative block">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
           <input

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -27,6 +27,7 @@ type OperationNote = {
 };
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
+type DeliverySaveProgress = { attachment?: Attachment; key: string; noteId?: string };
 
 const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
   { label: "도착완료", value: "arrived" },
@@ -72,10 +73,12 @@ export function MobileDeliveryProofPanel({
   const [manualRecipientPhone, setManualRecipientPhone] = useState("");
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("sms");
   const [messageResult, setMessageResult] = useState("");
+  const [resolvedMessage, setResolvedMessage] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [errorDetail, setErrorDetail] = useState("");
+  const saveProgressRef = useRef<DeliverySaveProgress | null>(null);
   const deliveryProofAttachments = useMemo(() => attachments.filter((item) => item.attachmentType === "delivery_proof"), [attachments]);
   const deliveryNotes = useMemo(() => notes.filter((item) => item.noteType === "delivery" || item.noteType === "delivery_message"), [notes]);
   const ownerMessage = createOwnerMessage(customerName, memo, deliveryStatus, file?.name || "", loadingPosition, {
@@ -147,8 +150,16 @@ export function MobileDeliveryProofPanel({
       ? `\n위치 태그: https://www.google.com/maps?q=${location.lat},${location.lng} (정확도 약 ${location.accuracy}m)`
       : "";
     const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카카오 수동/알림톡 대기" : "SMS 자동/무료 수동"}${file?.name ? `\n증빙 파일: ${file.name}` : ""}${locationText}`;
+    const attemptKey = JSON.stringify([
+      customerId,
+      deliveryStatus,
+      messageChannel,
+      memoText,
+      file ? `${file.name}:${file.size}:${file.lastModified}` : ""
+    ]);
+    const progress = saveProgressRef.current?.key === attemptKey ? saveProgressRef.current : { key: attemptKey };
 
-    const noteRequest = fetchWithTimeout("/api/customer-operations", {
+    const noteRequest = progress.noteId ? Promise.resolve(null) : fetchWithTimeout("/api/customer-operations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -158,14 +169,25 @@ export function MobileDeliveryProofPanel({
         nextAction: messageChannel === "kakao" ? "카카오 알림톡 또는 수동 공유" : "SMS 자동 발송 또는 수동 문자",
         noteType: "delivery"
       })
-    }, 15000);
-    const attachmentRequest = file ? uploadDeliveryProof(customerId, file, file.name) : Promise.resolve(new Response(null, { status: 200 }));
-    const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]).catch(() => [null, null]);
+    }, 15000).catch(() => null);
+    const attachmentRequest = !file || progress.attachment
+      ? Promise.resolve(null)
+      : uploadDeliveryProof(customerId, file, file.name).catch(() => null);
+    const [noteResponse, attachmentResponse] = await Promise.all([noteRequest, attachmentRequest]);
 
-    setSaving(false);
-
-    const noteOk = Boolean(noteResponse?.ok);
-    const attachmentOk = Boolean(attachmentResponse?.ok);
+    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
+    const attachmentPayload = attachmentResponse?.ok
+      ? ((await attachmentResponse.json().catch(() => null)) as { attachment?: Attachment; persisted?: boolean; uploaded?: boolean } | null)
+      : null;
+    const noteId = progress.noteId || notePayload?.note?.id;
+    const uploadedAttachment = progress.attachment || (
+      attachmentPayload?.attachment && attachmentPayload.persisted === true && attachmentPayload.uploaded === true
+        ? attachmentPayload.attachment
+        : undefined
+    );
+    const noteOk = Boolean(noteId);
+    const attachmentOk = !file || Boolean(uploadedAttachment);
+    saveProgressRef.current = { attachment: uploadedAttachment, key: attemptKey, noteId };
     const attachmentErrorPayload = !attachmentOk ? ((await attachmentResponse?.json().catch(() => null)) as { error?: string; message?: string } | null) : null;
     if (!noteOk || !attachmentOk) {
       const attachmentFailureReason = attachmentErrorPayload?.message || attachmentErrorPayload?.error;
@@ -174,41 +196,48 @@ export function MobileDeliveryProofPanel({
       // 다시 첨부하도록 안내합니다(메모 텍스트는 비우지 않되, 어떤 부분이 실패했는지 구체적으로 알립니다).
       if (noteOk && !attachmentOk) {
         setErrorDetail(
-          `배송 메모는 저장됐지만 사진/영상 업로드에 실패했습니다. 파일을 다시 선택한 뒤 저장을 다시 눌러주세요(메모는 중복 저장되지 않습니다).${attachmentFailureReason ? ` 사유: ${attachmentFailureReason}` : ""}`
+          `배송 메모는 저장됐지만 사진/영상 업로드에 실패했습니다. 아래 재시도 버튼을 누르면 사진/영상만 다시 저장합니다.${attachmentFailureReason ? ` 사유: ${attachmentFailureReason}` : ""}`
         );
       } else if (!noteOk && attachmentOk) {
-        setErrorDetail("사진/영상은 업로드됐지만 배송 메모 저장에 실패했습니다. 저장을 다시 눌러 메모를 다시 저장해주세요.");
+        setErrorDetail("사진/영상은 업로드됐지만 배송 메모 저장에 실패했습니다. 아래 재시도 버튼을 누르면 메모만 다시 저장합니다.");
       } else {
         setErrorDetail(`서버에 저장하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.${attachmentFailureReason ? ` 사유: ${attachmentFailureReason}` : ""}`);
       }
+      setSaving(false);
       setStatus("error");
       return;
     }
 
     setErrorDetail("");
-    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
-    const attachmentPayload = attachmentResponse?.ok ? ((await attachmentResponse.json().catch(() => null)) as { attachment?: Attachment } | null) : null;
-    if (attachmentPayload?.attachment) {
+    if (uploadedAttachment) {
       setAttachments((current) =>
-        current.some((item) => item.id === attachmentPayload.attachment?.id) ? current : [attachmentPayload.attachment as Attachment, ...current]
+        current.some((item) => item.id === uploadedAttachment.id) ? current : [uploadedAttachment, ...current]
       );
     }
     const messageResponse = await fetchWithTimeout("/api/customer-messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        attachmentId: attachmentPayload?.attachment?.id,
+        attachmentId: uploadedAttachment?.id,
         channel: messageChannel,
         customerId,
         message: ownerMessage,
-        noteId: notePayload?.note?.id,
+        noteId,
         triggerType: deliveryStatus === "issue" ? "delivery_issue" : "delivery_complete"
       })
     }, 12000).catch(() => null);
     const messagePayload = (await messageResponse?.json().catch(() => null)) as
-      | { log?: { errorMessage?: string; recipientPhone?: string; status?: string }; message?: string; sent?: boolean }
+      | { log?: { errorMessage?: string; messageBody?: string; recipientPhone?: string; status?: string }; message?: string; sent?: boolean }
       | null;
     setManualRecipientPhone(messagePayload?.log?.recipientPhone || "");
+    setResolvedMessage(messagePayload?.log?.messageBody || ownerMessage);
+    if (!messageResponse?.ok) {
+      setMessageResult(messagePayload?.message || "거래처 알림 요청에 실패했습니다.");
+      setErrorDetail("배송 메모와 증빙은 저장됐지만 거래처 알림 처리에 실패했습니다. 아래 재시도 버튼을 누르면 알림만 다시 요청합니다.");
+      setSaving(false);
+      setStatus("error");
+      return;
+    }
     setMessageResult(
       messagePayload?.sent
         ? `거래처 알림 발송 완료 · ${messagePayload.log?.recipientPhone || "수신번호"}`
@@ -216,6 +245,8 @@ export function MobileDeliveryProofPanel({
     );
     setFile(null);
     setMemo("");
+    saveProgressRef.current = null;
+    setSaving(false);
     setStatus("saved");
     await loadProofs();
   }
@@ -232,13 +263,19 @@ export function MobileDeliveryProofPanel({
   async function shareOwnerMessage() {
     if (!navigator.share) {
       await copyOwnerMessage();
+      setCopyMessage("공유 기능을 지원하지 않아 문구를 복사했습니다. 저장 후 문자 보내기 버튼을 이용해주세요.");
       return;
     }
     try {
       await navigator.share({ text: ownerMessage, title: `${customerName} 배송 안내` });
       setCopyMessage("공유 화면을 열었습니다.");
-    } catch {
-      setCopyMessage("공유를 취소했거나 지원되지 않아 문구를 복사해 사용하세요.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setCopyMessage("공유를 취소했습니다. 필요하면 아래 문자 보내기 버튼을 이용해주세요.");
+        return;
+      }
+      await copyOwnerMessage();
+      setCopyMessage("공유 화면을 열지 못해 문구를 복사했습니다. 아래 문자 보내기 버튼을 이용해주세요.");
     }
   }
 
@@ -359,7 +396,7 @@ export function MobileDeliveryProofPanel({
 
       <Button className="mt-3 h-11 w-full bg-blue-700 font-black hover:bg-blue-800" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
-        {saving ? "저장 중" : status === "saved" ? "저장 완료" : "완료 저장"}
+        {saving ? "저장 중" : status === "saved" ? "저장 완료" : status === "error" ? "실패 단계 재시도" : "완료 저장"}
       </Button>
 
       {status === "error" ? (
@@ -370,7 +407,7 @@ export function MobileDeliveryProofPanel({
       {status === "saved" && manualRecipientPhone ? (
         <a
           className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white text-sm font-black text-blue-800 shadow-sm"
-          href={createSmsHref(manualRecipientPhone, ownerMessage)}
+          href={createSmsHref(manualRecipientPhone, resolvedMessage || ownerMessage)}
         >
           <MessageSquareText className="h-4 w-4" />
           무료 문자앱으로 보내기
@@ -490,7 +527,8 @@ function deliveryStatusLabel(status: DeliveryStatus) {
 
 function createSmsHref(phone: string, message: string) {
   const normalizedPhone = phone.startsWith("82") ? `0${phone.slice(2)}` : phone;
-  return `sms:${normalizedPhone}?&body=${encodeURIComponent(message)}`;
+  const isIos = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  return `sms:${normalizedPhone}${isIos ? "&" : "?"}body=${encodeURIComponent(message)}`;
 }
 
 function formatHistoryDate(value: string) {

@@ -83,9 +83,116 @@ type FullscreenMapPayload = {
   routePath: ReadonlyArray<KakaoRoutePoint>;
 };
 
+type KakaoLatLng = {
+  getLat: () => number;
+  getLng: () => number;
+};
+
+type KakaoLatLngBounds = {
+  extend: (position: KakaoLatLng) => void;
+  getSouthWest: () => KakaoLatLng;
+};
+
+type KakaoMap = {
+  getCenter: () => KakaoLatLng;
+  getLevel: () => number;
+  relayout?: () => void;
+  setBounds: (bounds: KakaoLatLngBounds, ...padding: number[]) => void;
+  setCenter: (position: KakaoLatLng) => void;
+  setLevel: (level: number) => void;
+};
+
+type KakaoCustomOverlay = {
+  setContent: (content: HTMLElement) => void;
+  setMap: (map: KakaoMap | null) => void;
+  setPosition: (position: KakaoLatLng) => void;
+};
+
+type KakaoCircle = {
+  getBounds: () => KakaoLatLngBounds;
+  setMap: (map: KakaoMap | null) => void;
+  setRadius: (radius: number) => void;
+};
+
+type KakaoMarker = {
+  getPosition: () => KakaoLatLng;
+  setMap: (map: KakaoMap | null) => void;
+};
+
+type KakaoMarkerImage = object;
+type KakaoSize = object;
+type KakaoPoint = object;
+type KakaoPolyline = object;
+
+type KakaoMapMouseEvent = {
+  latLng?: KakaoLatLng;
+};
+
+type KakaoGeocodeResult = {
+  x: number | string;
+  y: number | string;
+};
+
+type KakaoMapsApi = {
+  Circle: new (options: {
+    center: KakaoLatLng;
+    fillColor: string;
+    fillOpacity: number;
+    radius: number;
+    strokeColor: string;
+    strokeOpacity: number;
+    strokeStyle: string;
+    strokeWeight: number;
+  }) => KakaoCircle;
+  CustomOverlay: new (options: {
+    content: HTMLElement | string;
+    map?: KakaoMap;
+    position: KakaoLatLng;
+    yAnchor?: number;
+    zIndex?: number;
+  }) => KakaoCustomOverlay;
+  LatLng: new (lat: number, lng: number) => KakaoLatLng;
+  LatLngBounds: new () => KakaoLatLngBounds;
+  Map: new (container: HTMLElement, options: { center: KakaoLatLng; level: number }) => KakaoMap;
+  Marker: new (options: {
+    draggable?: boolean;
+    image?: KakaoMarkerImage;
+    position: KakaoLatLng;
+    title?: string;
+    zIndex?: number;
+  }) => KakaoMarker;
+  MarkerImage: new (src: string, size: KakaoSize, options?: { offset?: KakaoPoint }) => KakaoMarkerImage;
+  Point: new (x: number, y: number) => KakaoPoint;
+  Polyline: new (options: {
+    endArrow?: boolean;
+    map: KakaoMap;
+    path: KakaoLatLng[];
+    strokeColor: string;
+    strokeOpacity: number;
+    strokeStyle: string;
+    strokeWeight: number;
+  }) => KakaoPolyline;
+  Size: new (width: number, height: number) => KakaoSize;
+  event: {
+    addListener(target: KakaoMap, eventName: "click", handler: (event: KakaoMapMouseEvent) => void): void;
+    addListener(target: object, eventName: string, handler: () => void): void;
+  };
+  load: (callback: () => void) => void;
+  services: {
+    Geocoder: new () => {
+      addressSearch: (address: string, callback: (result: KakaoGeocodeResult[], status: string) => void) => void;
+    };
+    Status: { OK: string };
+  };
+};
+
+type KakaoSdk = {
+  maps: KakaoMapsApi;
+};
+
 declare global {
   interface Window {
-    kakao?: any;
+    kakao?: KakaoSdk;
   }
 }
 
@@ -145,18 +252,18 @@ export function KakaoAddressMap({
   showList = true
 }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const boundsRef = useRef<any>(null);
+  const mapInstanceRef = useRef<KakaoMap | null>(null);
+  const boundsRef = useRef<KakaoLatLngBounds | null>(null);
   // marker.id -> 지오코딩된 LatLng 캐시. 마커를 선택(focusedMarkerId 변경)할 때마다 지도를
   // 통째로 다시 만들고 모든 주소를 재지오코딩하면(과거 버그) 마커가 많을수록 브라우저가 몇 초씩
   // 멈추는 현상이 생깁니다. 최초 로드 때 한 번만 계산해 여기 저장해두고, 이후 포커스 이동은
   // 이 캐시를 읽어 지도만 살짝 이동시키는 훨씬 가벼운 두 번째 effect에서 처리합니다.
-  const markerPositionsRef = useRef<Map<string, any>>(new Map());
+  const markerPositionsRef = useRef<Map<string, KakaoLatLng>>(new Map());
   // 신규 리드 마커만 확대/축소 수준에 따라 "이름표 있는 알약" ↔ "작은 점"으로 다시 그립니다(2026-08-24
   // 피드백: "신규 거래처명 이렇게 뜨게 끔 만들어" — 예전 겹침 문제 때문에 항상 점으로 축약했던 걸,
   // 지도를 확대(level 낮음)했을 때는 화면에 보이는 개수가 자연히 줄어드니 이름표를 다시 보여주도록
   // 절충). CustomOverlay.setContent()로 좌표 재지오코딩 없이 내용만 바꿔 가볍게 유지합니다.
-  const leadOverlayEntriesRef = useRef<Array<{ element: HTMLElement; marker: KakaoMapMarker; overlay: any }>>([]);
+  const leadOverlayEntriesRef = useRef<Array<{ element: HTMLElement; marker: KakaoMapMarker; overlay: KakaoCustomOverlay }>>([]);
   // marker.id -> 현재 화면에 붙어 있는 마커 DOM(button) 엘리먼트. 선택된 거래처/리드가 지도에서도
   // 눈에 띄도록(2026-08-30 피드백: "선택한 거래처 지도에서도 하이라이트 되면 좋을듯") focusedMarkerId가
   // 바뀔 때 이 엘리먼트에 직접 outline/scale을 입혔다 지웠다 합니다 — 재지오코딩 없이 가벼운 DOM 조작만.
@@ -169,9 +276,9 @@ export function KakaoAddressMap({
   // (마커 클릭과 무관하게) 지도가 통째로 재생성됩니다. ref로 최신 콜백만 따로 추적해 boot effect가
   // 이 값 변화에 반응하지 않도록 분리합니다.
   const onMarkerClickRef = useRef(onMarkerClick);
-  const radiusCircleRef = useRef<any>(null);
-  const radiusHandleMarkerRef = useRef<any>(null);
-  const radiusLabelOverlayRef = useRef<any>(null);
+  const radiusCircleRef = useRef<KakaoCircle | null>(null);
+  const radiusHandleMarkerRef = useRef<KakaoMarker | null>(null);
+  const radiusLabelOverlayRef = useRef<KakaoCustomOverlay | null>(null);
   const radiusOnChangeRef = useRef(radiusOverlay?.onRadiusChange);
   const radiusOnClearRef = useRef(radiusOverlay?.onClear);
   // radiusOverlay가 지금 화면에 떠 있는지(centerPoint/centerMarkerId가 있는지)를 ref로도 들고 있어,
@@ -193,7 +300,7 @@ export function KakaoAddressMap({
   const vehicleMarkers = useMemo(() => markers.filter((marker) => marker.tone === "vehicle"), [markers]);
   // 차량마다: 지금 지도에 붙어 있는 CustomOverlay와, 그 오버레이가 마지막으로 가 있던 좌표를
   // 함께 들고 있어야 "이전 위치 -> 새 위치"를 보간할 기준점이 생깁니다.
-  const vehicleOverlaysRef = useRef<Map<string, { overlay: any; lat: number; lng: number }>>(new Map());
+  const vehicleOverlaysRef = useRef<Map<string, { overlay: KakaoCustomOverlay; lat: number; lng: number }>>(new Map());
   // 차량마다 진행 중인 requestAnimationFrame id — 다음 GPS 갱신이 이전 애니메이션이 끝나기 전에
   // 도착하면(폴링 주기가 애니메이션 시간보다 짧으면) 이전 애니메이션을 취소하고 "지금 위치"에서
   // 새 목표로 다시 보간을 시작합니다.
@@ -272,7 +379,7 @@ export function KakaoAddressMap({
         // "신규 리드 서치"(네이버 지도 반경 도구 참고): active일 때 지도를 왼쪽 클릭하면 그 지점에
         // 고정 기본 반경(기본 500m)으로 즉시 원을 만들고 onLocked로 부모에 알립니다. 이후 크기
         // 조절은 아래 radiusOverlay effect의 드래그 손잡이가 맡습니다.
-        kakao.maps.event.addListener(map, "click", (mouseEvent: any) => {
+        kakao.maps.event.addListener(map, "click", (mouseEvent: KakaoMapMouseEvent) => {
           if (!leadSearchRef.current?.active) return;
           const clickLatLng = mouseEvent.latLng;
           if (!clickLatLng) return;
@@ -306,7 +413,7 @@ export function KakaoAddressMap({
         markerElementsRef.current = new Map();
         highlightedElementRef.current = null;
         leadOverlayEntriesRef.current = [];
-        let focusedPosition: any = null;
+        let focusedPosition: KakaoLatLng | null = null;
         let found = 0;
         let primaryFound = 0;
         const roadPathSegments = splitRoutePath(routePath).map((segment) => segment.map((point) => new kakao.maps.LatLng(point.lat, point.lng)));
@@ -325,7 +432,7 @@ export function KakaoAddressMap({
         const computeCompactLeadMarkers = (level: number) => leadMarkerCount > 800 || level >= 7;
         let compactLeadMarkers = computeCompactLeadMarkers(map.getLevel());
 
-        const attachLeadOverlayEntry = (overlay: any, marker: KakaoMapMarker, element: HTMLElement) => {
+        const attachLeadOverlayEntry = (overlay: KakaoCustomOverlay, marker: KakaoMapMarker, element: HTMLElement) => {
           leadOverlayEntriesRef.current.push({ element, marker, overlay });
         };
 
@@ -382,7 +489,7 @@ export function KakaoAddressMap({
             geocodeCacheMissCount += 1;
             return withTimeout(
               new Promise<void>((resolve) => {
-                geocoder.addressSearch(marker.address, (result: any[], geocodeStatus: string) => {
+                geocoder.addressSearch(marker.address, (result: KakaoGeocodeResult[], geocodeStatus: string) => {
                   if (ignore) {
                     resolve();
                     return;
@@ -858,7 +965,7 @@ function getKakaoDomainHint() {
   return "";
 }
 
-function drawRoadRoutePolylines(kakao: any, map: any, roadPathSegments: any[][]) {
+function drawRoadRoutePolylines(kakao: KakaoSdk, map: KakaoMap, roadPathSegments: KakaoLatLng[][]) {
   roadPathSegments.forEach((roadPath) => {
     if (roadPath.length < 2) return;
     new kakao.maps.Polyline({
@@ -977,8 +1084,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 }
 
 function loadKakaoMapSdk(appKey: string) {
-  if (window.kakao?.maps?.services) {
-    return new Promise<void>((resolve) => window.kakao.maps.load(resolve));
+  const loadedKakao = window.kakao;
+  if (loadedKakao?.maps?.services) {
+    return new Promise<void>((resolve) => loadedKakao.maps.load(resolve));
   }
 
   if (kakaoScriptPromise) return kakaoScriptPromise;

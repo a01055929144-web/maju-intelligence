@@ -368,6 +368,9 @@ export default function CrmTimelinePage() {
   const [attachmentsTruncated, setAttachmentsTruncated] = useState(false);
   const [notesTruncated, setNotesTruncated] = useState(false);
   const [isLoadingMoreOperations, setIsLoadingMoreOperations] = useState(false);
+  const [operationsStatus, setOperationsStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [operationsError, setOperationsError] = useState("");
+  const [operationsReloadToken, setOperationsReloadToken] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [newMemo, setNewMemo] = useState("");
   const [newNextAction, setNewNextAction] = useState("");
@@ -435,27 +438,41 @@ export default function CrmTimelinePage() {
     syncSelectedCustomerUrl(selectedCustomer.id);
     let active = true;
 
+    setOperationsStatus("loading");
+    setOperationsError("");
+    setCustomerAttachments([]);
+    setCustomerNotes([]);
+    setAttachmentsTruncated(false);
+    setNotesTruncated(false);
+
     fetchWithTimeout(withCompanyQuery(`/api/customer-operations?customerId=${encodeURIComponent(selectedCustomer.id)}`), { cache: "no-store" }, 12000)
-      .then((response) => (response.ok ? response.json() : null))
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || `원장 기록을 불러오지 못했습니다 (HTTP ${response.status}).`);
+        return payload;
+      })
       .then((payload) => {
         if (!active || !payload) return;
         setCustomerAttachments(payload.attachments || []);
         setCustomerNotes(payload.notes || []);
         setAttachmentsTruncated(Boolean(payload.attachmentsTruncated));
         setNotesTruncated(Boolean(payload.notesTruncated));
+        setOperationsStatus("ready");
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
         setCustomerAttachments([]);
         setCustomerNotes([]);
         setAttachmentsTruncated(false);
         setNotesTruncated(false);
+        setOperationsStatus("error");
+        setOperationsError(error instanceof Error ? error.message : "원장 기록을 불러오지 못했습니다.");
       });
 
     return () => {
       active = false;
     };
-  }, [selectedCustomer?.id]);
+  }, [operationsReloadToken, selectedCustomer?.id]);
 
   async function loadMoreCustomerOperations() {
     if (!selectedCustomer.id || isLoadingMoreOperations || (!attachmentsTruncated && !notesTruncated)) return;
@@ -705,7 +722,7 @@ export default function CrmTimelinePage() {
       ok: customerNotes.length > 0 || selectedCustomer.memoCount > 0,
       title: "메모 히스토리"
     }
-  ];
+  ].filter((check) => operationsStatus === "ready" || (check.title !== "필수 첨부자료" && check.title !== "메모 히스토리"));
   const operationalReadyCount = operationalChecks.filter((check) => check.ok).length;
   const ledgerProgress = Math.round((operationalReadyCount / operationalChecks.length) * 100);
   const urgentOperationalChecks = operationalChecks.filter((check) => !check.ok).slice(0, 3);
@@ -1164,7 +1181,16 @@ export default function CrmTimelinePage() {
             {[
               { label: "1. 거래처 선택", value: `${filteredCustomers.length.toLocaleString()}곳`, icon: Search },
               { label: "2. 원장 확인", value: selectedCustomer.customerName || "미선택", icon: Building2 },
-              { label: "3. 첨부·메모", value: `${combinedAttachments.length.toLocaleString()}건 · ${historyCount.toLocaleString()}건`, icon: FileText }
+              {
+                label: "3. 첨부·메모",
+                value:
+                  operationsStatus === "ready"
+                    ? `${combinedAttachments.length.toLocaleString()}건 · ${historyCount.toLocaleString()}건`
+                    : operationsStatus === "error"
+                      ? "조회 실패"
+                      : "확인 중",
+                icon: FileText
+              }
             ].map((item, index) => {
               const Icon = item.icon;
               return (
@@ -1611,8 +1637,18 @@ export default function CrmTimelinePage() {
                   <InfoTile icon={Route} label="출발지 거리" value={`${selectedCustomer.deliveryKm}km`} />
                 </div>
                 <div className="grid gap-0 border-t border-slate-200 sm:grid-cols-3">
-                  <PriorityTile label="배송 적재위치" value={selectedCustomer.loadingPosition || "미등록"} helper={`${loadingPositionAttachments}개 자료 등록`} tone="blue" />
-                  <PriorityTile label="히스토리 메모" value={`${customerNotes.length || selectedCustomer.memoCount}건`} helper="상담·배송 특이사항" tone="slate" />
+                  <PriorityTile
+                    label="배송 적재위치"
+                    value={selectedCustomer.loadingPosition || "미등록"}
+                    helper={operationsStatus === "ready" ? `${loadingPositionAttachments}개 자료 등록` : operationsStatus === "error" ? "첨부 조회 실패" : "첨부 확인 중"}
+                    tone="blue"
+                  />
+                  <PriorityTile
+                    label="히스토리 메모"
+                    value={operationsStatus === "ready" ? `${customerNotes.length || selectedCustomer.memoCount}건` : operationsStatus === "error" ? "조회 실패" : "확인 중"}
+                    helper={operationsStatus === "ready" ? "상담·배송 특이사항" : "기존 기록을 미등록으로 판정하지 않습니다"}
+                    tone="slate"
+                  />
                   <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager || "미지정"} helper={`${selectedCustomer.region || "미분류"} 권역`} tone="emerald" />
                 </div>
               </div>
@@ -1633,15 +1669,27 @@ export default function CrmTimelinePage() {
                     <span className="mt-0.5 block text-xs font-bold text-slate-500">첨부자료, 배송완료 증빙 등 모바일 현장 기록 건수는 필요할 때 펼쳐서 확인합니다.</span>
                   </span>
                   <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
-                    메모 {fieldRecordSummary.memoCount.toLocaleString()} · 첨부 {fieldRecordSummary.attachmentCount.toLocaleString()}
+                    {operationsStatus === "ready"
+                      ? `메모 ${fieldRecordSummary.memoCount.toLocaleString()} · 첨부 ${fieldRecordSummary.attachmentCount.toLocaleString()}`
+                      : operationsStatus === "error"
+                        ? "현장 기록 조회 실패"
+                        : "현장 기록 확인 중"}
                   </Badge>
                 </summary>
                 <div className="border-t border-slate-200 bg-slate-50/60 p-3">
-                  <FieldRecordTracePanel
-                    summary={fieldRecordSummary}
-                    onOpenHistory={() => setDetailTab("history")}
-                    onOpenLedger={() => setDetailTab("ledger")}
-                  />
+                  {operationsStatus === "ready" ? (
+                    <FieldRecordTracePanel
+                      summary={fieldRecordSummary}
+                      onOpenHistory={() => setDetailTab("history")}
+                      onOpenLedger={() => setDetailTab("ledger")}
+                    />
+                  ) : (
+                    <OperationsLoadState
+                      error={operationsError}
+                      loading={operationsStatus === "loading"}
+                      onRetry={() => setOperationsReloadToken((current) => current + 1)}
+                    />
+                  )}
                 </div>
               </details>
             </div>
@@ -1840,7 +1888,15 @@ export default function CrmTimelinePage() {
                       setNewAttachmentTitle(attachmentTitleFromType("loading_position"));
                     }}
                   />
-                  <AttachmentChecklistPanel checklist={attachmentChecklist} />
+                  {operationsStatus === "ready" ? (
+                    <AttachmentChecklistPanel checklist={attachmentChecklist} />
+                  ) : (
+                    <OperationsLoadState
+                      error={operationsError}
+                      loading={operationsStatus === "loading"}
+                      onRetry={() => setOperationsReloadToken((current) => current + 1)}
+                    />
+                  )}
                   <div className="maju-section-card mt-4 overflow-hidden">
                     <div className="maju-card-header flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -1958,10 +2014,18 @@ export default function CrmTimelinePage() {
                   <div className="maju-section-card mt-4 overflow-hidden">
                     <div className="maju-card-header flex items-center justify-between gap-3 px-3 py-2">
                       <p className="text-xs font-black text-slate-500">등록된 첨부자료</p>
-                      <Badge className="bg-slate-100 text-slate-700">{combinedAttachments.length}건</Badge>
+                      <Badge className="bg-slate-100 text-slate-700">
+                        {operationsStatus === "ready" ? `${combinedAttachments.length}건` : operationsStatus === "error" ? "조회 실패" : "확인 중"}
+                      </Badge>
                     </div>
                     <div className="grid gap-0">
-                      {combinedAttachments.length ? (
+                      {operationsStatus !== "ready" ? (
+                        <OperationsLoadState
+                          error={operationsError}
+                          loading={operationsStatus === "loading"}
+                          onRetry={() => setOperationsReloadToken((current) => current + 1)}
+                        />
+                      ) : combinedAttachments.length ? (
                         combinedAttachments.map((attachment) => (
                           <AttachmentRow
                             key={attachment.id}
@@ -2007,14 +2071,18 @@ export default function CrmTimelinePage() {
                     <h3 className="mt-1 text-base font-black text-slate-950">메모 히스토리</h3>
                     <p className="mt-1 text-sm font-medium text-slate-500">상담, 배송 특이사항, 대표 요청사항을 시간순으로 누적합니다.</p>
                   </div>
-                  <Badge className="bg-slate-100 text-slate-700">{customerNotes.length || selectedCustomer.memoCount}건</Badge>
+                  <Badge className="bg-slate-100 text-slate-700">
+                    {operationsStatus === "ready" ? `${customerNotes.length || selectedCustomer.memoCount}건` : operationsStatus === "error" ? "조회 실패" : "확인 중"}
+                  </Badge>
                 </div>
                 <div className="border-b border-slate-200/80 bg-slate-50/50 p-4">
-                  <HistoryInputSummary
-                    historyCount={historyCount}
-                    latestNote={latestNote}
-                    nextActionCount={nextActionCount}
-                  />
+                  {operationsStatus === "ready" ? (
+                    <HistoryInputSummary
+                      historyCount={historyCount}
+                      latestNote={latestNote}
+                      nextActionCount={nextActionCount}
+                    />
+                  ) : null}
                   <div className="maju-section-card mt-3 overflow-hidden">
                     <div className="maju-card-header px-3 py-3">
                       <p className="text-xs font-black uppercase tracking-wide text-slate-400">빠른 메모</p>
@@ -2071,7 +2139,13 @@ export default function CrmTimelinePage() {
                   </div>
                 </div>
                 <div className="grid gap-0 divide-y divide-slate-100">
-                  {customerNotes.length ? (
+                  {operationsStatus !== "ready" ? (
+                    <OperationsLoadState
+                      error={operationsError}
+                      loading={operationsStatus === "loading"}
+                      onRetry={() => setOperationsReloadToken((current) => current + 1)}
+                    />
+                  ) : customerNotes.length ? (
                     customerNotes.map((note) => (
                       <div key={note.id} className="p-4">
                         <div className="flex items-center justify-between gap-3">
@@ -2434,6 +2508,30 @@ function CustomerLoadErrorBanner({ message, onRetry }: { message: string; onRetr
         <RefreshCw className="h-3.5 w-3.5" />
         다시 시도
       </button>
+    </div>
+  );
+}
+
+function OperationsLoadState({ error, loading, onRetry }: { error: string; loading: boolean; onRetry: () => void }) {
+  return (
+    <div className={`m-3 rounded-md border p-3 ${loading ? "border-slate-200 bg-slate-50" : "border-red-200 bg-red-50"}`}>
+      <div className="flex items-start gap-2">
+        {loading ? <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-slate-500" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />}
+        <div className="min-w-0">
+          <p className={`text-sm font-black ${loading ? "text-slate-700" : "text-red-900"}`}>
+            {loading ? "첨부·메모 기록을 확인하고 있습니다." : "첨부·메모 기록을 불러오지 못했습니다."}
+          </p>
+          {!loading ? (
+            <>
+              <p className="mt-1 text-xs font-bold leading-5 text-red-700">조회 실패는 자료가 0개이거나 미등록이라는 뜻이 아닙니다.</p>
+              {error ? <p className="mt-1 break-words text-[11px] font-semibold text-red-600">{error}</p> : null}
+              <button className="maju-button-secondary mt-3 h-9 px-3 text-xs" onClick={onRetry} type="button">
+                다시 시도
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

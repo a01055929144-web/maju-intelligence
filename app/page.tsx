@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { ExcelHeaderMappingPreview } from "@/components/excel-mapping-preview";
@@ -56,6 +55,7 @@ type RawRow = Record<string, string | number | boolean | null | undefined>;
 type FieldMap = Record<string, string>;
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
+const BULK_SAVE_TIMEOUT_MS = 120000;
 type EntryMode = "document" | "excel" | "manual";
 type OcrMeta = {
   confidence: number;
@@ -480,7 +480,7 @@ export default function Home() {
           uploadType
         })
       },
-      30000
+      BULK_SAVE_TIMEOUT_MS
     ).catch(() => null);
 
     if (response?.ok) {

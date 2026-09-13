@@ -104,7 +104,7 @@ export default function CustomerDataManagementPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [adminCompanyId, pageSize]);
+  }, [adminCompanyId]);
 
   const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
 
@@ -146,7 +146,10 @@ export default function CustomerDataManagementPage() {
                 보기
                 <select
                   className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
-                  onChange={(event) => setPageSize(Number(event.target.value) as HistoryPageSize)}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value) as HistoryPageSize);
+                    setPage(1);
+                  }}
                   value={pageSize}
                 >
                   {LIST_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}개</option>)}

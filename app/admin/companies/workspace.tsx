@@ -170,6 +170,17 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const currentStatus = selectedCompany?.status || formBaseline.status || "active";
+    const nextStatus = form.status || "active";
+    if (form.id && currentStatus !== nextStatus && (nextStatus === "paused" || nextStatus === "closed")) {
+      const nextStatusLabel = nextStatus === "closed" ? "탈퇴(폐쇄)" : "중지";
+      const confirmed = window.confirm(
+        `"${form.name}"의 운영상태를 "${nextStatusLabel}"로 변경하시겠습니까?\n저장 즉시 이 회사의 고객사·직원 로그인이 차단됩니다. 데이터는 삭제되지 않으며 운영상태를 다시 "운영"으로 저장하면 복구할 수 있습니다.`
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     setMessage("");
 
@@ -900,6 +911,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
               {form.status === "closed" ? (
                 <p className="text-xs font-bold leading-5 text-rose-600">
                   이 회사는 탈퇴(폐쇄) 처리되어 있어 어떤 로그인(이메일/카카오/소셜)도 막혀 있습니다. 다시 쓸 수 있게 하려면 위에서 &quot;운영&quot;으로 바꾸고 저장하세요.
+                </p>
+              ) : form.status === "paused" ? (
+                <p className="text-xs font-bold leading-5 text-amber-700">
+                  저장하면 이 회사의 고객사·직원 로그인이 차단됩니다. 데이터는 유지되며 &quot;운영&quot;으로 다시 저장하면 복구할 수 있습니다.
                 </p>
               ) : null}
             </label>

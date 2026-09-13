@@ -4043,7 +4043,7 @@ export async function upsertCustomerMaster(
   input: CustomerMasterInput,
   companyId?: string,
   auditContext: CustomerMasterAuditContext = {},
-  options: { confirmDuplicate?: boolean } = {}
+  options: { confirmDuplicate?: boolean; skipLeadCleanupForLeadId?: string } = {}
 ) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
@@ -4312,10 +4312,73 @@ export async function upsertCustomerMaster(
   // 거래처 카드를 실제로 열었을 때만(리뷰가 아직 없는 경우) 그 자리에서 수집합니다 — 사용한
   // 만큼만 비용이 발생하도록 sales-route-map-workspace.tsx의 카드 오픈 시점에서 호출합니다.
 
+  // 신규 거래처가 저장되면 동일 사업체로 판정되는 활성 리드를 정리합니다. 리드를 거래처로
+  // 전환하는 흐름에서는 방금 전환한 리드 자체를 제외해 자기 자신을 다시 매칭하지 않습니다.
+  if (!existingRows.length) {
+    await excludeMatchingLeadsForNewCustomer(id, savedCustomer.id, {
+      address: input.address || "",
+      businessName: customerName,
+      businessNumber: rawBusinessNumber,
+      phone: input.phone || ""
+    }, options.skipLeadCleanupForLeadId).catch(() => null);
+  }
+
   return {
     customer: savedCustomer,
     persisted: true
   };
+}
+
+async function excludeMatchingLeadsForNewCustomer(
+  companyId: string,
+  customerId: string,
+  customer: { address: string; businessName: string; businessNumber: string; phone: string },
+  skipLeadId?: string
+) {
+  const businessNumber = /^(\d)\1{9}$/.test(customer.businessNumber) ? "" : customer.businessNumber;
+  const lookup = businessNumber
+    ? `business_number=eq.${encodeURIComponent(businessNumber)}`
+    : `business_name=ilike.${encodeURIComponent(customer.businessName)}`;
+  const inactiveStatuses = ["제외", "거래처 전환"].map(encodeURIComponent).join(",");
+  const leads = await supabaseRequest<Array<{
+    address: string | null;
+    business_name: string;
+    business_number: string | null;
+    id: string;
+    phone: string | null;
+  }>>(
+    `business_permit_leads?select=id,business_name,address,phone,business_number&company_id=eq.${encodeURIComponent(companyId)}&status=not.in.(${inactiveStatuses})&${lookup}`
+  ).catch(() => []);
+
+  await Promise.all(leads.filter((lead) => lead.id !== skipLeadId).map(async (lead) => {
+    const duplicate = findLeadCustomerDuplicate({
+      address: customer.address,
+      businessName: customer.businessName,
+      businessNumber: customer.businessNumber,
+      phone: customer.phone
+    }, [{
+      address: lead.address || "",
+      customerName: lead.business_name,
+      businessNumber: lead.business_number || "",
+      id: lead.id,
+      phone: lead.phone || ""
+    }]);
+    if (!duplicate) return;
+    const reason = `이미 등록된 거래처(${duplicate.reason})`;
+    await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(lead.id)}&company_id=eq.${encodeURIComponent(companyId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        exclude_reason: reason,
+        is_duplicate: true,
+        matched_customer_id: customerId,
+        next_action: "제외 검토",
+        next_action_reasons: [reason],
+        status: "제외",
+        updated_at: new Date().toISOString()
+      })
+    }).catch(() => null);
+  }));
 }
 
 async function upsertNormalizedCustomerWithOptionalPlaceLinks(
@@ -5168,7 +5231,7 @@ export async function sendCustomerDeliveryMessage(
   companyId?: string
 ) {
   const id = companyId || getDefaultCompanyId();
-  const message = input.message.trim();
+  let message = input.message.trim();
   if (!message) throw new Error("발송할 메시지가 없습니다.");
 
   if (!isProductionStoreConfigured() || input.customerId.startsWith("sample-") || input.customerId.startsWith("local-")) {
@@ -5201,6 +5264,17 @@ export async function sendCustomerDeliveryMessage(
   );
   const customer = customerRows[0];
   if (!customer) throw new Error("거래처를 찾을 수 없습니다.");
+
+  if (input.attachmentId) {
+    const attachmentRows = await supabaseRequest<Array<{ storage_path: string | null }>>(
+      `customer_attachments?select=storage_path&id=eq.${encodeURIComponent(input.attachmentId)}&customer_id=eq.${encodeURIComponent(input.customerId)}&company_id=eq.${encodeURIComponent(id)}&limit=1`
+    ).catch(() => []);
+    const storagePath = attachmentRows[0]?.storage_path;
+    if (storagePath) {
+      const signedUrl = await createCustomerAttachmentSignedUrl(storagePath, 7 * 24 * 60 * 60).catch(() => "");
+      if (signedUrl) message = `${message}\n증빙자료 보기(7일): ${signedUrl}`;
+    }
+  }
 
   const contacts = await listCustomerContacts(id, input.customerId).catch(() => []);
   const primaryContact = contacts.find((contact) => contact.isPrimary && contact.phone) || contacts.find((contact) => contact.phone);
@@ -5345,7 +5419,7 @@ export async function uploadCustomerAttachmentFile(
   };
 }
 
-export async function createCustomerAttachmentSignedUrl(storagePath: string) {
+export async function createCustomerAttachmentSignedUrl(storagePath: string, expiresInSeconds = 60 * 10) {
   if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
   const cleanPath = storagePath.replace(/^\/+/, "");
   const result = await supabaseStorageRequest<{ signedURL: string }>(
@@ -5355,7 +5429,7 @@ export async function createCustomerAttachmentSignedUrl(storagePath: string) {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ expiresIn: 60 * 10 })
+      body: JSON.stringify({ expiresIn: Math.max(60, Math.min(expiresInSeconds, 7 * 24 * 60 * 60)) })
     }
   );
 
@@ -7773,7 +7847,8 @@ export async function convertPermitLeadToCustomer(
       kakaoPlaceUrl: lead.kakao_place_url || undefined
     },
     companyId,
-    auditContext
+    auditContext,
+    { skipLeadCleanupForLeadId: leadId }
   );
 
   await supabaseRequest(

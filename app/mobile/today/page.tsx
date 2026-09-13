@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, Phone, PlusCircle, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
+import { MobileAccordionStep } from "@/components/mobile-accordion-step";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
+import { MobileRouteList } from "@/components/mobile-route-list";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
@@ -119,6 +121,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileFieldFlowNav customerId={selectedStop?.id} />
 
           {selectedStop ? (
+            <MobileAccordionStep defaultOpen label="2. 선택 매장" targetId="selected-customer">
             <section className="scroll-mt-24 overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]" id="selected-customer">
               <div className="border-b border-teal-100 bg-teal-50 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -137,9 +140,15 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#delivery-proof`} icon={CheckCircle2} label="완료" value="사진 저장" />
               </div>
             </section>
+            </MobileAccordionStep>
           ) : null}
 
-          <section className="scroll-mt-24 rounded-xl border border-slate-200 bg-white" id="route-list">
+          <MobileAccordionStep defaultOpen={!selectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
+            <MobileRouteList driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
+          </MobileAccordionStep>
+
+          {/* Legacy server-rendered list retained only as source reference. */}
+          {false ? <section className="scroll-mt-24 rounded-xl border border-slate-200 bg-white" id="route-list-legacy">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
               <div className="min-w-0">
                 <p className="truncate font-black text-slate-950">{driverName}</p>
@@ -188,10 +197,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 </div>
               ) : null}
             </div>
-          </section>
+          </section> : null}
 
           {selectedStop ? (
-            <section className="scroll-mt-24 space-y-4" id="field-records">
+            <section className="space-y-3">
+              <MobileAccordionStep label="3. 지도·전화" targetId="contact-actions">
               <MobileRouteActionPanel
                 address={selectedStop.address || selectedStop.region || selectedStop.name}
                 customerId={selectedStop.id}
@@ -200,7 +210,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 durationMinutes={selectedStop.durationMinutes}
                 phone={selectedStop.phone}
               />
+              </MobileAccordionStep>
+              <MobileAccordionStep label="4. 적재위치" targetId="loading-position">
               <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
+              </MobileAccordionStep>
+              <MobileAccordionStep label="5. 배송완료·사진" targetId="delivery-proof">
               <MobileDeliveryProofPanel
                 companyName={companySettings.name || session.companyName}
                 customerId={selectedStop.id}
@@ -212,7 +226,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 notificationPhone={companySettings.notificationPhone}
                 notificationSenderName={companySettings.notificationSenderName}
               />
+              </MobileAccordionStep>
+              <MobileAccordionStep label="6. 메모 저장" targetId="visit-memo">
               <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
+              </MobileAccordionStep>
             </section>
           ) : null}
 
@@ -222,7 +239,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
           <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="매장" />
           <FooterItem href="/mobile/register" icon={PlusCircle} label="등록" />
-          <FooterItem href="/mobile/today#field-records" icon={CheckCircle2} label="완료" />
+          <FooterItem href="/mobile/today#delivery-proof" icon={CheckCircle2} label="완료" />
         </footer>
       </section>
     </main>
