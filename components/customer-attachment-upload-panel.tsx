@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, ExternalLink, FileVideo, ImageIcon, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, FileVideo, ImageIcon, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LoadingPositionGallery } from "@/components/loading-position-gallery";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -17,10 +17,10 @@ type AttachmentItem = {
 };
 
 const slots = [
-  { accept: "image/*,.pdf", description: "사업자 정보 원본", key: "business_license", label: "사업자등록증", required: true },
-  { accept: "image/*,.pdf", description: "필요 시 마스킹 후 보관", key: "identity_document", label: "신분증", required: false },
-  { accept: "image/*,.pdf", description: "정산 계좌 확인", key: "bank_account", label: "통장사본", required: false },
-  { accept: "image/*,video/*", description: "후문, 냉장고, 적재 위치", key: "loading_position", label: "배송 적재위치", required: false }
+  { accept: "image/*,.pdf", description: "사업자 정보 원본", key: "business_license", label: "사업자등록증", recommended: false, required: true },
+  { accept: "image/*,.pdf", description: "필요 시 마스킹 후 보관", key: "identity_document", label: "신분증", recommended: false, required: false },
+  { accept: "image/*,.pdf", description: "정산 계좌 확인", key: "bank_account", label: "통장사본", recommended: true, required: false },
+  { accept: "image/*,video/*", description: "후문, 냉장고, 적재 위치", key: "loading_position", label: "배송 적재위치", recommended: true, required: false }
 ];
 
 export function CustomerAttachmentUploadPanel({ customerId, customerName }: { customerId: string; customerName: string }) {
@@ -52,6 +52,8 @@ export function CustomerAttachmentUploadPanel({ customerId, customerName }: { cu
   const requiredCount = slots.filter((slot) => slot.required).length;
   const completedSlotCount = slots.filter((slot) => attachments.some((item) => item.attachmentType === slot.key)).length;
   const loadingPositionCount = attachments.filter((item) => item.attachmentType === "loading_position").length;
+  const missingRequiredSlots = slots.filter((slot) => slot.required && !attachments.some((item) => item.attachmentType === slot.key));
+  const missingRecommendedSlots = slots.filter((slot) => slot.recommended && !attachments.some((item) => item.attachmentType === slot.key));
 
   return (
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
@@ -70,6 +72,27 @@ export function CustomerAttachmentUploadPanel({ customerId, customerName }: { cu
         <AttachmentSummary label="전체 파일" value={`${attachments.length.toLocaleString()}개`} />
         <AttachmentSummary label="적재위치" value={loadingPositionCount ? `${loadingPositionCount.toLocaleString()}개` : "보완 필요"} />
       </div>
+
+      {loadState === "error" ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+          <span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" />첨부자료를 불러오지 못해 누락 여부를 확인할 수 없습니다.</span>
+          <button className="inline-flex h-8 items-center gap-1 rounded-md bg-white px-2.5 font-black ring-1 ring-inset ring-rose-200" onClick={loadAttachments} type="button">
+            <RefreshCw className="h-3.5 w-3.5" /> 다시 확인
+          </button>
+        </div>
+      ) : loadState === "ready" && missingRequiredSlots.length ? (
+        <p className="mt-3 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> 필수 누락: {missingRequiredSlots.map((slot) => slot.label).join(", ")}을 등록해야 원장 서류가 완료됩니다.
+        </p>
+      ) : loadState === "ready" && missingRecommendedSlots.length ? (
+        <p className="mt-3 flex items-start gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> 운영 보완 권장: {missingRecommendedSlots.map((slot) => slot.label).join(", ")}
+        </p>
+      ) : loadState === "ready" ? (
+        <p className="mt-3 flex items-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">
+          <CheckCircle2 className="h-3.5 w-3.5" /> 필수 및 운영 권장 첨부자료가 모두 연결됐습니다.
+        </p>
+      ) : null}
 
       <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-3">
         {slots.map((slot) => (
