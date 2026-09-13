@@ -37,6 +37,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { readLocalJson } from "@/lib/route-map-utils";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
@@ -89,7 +90,6 @@ import {
   permitGradeToneClassName,
   permitLeadActionLabel,
   quoteDraftId,
-  readLocalJson,
   readQuoteDraft,
   withPermitLeadCompanyQuery
 } from "@/components/sales-route-map-workspace";

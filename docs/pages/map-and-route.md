@@ -60,6 +60,12 @@ customer (거래처 마커), lead (신규 리드 오버레이), analytics (요�
 - 배송 히스토리 월간 캘린더 + 확정 순서 vs 실제 GPS 경로 비교
 
 ## Task (이번에 진행할 작업이 있으면 여기 채움)
+**(2026-09-14 1단계 완료) `sales-route-map-workspace.tsx` 순수 유틸 분리**
+- React 상태와 무관한 거리·유류비·합계·시간/거리 표시·등급 배지·로컬 JSON 유틸을 `lib/route-map-utils.ts`로 이동했습니다.
+- 기존 외부 import 호환성은 원 파일의 re-export로 유지하고, `today-course-view`, `delivery-history-view`, `permit-leads-view`는 새 leaf 모듈을 직접 참조하도록 변경했습니다.
+- 유틸 입출력 회귀 테스트를 추가했으며 typecheck/lint/34 tests/production build를 통과했습니다.
+- 다음 분리 단계는 `createStoreRows`부터 차량·마커 변환 함수 묶음이며, UI 상태/렌더 로직과 섞지 않고 별도 작업으로 진행합니다.
+
 **(2026-09-13 구현 완료) 라이브 차량 패널을 배송담당자 필터 쪽으로 통합**
 - 사용자 요청: "차량 라이브가 많아지면 필터 구분이 좋지 않아보이네, 배송 담당필터 자리에 옮기는 방향 검토해"
 - 현재 구조: 지도 위에 좌측 `DeliveryAssignmentPanel`(배송담당자 필터 — 관리자가 등록한 담당자/차량 목록, 정적)과 우측 `LiveVehicleStatusPanel`(라이브 차량 — 실시간 GPS, 동적)이 서로 다른 카드로 떠 있음. 둘 다 "담당자/차량" 정보를 다루지만 이름 표시 소스가 다름(좌측은 관리자가 등록한 정식 이름, 우측은 최근까지 세션 닉네임이었다가 이번 세션에서 invitedEmployeeName 우선으로 수정됨).

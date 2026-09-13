@@ -5,8 +5,9 @@ import { CalendarDays, ChevronLeft, ChevronRight, Loader2, MapPin, Truck } from 
 import { Badge } from "@/components/ui/badge";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { formatMinutes } from "@/lib/route-map-utils";
 import { DeliveryCompletionEvent, DeliveryHistoryDay, DeliveryHistoryDriverGroup, StaffLocationEvent } from "@/lib/store";
-import { formatMinutes, RouteMetric, StoreRow } from "@/components/sales-route-map-workspace";
+import { RouteMetric, StoreRow } from "@/components/sales-route-map-workspace";
 
 // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
 // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 화면입니다.

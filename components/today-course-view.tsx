@@ -16,28 +16,20 @@ import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map"
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { GeoPoint } from "@/lib/navigation-links";
+import { estimateFuelCostWon, formatDistanceKmLabel, formatMinutes, getStoreTotals, gradeBadgeClass, readLocalJson, roundToSix, saveLocalJson } from "@/lib/route-map-utils";
 import type { DeliveryVehicle } from "@/lib/store";
 import {
-  clamp,
   CourseSummary,
   DeliveryProof,
   DeliveryProofInput,
-  estimateFuelCostWon,
-  formatDistanceKmLabel,
-  formatMinutes,
   FullRouteNavigateAction,
   FuelPriceByType,
   getRouteStopAddress,
-  getStoreTotals,
-  gradeBadgeClass,
   localStoreKeys,
   NavigateMenu,
   OperationalEmptyState,
-  readLocalJson,
-  roundToSix,
   RouteMetric,
   RouteWorkStep,
-  saveLocalJson,
   StoreQuickCard,
   StoreRow,
   tmapWaypointLimit

@@ -93,8 +93,35 @@ import type {
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import {
+  clamp,
+  deliveryCostRatio,
+  deliveryWorthLabel,
+  estimateFuelCostWon,
+  formatDistanceKmLabel,
+  formatMinutes,
+  getStoreTotals,
+  gradeBadgeClass,
+  haversineKm,
+  readLocalJson,
+  roundToOneDecimal,
+  saveLocalJson,
+  type RevenueGrade
+} from "@/lib/route-map-utils";
+export {
+  clamp,
+  deliveryCostRatio,
+  deliveryWorthLabel,
+  estimateFuelCostWon,
+  formatDistanceKmLabel,
+  formatMinutes,
+  getStoreTotals,
+  gradeBadgeClass,
+  readLocalJson,
+  roundToSix,
+  saveLocalJson
+} from "@/lib/route-map-utils";
 
-type RevenueGrade = "A" | "B" | "C";
 type GradeFilter = "all" | RevenueGrade;
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
@@ -8877,15 +8904,6 @@ function getCompletionOrderClass(completion: DeliveryCompletionEvent) {
   return "bg-amber-50 text-amber-800 ring-amber-100";
 }
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const toRad = (value: number) => (value * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 function spreadMarkers(markers: KakaoMapMarker[]) {
   const counts = new Map<string, number>();
   return markers.map((marker) => {
@@ -8901,10 +8919,6 @@ function spreadMarkers(markers: KakaoMapMarker[]) {
       y: clamp(marker.y + Math.sin(angle) * radius, 6, 94)
     };
   });
-}
-
-export function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function createBusinessOcrSuggestion(store: StoreRow, fileName: string): BusinessOcrSuggestion {
@@ -9059,25 +9073,6 @@ function getDeliveryDefaults(vehicles: DeliveryVehicle[]) {
   return { areas, drivers };
 }
 
-export function readLocalJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export function saveLocalJson(key: string, value: unknown) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Attachments can be large because previews are stored as data URLs in the browser.
-  }
-}
-
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -9085,60 +9080,6 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-export function getStoreTotals(stores: StoreRow[]) {
-  return {
-    distanceKm: roundToOneDecimal(stores.reduce((total, store) => total + Number(store.distanceKm || 0), 0)),
-    durationMinutes: stores.reduce((total, store) => total + Number(store.durationMinutes || 0), 0),
-    expectedRevenue: stores.reduce((total, store) => total + Number(store.expectedRevenue || 0), 0)
-  };
-}
-
-export function formatMinutes(minutes: number) {
-  if (!minutes) return "-";
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return hours ? `${hours}시간 ${rest}분` : `${rest}분`;
-}
-
-// 2026-08-24 피드백("전체 거래처 0km가 되네")에 대응한 헬퍼입니다. distanceKm은 아직 거리 계산을
-// 한 번도 돌리지 않은 거래처는 그냥 숫자 0으로 채워져 있는데, 기존 코드는 `distanceKm?.toLocaleString()
-// || "-"`로 표시해서 — 0은 falsy가 아니라 (0).toLocaleString()이 "0"이라는 truthy 문자열을 반환하는
-// 바람에 "0km"로 그대로 찍혔습니다. 실제로는 "0km 떨어져 있다"가 아니라 "아직 계산 안 됨"이므로,
-// 값이 없을 때는 명확하게 안내 문구를 보여줍니다.
-export function formatDistanceKmLabel(distanceKm: number | undefined) {
-  if (!distanceKm) return "거리 확인 필요";
-  return `${distanceKm.toLocaleString()}km`;
-}
-
-export function estimateFuelCostWon(distanceKm: number, pricePerLiter: number, mileageKmPerLiter = 7.5) {
-  if (!Number.isFinite(distanceKm) || distanceKm <= 0) return 0;
-  if (!Number.isFinite(pricePerLiter) || pricePerLiter <= 0) return 0;
-  if (!Number.isFinite(mileageKmPerLiter) || mileageKmPerLiter <= 0) return 0;
-
-  return Math.round((distanceKm / mileageKmPerLiter) * pricePerLiter);
-}
-
-/**
- * "물류비가 얼마나 나와야 배송 갈 만한가"에 대한 대략적인 기준(2026-08-27 요청)입니다. 왕복
- * 유류비가 그 거래처의 예상 월매출에서 차지하는 비중으로 계산합니다 — 한 번의 왕복 배송 비용이
- * 월매출 전체의 몇 %인지를 보면, 매출 규모 대비 거리가 과도한 곳을 가려낼 수 있습니다(실제로는
- * 한 달에 여러 번 배송하므로 이 비율은 보수적인 상한값입니다). 임계값은 일반적인 식자재 유통
- * 물류비 비중(매출의 10~15% 내외)을 참고한 대략적인 기준이라 절대적인 기준은 아닙니다.
- */
-export function deliveryCostRatio(roundTripFuelCostWon: number, monthlyRevenueManwon: number) {
-  const monthlyRevenueWon = monthlyRevenueManwon * 10000;
-  if (!Number.isFinite(monthlyRevenueWon) || monthlyRevenueWon <= 0) return null;
-  if (!Number.isFinite(roundTripFuelCostWon) || roundTripFuelCostWon <= 0) return 0;
-  return roundTripFuelCostWon / monthlyRevenueWon;
-}
-
-export function deliveryWorthLabel(ratio: number | null): { label: string; toneClassName: string } {
-  if (ratio === null) return { label: "매출 확인 필요", toneClassName: "bg-slate-100 text-slate-600" };
-  if (ratio <= 0.05) return { label: "배송 효율적", toneClassName: "bg-emerald-100 text-emerald-800" };
-  if (ratio <= 0.15) return { label: "적정 범위", toneClassName: "bg-amber-100 text-amber-800" };
-  return { label: "재검토 필요", toneClassName: "bg-rose-100 text-rose-800" };
 }
 
 function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
@@ -9164,10 +9105,6 @@ function businessStatusClass(status: StoreRow["businessStatus"]) {
   return "rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700";
 }
 
-function roundToOneDecimal(value: number) {
-  return Math.round(value * 10) / 10;
-}
-
 // 거래처 출입방법 종류(2026-08-24 피드백: "열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등
 // 넣어야해"). 자유 텍스트도 허용하되(과거 데이터·기타 케이스), 현장에서 가장 자주 쓰는 4가지는
 // 버튼 한 번으로 바로 고를 수 있게 합니다.
@@ -9181,14 +9118,4 @@ const ACCESS_METHOD_TYPE_OPTIONS: Array<{ icon: LucideIcon; label: string }> = [
 
 function getAccessMethodIcon(type?: string): LucideIcon {
   return ACCESS_METHOD_TYPE_OPTIONS.find((option) => option.label === type)?.icon || KeyRound;
-}
-
-export function roundToSix(value: number) {
-  return Math.round(value * 1000000) / 1000000;
-}
-
-export function gradeBadgeClass(grade: RevenueGrade) {
-  if (grade === "A") return "rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800 ring-1 ring-inset ring-emerald-200";
-  if (grade === "B") return "rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800 ring-1 ring-inset ring-blue-200";
-  return "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200";
 }
