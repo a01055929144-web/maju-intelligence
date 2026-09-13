@@ -153,12 +153,14 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             </label>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5">
-                <span className="text-xs font-bold text-muted-foreground">대표자/담당자</span>
+                <span className="text-xs font-bold text-muted-foreground">대표자/운영 표시명</span>
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.ownerName}
                   onChange={(event) => setForm({ ...form, ownerName: event.target.value })}
+                  placeholder="라이브 차량과 모바일 화면에 표시할 이름"
                 />
+                <span className="block text-[11px] font-semibold text-slate-400">개인·오너 계정의 라이브 차량 및 현장 화면 이름으로 사용됩니다.</span>
               </label>
               <label className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground">업태/업종</span>

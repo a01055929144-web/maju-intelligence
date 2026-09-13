@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerSession, getRequestAuthScope, shouldScopeCustomerData } from "@/lib/auth";
+import { getCustomerOperationalName, getCustomerSession, getRequestAuthScope, shouldScopeCustomerData } from "@/lib/auth";
 import { getDeliveryCompletionEvents, getStaffLocationEvents, getStaffVehicleLocations, upsertStaffMobileLocation } from "@/lib/store";
 
 export async function GET(request: NextRequest) {
@@ -69,10 +69,9 @@ export async function POST(request: NextRequest) {
       // 라이브 차량 목록의 기사명으로 매 위치 갱신마다 DB(staff_mobile_devices.driver_name)에 저장했습니다.
       // 그 결과 지역명이나 무의미한 기본값처럼 실제 담당자와 무관한 텍스트가 "라이브 차량" 패널에
       // 노출됐습니다. 오늘 카카오 초대 매칭 버그(자동 배정 매핑, invitedEmployeeName 도입) 수정과
-      // 같은 이유로, 세션에 이미 들어있는 invitedEmployeeName(초대 시 관리자가 입력한 정식 이름 —
-      // "직원"/"모바일 직원" 같은 placeholder 기본값은 제외됨)이 있으면 그걸 우선 쓰고, 초대 없이
-      // 개인 워크스페이스를 만든 계정처럼 그 값이 없을 때만 기존과 동일하게 닉네임으로 대체합니다.
-      driverName: session.invitedEmployeeName || session.name,
+      // 같은 이유로 안정적인 운영 이름을 한 함수에서 결정합니다. 수동 담당자 배정명, 초대 시 정식명,
+      // 개인/오너의 회사 설정 운영 표시명, 소셜 닉네임 순으로 사용하고 placeholder는 제외합니다.
+      driverName: getCustomerOperationalName(session),
       lat,
       lng,
       recordedAt: typeof body?.recordedAt === "string" ? body.recordedAt : undefined,

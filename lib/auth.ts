@@ -34,6 +34,9 @@ export type CustomerSession = {
   // 매칭 후보로 추가해, 관리자가 애초에 거래처 담당자 표기와 같은 이름으로 초대했다면 닉네임이
   // 무엇이든 수동 개입 없이 바로 매칭되게 합니다(lib/store.ts의 normalizeInvitedEmployeeName 참고).
   invitedEmployeeName?: string;
+  // 개인/오너 계정은 직원 초대명이 없으므로 회사 설정의 대표자/담당자명을 운영 표시명으로 씁니다.
+  // getCustomerSession이 멤버십을 검증할 때 최신 값을 다시 읽어 설정 변경 후 재로그인 없이 반영합니다.
+  operationalDisplayName?: string;
 };
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
@@ -105,6 +108,7 @@ export async function getCustomerSession() {
       ...session,
       assignedManagerName: membership.assignedManagerName,
       assignedVehicle: membership.assignedVehicle,
+      operationalDisplayName: role === "owner" ? membership.companyOwnerName : session.operationalDisplayName,
       role,
       workspaceRole
     };
@@ -208,6 +212,17 @@ export function getCustomerAssignmentKeys(session: CustomerSession | null) {
   ]
     .map((value) => value?.trim())
     .filter(Boolean) as string[];
+}
+
+/** Returns the stable operations-facing name used by delivery, GPS, and assignment screens. */
+export function getCustomerOperationalName(session: CustomerSession | null) {
+  if (!session) return "";
+  const candidates = [session.assignedManagerName, session.invitedEmployeeName, session.operationalDisplayName, session.name];
+  for (const candidate of candidates) {
+    const normalized = candidate?.trim();
+    if (normalized && !/^(개인 사용자|직원|모바일 직원|배송기사|모바일 담당자)$/.test(normalized)) return normalized;
+  }
+  return session.companyName?.trim() || "이름 미등록 직원";
 }
 
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {

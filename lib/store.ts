@@ -2548,6 +2548,7 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
   active: boolean;
   assignedManagerName?: string;
   assignedVehicle?: string;
+  companyOwnerName?: string;
   role?: StaffInvitation["role"] | "owner" | "member";
 }> {
   if (!input.companyId || !input.userId) return { active: false };
@@ -2557,10 +2558,10 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
     Array<{
       role: StaffInvitation["role"] | "owner" | "member";
       app_users: { status: string | null } | null;
-      companies: { status: string | null } | null;
+      companies: { owner_name: string | null; status: string | null } | null;
     }>
   >(
-    `company_members?select=role,app_users(status),companies(status)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
+    `company_members?select=role,app_users(status),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
       input.userId
     )}&status=eq.active&limit=1`
   );
@@ -2574,6 +2575,7 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
     active: true,
     assignedManagerName: assignment?.assignedManagerName,
     assignedVehicle: assignment?.assignedVehicle,
+    companyOwnerName: member.companies?.owner_name?.trim() || undefined,
     role: member.role || "member"
   };
 }

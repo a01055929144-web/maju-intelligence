@@ -7,7 +7,7 @@ import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
-import { getCustomerAssignmentKeys, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
+import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
 import { getCompanySettings, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -23,8 +23,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
     getCompanySettings(session.companyId, session.companyName)
   ]);
   const sourceReady = routePlan.source === "supabase";
-  const driverName = session.name || "모바일 담당자";
-  const normalizedDriverName = session.name?.trim();
+  const driverName = getCustomerOperationalName(session);
+  const normalizedDriverName = driverName.trim();
   const allStops = sourceReady ? routePlan.groups.flatMap((group) => group.stops) : [];
   // 2026-08-28 피드백 대응: 데스크톱에서 확정한 순서(order 필드, route_plan_confirmations 반영)를
   // 그대로 사용하도록 정렬을 명시적으로 추가합니다 — 정렬을 안 하면 원장에 저장된 순서(무작위에
@@ -74,7 +74,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
-              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{session.name}님</p>
+              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{driverName}님</p>
             </div>
             <Badge className="shrink-0 whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
           </div>
