@@ -10,7 +10,7 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  { ignores: [".next/**", "node_modules/**", "coverage/**", "outputs/**"] },
+  { ignores: [".next/**", ".next-*-backup/**", "node_modules/**", "coverage/**", "outputs/**"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     files: ["components/kakao-address-map.tsx"],

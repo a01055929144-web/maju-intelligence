@@ -10,7 +10,8 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json({ credentials: await getAuthCredentials() });
+  const credentials = await getAuthCredentials();
+  return NextResponse.json({ credentials: publicCredentials(credentials) });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -29,13 +30,24 @@ export async function PATCH(request: NextRequest) {
       }
     | null;
 
-  if (!body?.adminEmail || !body.adminPassword || !body.customerEmail || !body.customerPassword) {
-    return NextResponse.json({ message: "관리자/고객사 이메일과 비밀번호는 필수입니다." }, { status: 400 });
+  if (!body?.adminEmail || !body.customerEmail) {
+    return NextResponse.json({ message: "관리자/고객사 이메일은 필수입니다." }, { status: 400 });
   }
 
   const result = await upsertAuthCredentials(body, {
     actorName: session.name,
     actorRole: session.appRole
   });
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, credentials: publicCredentials(result.credentials) });
+}
+
+function publicCredentials(credentials: Awaited<ReturnType<typeof getAuthCredentials>>) {
+  return {
+    adminEmail: credentials.adminEmail,
+    adminPassword: "",
+    customerEmail: credentials.customerEmail,
+    customerPassword: "",
+    customerCompanyId: credentials.customerCompanyId,
+    updatedAt: credentials.updatedAt
+  };
 }

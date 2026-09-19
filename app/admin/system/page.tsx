@@ -13,6 +13,7 @@ const statusLabels = {
   fallback: "점검 필요",
   missing: "누락"
 };
+const AUDIT_PAGE_SIZE = 10;
 
 function singleParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
@@ -40,6 +41,7 @@ export default async function AdminSystemPage({
 
   const params = await searchParams;
   const auditCompany = singleParam(params.auditCompany);
+  const requestedAuditPage = Math.max(1, Number.parseInt(singleParam(params.auditPage), 10) || 1);
   const auditQuery = singleParam(params.auditQuery).trim().toLowerCase();
   const auditTone = singleParam(params.auditTone);
   const [system, auditResult] = await Promise.all([
@@ -58,6 +60,17 @@ export default async function AdminSystemPage({
       .some((value) => value.toLowerCase().includes(auditQuery));
     return matchesCompany && matchesTone && matchesQuery;
   });
+  const auditTotalPages = Math.max(1, Math.ceil(filteredAuditLogs.length / AUDIT_PAGE_SIZE));
+  const auditPage = Math.min(requestedAuditPage, auditTotalPages);
+  const pagedAuditLogs = filteredAuditLogs.slice((auditPage - 1) * AUDIT_PAGE_SIZE, auditPage * AUDIT_PAGE_SIZE);
+  const auditPageHref = (page: number) => {
+    const query = new URLSearchParams();
+    if (auditCompany) query.set("auditCompany", auditCompany);
+    if (auditQuery) query.set("auditQuery", auditQuery);
+    if (auditTone) query.set("auditTone", auditTone);
+    query.set("auditPage", String(page));
+    return `/admin/system?${query.toString()}#audit-logs`;
+  };
   const sensitiveAuditCount = filteredAuditLogs.filter((log) => auditHasSensitiveChange(log.metadata)).length;
   const dataAuditCount = filteredAuditLogs.filter((log) => auditActionTone(log.action) === "data").length;
   const accountAuditCount = filteredAuditLogs.filter((log) => auditActionTone(log.action) === "account").length;
@@ -451,7 +464,7 @@ export default async function AdminSystemPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="audit-logs">
           <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -520,7 +533,7 @@ export default async function AdminSystemPage({
                     <span>수행자</span>
                   </div>
                   <div className="divide-y divide-border">
-                    {filteredAuditLogs.map((log) => {
+                    {pagedAuditLogs.map((log) => {
                       const tone = auditHasSensitiveChange(log.metadata) ? "danger" : auditActionTone(log.action);
 
                       return (
@@ -540,6 +553,24 @@ export default async function AdminSystemPage({
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    {((auditPage - 1) * AUDIT_PAGE_SIZE + 1).toLocaleString()}-{Math.min(auditPage * AUDIT_PAGE_SIZE, filteredAuditLogs.length).toLocaleString()} / {filteredAuditLogs.length.toLocaleString()}건
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {auditPage > 1 ? (
+                      <Link className="inline-flex h-9 items-center rounded-md border border-border bg-white px-3 text-xs font-black text-slate-700" href={auditPageHref(auditPage - 1)}>이전</Link>
+                    ) : (
+                      <span className="inline-flex h-9 items-center rounded-md border border-border bg-muted px-3 text-xs font-black text-muted-foreground">이전</span>
+                    )}
+                    <Badge className="bg-slate-100 text-slate-700">{auditPage}/{auditTotalPages} 페이지</Badge>
+                    {auditPage < auditTotalPages ? (
+                      <Link className="inline-flex h-9 items-center rounded-md border border-border bg-white px-3 text-xs font-black text-slate-700" href={auditPageHref(auditPage + 1)}>다음</Link>
+                    ) : (
+                      <span className="inline-flex h-9 items-center rounded-md border border-border bg-muted px-3 text-xs font-black text-muted-foreground">다음</span>
+                    )}
                   </div>
                 </div>
               </div>

@@ -15,8 +15,6 @@ export async function GET(request: Request) {
   const expectedDomains = uniqueStrings([
     currentOrigin,
     appUrl,
-    "https://maju-intelligence-v2-deploy.vercel.app",
-    "https://maju-intelligence-v2-deploy-a01055929144-3978s-projects.vercel.app",
     "https://maju-intelligence.vercel.app",
     "https://maju-intelligence-a01055929144-3978s-projects.vercel.app"
   ]);

@@ -57,8 +57,8 @@ export default async function AdminAccountsPage() {
           <CardContent className="flex gap-3 p-4 text-sm leading-6 text-amber-900">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
             <p>
-              초기 운영 편의를 위해 비밀번호를 관리자 화면에서 확인할 수 있게 저장합니다. 운영 계정은 긴 비밀번호로 교체하고,
-              필요 시 비밀번호 초기화 방식으로 관리하세요.
+              저장된 비밀번호와 해시는 화면에 표시하지 않습니다. 비밀번호를 변경할 때만 새 값을 입력하고,
+              입력하지 않으면 현재 비밀번호가 유지됩니다.
             </p>
           </CardContent>
         </Card>
@@ -68,7 +68,16 @@ export default async function AdminAccountsPage() {
             <CardTitle>로그인 계정</CardTitle>
           </CardHeader>
           <CardContent>
-            <AdminAccountsForm initialCredentials={credentials} />
+            <AdminAccountsForm
+              initialCredentials={{
+                adminEmail: credentials.adminEmail,
+                adminPassword: "",
+                customerEmail: credentials.customerEmail,
+                customerPassword: "",
+                customerCompanyId: credentials.customerCompanyId,
+                updatedAt: credentials.updatedAt
+              }}
+            />
           </CardContent>
         </Card>
       </section>

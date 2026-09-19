@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -61,6 +62,7 @@ export function MobileDeliveryProofPanel({
   notificationPhone?: string;
   notificationSenderName?: string;
 }) {
+  const router = useRouter();
   const [copyMessage, setCopyMessage] = useState("");
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>("arrived");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -249,6 +251,7 @@ export function MobileDeliveryProofPanel({
     setSaving(false);
     setStatus("saved");
     await loadProofs();
+    router.refresh();
   }
 
   async function copyOwnerMessage() {

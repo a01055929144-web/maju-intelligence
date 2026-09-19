@@ -10,7 +10,7 @@ import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attach
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
-import { getCompanySettings, getTodayRoutePlan } from "@/lib/store";
+import { getCompanySettings, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
 export default async function MobileTodayPage({ searchParams }: { searchParams?: Promise<{ customer?: string }> }) {
@@ -20,12 +20,13 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
   const assignmentKeys = getCustomerAssignmentKeys(session);
   const isScopedStaffView = shouldScopeCustomerData(session);
-  const [routePlan, companySettings] = await Promise.all([
+  const driverName = getCustomerOperationalName(session);
+  const [routePlan, companySettings, completionEvents] = await Promise.all([
     getTodayRoutePlan(session.companyId, { assignmentKeys }),
-    getCompanySettings(session.companyId, session.companyName)
+    getCompanySettings(session.companyId, session.companyName),
+    getDeliveryCompletionEvents(session.companyId, { deliveryVehicle: session.assignedVehicle, driverName, hours: 20 })
   ]);
   const sourceReady = routePlan.source === "supabase";
-  const driverName = getCustomerOperationalName(session);
   const normalizedDriverName = driverName.trim();
   const allStops = sourceReady ? routePlan.groups.flatMap((group) => group.stops) : [];
   // 2026-08-28 피드백 대응: 데스크톱에서 확정한 순서(order 필드, route_plan_confirmations 반영)를
@@ -144,7 +145,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           ) : null}
 
           <MobileAccordionStep defaultOpen={!selectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
-            <MobileRouteList driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
+            <MobileRouteList completedCustomerIds={completionEvents.map((event) => event.customerId)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
           </MobileAccordionStep>
 
           {/* Legacy server-rendered list retained only as source reference. */}

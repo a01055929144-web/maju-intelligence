@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowRight, BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartPulse, MapPin, Route, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, BarChart3, Building2, CalendarDays, CheckCircle2, ClipboardList, HeartPulse, MapPin, Route, ShieldAlert, Target, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
-import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getLatestReport, getReportById } from "@/lib/store";
 
 export default async function ReportDetailPage({
@@ -23,6 +23,32 @@ export default async function ReportDetailPage({
     redirect("/dashboard/login");
   }
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
+
+  const canViewCompanyReport = Boolean(adminSession) || customerHasCapability(customerSession, "view_company_operations");
+  if (!canViewCompanyReport) {
+    return (
+      <CustomerAppShell
+        active="report"
+        companyName={customerSession?.companyName || "고객사"}
+        subtitle="회사 전체 분석은 대표 또는 관리자 권한이 필요합니다."
+        title="AI 리포트"
+        userName={customerSession?.name || "사용자"}
+        workspaceRole={customerSession?.workspaceRole}
+      >
+        <section className="mx-auto max-w-[720px] px-4 py-10">
+          <div className="maju-section-card p-6 text-center">
+            <ShieldAlert className="mx-auto h-9 w-9 text-amber-600" />
+            <h2 className="mt-3 text-lg font-black text-slate-950">리포트 조회 권한이 없습니다.</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-600">대표 또는 관리자에게 권한을 요청하세요.</p>
+            <Link className="maju-button-primary mt-5" href="/dashboard">
+              지도 홈으로 이동
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
+      </CustomerAppShell>
+    );
+  }
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const report = id === "latest" ? await getLatestReport(companyId) : await getReportById(id, companyId);

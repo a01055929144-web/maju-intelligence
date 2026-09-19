@@ -5585,6 +5585,8 @@ export type QuoteSubject = {
 type QuoteRow = { id: string; item: string; qty: number; unitPrice: number };
 export type QuoteDraft = {
   menuNotes: string;
+  recommendationBasis?: string;
+  recommendationCount?: 10 | 20 | 30;
   rows: QuoteRow[];
   savedAt: string;
   subject: QuoteSubject;
@@ -6258,8 +6260,8 @@ function QuoteDrawer({
   const [menuNotes, setMenuNotes] = useState(initialDraft?.menuNotes || subject.menuNotes || "");
   const [quoteMessage, setQuoteMessage] = useState("");
   const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
-  const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(10);
-  const [recommendationBasis, setRecommendationBasis] = useState("");
+  const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(initialDraft?.recommendationCount || 10);
+  const [recommendationBasis, setRecommendationBasis] = useState(initialDraft?.recommendationBasis || "");
   const [isRecommending, setIsRecommending] = useState(false);
   const quoteImageRef = useRef<HTMLDivElement>(null);
 
@@ -6268,7 +6270,8 @@ function QuoteDrawer({
     setRows(draft?.rows || buildQuoteDraftRows(subject.industry));
     setMenuNotes(draft?.menuNotes || subject.menuNotes || "");
     setSavedAt(draft?.savedAt || "");
-    setRecommendationBasis("");
+    setRecommendationCount(draft?.recommendationCount || 10);
+    setRecommendationBasis(draft?.recommendationBasis || "");
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
   }, [draftKey, subject]);
 
@@ -6377,6 +6380,8 @@ function QuoteDrawer({
     const nextSavedAt = new Date().toISOString();
     saveQuoteDraftToLocal(subject, {
       menuNotes,
+      recommendationBasis,
+      recommendationCount,
       rows,
       savedAt: nextSavedAt,
       subject
@@ -6389,6 +6394,8 @@ function QuoteDrawer({
     deleteQuoteDraftFromLocal(subject);
     setRows(buildQuoteDraftRows(subject.industry));
     setMenuNotes(subject.menuNotes || "");
+    setRecommendationCount(10);
+    setRecommendationBasis("");
     setSavedAt("");
     setQuoteMessage("저장된 초안을 지우고 추천 품목으로 다시 시작합니다.");
   }

@@ -8,7 +8,7 @@ import type { AuthCredentials } from "@/lib/store";
 
 export function AdminAccountsForm({ initialCredentials }: { initialCredentials: AuthCredentials }) {
   const [form, setForm] = useState(initialCredentials);
-  const [showPasswords, setShowPasswords] = useState(true);
+  const [showPasswords, setShowPasswords] = useState(false);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -128,11 +128,13 @@ function AccountPanel({
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-bold text-muted-foreground">비밀번호</span>
+          <span className="text-xs font-bold text-muted-foreground">새 비밀번호 (변경 시 입력)</span>
           <input
             className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
             type={passwordVisible ? "text" : "password"}
             value={password}
+            autoComplete="new-password"
+            placeholder="입력하지 않으면 현재 비밀번호 유지"
             onChange={(event) => onPasswordChange(event.target.value)}
           />
         </label>

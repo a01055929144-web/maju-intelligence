@@ -92,7 +92,7 @@ function recommendProducts(input: {
     })
     .sort((left, right) => right.score - left.score || left.stableIndex - right.stableIndex)
     .slice(0, input.count)
-    .map(({ stableIndex: _stableIndex, ...candidate }) => candidate);
+    .map(({ item, reason, score, source }) => ({ item, reason, score, source }));
 }
 
 export async function GET(request: NextRequest) {
