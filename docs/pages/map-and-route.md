@@ -85,10 +85,10 @@ customer (거래처 마커), lead (신규 리드 오버레이), analytics (요�
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 라이브 차량 필터/표시명 통합과 v2 도메인 참조 제거 후 운영 화면 및 전체 빌드 확인.
 
 ## BUILD
-알 수 없음 (Claude 세션에서 npm install 불가, 사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 라이브차량 위치 조회 + 지도 마커 렌더링

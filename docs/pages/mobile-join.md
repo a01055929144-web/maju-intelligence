@@ -50,10 +50,10 @@ _(비어있음)_
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-12
+2026-09-19 — 기존 직원 매핑 흐름을 포함해 전체 typecheck/lint/build/test 검증 완료.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 회사명 + 마스킹 연락처 기반 가입 흐름 리디자인

@@ -60,10 +60,10 @@ _(비어있음)_
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 기존 직원/권한 흐름을 포함해 전체 typecheck/lint/build/test 검증 완료.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 카드 레이아웃 정리(회사 설정/문자 발송/이탈위험 알림 분리, 설정 절차 카드화, 우측 아내 제목 중복 해소)

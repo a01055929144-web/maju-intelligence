@@ -61,10 +61,10 @@ route, delivery (담당자/차량 배정 표시)
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 거래처 0건 오류 구분과 교차 중복 정리 변경을 포함해 전체 검증 완료.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 카드 구조 버그 수정(목록 카드가 원장/기록 카드를 950줄 넘게 감싸던 문제)
@@ -73,12 +73,12 @@ ACTIVE
 - [x] 연락처 하이픈 포맷 표시
 - [x] 거래처 상세 배송권역 지정 기능 제거(불필요 판단)
 - [x] 매출 거래 매칭(`sales-transaction-matcher`) 연동
-- [x] 거래처 0건 표시 버그 수정(2026-09-11, Claude 분석+구현 — 아래 KNOWN ISSUES 참고. 실제 typecheck/lint/build는 사용자/Codex 확인 필요)
+- [x] 거래처 0건 표시 버그 수정 및 typecheck/lint/build 검증 완료(아래 KNOWN ISSUES 참고)
 - [x] 첨부파일 종류별 필수 누락/운영 보완/조회 실패 상태 구분
 - [x] 신규 거래처 저장 시 동일 사업체 활성 리드를 자동 제외해 거래처→리드 교차 중복 정리
 
 ## TODO
-- [ ] 거래처 0건 표시 버그 수정 후 `npx tsc --noEmit` / `npm run lint` / `npm run build` PASS 확인(Claude Cowork 세션은 `npm install`이 레지스트리 정책으로 막혀 있어 실행 불가 — esbuild 수준 문법 검사와 중괄호/괄호 균형 체크만 완료한 상태)
+- [ ] (없음, 새 요청 시 추가)
 
 ## KNOWN ISSUES
 - **거래처 0건 표시 버그 — 원인 확정 및 수정 완료(2026-09-11, Claude 분석+구현)**: 실제 companyId 불일치로 0건이 조회되는 것이 아니라, `app/crm/timeline/page.tsx`의 `/api/customers` 호출부가 "API 실패"와 "진짜 0건"을 구분하지 않고 둘 다 동일하게 `customers=[]`로 접어버리는 것이 원인이었다. 실패 경로 3가지: (1) admin 프리뷰 모드는 세션 쿠키 없이 URL의 `?companyId=` 쿼리 하나로만 테넌트를 구분하는데(`lib/auth.ts` `getRequestAuthScope` admin 분기), 이 파라미터가 없으면 API가 401을 반환 (2) `app/api/customers/route.ts` GET에 try/catch가 없어서 `lib/store.ts`의 `getCustomerMaster`가 컬럼 누락이 아닌 다른 이유(네트워크 순단, Supabase 일시 오류 등)로 던지는 예외가 그대로 500으로 노출 (3) `fetchWithTimeout`의 12초 타임아웃 초과. 세 경우 모두 프런트에서 `response.ok`만 보고 `payload=null` → `customers=[]`로 귀결되어 실제 데이터가 있는 회사도 화면엔 "거래처 원장 비어 있음/미연결"과 동일하게 0건으로 보였다. **수정**: `route.ts` GET을 try/catch로 감싸 실패 시 `{source:"error", message}`를 502로 명시적으로 반환하도록 하고, `page.tsx`는 목록 fetch를 재사용 가능한 `loadCustomers()`로 리팩터링해 API 실패 시 재시도 버튼이 있는 빨간 에러 배너(`CustomerLoadErrorBanner`)를 띄우며, 상태 스트립/빈 목록 문구도 "불러오기 실패"로 정확히 구분해 표시하도록 변경. 상세 분석·구현 내역은 `qa-report-customers-zero-count.md` 참고. **남은 일**: 실제 `npx tsc --noEmit` / `npm run lint` / `npm run build`는 Claude Cowork 세션에서 `npm install`이 막혀 있어 실행하지 못했으므로 사용자/Codex가 로컬에서 확인 필요.

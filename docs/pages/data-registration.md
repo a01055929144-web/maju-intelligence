@@ -57,14 +57,15 @@ _(비어있음)_
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 모바일 첨부 동일 파일 재선택과 전체 빌드 검증 완료.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 메인 페이지 문제행/최근 등록이력 표 정렬
 - [x] 레이아웃 점검 완료(구조적 버그 없음, 사소한 클래스 드리프트만 존재)
+- [x] 첨부 업로드 후 input을 초기화해 같은 파일 재선택·재시도 가능
 
 ## TODO
 - [ ] app/page.tsx가 5,220줄로 과대 — 향후 기회가 되면 컴포넌트 분리 검토(지금 당장 리팩터링 지시는 아님)

@@ -36,10 +36,10 @@ _(비어있음)_
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 전체 typecheck/lint/build/test 검증 완료.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 등록 이력 표 정렬

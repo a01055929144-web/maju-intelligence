@@ -49,17 +49,18 @@ _(비어있음)_
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 견적 추천 개수/근거 초안 저장·복원과 전체 빌드를 확인.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 헤더 없던 바로가기 카드 묶음에 maju-card-header 추가
+- [x] 견적 추천 품목 10/20/30개 선택값과 추천 근거 저장·재사용
 
 ## TODO
 - [ ] 인스타 DM 영업 보조(로드맵상 3순위 항목, 미착수)
-- [ ] 견적서 작성 고도화(로드맵상 3순위 항목, 미착수)
+- [ ] 견적서 이미지/PDF 저장 흐름의 실제 화면 QA 및 외부 메뉴/리뷰 근거 고도화
 - [ ] 영업 우선순위 표시(로드맵상 3순위 항목, 미착수)
 
 ## KNOWN ISSUES

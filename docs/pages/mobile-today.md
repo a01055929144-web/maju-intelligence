@@ -17,6 +17,7 @@ route, customer
 - `components/mobile-delivery-proof-panel.tsx`
 - `components/mobile-loading-attachment-panel.tsx`
 - `components/mobile-route-action-panel.tsx`
+- `components/mobile-route-list.tsx`
 - `components/mobile-visit-note-form.tsx`
 - `components/mobile-location-reporter.tsx`
 
@@ -42,14 +43,17 @@ _(비어있음)_
 ACTIVE (최근 UI 단순화, 재검토 권장)
 
 ## LAST VERIFIED
-2026-09-11
+2026-09-19 — 모바일 순서 저장 실패 복구, 배송완료 즉시 반영, 동일 파일 재선택 동작과 전체 빌드를 확인.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] safe-area 하단 여백, 터치 영역(min-h-12) 확대
 - [x] 4초 GPS 폴링 연동
+- [x] 배송완료 저장 후 서버 화면 새로고침 및 오늘 코스 완료 배지 반영
+- [x] 순서 저장 API/네트워크 실패 시 마지막 저장 순서로 복구하고 오류 상태 표시
+- [x] 모바일 첨부 업로드에서 같은 파일을 다시 선택해 재시도 가능
 
 ## TODO
 - [ ] **origin의 "simplify mobile field UX" 병합 결과 재검토**: 이 변경으로 "현장 실행 순서" 4단계 진행 패널(구 `MobileFieldFlowPanel`)과 운영 기준 패널의 담당자/업무구분 표시(구 `MobileOperationBasisPanel`)가 제거되고 더 단순한 `MobileRouteContextBar`로 대체됐다. 텍스트 단순화 수준을 넘어 실제 정보 표시량이 줄어든 변경이라, 사용자가 실사용해보고 이 방향이 맞는지 확인이 필요하다. 되돌리길 원하면 git 히스토리에서 병합 직전 버전을 복원할 수 있다.

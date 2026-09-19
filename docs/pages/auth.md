@@ -54,10 +54,10 @@ _(비어있음)_
 ACTIVE
 
 ## LAST VERIFIED
-2026-09-08
+2026-09-19 — 기존 인증 경계와 레이트리밋을 포함해 전체 typecheck/lint/build/test 검증 완료.
 
 ## BUILD
-알 수 없음 (사용자/Codex 확인 필요)
+PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
 - [x] 로그인 화면 2단 구성 + 고객사 탈퇴(소프트 삭제)
