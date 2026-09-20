@@ -73,9 +73,10 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 - [x] 직원 담당 업무(역할) 카탈로그 자유 편집
 - [x] 고객사 탈퇴(소프트 삭제) + 재활성화 안내
 - [x] 마이그레이션 미적용 위험 6개 전수 감사 + `assigned_manager_name`/`assigned_vehicle` 진단 메시지 보강(2026-09-11, Claude 분석+구현 — 아래 KNOWN ISSUES 참고)
+- [x] 회사 전체 운영 데이터 API 8곳의 `view_company_operations` 게이트와 직원 배정 키 필터 자동 회귀 테스트 추가
 
 ## TODO
-- [ ] 직원별 데이터 노출/권한 필터 재점검(카카오 매핑 포함, 로드맵 5순위 항목)
+- [ ] 실제 카카오 직원 계정으로 담당 거래처만 노출되는지 현장 로그인 검증(코드 게이트/자동 테스트는 완료)
 - [ ] GPS 추적 동의 안내를 초대/가입 화면에 추가할지 검토(제안됐으나 아직 요청받지 않음)
 
 ## KNOWN ISSUES
