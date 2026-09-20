@@ -69,6 +69,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
     : 0;
   const routeDurationMinutes = isPersonalized ? myStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0) : 0;
   const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops[0];
+  const hasExplicitSelectedStop = Boolean(resolvedSearchParams?.customer && todayStops.some((stop) => stop.id === resolvedSearchParams.customer));
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const heroCopy = getMobileHeroCopy(workspaceRole);
@@ -91,19 +92,31 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             PC 화면
           </Link>
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
+          <MobileFieldFlowNav customerId={selectedStop?.id} />
         </header>
 
         <div className="flex-1 space-y-3 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4">
-          <section className="rounded-xl bg-teal-700 p-4 text-white shadow-[0_12px_28px_rgba(15,118,110,0.18)]">
-            <p className="text-xs font-black text-white/70">오늘 코스</p>
-            <h1 className="mt-1 truncate text-2xl font-black leading-tight">{heroCopy.title}</h1>
-          </section>
-
-          <section className="grid grid-cols-3 gap-2">
-            <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${visibleRouteTotal}곳` : "등록 필요"} />
-            <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routeDistanceKm.toLocaleString()}km` : "-"} />
-            <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routeDurationMinutes) : "-"} />
-          </section>
+          {isScopedStaffView ? (
+            <MobileDriverRouteSummary
+              area={routeArea}
+              distanceKm={routeDistanceKm}
+              durationMinutes={routeDurationMinutes}
+              sourceReady={sourceReady}
+              totalStops={visibleRouteTotal}
+            />
+          ) : (
+            <>
+              <section className="rounded-xl bg-teal-700 p-4 text-white shadow-[0_12px_28px_rgba(15,118,110,0.18)]">
+                <p className="text-xs font-black text-white/70">오늘 코스</p>
+                <h1 className="mt-1 truncate text-2xl font-black leading-tight">{heroCopy.title}</h1>
+              </section>
+              <section className="grid grid-cols-3 gap-2">
+                <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${visibleRouteTotal}곳` : "등록 필요"} />
+                <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routeDistanceKm.toLocaleString()}km` : "-"} />
+                <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routeDurationMinutes) : "-"} />
+              </section>
+            </>
+          )}
 
           {!sourceReady ? (
             <MobileOperationalEmptyState />
@@ -115,21 +128,21 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </p>
           ) : null}
 
-          <MobileRouteContextBar
-            area={routeArea}
-            selectedStopName={selectedStop?.name || "선택 거래처 없음"}
-            totalStops={sourceReady ? visibleRouteTotal : 0}
-            visibleStops={todayStops.length}
-          />
+          {!isScopedStaffView ? (
+            <MobileRouteContextBar
+              area={routeArea}
+              selectedStopName={selectedStop?.name || "선택 거래처 없음"}
+              totalStops={sourceReady ? visibleRouteTotal : 0}
+              visibleStops={todayStops.length}
+            />
+          ) : null}
 
-          <MobileFieldFlowNav customerId={selectedStop?.id} />
-
-          <MobileAccordionStep defaultOpen={!selectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
+          <MobileAccordionStep defaultOpen={!hasExplicitSelectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
             <MobileRouteList completedCustomerIds={completionEvents.map((event) => event.customerId)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
           </MobileAccordionStep>
 
           {selectedStop ? (
-            <MobileAccordionStep defaultOpen label="2. 선택 매장" targetId="selected-customer">
+            <MobileAccordionStep defaultOpen={hasExplicitSelectedStop} label="2. 선택 매장" targetId="selected-customer">
             <section className="scroll-mt-24 overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]" id="selected-customer">
               <div className="border-b border-teal-100 bg-teal-50 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -276,6 +289,33 @@ function MobileRouteContextBar({
             <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function MobileDriverRouteSummary({
+  area,
+  distanceKm,
+  durationMinutes,
+  sourceReady,
+  totalStops
+}: {
+  area: string;
+  distanceKm: number;
+  durationMinutes: number;
+  sourceReady: boolean;
+  totalStops: number;
+}) {
+  return (
+    <section className="flex items-center justify-between gap-3 rounded-xl bg-teal-700 px-4 py-3 text-white shadow-[0_10px_24px_rgba(15,118,110,0.16)]">
+      <div className="min-w-0">
+        <p className="truncate text-xs font-bold text-white/70">오늘 코스 · {area}</p>
+        <p className="mt-0.5 text-lg font-black">{sourceReady ? `${totalStops.toLocaleString()}곳` : "코스 확인 필요"}</p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-black">{sourceReady ? `${distanceKm.toLocaleString()}km` : "-"}</p>
+        <p className="mt-0.5 text-xs font-bold text-white/70">{sourceReady ? formatMinutes(durationMinutes) : "-"}</p>
       </div>
     </section>
   );
