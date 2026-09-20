@@ -3601,6 +3601,7 @@ function VehicleMasterManager({
 }) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState("");
   const [savingId, setSavingId] = useState("");
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<{ fuelType: VehicleFuelType; memo: string; name: string; plateNumber: string }>({
@@ -3610,25 +3611,41 @@ function VehicleMasterManager({
     plateNumber: ""
   });
 
-  async function saveNewVehicle() {
-    setSavingId("new");
+  async function saveVehicle() {
+    const targetId = editingId;
+    setSavingId(targetId || "new");
     setError("");
     try {
       const response = await fetch("/api/delivery-vehicle-master", {
-        body: JSON.stringify(draft),
+        body: JSON.stringify(targetId ? { ...draft, id: targetId } : draft),
         headers: { "Content-Type": "application/json" },
-        method: "POST"
+        method: targetId ? "PATCH" : "POST"
       });
       const payload = (await response.json().catch(() => ({}))) as { message?: string; vehicle?: VehicleMaster };
       if (!response.ok || !payload.vehicle) throw new Error(payload.message || "차량 저장에 실패했습니다.");
-      onChange([...vehicles, payload.vehicle].sort((left, right) => left.name.localeCompare(right.name, "ko")));
+      onChange((targetId ? vehicles.map((vehicle) => (vehicle.id === targetId ? payload.vehicle! : vehicle)) : [...vehicles, payload.vehicle]).sort((left, right) => left.name.localeCompare(right.name, "ko")));
       setDraft({ fuelType: "diesel", memo: "", name: "", plateNumber: "" });
       setAdding(false);
+      setEditingId("");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "차량 저장에 실패했습니다.");
     } finally {
       setSavingId("");
     }
+  }
+
+  function beginEdit(vehicle: VehicleMaster) {
+    setError("");
+    setAdding(false);
+    setEditingId(vehicle.id);
+    setDraft({ fuelType: vehicle.fuelType, memo: vehicle.memo || "", name: vehicle.name, plateNumber: vehicle.plateNumber });
+  }
+
+  function cancelForm() {
+    setAdding(false);
+    setEditingId("");
+    setDraft({ fuelType: "diesel", memo: "", name: "", plateNumber: "" });
+    setError("");
   }
 
   async function changeStatus(vehicle: VehicleMaster, status: VehicleOperationalStatus) {
@@ -3679,7 +3696,15 @@ function VehicleMasterManager({
               </div>
               {vehicle.memo ? <p className="mt-1 truncate text-[10px] font-bold text-slate-400">{vehicle.memo}</p> : null}
               {canManage ? (
-                <div className="mt-2 grid grid-cols-3 gap-1">
+                <div className="mt-2 grid grid-cols-4 gap-1">
+                  <button
+                    className="h-7 rounded border border-slate-200 bg-white text-[10px] font-black text-slate-600"
+                    disabled={Boolean(savingId)}
+                    onClick={() => beginEdit(vehicle)}
+                    type="button"
+                  >
+                    수정
+                  </button>
                   {(["active", "maintenance", "inactive"] as const).map((status) => (
                     <button
                       className={`h-7 rounded border text-[10px] font-black ${vehicle.status === status ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`}
@@ -3697,8 +3722,9 @@ function VehicleMasterManager({
           ))}
           {available && !vehicles.length ? <p className="py-2 text-center text-[11px] font-bold text-slate-500">등록된 차량이 없습니다.</p> : null}
           {canManage && available ? (
-            adding ? (
+            adding || editingId ? (
               <div className="space-y-2 rounded-md border border-teal-200 bg-white p-2.5">
+                <p className="text-[11px] font-black text-slate-800">{editingId ? "차량 정보 수정" : "새 차량 등록"}</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   <input className="h-8 rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="차량명" value={draft.name} />
                   <input className="h-8 rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, plateNumber: event.target.value }))} placeholder="차량번호" value={draft.plateNumber} />
@@ -3708,12 +3734,12 @@ function VehicleMasterManager({
                 </select>
                 <input className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, memo: event.target.value }))} placeholder="메모 (선택)" value={draft.memo} />
                 <div className="flex justify-end gap-1.5">
-                  <button className="maju-button-secondary h-8 px-3 text-xs" disabled={savingId === "new"} onClick={() => setAdding(false)} type="button">취소</button>
-                  <button className="maju-button-primary h-8 px-3 text-xs disabled:opacity-50" disabled={savingId === "new" || !draft.name.trim() || !draft.plateNumber.trim()} onClick={() => void saveNewVehicle()} type="button">{savingId === "new" ? "저장 중" : "등록"}</button>
+                  <button className="maju-button-secondary h-8 px-3 text-xs" disabled={Boolean(savingId)} onClick={cancelForm} type="button">취소</button>
+                  <button className="maju-button-primary h-8 px-3 text-xs disabled:opacity-50" disabled={Boolean(savingId) || !draft.name.trim() || !draft.plateNumber.trim()} onClick={() => void saveVehicle()} type="button">{savingId ? "저장 중" : editingId ? "수정 저장" : "등록"}</button>
                 </div>
               </div>
             ) : (
-              <button className="maju-button-secondary flex h-8 w-full items-center justify-center gap-1 text-xs" onClick={() => setAdding(true)} type="button"><Plus className="h-3.5 w-3.5" /> 차량 등록</button>
+              <button className="maju-button-secondary flex h-8 w-full items-center justify-center gap-1 text-xs" onClick={() => { setAdding(true); setEditingId(""); }} type="button"><Plus className="h-3.5 w-3.5" /> 차량 등록</button>
             )
           ) : null}
           {error ? <p className="text-[11px] font-bold leading-4 text-rose-600">{error}</p> : null}
