@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, CheckCircle2, Loader2, Plus, RefreshCw } from "lucide-react";
 import { LoadingPositionGallery } from "@/components/loading-position-gallery";
+import { openMobileStep } from "@/components/mobile-accordion-step";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 
@@ -87,6 +88,7 @@ export function MobileLoadingAttachmentPanel({
     }
     setAttachments((current) => [payload.attachment!, ...current]);
     setSaveState("saved");
+    window.setTimeout(() => openMobileStep("delivery-proof"), 450);
   }
 
   useEffect(() => {

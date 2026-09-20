@@ -5,6 +5,12 @@ import { type ReactNode, useEffect, useState } from "react";
 
 const OPEN_EVENT = "maju-mobile-step-open";
 
+export function openMobileStep(targetId: string) {
+  window.history.replaceState(null, "", `#${targetId}`);
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: targetId }));
+  requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
 export function MobileAccordionStep({ children, defaultOpen = false, label, targetId }: {
   children: ReactNode;
   defaultOpen?: boolean;
@@ -35,8 +41,7 @@ export function MobileAccordionStep({ children, defaultOpen = false, label, targ
     const next = !open;
     setOpen(next);
     if (next) {
-      window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: targetId }));
-      window.history.replaceState(null, "", `#${targetId}`);
+      openMobileStep(targetId);
     }
   }
 

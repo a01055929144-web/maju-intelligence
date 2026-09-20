@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CheckCircle2, ChevronRight, Clock, MapPinned, Phone, PlusCircle, Route, Truck } from "lucide-react";
+import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, Phone, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileAccordionStep } from "@/components/mobile-accordion-step";
@@ -83,16 +83,12 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
               <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{driverName}님</p>
             </div>
-            <Badge className="shrink-0 whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
+              <Link className="inline-flex h-8 items-center rounded-lg px-2 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
+            </div>
           </div>
-          <Link
-            className="mt-2 inline-flex h-8 items-center rounded-full bg-slate-50 px-3 text-xs font-black text-teal-700 ring-1 ring-inset ring-slate-200"
-            href="/dashboard"
-          >
-            PC 화면
-          </Link>
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
-          <MobileFieldFlowNav customerId={selectedStop?.id} />
         </header>
 
         <div className="flex-1 space-y-3 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4">
@@ -244,11 +240,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
         </div>
 
-        <footer className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
+        <footer aria-label="현장 처리 순서" className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
           <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
-          <FooterItem href="/mobile/today#selected-customer" icon={Building2} label="매장" />
-          <FooterItem href="/mobile/register" icon={PlusCircle} label="등록" />
-          <FooterItem href="/mobile/today#delivery-proof" icon={CheckCircle2} label="완료" />
+          <FooterItem href={selectedStop ? `/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#selected-customer` : "/mobile/today#route-list"} icon={Building2} label="매장·이동" />
+          <FooterItem href={selectedStop ? `/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#loading-position` : "/mobile/today#route-list"} icon={Camera} label="적재" />
+          <FooterItem href={selectedStop ? `/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#delivery-proof` : "/mobile/today#route-list"} icon={CheckCircle2} label="완료·메모" />
         </footer>
       </section>
     </main>
@@ -310,36 +306,6 @@ function MobileDriverRouteSummary({
         <p className="mt-0.5 text-xs font-bold text-white/70">{sourceReady ? formatMinutes(durationMinutes) : "-"}</p>
       </div>
     </section>
-  );
-}
-
-function MobileFieldFlowNav({ customerId }: { customerId?: string }) {
-  const selectedCustomerPath = customerId ? `/mobile/today?customer=${encodeURIComponent(customerId)}` : "/mobile/today";
-  const steps = [
-    { href: "/mobile/today#route-list", label: "코스" },
-    { href: `${selectedCustomerPath}#selected-customer`, label: "매장·이동" },
-    { href: `${selectedCustomerPath}#loading-position`, label: "적재" },
-    { href: `${selectedCustomerPath}#delivery-proof`, label: "완료·메모" }
-  ];
-
-  return (
-    <nav aria-label="현장 처리 순서" className="overflow-x-auto rounded-xl border border-teal-100 bg-teal-50/70 px-2 py-2">
-      <ol className="flex min-w-max items-center">
-        {steps.map((step, index) => (
-          <li className="flex items-center" key={step.label}>
-            {index ? <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-teal-300" /> : null}
-            <Link
-              aria-disabled={!customerId && index > 0}
-              className={`inline-flex min-h-10 items-center rounded-lg px-2.5 text-xs font-black ${!customerId && index > 0 ? "pointer-events-none text-slate-300" : "text-teal-800 hover:bg-white"}`}
-              href={step.href}
-            >
-              <span className="mr-1.5 text-[10px] text-teal-500">{index + 1}</span>
-              {step.label}
-            </Link>
-          </li>
-        ))}
-      </ol>
-    </nav>
   );
 }
 
