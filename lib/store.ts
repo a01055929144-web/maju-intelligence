@@ -3865,6 +3865,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("health_score_snapshots", "건강도 스냅샷", "리포트별 건강도 점수 스냅샷입니다."),
     countTableRows("auth_credentials", "로그인 저장 정보", "관리자/고객 로그인 정보를 관리할 때 사용하는 테이블입니다."),
     countTableRows("excel_mapping_presets", "엑셀 매핑 프리셋", "ERP/유통사별로 저장해둔 엑셀 헤더 매핑 프리셋입니다."),
+    countTableRows("login_throttle_attempts", "로그인 시도 제한", "로그인·공개 조회 요청 제한을 서버 인스턴스 간 공유하는 테이블입니다."),
     checkVisitLeadRelationship(),
     checkCustomerPlaceLinkColumns(),
     checkDefaultCompany()

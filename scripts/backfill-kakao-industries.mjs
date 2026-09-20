@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { normalizeKakaoCategoryIndustry } from "../lib/leads.ts";
+import {
+  hasCustomerKakaoIndustryEvidence,
+  hasLeadKakaoIndustryEvidence,
+  replaceIndustryTag,
+  resolveKakaoIndustryBackfill
+} from "../lib/industry-backfill.ts";
 
 const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
@@ -30,17 +35,6 @@ if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY가 필요합니다.");
 }
 
-const standardBuckets = new Set([
-  "한식",
-  "카페/디저트",
-  "일식",
-  "중식",
-  "프랜차이즈/배달",
-  "주점",
-  "양식",
-  "뷔페/단체급식"
-]);
-
 const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
 const [customers, leads] = await Promise.all([
   fetchAll("normalized_customers", "id,company_id,customer_name,industry,kakao_place_url,place_links_checked_at"),
@@ -49,20 +43,18 @@ const [customers, leads] = await Promise.all([
 
 const customerCandidates = customers.flatMap((row) => {
   const current = cleanText(row.industry);
-  const normalized = normalizeCandidate(current);
-  const hasKakaoEvidence = Boolean(cleanText(row.kakao_place_url) || row.place_links_checked_at);
+  const normalized = resolveKakaoIndustryBackfill(current);
+  const hasKakaoEvidence = hasCustomerKakaoIndustryEvidence(row);
   if (!hasKakaoEvidence || !normalized) return [];
   return [{ id: row.id, companyId: row.company_id, name: row.customer_name, before: current, after: normalized }];
 });
 
 const leadCandidates = leads.flatMap((row) => {
   const current = cleanText(row.industry_primary);
-  const normalized = normalizeCandidate(current);
-  const source = cleanText(row.source).toLowerCase();
-  const hasKakaoEvidence = source.includes("kakao") || Boolean(cleanText(row.kakao_place_url));
+  const normalized = resolveKakaoIndustryBackfill(current);
+  const hasKakaoEvidence = hasLeadKakaoIndustryEvidence(row);
   if (!hasKakaoEvidence || !normalized) return [];
-  const tags = Array.isArray(row.industry_tags) ? row.industry_tags.map(cleanText).filter(Boolean) : [];
-  const nextTags = [...new Set(tags.filter((tag) => tag !== current).concat(normalized))];
+  const nextTags = replaceIndustryTag(row.industry_tags, current, normalized);
   return [{ id: row.id, companyId: row.company_id, name: row.business_name, before: current, after: normalized, tags: nextTags }];
 });
 
@@ -98,12 +90,6 @@ if (apply) {
 }
 
 console.log(JSON.stringify(report, null, 2));
-
-function normalizeCandidate(current) {
-  if (!current || standardBuckets.has(current)) return null;
-  const normalized = normalizeKakaoCategoryIndustry(current);
-  return normalized !== current && standardBuckets.has(normalized) ? normalized : null;
-}
 
 async function fetchAll(table, select) {
   const rows = [];
