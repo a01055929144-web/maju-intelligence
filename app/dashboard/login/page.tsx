@@ -34,7 +34,7 @@ export default function CustomerLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [recentLoginEmail, setRecentLoginEmail] = useState(readRecentLoginEmail);
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
 
   async function login(nextEmail = email, nextPassword = password) {
     setLoading(true);
@@ -131,14 +131,14 @@ export default function CustomerLoginPage() {
                   >
                     <Check className="h-3.5 w-3.5" />
                   </span>
-                  자동 로그인
+                  로그인 상태 유지
                 </span>
                 <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
-                <span className="text-xs font-extrabold text-muted-foreground">이 기기에서 유지</span>
+                <span className="text-xs font-extrabold text-muted-foreground">개인 PC에서만</span>
               </label>
               <Button className="mt-1.5 w-full" disabled={loading}>
                 {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
-                로그인
+                {loading ? "로그인 확인 중…" : "로그인"}
               </Button>
               <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/forgot-password">
                 비밀번호를 잊으셨나요?

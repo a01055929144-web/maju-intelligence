@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { useState } from "react";
 
 type OAuthLoginButtonsProps = {
   inviteCode?: string;
@@ -11,14 +15,16 @@ type OAuthLoginButtonsProps = {
 // 나중에 다시 켤 수 있도록 그대로 남겨뒀습니다.
 export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
   const query = inviteCode ? `?invite=${encodeURIComponent(inviteCode)}` : "";
+  const [moving, setMoving] = useState(false);
 
   return (
     <Link
       className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition hover:brightness-95"
       href={`/api/auth/kakao/start${query}`}
+      onClick={() => setMoving(true)}
     >
-      <KakaoMark />
-      카카오 로그인
+      {moving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KakaoMark />}
+      {moving ? "카카오로 이동 중…" : "카카오로 계속"}
     </Link>
   );
 }

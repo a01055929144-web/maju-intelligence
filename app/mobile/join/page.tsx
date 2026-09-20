@@ -1,6 +1,4 @@
-import Link from "next/link";
-import { AlertTriangle, CheckCircle2, MessageCircle, ShieldCheck, Smartphone, UserCheck } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 import { getStaffInvitationPreview } from "@/lib/store";
 
@@ -18,36 +16,23 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
   const invitePreview = inviteCode ? await getStaffInvitationPreview(inviteCode).catch(() => null) : null;
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <section className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col bg-white shadow-[0_20px_80px_rgba(15,23,42,0.12)]">
-        <header className="border-b border-slate-200 bg-white px-4 pb-4 pt-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white shadow-[0_10px_24px_rgba(15,118,110,0.18)]">M</span>
-              <div>
-                <p className="text-sm font-black">MAJU Intelligence</p>
-                <p className="text-xs font-bold text-slate-500">카카오 로그인</p>
-              </div>
-            </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">모바일</Badge>
+    <main className="grid min-h-screen place-items-center bg-[#f5f7fb] px-4 py-6 text-slate-950">
+      <section className="w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_20px_80px_rgba(15,23,42,0.10)]">
+        <header className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white">M</span>
+          <div>
+            <p className="text-sm font-black">MAJU Intelligence</p>
+            <h1 className="text-xl font-black">{joinMode === "company" ? "직원 초대 가입" : "직원 로그인"}</h1>
           </div>
         </header>
 
-        <div className="flex-1 space-y-3 px-4 py-4">
-          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <Badge className="mb-3 bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-200">
-              <MessageCircle className="mr-1 h-3.5 w-3.5" />
-              카카오 로그인
-            </Badge>
-            <h1 className="text-2xl font-black leading-snug text-slate-950">{joinMode === "company" ? "초대 확인 후 로그인" : "모바일 로그인"}</h1>
-          </section>
+        <div className="mt-5 space-y-3">
 
           {errorMessage ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3" role="alert">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" />
                 <div>
-                  <p className="font-black text-rose-950">로그인 실패</p>
                   <p className="mt-1 text-sm font-bold leading-5 text-rose-800">{errorMessage}</p>
                 </div>
               </div>
@@ -56,32 +41,17 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
 
           {inviteCode ? (
             <section className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
-              <div className="flex items-center gap-2">
-                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-700 text-[11px] font-black text-white">1</span>
-                <p className="text-xs font-black text-teal-800">초대 확인</p>
-              </div>
               {invitePreview ? (
-                <div className="mt-3">
-                  <p className="text-xs font-bold text-slate-500">회사</p>
-                  <p className="text-xl font-black leading-tight text-slate-950">{invitePreview.companyName}</p>
-
-                  <div className="mt-3 flex items-start gap-2 rounded-lg border border-teal-100 bg-white p-3">
-                    <UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
-                    <div className="text-sm">
-                      <p className="font-black text-slate-900">{invitePreview.employeeName}</p>
-                      <p className="font-semibold text-slate-500">
-                        {invitePreview.maskedPhone || "연락처 미등록"}
-                      </p>
-                    </div>
-                  </div>
-
+                <div>
+                  <p className="text-lg font-black text-slate-950">{invitePreview.companyName}</p>
+                  <p className="mt-1 text-sm font-bold text-slate-600">{invitePreview.employeeName} · {invitePreview.maskedPhone || "연락처 미등록"}</p>
                   {invitePreview.status === "pending" ? (
-                    <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      가입 준비 완료
+                      초대 확인 완료
                     </p>
                   ) : invitePreview.status === "accepted" ? (
-                    <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       이미 가입됨
                     </p>
@@ -99,33 +69,11 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             </section>
           ) : null}
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2">
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-700 text-[11px] font-black text-white">{inviteCode ? "2" : "1"}</span>
-              <p className="text-xs font-black text-slate-500">카카오 로그인</p>
-            </div>
-            <div className="mt-3">
-              <OAuthLoginButtons inviteCode={inviteCode} />
-            </div>
-          </section>
-
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
-              <div>
-                <p className="font-black text-slate-950">{joinMode === "company" ? "초대 기반 연결" : "초대받은 계정만 연결"}</p>
-                <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">회사 데이터는 관리자 초대로만 연결됩니다.</p>
-              </div>
-            </div>
-          </section>
+          <OAuthLoginButtons inviteCode={inviteCode} />
+          <p className="text-center text-xs font-bold leading-5 text-slate-500">
+            {inviteCode ? "카카오 인증 후 바로 회사 코스로 연결됩니다." : "관리자에게 받은 초대 링크로 접속해주세요."}
+          </p>
         </div>
-
-        <footer className="border-t border-slate-200 bg-white px-5 py-4">
-          <Link className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700" href="/dashboard/login">
-            <Smartphone className="h-4 w-4" />
-            로그인 화면으로 돌아가기
-          </Link>
-        </footer>
       </section>
     </main>
   );
