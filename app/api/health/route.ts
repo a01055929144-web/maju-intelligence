@@ -23,7 +23,8 @@ export async function GET() {
         warningCount,
         databaseChecks: {
           ready: databaseReadyCount,
-          total: system.databaseChecks.length
+          total: system.databaseChecks.length,
+          issues: system.databaseChecks.filter((check) => check.status !== "ready").map((check) => check.name)
         },
         storageChecks: {
           ready: storageReadyCount,
