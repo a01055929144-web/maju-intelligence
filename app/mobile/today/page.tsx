@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, Phone, PlusCircle, Route, Truck } from "lucide-react";
+import { Building2, CheckCircle2, ChevronRight, Clock, MapPinned, Phone, PlusCircle, Route, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileAccordionStep } from "@/components/mobile-accordion-step";
@@ -142,7 +142,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </MobileAccordionStep>
 
           {selectedStop ? (
-            <MobileAccordionStep defaultOpen={hasExplicitSelectedStop} label="2. 선택 매장" targetId="selected-customer">
+            <MobileAccordionStep defaultOpen={hasExplicitSelectedStop} label="2. 매장 · 지도 · 전화" targetId="selected-customer">
             <section className="scroll-mt-24 overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]" id="selected-customer">
               <div className="border-b border-teal-100 bg-teal-50 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -154,11 +154,15 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                   <Badge className="shrink-0 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">{selectedStop.industry || "업종"}</Badge>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 p-3">
-                <ActionLink href={selectedStop.phone ? `tel:${selectedStop.phone}` : "#"} icon={Phone} label="전화" value={selectedStop.phone || "연락처 없음"} />
-                <ActionLink href={createKakaoMapSearchUrl(selectedStop.address || selectedStop.name)} icon={MapPinned} label="지도" value={`${selectedStop.distanceKm || 0}km`} />
-                <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#loading-position`} icon={Camera} label="적재" value={selectedStop.loadingPosition || "확인"} />
-                <ActionLink href={`/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#delivery-proof`} icon={CheckCircle2} label="완료" value="사진 저장" />
+              <div className="p-3">
+                <MobileRouteActionPanel
+                  address={selectedStop.address || selectedStop.region || selectedStop.name}
+                  customerId={selectedStop.id}
+                  customerName={selectedStop.name}
+                  distanceKm={selectedStop.distanceKm}
+                  durationMinutes={selectedStop.durationMinutes}
+                  phone={selectedStop.phone}
+                />
               </div>
             </section>
             </MobileAccordionStep>
@@ -218,20 +222,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           {selectedStop ? (
             <section className="space-y-3">
-              <MobileAccordionStep label="3. 지도·전화" targetId="contact-actions">
-              <MobileRouteActionPanel
-                address={selectedStop.address || selectedStop.region || selectedStop.name}
-                customerId={selectedStop.id}
-                customerName={selectedStop.name}
-                distanceKm={selectedStop.distanceKm}
-                durationMinutes={selectedStop.durationMinutes}
-                phone={selectedStop.phone}
-              />
-              </MobileAccordionStep>
-              <MobileAccordionStep label="4. 적재위치" targetId="loading-position">
+              <MobileAccordionStep label="3. 적재위치" targetId="loading-position">
               <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
               </MobileAccordionStep>
-              <MobileAccordionStep label="5. 배송완료·사진" targetId="delivery-proof">
+              <MobileAccordionStep label="4. 배송완료 · 사진 · 메모" targetId="delivery-proof">
               <MobileDeliveryProofPanel
                 companyName={companySettings.name || session.companyName}
                 customerId={selectedStop.id}
@@ -243,8 +237,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 notificationPhone={companySettings.notificationPhone}
                 notificationSenderName={companySettings.notificationSenderName}
               />
-              </MobileAccordionStep>
-              <MobileAccordionStep label="6. 메모 저장" targetId="visit-memo">
               <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
               </MobileAccordionStep>
             </section>
@@ -325,11 +317,9 @@ function MobileFieldFlowNav({ customerId }: { customerId?: string }) {
   const selectedCustomerPath = customerId ? `/mobile/today?customer=${encodeURIComponent(customerId)}` : "/mobile/today";
   const steps = [
     { href: "/mobile/today#route-list", label: "코스" },
-    { href: `${selectedCustomerPath}#selected-customer`, label: "매장" },
-    { href: `${selectedCustomerPath}#contact-actions`, label: "지도·전화" },
+    { href: `${selectedCustomerPath}#selected-customer`, label: "매장·이동" },
     { href: `${selectedCustomerPath}#loading-position`, label: "적재" },
-    { href: `${selectedCustomerPath}#delivery-proof`, label: "완료·사진" },
-    { href: `${selectedCustomerPath}#visit-memo`, label: "메모" }
+    { href: `${selectedCustomerPath}#delivery-proof`, label: "완료·메모" }
   ];
 
   return (
@@ -372,16 +362,6 @@ function MobileOperationalEmptyState() {
   );
 }
 
-function ActionLink({ href, icon: Icon, label, value }: { href: string; icon: typeof Phone; label: string; value: string }) {
-  return (
-    <a className="flex min-h-[76px] flex-col rounded-lg border border-slate-200 bg-white p-3 transition hover:border-teal-200 hover:bg-teal-50" href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined}>
-      <Icon className="h-4 w-4 text-teal-700" />
-      <p className="mt-2 text-xs font-black text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
-    </a>
-  );
-}
-
 function MobileMetric({ icon: Icon, label, value }: { icon: typeof Route; label: string; value: string }) {
   return (
     <div className="min-h-[92px] rounded-xl border border-slate-200 bg-white p-3">
@@ -399,10 +379,6 @@ function SmallAction({ icon: Icon, label }: { icon: typeof MapPinned; label: str
       {label}
     </span>
   );
-}
-
-function createKakaoMapSearchUrl(query: string) {
-  return `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
 }
 
 function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
