@@ -10,6 +10,7 @@ import { summarizePastedReviewText } from "./review-summarizer";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
+import { hasCustomerKakaoIndustryEvidence, hasLeadKakaoIndustryEvidence, resolveKakaoIndustryBackfill } from "./industry-backfill";
 import { hashPassword } from "./password";
 import { sendEmail } from "./email";
 import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "./business-number";
@@ -4327,6 +4328,51 @@ export async function upsertCustomerMaster(
   return {
     customer: savedCustomer,
     persisted: true
+  };
+}
+
+export type IndustryBackfillPreview = {
+  customerCandidates: number;
+  customersScanned: number;
+  leadCandidates: number;
+  leadsScanned: number;
+  samples: Array<{ after: string; before: string; companyId: string; id: string; kind: "customer" | "lead"; name: string }>;
+};
+
+/** Read-only preview for the guarded one-time Kakao industry backfill. */
+export async function getKakaoIndustryBackfillPreview(companyId?: string): Promise<IndustryBackfillPreview> {
+  if (!isProductionStoreConfigured()) {
+    return { customerCandidates: 0, customersScanned: 0, leadCandidates: 0, leadsScanned: 0, samples: [] };
+  }
+  const companyFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+  const [customers, leads] = await Promise.all([
+    supabaseRequest<Array<{ company_id: string; customer_name: string; id: string; industry: string | null; kakao_place_url: string | null; place_links_checked_at: string | null }>>(
+      `normalized_customers?select=id,company_id,customer_name,industry,kakao_place_url,place_links_checked_at${companyFilter}&limit=5000`
+    ),
+    supabaseRequest<Array<{ business_name: string; company_id: string; id: string; industry_primary: string | null; kakao_place_url: string | null; source: string | null }>>(
+      `business_permit_leads?select=id,company_id,business_name,source,industry_primary,kakao_place_url${companyFilter}&limit=5000`
+    )
+  ]);
+  const customerCandidates = customers.flatMap((row) => {
+    const before = row.industry?.trim() || "";
+    const after = resolveKakaoIndustryBackfill(before);
+    return after && hasCustomerKakaoIndustryEvidence(row)
+      ? [{ after, before, companyId: row.company_id, id: row.id, kind: "customer" as const, name: row.customer_name }]
+      : [];
+  });
+  const leadCandidates = leads.flatMap((row) => {
+    const before = row.industry_primary?.trim() || "";
+    const after = resolveKakaoIndustryBackfill(before);
+    return after && hasLeadKakaoIndustryEvidence(row)
+      ? [{ after, before, companyId: row.company_id, id: row.id, kind: "lead" as const, name: row.business_name }]
+      : [];
+  });
+  return {
+    customerCandidates: customerCandidates.length,
+    customersScanned: customers.length,
+    leadCandidates: leadCandidates.length,
+    leadsScanned: leads.length,
+    samples: [...customerCandidates, ...leadCandidates].slice(0, 30)
   };
 }
 
