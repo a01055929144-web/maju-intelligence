@@ -495,7 +495,7 @@ async function uploadDeliveryProof(customerId: string, file: File, title: string
   return fetchWithTimeout("/api/customer-attachments/upload", {
     method: "POST",
     body: formData
-  }, 20000);
+  }, 120000);
 }
 
 function createOwnerMessage(

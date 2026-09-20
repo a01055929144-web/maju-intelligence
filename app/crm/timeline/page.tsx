@@ -1074,7 +1074,7 @@ export default function CrmTimelinePage() {
             method: "POST",
             body: formData
           },
-          20000
+          120000
         );
         const payload = await response.json().catch(() => null);
         if (!response.ok) throw new Error(payload?.message || `${file.name} 첨부자료 저장에 실패했습니다.`);

@@ -165,7 +165,7 @@ function AttachmentSlot({
     // 나머지 파일은 시도조차 하지 않고 조용히 버려졌고, 오류 메시지도 실패한 파일 하나만
     // 언급해 몇 개가 실제로 성공했는지 알 수 없었습니다. 이제 모든 파일을 끝까지 시도하고,
     // 성공/실패 개수와 실패한 파일 이름을 함께 보여줍니다.
-    const failedFileNames: string[] = [];
+    const failedFiles: string[] = [];
     let successCount = 0;
     for (const file of files) {
       const formData = new FormData();
@@ -176,10 +176,11 @@ function AttachmentSlot({
       const companyId = getCurrentCompanyId();
       if (companyId) formData.append("companyId", companyId);
 
-      const response = await fetchWithTimeout("/api/customer-attachments/upload", { method: "POST", body: formData }, 20000).catch(() => null);
+      const response = await fetchWithTimeout("/api/customer-attachments/upload", { method: "POST", body: formData }, 120000).catch(() => null);
 
       if (!response?.ok) {
-        failedFileNames.push(file.name);
+        const errorPayload = (await response?.json().catch(() => null)) as { message?: string } | null;
+        failedFiles.push(`${file.name}${errorPayload?.message ? ` (${errorPayload.message})` : ""}`);
         continue;
       }
 
@@ -188,16 +189,16 @@ function AttachmentSlot({
         onUploaded(payload.attachment);
         successCount += 1;
       } else {
-        failedFileNames.push(file.name);
+        failedFiles.push(`${file.name} (원장 연결 응답 없음)`);
       }
     }
 
-    if (failedFileNames.length) {
+    if (failedFiles.length) {
       setSaveState("error");
       setErrorMessage(
         successCount
-          ? `${successCount}/${files.length}개 업로드 완료, 실패: ${failedFileNames.join(", ")} (다시 시도해주세요)`
-          : `업로드에 실패했습니다: ${failedFileNames.join(", ")}`
+          ? `${successCount}/${files.length}개 업로드 완료, 실패: ${failedFiles.join(", ")} (다시 시도해주세요)`
+          : `업로드에 실패했습니다: ${failedFiles.join(", ")}`
       );
       return;
     }
@@ -248,7 +249,17 @@ function AttachmentSlot({
       </div>
 
       <label className="mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-950">
-        <input accept={accept} className="sr-only" multiple onChange={(event) => uploadFiles(event.target.files)} type="file" />
+        <input
+          accept={accept}
+          className="sr-only"
+          multiple
+          onChange={(event) => {
+            const files = event.target.files;
+            event.target.value = "";
+            void uploadFiles(files);
+          }}
+          type="file"
+        />
         {saveState === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
         {saveState === "saving" ? `${uploadCount.toLocaleString()}개 업로드 중` : "+ 파일 업로드"}
       </label>

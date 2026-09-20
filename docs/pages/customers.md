@@ -76,6 +76,7 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 - [x] 거래처 0건 표시 버그 수정 및 typecheck/lint/build 검증 완료(아래 KNOWN ISSUES 참고)
 - [x] 첨부파일 종류별 필수 누락/운영 보완/조회 실패 상태 구분
 - [x] 신규 거래처 저장 시 동일 사업체 활성 리드를 자동 제외해 거래처→리드 교차 중복 정리
+- [x] 최대 50MB 첨부 업로드 제한 시간을 120초로 조정하고 실패 후 동일 파일 재선택·서버 오류 사유 표시 보강
 
 ## TODO
 - [ ] (없음, 새 요청 시 추가)
