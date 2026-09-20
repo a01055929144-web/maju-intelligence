@@ -87,6 +87,7 @@ import type {
   PossibleDuplicateCustomer,
   RoutePlan,
   RoutePlanStop,
+  StaffInvitation,
   StaffLocationEvent,
   StaffVehicleLocation
 } from "@/lib/store";
@@ -301,6 +302,7 @@ type BusinessOcrSuggestion = {
 };
 
 type SalesRouteMapWorkspaceProps = {
+  readonly canManageStaff?: boolean;
   readonly churnRiskCompanyId?: string;
   /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
   readonly companyName?: string;
@@ -311,6 +313,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly mapMarkers: KakaoMapMarker[];
   readonly routePlan: RoutePlan;
   readonly staffVehicleLocations?: StaffVehicleLocation[];
+  readonly staffInvitations?: StaffInvitation[];
   /** 2026-08-31 피드백 대응: 물류 출발지 주소가 아직 설정되지 않아 거리 계산이 기본값으로
    * 이뤄지고 있음을 알리는 배너를 띄울지 여부(고객사 계정에서만, 관리자 미리보기에서는 숨김). */
   readonly showOriginAddressBanner?: boolean;
@@ -403,7 +406,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffVehicleLocations = [], timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -2629,6 +2632,7 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
             <DeliveryAssignmentPanel
+              canManageStaff={canManageStaff}
               collapsed={leftCollapsed}
               fuelTypeConfiguredByVehicleId={fuelTypeConfiguredByVehicleId}
               liveVehicleDetails={
@@ -2673,9 +2677,9 @@ export function SalesRouteMapWorkspace({ churnRiskCompanyId, churnRiskCustomers,
               onToggleCollapsed={() => setLeftCollapsed((value) => !value)}
               onUpdateVehicle={updateVehicle}
               selectedVehicleId={vehicleFilterId}
-              selectedLiveVehicleId={selectedLiveVehicleId}
               totalStores={allStores.length}
               liveVehicles={liveVehicleLocations}
+              staffInvitations={staffInvitations}
               vehicles={deliveryVehicles}
             />
           </div>
@@ -3140,6 +3144,7 @@ function ConfirmDialog({
 }
 
 function DeliveryAssignmentPanel({
+  canManageStaff,
   collapsed,
   fuelTypeConfiguredByVehicleId,
   liveVehicleDetails,
@@ -3152,10 +3157,11 @@ function DeliveryAssignmentPanel({
   onToggleCollapsed,
   onUpdateVehicle,
   selectedVehicleId,
-  selectedLiveVehicleId,
+  staffInvitations,
   totalStores,
   vehicles
 }: {
+  readonly canManageStaff: boolean;
   readonly collapsed: boolean;
   readonly fuelTypeConfiguredByVehicleId: Map<string, boolean>;
   readonly liveVehicleDetails: ReactNode;
@@ -3168,7 +3174,7 @@ function DeliveryAssignmentPanel({
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
   readonly selectedVehicleId: string;
-  readonly selectedLiveVehicleId: string;
+  readonly staffInvitations: StaffInvitation[];
   readonly totalStores: number;
   readonly vehicles: DeliveryVehicle[];
 }) {
@@ -3178,12 +3184,61 @@ function DeliveryAssignmentPanel({
   const [deleteError, setDeleteError] = useState<{ vehicleId: string; message: string } | null>(null);
   const [pendingDeleteVehicle, setPendingDeleteVehicle] = useState<DeliveryVehicle | null>(null);
   const [liveSearch, setLiveSearch] = useState("");
-  const [liveStatusFilter, setLiveStatusFilter] = useState<"all" | "active" | "stale">("all");
+  const [liveStatusFilter, setLiveStatusFilter] = useState<"all" | "active" | "stale" | "offline">("all");
+  const [assignmentRows, setAssignmentRows] = useState(staffInvitations);
+  const [connectionDrafts, setConnectionDrafts] = useState<Record<string, string>>({});
+  const [connectingLiveId, setConnectingLiveId] = useState("");
+  const [connectionError, setConnectionError] = useState("");
+  useEffect(() => setAssignmentRows(staffInvitations), [staffInvitations]);
   const normalizedLiveSearch = liveSearch.trim().toLowerCase();
-  const filteredLiveVehicles = [...liveVehicles]
-    .filter((location) => liveStatusFilter === "all" || (liveStatusFilter === "active" ? !location.isStale : location.isStale))
-    .filter((location) => !normalizedLiveSearch || `${location.displayName} ${location.deliveryVehicle || ""}`.toLowerCase().includes(normalizedLiveSearch))
-    .sort((a, b) => Number(a.isStale) - Number(b.isStale));
+  const findVehicleForLiveLocation = (location: StaffVehicleLocation) => {
+    const invitation = assignmentRows.find((item) => item.acceptedBy === location.userId);
+    const assignmentKeys = [invitation?.assignedManagerName, invitation?.assignedVehicle].map((value) => value?.trim().toLowerCase()).filter(Boolean);
+    const assignedVehicle = assignmentKeys.length
+      ? vehicles.find((vehicle) => [vehicle.driver, vehicle.name].map((value) => value?.trim().toLowerCase()).some((value) => value && assignmentKeys.includes(value)))
+      : undefined;
+    return assignedVehicle || vehicles.find((vehicle) => liveVehicleMatchesDeliveryGroup(location, vehicle));
+  };
+  const liveVehicleByDeliveryGroup = new Map<string, StaffVehicleLocation>();
+  liveVehicles.forEach((location) => {
+    const vehicle = findVehicleForLiveLocation(location);
+    if (vehicle && !liveVehicleByDeliveryGroup.has(vehicle.id)) liveVehicleByDeliveryGroup.set(vehicle.id, location);
+  });
+  const unassignedLiveVehicles = liveVehicles.filter((location) => !findVehicleForLiveLocation(location));
+  const filteredVehicles = vehicles.filter((vehicle) => {
+    const live = liveVehicleByDeliveryGroup.get(vehicle.id);
+    const matchesSearch = !normalizedLiveSearch || `${vehicle.name} ${vehicle.driver} ${vehicle.area} ${live?.displayName || ""}`.toLowerCase().includes(normalizedLiveSearch);
+    if (!matchesSearch) return false;
+    if (liveStatusFilter === "active") return Boolean(live && !live.isStale);
+    if (liveStatusFilter === "stale") return Boolean(live?.isStale);
+    if (liveStatusFilter === "offline") return !live;
+    return true;
+  });
+
+  async function connectLiveVehicle(location: StaffVehicleLocation) {
+    const invitation = assignmentRows.find((item) => item.acceptedBy === location.userId);
+    const vehicle = vehicles.find((item) => item.id === connectionDrafts[location.id]);
+    if (!invitation || !vehicle || connectingLiveId) return;
+    setConnectingLiveId(location.id);
+    setConnectionError("");
+    const response = await fetch("/api/customer/staff-invitations", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationId: invitation.id, assignedManagerName: vehicle.driver, assignedVehicle: vehicle.name })
+    }).catch(() => null);
+    const payload = await response?.json().catch(() => null);
+    setConnectingLiveId("");
+    if (!response?.ok || !payload?.invitation) {
+      setConnectionError(payload?.message || "담당자·차량 연결을 저장하지 못했습니다.");
+      return;
+    }
+    setAssignmentRows((current) => current.map((item) => item.id === invitation.id ? { ...item, ...payload.invitation } : item));
+    setConnectionDrafts((current) => {
+      const next = { ...current };
+      delete next[location.id];
+      return next;
+    });
+  }
 
   // 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아") 대응: 삭제 버튼을 누르면 바로
   // window.confirm()을 띄우던 예전 방식 대신, 화면 안에 확인 모달(ConfirmDialog)을 띄우도록 2단계로
@@ -3230,9 +3285,9 @@ function DeliveryAssignmentPanel({
         <div>
           <p className="flex items-center gap-2 text-sm font-black text-slate-950">
             <Truck className="h-4 w-4 text-slate-500" />
-            배송담당자 필터
+            담당자 · 차량
           </p>
-          <p className="mt-1 text-xs font-bold text-slate-500">담당자별 거래처만 지도에 표시합니다.</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{vehicles.filter((vehicle) => !vehicle.isUnassigned).length}명 · 미배정 라이브 {unassignedLiveVehicles.length}건</p>
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
@@ -3255,14 +3310,21 @@ function DeliveryAssignmentPanel({
           <input
             className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-xs font-bold text-slate-800 outline-none focus:border-teal-300"
             onChange={(event) => setLiveSearch(event.target.value)}
-            placeholder="라이브 담당자·차량 검색"
+            placeholder="담당자·차량 검색"
             value={liveSearch}
           />
         </label>
-        <div className="grid grid-cols-3 gap-1">
-          {(["all", "active", "stale"] as const).map((status) => {
-            const count = status === "all" ? liveVehicles.length : liveVehicles.filter((location) => (status === "active" ? !location.isStale : location.isStale)).length;
-            const label = status === "all" ? "전체" : status === "active" ? "활성" : "지연";
+        <div className="grid grid-cols-4 gap-1">
+          {(["all", "active", "stale", "offline"] as const).map((status) => {
+            const count = status === "all"
+              ? vehicles.length
+              : vehicles.filter((vehicle) => {
+                  const live = liveVehicleByDeliveryGroup.get(vehicle.id);
+                  if (status === "active") return Boolean(live && !live.isStale);
+                  if (status === "stale") return Boolean(live?.isStale);
+                  return !live;
+                }).length;
+            const label = status === "all" ? "전체" : status === "active" ? "활성" : status === "stale" ? "지연" : "오프라인";
             return (
               <button
                 className={`rounded-md px-2 py-1.5 text-[11px] font-black ${liveStatusFilter === status ? "bg-teal-700 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200"}`}
@@ -3274,26 +3336,6 @@ function DeliveryAssignmentPanel({
               </button>
             );
           })}
-        </div>
-        <div className="max-h-40 space-y-1 overflow-auto">
-          {filteredLiveVehicles.map((location) => (
-            <button
-              className={`flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left ${selectedLiveVehicleId === location.id ? "border-teal-300 bg-teal-50 ring-1 ring-teal-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-              key={location.id}
-              onClick={() => onSelectLiveVehicle(location)}
-              type="button"
-            >
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: location.isStale ? "#94a3b8" : vehicleColorForId(location.id) }} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-black text-slate-900">{location.displayName}</span>
-                <span className="block truncate text-[10px] font-bold text-slate-500">{location.deliveryVehicle || "차량 미배정"} · {formatVehicleLocationAge(location.lastLocationAt) || "수신 전"}</span>
-              </span>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${location.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
-                {location.isStale ? "지연" : "활성"}
-              </span>
-            </button>
-          ))}
-          {!filteredLiveVehicles.length ? <p className="rounded-md bg-white px-2 py-2 text-center text-[11px] font-bold text-slate-500">조건에 맞는 라이브 차량이 없습니다.</p> : null}
         </div>
       </div>
       {liveVehicleDetails}
@@ -3313,9 +3355,10 @@ function DeliveryAssignmentPanel({
         </button>
       </div>
       <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 divide-y divide-slate-100 overflow-auto xl:max-h-none">
-        {vehicles.map((vehicle) => {
+        {filteredVehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
+          const liveVehicle = liveVehicleByDeliveryGroup.get(vehicle.id);
           return (
             <div
               className={`w-full px-4 py-3 text-left transition ${
@@ -3339,6 +3382,9 @@ function DeliveryAssignmentPanel({
                   <div className="flex items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{vehicle.name}</p>
                     <div className="flex shrink-0 items-center gap-1">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${liveVehicle ? (liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-teal-100 text-teal-800") : "bg-slate-100 text-slate-500"}`}>
+                        {liveVehicle ? (liveVehicle.isStale ? "지연" : "활성") : "오프라인"}
+                      </span>
                       {vehicle.isUnassigned ? null : (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">
                           {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
@@ -3362,7 +3408,9 @@ function DeliveryAssignmentPanel({
                     </p>
                   )}
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">{vehicle.area}</p>
+                    <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">
+                      {vehicle.area}{liveVehicle ? ` · ${formatVehicleLocationAge(liveVehicle.lastLocationAt) || "수신 전"}` : " · 라이브 신호 없음"}
+                    </p>
                     {vehicle.isUnassigned ? null : (
                       <div className="flex shrink-0 items-center gap-1">
                         <span
@@ -3420,7 +3468,52 @@ function DeliveryAssignmentPanel({
             </div>
           );
         })}
+        {!filteredVehicles.length ? <p className="p-4 text-center text-xs font-bold text-slate-500">조건에 맞는 담당자·차량이 없습니다.</p> : null}
       </div>
+      {unassignedLiveVehicles.length ? (
+        <div className="shrink-0 border-t border-amber-200 bg-amber-50/70 p-3">
+          <p className="text-xs font-black text-amber-900">미배정 라이브 운행 · {unassignedLiveVehicles.length}건</p>
+          <p className="mt-1 text-[11px] font-bold leading-4 text-amber-800">GPS 계정은 확인됐지만 배송 담당자·차량 그룹과 연결되지 않았습니다.</p>
+          <div className="mt-2 max-h-48 space-y-2 overflow-auto">
+            {unassignedLiveVehicles.map((location) => {
+              const invitation = assignmentRows.find((item) => item.acceptedBy === location.userId);
+              return (
+                <div className="rounded-md border border-amber-200 bg-white p-2.5" key={location.id}>
+                  <button className="flex w-full items-center gap-2 text-left" onClick={() => onSelectLiveVehicle(location)} type="button">
+                    <span className={`h-2.5 w-2.5 rounded-full ${location.isStale ? "bg-amber-400" : "bg-teal-500"}`} />
+                    <span className="min-w-0 flex-1 truncate text-xs font-black text-slate-900">{location.displayName}</span>
+                    <span className="text-[10px] font-bold text-slate-500">{formatVehicleLocationAge(location.lastLocationAt) || "수신 전"}</span>
+                  </button>
+                  {canManageStaff && invitation ? (
+                    <div className="mt-2 grid grid-cols-[1fr_auto] gap-1.5">
+                      <select
+                        aria-label={`${location.displayName} 담당자·차량 연결`}
+                        className="h-8 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-700"
+                        onChange={(event) => setConnectionDrafts((current) => ({ ...current, [location.id]: event.target.value }))}
+                        value={connectionDrafts[location.id] || ""}
+                      >
+                        <option value="">연결할 담당자·차량</option>
+                        {vehicles.filter((vehicle) => !vehicle.isUnassigned).map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.driver || vehicle.name} · {vehicle.name}</option>)}
+                      </select>
+                      <button
+                        className="maju-button-primary h-8 px-2.5 text-[11px] disabled:opacity-50"
+                        disabled={!connectionDrafts[location.id] || Boolean(connectingLiveId)}
+                        onClick={() => void connectLiveVehicle(location)}
+                        type="button"
+                      >
+                        {connectingLiveId === location.id ? "저장 중" : "연결"}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[10px] font-bold text-amber-800">{canManageStaff ? "가입 직원 연결 정보가 없어 회사 설정에서 확인이 필요합니다." : "대표·관리자가 연결할 수 있습니다."}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {connectionError ? <p className="mt-2 text-[11px] font-bold text-rose-700">{connectionError}</p> : null}
+        </div>
+      ) : null}
       <div className="shrink-0 border-t border-slate-200/80 p-3">
         {isAdding ? (
           <AddDriverForm

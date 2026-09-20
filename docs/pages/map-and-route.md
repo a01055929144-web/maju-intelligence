@@ -73,6 +73,12 @@ customer (거래처 마커), lead (신규 리드 오버레이), analytics (요�
 - Owner Domain: route / Related Domain: delivery.
 - 다음 단계: 실제 운영 데이터에서 다수 차량 접속 시 좌측 스크롤과 선택 상세 동작을 확인합니다.
 
+**(2026-09-20 구현 완료) 담당자 카드와 라이브 운행의 계정 기준 통합**
+- 지도 좌측을 `담당자 · 차량` 단일 목록으로 정리하고 등록 배송 그룹 카드에 활성/지연/오프라인 상태와 최근 GPS 수신 시각을 합쳤습니다.
+- 이름 유사도 대신 `staff_mobile_devices.user_id`와 가입 완료 초대의 `staff_invitations.accepted_by`를 우선 연결 기준으로 사용합니다.
+- 배송 그룹과 연결되지 않은 GPS 신호는 `미배정 라이브 운행`으로 분리합니다. 대표·관리자는 이 영역에서 담당자·차량 그룹을 선택해 기존 `assigned_manager_name`/`assigned_vehicle`에 저장할 수 있습니다.
+- 일반 직원·배송기사는 연결 상태를 볼 수만 있고 배정 정보를 변경할 수 없습니다. 플랫폼 관리자 미리보기 역시 고객사 세션용 API를 대신 호출하지 않도록 읽기 전용으로 유지합니다.
+
 ## Completion
 - 기능 정상 동작
 - TypeScript / lint / build PASS

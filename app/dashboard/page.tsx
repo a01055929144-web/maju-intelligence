@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
-import { getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
+import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCompanyStaffInvitations, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
@@ -18,8 +18,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
+  const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
-  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations] = await Promise.all([
+  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId, { assignmentKeys }),
     getCustomerMaster(companyId, { assignmentKeys }),
@@ -28,7 +29,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
     isScopedStaffView && !customerSession?.userId
       ? Promise.resolve([])
-      : getStaffVehicleLocations(companyId, { userId: isScopedStaffView ? customerSession?.userId : undefined }).catch(() => [])
+      : getStaffVehicleLocations(companyId, { userId: isScopedStaffView ? customerSession?.userId : undefined }).catch(() => []),
+    canManageStaff && companyId ? getCompanyStaffInvitations(companyId).catch(() => ({ invitations: [], persisted: false })) : Promise.resolve({ invitations: [], persisted: false })
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   // 2026-08-31 피드백 대응: 회원가입 단계는 물류 출발지 주소를 받지 않아, 고객사가 회사 설정에서
@@ -68,10 +70,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
+          canManageStaff={canManageStaff}
           mapMarkers={mapMarkers}
           routePlan={routePlan}
           showOriginAddressBanner={showOriginAddressBanner}
           staffVehicleLocations={staffVehicleLocations}
+          staffInvitations={staffInvitationResult.invitations}
           timelineHref={timelineHref}
           vehicleFuelTypes={vehicleFuelTypes}
         />
