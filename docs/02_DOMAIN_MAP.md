@@ -39,8 +39,9 @@
 
 **책임**: 배송차량 정보, 배송완료 기록, 직원 실시간 GPS, 배송 히스토리, 방문 결과.
 
-- 함수: `getDeliveryCompletionEvents`, `getDeliveryHistoryForDate`, `getDeliveryHistorySummary`, `getDeliveryVehicleFuelTypes`, `upsertDeliveryVehicleFuelType`, `deleteDeliveryVehicleFuelType`, `bulkUpdateDeliveryManager`, `bulkUpdateDeliveryVehicle`, `bulkClearDeliveryAssignment`, `getStaffLocationEvents`, `getStaffVehicleLocations`, `upsertStaffMobileLocation`, `purgeExpiredStaffLocationEvents`, `saveVisitResult`, `getVisitTimeline`, `sendCustomerDeliveryMessage`
-- 테이블: `delivery_vehicles`, `staff_location_events`, `staff_mobile_devices`, `visit_results`
+- 함수: `getDeliveryCompletionEvents`, `getDeliveryHistoryForDate`, `getDeliveryHistorySummary`, `getDeliveryVehicleFuelTypes`, `upsertDeliveryVehicleFuelType`, `deleteDeliveryVehicleFuelType`, `vehicleMasterRepository`, `bulkUpdateDeliveryManager`, `bulkUpdateDeliveryVehicle`, `bulkClearDeliveryAssignment`, `getStaffLocationEvents`, `getStaffVehicleLocations`, `upsertStaffMobileLocation`, `purgeExpiredStaffLocationEvents`, `saveVisitResult`, `getVisitTimeline`, `sendCustomerDeliveryMessage`
+- 테이블: `delivery_vehicle_master`, `delivery_vehicles`, `staff_location_events`, `staff_mobile_devices`, `visit_results`
+- 관련 파일: `domains/delivery/vehicle-master.ts`, `application/delivery/manage-vehicle-master.ts`, `app/api/delivery-vehicle-master/route.ts`
 - 알려진 정책: `staff_location_events`는 1년 보관 후 자동 삭제(`purgeExpiredStaffLocationEvents`, 매일 크론), 직원 퇴사 시 즉시 삭제.
 
 ## analytics

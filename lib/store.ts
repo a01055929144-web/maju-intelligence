@@ -20,6 +20,7 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
+import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
@@ -8404,6 +8405,102 @@ export async function saveRouteDistanceCache(
 }
 
 export type DeliveryVehicleFuelType = "gasoline" | "diesel";
+
+type VehicleMasterRow = {
+  company_id: string;
+  created_at: string;
+  fuel_type: VehicleMaster["fuelType"];
+  id: string;
+  memo: string | null;
+  name: string;
+  operational_status: VehicleOperationalStatus;
+  plate_number: string;
+  updated_at: string;
+};
+
+function toVehicleMaster(row: VehicleMasterRow): VehicleMaster {
+  return {
+    companyId: row.company_id,
+    createdAt: row.created_at,
+    fuelType: row.fuel_type,
+    id: row.id,
+    memo: row.memo || undefined,
+    name: row.name,
+    plateNumber: row.plate_number,
+    status: row.operational_status,
+    updatedAt: row.updated_at
+  };
+}
+
+function isMissingVehicleMasterTableError(error: unknown) {
+  return error instanceof Error && error.message.includes("delivery_vehicle_master");
+}
+
+export const vehicleMasterRepository: VehicleMasterRepository = {
+  async list(companyId) {
+    if (!isProductionStoreConfigured()) return { available: false, vehicles: [] };
+    try {
+      const rows = await supabaseRequest<VehicleMasterRow[]>(
+        `delivery_vehicle_master?select=*&company_id=eq.${encodeURIComponent(companyId)}&order=operational_status.asc,name.asc`
+      );
+      return { available: true, vehicles: rows.map(toVehicleMaster) };
+    } catch (error) {
+      if (isMissingVehicleMasterTableError(error)) return { available: false, vehicles: [] };
+      throw error;
+    }
+  },
+  async save(companyId, input: VehicleMasterInput, id?: string) {
+    if (!isProductionStoreConfigured()) throw new Error("운영 데이터베이스가 연결되어 있지 않습니다.");
+    const now = new Date().toISOString();
+    try {
+      const rows = await supabaseRequest<VehicleMasterRow[]>(id
+        ? `delivery_vehicle_master?id=eq.${encodeURIComponent(id)}&company_id=eq.${encodeURIComponent(companyId)}`
+        : "delivery_vehicle_master", {
+        method: id ? "PATCH" : "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(id ? {
+          fuel_type: input.fuelType,
+          memo: input.memo || null,
+          name: input.name,
+          operational_status: input.status || "active",
+          plate_number: input.plateNumber,
+          updated_at: now
+        } : [{
+          company_id: companyId,
+          fuel_type: input.fuelType,
+          memo: input.memo || null,
+          name: input.name,
+          operational_status: input.status || "active",
+          plate_number: input.plateNumber,
+          updated_at: now
+        }])
+      });
+      if (!rows[0]) throw new Error("차량 저장 결과를 확인하지 못했습니다.");
+      return toVehicleMaster(rows[0]);
+    } catch (error) {
+      if (isMissingVehicleMasterTableError(error)) throw new Error("차량 마스터 마이그레이션을 먼저 적용해주세요.");
+      throw error;
+    }
+  },
+  async setStatus(companyId, id, status) {
+    if (!isProductionStoreConfigured()) throw new Error("운영 데이터베이스가 연결되어 있지 않습니다.");
+    try {
+      const rows = await supabaseRequest<VehicleMasterRow[]>(
+        `delivery_vehicle_master?id=eq.${encodeURIComponent(id)}&company_id=eq.${encodeURIComponent(companyId)}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify({ operational_status: status, updated_at: new Date().toISOString() })
+        }
+      );
+      if (!rows[0]) throw new Error("차량을 찾을 수 없습니다.");
+      return toVehicleMaster(rows[0]);
+    } catch (error) {
+      if (isMissingVehicleMasterTableError(error)) throw new Error("차량 마스터 마이그레이션을 먼저 적용해주세요.");
+      throw error;
+    }
+  }
+};
 
 function isMissingDeliveryVehiclesTableError(error: unknown) {
   return error instanceof Error && error.message.includes("delivery_vehicles");

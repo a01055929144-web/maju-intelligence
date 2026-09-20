@@ -91,6 +91,7 @@ import type {
   StaffLocationEvent,
   StaffVehicleLocation
 } from "@/lib/store";
+import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -319,6 +320,8 @@ type SalesRouteMapWorkspaceProps = {
   readonly showOriginAddressBanner?: boolean;
   readonly timelineHref?: string;
   readonly vehicleFuelTypes?: Record<string, "gasoline" | "diesel">;
+  readonly vehicleMasterAvailable?: boolean;
+  readonly vehicleMasterVehicles?: VehicleMaster[];
 };
 
 export type CourseSummary = {
@@ -406,7 +409,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -433,6 +436,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
   const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
   const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const [vehicleMasterRecords, setVehicleMasterRecords] = useState<VehicleMaster[]>(vehicleMasterVehicles);
   const [liveVehicleConnectionError, setLiveVehicleConnectionError] = useState("");
   const [vehicleAnalysis, setVehicleAnalysis] = useState<{
     completions: DeliveryCompletionEvent[];
@@ -621,6 +625,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // manualDrivers도 넘겨야 "새 담당자·배송차 추가"로 등록한, 아직 거래처가 없는 담당자가 빈 배송차로
   // 목록에 보입니다(2026-08-24 발견: 이전에는 manualVehicles만 반영되어 담당자만 추가하면 목록에
   // 나타나지 않는 버그가 있었음 — 삭제 기능을 테스트하다 발견).
+  const activeVehicleMasterNames = useMemo(
+    () => vehicleMasterRecords.filter((vehicle) => vehicle.status === "active").map((vehicle) => vehicle.name),
+    [vehicleMasterRecords]
+  );
   const baseDeliveryVehicles = useMemo(
     // storeEdits(개별 거래처에서 담당자·배송차를 바꾼 편집 내역)를 그룹핑 전에 먼저 반영해야, 편집
     // 직후 지도 필터(deliveryVehicleId)와 거래처 상세 화면이 같은 배송차를 가리킵니다. 2026-08-27
@@ -629,10 +637,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       createDeliveryVehiclesFromStores(
         applyStoreEditsForVehicleGrouping(routeSeedStores, storeEdits),
         vehicleFuelTypes,
-        manualVehicles,
+        Array.from(new Set([...manualVehicles, ...activeVehicleMasterNames])),
         manualDrivers
       ),
-    [routeSeedStores, storeEdits, vehicleFuelTypes, manualVehicles, manualDrivers]
+    [routeSeedStores, storeEdits, vehicleFuelTypes, manualVehicles, activeVehicleMasterNames, manualDrivers]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   // "미배정" 자동 그룹은 실제로 저장된 배송차가 아니므로, 헤더의 "N대" 배지에는 실제 배송차 수만
@@ -820,8 +828,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       const trimmed = name.trim();
       if (trimmed) names.add(trimmed);
     });
+    activeVehicleMasterNames.forEach((name) => {
+      const trimmed = name.trim();
+      if (trimmed) names.add(trimmed);
+    });
     return Array.from(names).sort();
-  }, [allStores, manualVehicles]);
+  }, [activeVehicleMasterNames, allStores, manualVehicles]);
   const registeredStoreNames = useMemo(() => new Set(allStores.map((store) => store.name.trim().toLowerCase())), [allStores]);
   // 이미 거래처로 등록된 곳은 "미등록 매장" 목록에서 빼서 중복으로 보이지 않게 합니다.
   const unregisteredResults = useMemo(
@@ -2680,6 +2692,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               totalStores={allStores.length}
               liveVehicles={liveVehicleLocations}
               staffInvitations={staffInvitations}
+              vehicleMasterAvailable={vehicleMasterAvailable}
+              vehicleMasterVehicles={vehicleMasterRecords}
+              onVehicleMasterChange={setVehicleMasterRecords}
               vehicles={deliveryVehicles}
             />
           </div>
@@ -3156,9 +3171,12 @@ function DeliveryAssignmentPanel({
   onSelectVehicle,
   onToggleCollapsed,
   onUpdateVehicle,
+  onVehicleMasterChange,
   selectedVehicleId,
   staffInvitations,
   totalStores,
+  vehicleMasterAvailable,
+  vehicleMasterVehicles,
   vehicles
 }: {
   readonly canManageStaff: boolean;
@@ -3173,9 +3191,12 @@ function DeliveryAssignmentPanel({
   readonly onSelectVehicle: (vehicleId: string) => void;
   readonly onToggleCollapsed: () => void;
   readonly onUpdateVehicle: (vehicleId: string, edit: VehicleEdit) => Promise<{ ok: boolean; message?: string }>;
+  readonly onVehicleMasterChange: (vehicles: VehicleMaster[]) => void;
   readonly selectedVehicleId: string;
   readonly staffInvitations: StaffInvitation[];
   readonly totalStores: number;
+  readonly vehicleMasterAvailable: boolean;
+  readonly vehicleMasterVehicles: VehicleMaster[];
   readonly vehicles: DeliveryVehicle[];
 }) {
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
@@ -3514,6 +3535,12 @@ function DeliveryAssignmentPanel({
           {connectionError ? <p className="mt-2 text-[11px] font-bold text-rose-700">{connectionError}</p> : null}
         </div>
       ) : null}
+      <VehicleMasterManager
+        available={vehicleMasterAvailable}
+        canManage={canManageStaff}
+        onChange={onVehicleMasterChange}
+        vehicles={vehicleMasterVehicles}
+      />
       <div className="shrink-0 border-t border-slate-200/80 p-3">
         {isAdding ? (
           <AddDriverForm
@@ -3544,6 +3571,155 @@ function DeliveryAssignmentPanel({
         />
       ) : null}
     </aside>
+  );
+}
+
+const vehicleFuelLabels: Record<VehicleFuelType, string> = {
+  diesel: "경유",
+  electric: "전기",
+  gasoline: "휘발유",
+  hybrid: "하이브리드",
+  lpg: "LPG"
+};
+
+const vehicleStatusLabels: Record<VehicleOperationalStatus, string> = {
+  active: "운행",
+  inactive: "미사용",
+  maintenance: "정비"
+};
+
+function VehicleMasterManager({
+  available,
+  canManage,
+  onChange,
+  vehicles
+}: {
+  readonly available: boolean;
+  readonly canManage: boolean;
+  readonly onChange: (vehicles: VehicleMaster[]) => void;
+  readonly vehicles: VehicleMaster[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [savingId, setSavingId] = useState("");
+  const [error, setError] = useState("");
+  const [draft, setDraft] = useState<{ fuelType: VehicleFuelType; memo: string; name: string; plateNumber: string }>({
+    fuelType: "diesel",
+    memo: "",
+    name: "",
+    plateNumber: ""
+  });
+
+  async function saveNewVehicle() {
+    setSavingId("new");
+    setError("");
+    try {
+      const response = await fetch("/api/delivery-vehicle-master", {
+        body: JSON.stringify(draft),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => ({}))) as { message?: string; vehicle?: VehicleMaster };
+      if (!response.ok || !payload.vehicle) throw new Error(payload.message || "차량 저장에 실패했습니다.");
+      onChange([...vehicles, payload.vehicle].sort((left, right) => left.name.localeCompare(right.name, "ko")));
+      setDraft({ fuelType: "diesel", memo: "", name: "", plateNumber: "" });
+      setAdding(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "차량 저장에 실패했습니다.");
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  async function changeStatus(vehicle: VehicleMaster, status: VehicleOperationalStatus) {
+    setSavingId(vehicle.id);
+    setError("");
+    try {
+      const response = await fetch("/api/delivery-vehicle-master", {
+        body: JSON.stringify({ id: vehicle.id, status }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH"
+      });
+      const payload = (await response.json().catch(() => ({}))) as { message?: string; vehicle?: VehicleMaster };
+      if (!response.ok || !payload.vehicle) throw new Error(payload.message || "차량 상태 변경에 실패했습니다.");
+      onChange(vehicles.map((item) => (item.id === vehicle.id ? payload.vehicle! : item)));
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : "차량 상태 변경에 실패했습니다.");
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  return (
+    <div className="shrink-0 border-t border-slate-200 bg-slate-50/70 p-3">
+      <button className="flex w-full items-center justify-between gap-2 text-left" onClick={() => setOpen((value) => !value)} type="button">
+        <span>
+          <span className="block text-xs font-black text-slate-900">차량 마스터</span>
+          <span className="mt-0.5 block text-[11px] font-bold text-slate-500">차량번호·연료·운행 상태 · {vehicles.length}대</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 text-slate-500 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <div className="mt-3 space-y-2">
+          {!available ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[11px] font-bold leading-4 text-amber-800">
+              차량 마스터 DB 준비가 필요합니다. <code>20260920b_delivery_vehicle_master.sql</code> 적용 후 사용할 수 있습니다.
+            </div>
+          ) : null}
+          {vehicles.map((vehicle) => (
+            <div className="rounded-md border border-slate-200 bg-white p-2.5" key={vehicle.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-black text-slate-900">{vehicle.name}</p>
+                  <p className="mt-0.5 text-[11px] font-bold text-slate-500">{vehicle.plateNumber} · {vehicleFuelLabels[vehicle.fuelType]}</p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.status === "active" ? "bg-teal-100 text-teal-800" : vehicle.status === "maintenance" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
+                  {vehicleStatusLabels[vehicle.status]}
+                </span>
+              </div>
+              {vehicle.memo ? <p className="mt-1 truncate text-[10px] font-bold text-slate-400">{vehicle.memo}</p> : null}
+              {canManage ? (
+                <div className="mt-2 grid grid-cols-3 gap-1">
+                  {(["active", "maintenance", "inactive"] as const).map((status) => (
+                    <button
+                      className={`h-7 rounded border text-[10px] font-black ${vehicle.status === status ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`}
+                      disabled={savingId === vehicle.id || vehicle.status === status}
+                      key={status}
+                      onClick={() => void changeStatus(vehicle, status)}
+                      type="button"
+                    >
+                      {savingId === vehicle.id && vehicle.status !== status ? "저장 중" : vehicleStatusLabels[status]}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {available && !vehicles.length ? <p className="py-2 text-center text-[11px] font-bold text-slate-500">등록된 차량이 없습니다.</p> : null}
+          {canManage && available ? (
+            adding ? (
+              <div className="space-y-2 rounded-md border border-teal-200 bg-white p-2.5">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input className="h-8 rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="차량명" value={draft.name} />
+                  <input className="h-8 rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, plateNumber: event.target.value }))} placeholder="차량번호" value={draft.plateNumber} />
+                </div>
+                <select className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, fuelType: event.target.value as VehicleFuelType }))} value={draft.fuelType}>
+                  {Object.entries(vehicleFuelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <input className="h-8 w-full rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setDraft((current) => ({ ...current, memo: event.target.value }))} placeholder="메모 (선택)" value={draft.memo} />
+                <div className="flex justify-end gap-1.5">
+                  <button className="maju-button-secondary h-8 px-3 text-xs" disabled={savingId === "new"} onClick={() => setAdding(false)} type="button">취소</button>
+                  <button className="maju-button-primary h-8 px-3 text-xs disabled:opacity-50" disabled={savingId === "new" || !draft.name.trim() || !draft.plateNumber.trim()} onClick={() => void saveNewVehicle()} type="button">{savingId === "new" ? "저장 중" : "등록"}</button>
+                </div>
+              </div>
+            ) : (
+              <button className="maju-button-secondary flex h-8 w-full items-center justify-center gap-1 text-xs" onClick={() => setAdding(true)} type="button"><Plus className="h-3.5 w-3.5" /> 차량 등록</button>
+            )
+          ) : null}
+          {error ? <p className="text-[11px] font-bold leading-4 text-rose-600">{error}</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
