@@ -49,6 +49,9 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   // 보여줘서 실제 내 코스인 것처럼 착각하기 쉬웠습니다. 이제는 매칭된 코스가 없으면 목록을
   // 비워서 아래의 "오늘 배정된 코스가 없습니다" 안내로 명확히 차단합니다.
   const todayStops = isPersonalized ? myStops : [];
+  // 직원 화면에서는 담당 거래처 수만 노출합니다. routePlan.totalStops는 회사 전체 건수이므로
+  // 배정이 0건인 직원에게 폴백으로 보여주면 데이터 범위 정책을 우회해 전체 규모가 노출됩니다.
+  const visibleRouteTotal = isScopedStaffView ? todayStops.length : routePlan.totalStops;
   const myRegions = Array.from(new Set(myStops.map((stop) => stop.region)));
   const routeArea = isPersonalized
     ? myRegions.length > 1
@@ -97,7 +100,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           </section>
 
           <section className="grid grid-cols-3 gap-2">
-            <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${todayStops.length || routePlan.totalStops}곳` : "등록 필요"} />
+            <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${visibleRouteTotal}곳` : "등록 필요"} />
             <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routeDistanceKm.toLocaleString()}km` : "-"} />
             <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routeDurationMinutes) : "-"} />
           </section>
@@ -115,11 +118,15 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileRouteContextBar
             area={routeArea}
             selectedStopName={selectedStop?.name || "선택 거래처 없음"}
-            totalStops={sourceReady ? routePlan.totalStops : 0}
+            totalStops={sourceReady ? visibleRouteTotal : 0}
             visibleStops={todayStops.length}
           />
 
           <MobileFieldFlowNav customerId={selectedStop?.id} />
+
+          <MobileAccordionStep defaultOpen={!selectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
+            <MobileRouteList completedCustomerIds={completionEvents.map((event) => event.customerId)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
+          </MobileAccordionStep>
 
           {selectedStop ? (
             <MobileAccordionStep defaultOpen label="2. 선택 매장" targetId="selected-customer">
@@ -143,10 +150,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </section>
             </MobileAccordionStep>
           ) : null}
-
-          <MobileAccordionStep defaultOpen={!selectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
-            <MobileRouteList completedCustomerIds={completionEvents.map((event) => event.customerId)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
-          </MobileAccordionStep>
 
           {/* Legacy server-rendered list retained only as source reference. */}
           {false ? <section className="scroll-mt-24 rounded-xl border border-slate-200 bg-white" id="route-list-legacy">
