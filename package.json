@@ -12,6 +12,7 @@
     "check:production-env": "node scripts/check-production-env.mjs",
     "ops:check-env": "node scripts/check-production-env.mjs",
     "ops:migrate": "node scripts/apply-supabase-migrations.mjs",
+    "ops:backfill-industries": "node scripts/backfill-kakao-industries.mjs",
     "ops:verify-persisted": "node scripts/verify-production-persistence.mjs"
   },
   "dependencies": {

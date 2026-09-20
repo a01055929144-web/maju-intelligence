@@ -81,6 +81,12 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 - [ ] 리드 갱신 상태 확인(사용자 액션 필요 — Claude/Codex 작업 아님)
 - [ ] 인스타그램 ID 탐색/저장/복사(미착수)
 - [ ] 메뉴/리뷰 기반 추천 데이터의 외부 소스 정확도 고도화(`docs/pages/sales-assistant.md`와 공동)
+- [ ] 카카오 업종 백필 dry-run 결과 검토 후 운영 DB 백업을 확인하고 `npm run ops:backfill-industries -- --apply --backup-confirmed` 실행
+
+## OPERATIONS (2026-09-20)
+- `scripts/backfill-kakao-industries.mjs` 추가. 기본 실행은 조회 전용이며 기존 수동 업종을 보호하기 위해 카카오 연결 근거가 있는 비표준 값만 후보로 산정한다.
+- 실제 갱신은 `--apply --backup-confirmed`를 함께 지정해야 하며, 거래처 `industry`와 리드 `industry_primary`/`industry_tags`를 같은 표준 버킷 기준으로 갱신한다.
+- 로컬 `.env.production.local`의 Supabase URL/service-role 값이 비어 있어 2026-09-20 dry-run은 DB 접속 전에 중단됐다. 운영 데이터 변경은 0건이며, 자격증명이 제공되는 관리 환경에서 dry-run부터 다시 실행해야 한다.
 
 ## KNOWN ISSUES
 없음(이번 세션 기준). `isNewLead` 계산은 과거 두 차례 방향이 뒤바뀌는 회귀가 있었던 지점이므로, 이 로직을 다시 건드릴 땐 카카오 키워드 소스(`kakao_keyword_search`, 날짜 없음 → 항상 영업리드)와 인허가 자동수집 소스(날짜 있음 → 90일 기준)를 분기하는 조건을 각별히 주의해서 확인한다.
