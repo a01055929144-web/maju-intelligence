@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { getAdminSession } from "@/lib/auth";
 import { getAdminAuditLogs, getSystemDiagnostics } from "@/lib/store";
 import { AdminPageHeader } from "../admin-page-header";
+import { IndustryBackfillPreview } from "./industry-backfill-preview";
 
 const statusLabels = {
   ready: "준비됨",
@@ -645,6 +646,8 @@ export default async function AdminSystemPage({
             ))}
           </CardContent>
         </Card>
+
+        <IndustryBackfillPreview />
 
         <Card>
           <CardHeader>

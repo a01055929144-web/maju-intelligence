@@ -69,6 +69,7 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 - [x] 지도 진단 허용 도메인을 `maju-intelligence`로 정리하고 v2 도메인 참조 제거
 - [x] 로그인 제한 테이블의 `identifier` 기본키를 반영한 DB 진단 및 공개 헬스의 누락 항목명 제공
 - [x] 관리자 전용 업종 백필 후보 조회 API(읽기 전용, 비인증 차단)
+- [x] 관리자 시스템 화면에서 업종 백필 후보 건수·표본 조회(쓰기 동작 없음)
 
 ## TODO
 - [ ] (없음, 새 요청 시 추가)
