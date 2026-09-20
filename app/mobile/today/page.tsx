@@ -233,7 +233,14 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 notificationPhone={companySettings.notificationPhone}
                 notificationSenderName={companySettings.notificationSenderName}
               />
-              <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
+              <details className="group border-t border-blue-100 bg-white">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-black text-slate-600">
+                  추가 방문 메모
+                  <span className="text-teal-700 group-open:hidden">선택 입력</span>
+                  <span className="hidden text-teal-700 group-open:inline">닫기</span>
+                </summary>
+                <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
+              </details>
               </MobileAccordionStep>
             </section>
           ) : null}

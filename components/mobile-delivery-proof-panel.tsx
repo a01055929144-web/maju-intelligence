@@ -305,21 +305,6 @@ export function MobileDeliveryProofPanel({
         </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {deliveryStatuses.map((item) => (
-          <button
-            className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
-              deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
-            }`}
-            key={item.value}
-            onClick={() => setDeliveryStatus(item.value)}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
       <label className="mt-3 flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-white px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-50">
         <input
           accept="image/*,video/*"
@@ -334,6 +319,28 @@ export function MobileDeliveryProofPanel({
         {file ? file.name : "사진/영상 선택"}
       </label>
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
+
+      <details className="group mt-3 rounded-xl border border-blue-100 bg-white">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black text-slate-600">
+          문제 발생 · 메모 · 알림 설정
+          <span className="text-blue-700 group-open:hidden">열기</span>
+          <span className="hidden text-blue-700 group-open:inline">닫기</span>
+        </summary>
+        <div className="border-t border-blue-100 p-3">
+          <div className="grid grid-cols-3 gap-2">
+            {deliveryStatuses.map((item) => (
+              <button
+                className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
+                  deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                key={item.value}
+                onClick={() => setDeliveryStatus(item.value)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
 
       <textarea
         className="mt-3 min-h-[92px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
@@ -379,6 +386,8 @@ export function MobileDeliveryProofPanel({
         <p className="mt-2 whitespace-pre-line rounded-lg bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-700">{ownerMessage}</p>
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
       </div>
+        </div>
+      </details>
       <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-800">
         <MapPin className="h-3 w-3 shrink-0" />
         {locationStatus === "granted" && location
@@ -417,7 +426,13 @@ export function MobileDeliveryProofPanel({
         </a>
       ) : null}
 
-      <div className="mt-4 grid gap-2">
+      <details className="group mt-4 rounded-xl border border-blue-100 bg-white/70">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black text-slate-600">
+          이전 배송 기록
+          <span>{deliveryProofAttachments.length + deliveryNotes.length}건</span>
+        </summary>
+        <div className="border-t border-blue-100 p-3">
+      <div className="grid gap-2">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">최근 배송완료 증빙</p>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryProofAttachments.length}건</span>
@@ -481,6 +496,8 @@ export function MobileDeliveryProofPanel({
           </div>
         ) : null}
       </div>
+        </div>
+      </details>
     </section>
   );
 }
