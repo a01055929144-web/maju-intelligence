@@ -3986,6 +3986,80 @@ export async function getCustomerMaster(
   };
 }
 
+export type CustomerMapSummaryItem = {
+  address: string;
+  customerName: string;
+  deliveryManager?: string;
+  deliveryVehicle?: string;
+  email?: string;
+  grade: "A" | "B" | "C";
+  id: string;
+  monthlyRevenue: number;
+  phone?: string;
+  region: string;
+};
+
+/**
+ * 지도 첫 화면 전용 경량 조회입니다. 원장 상세에 필요한 사업자·첨부·리뷰 컬럼을 제외해
+ * 대량 거래처 회사에서도 초기 PostgREST 응답과 서버 직렬화 비용을 줄입니다.
+ */
+export async function getCustomerMapSummaries(
+  companyId?: string,
+  options?: { assignmentKeys?: string[] }
+): Promise<{ customers: CustomerMapSummaryItem[]; source: "empty" | "supabase"; truncated: boolean }> {
+  if (!isProductionStoreConfigured()) return { customers: [], source: "empty", truncated: false };
+
+  const id = companyId || getDefaultCompanyId();
+  type CustomerMapRow = {
+    address: string | null;
+    customer_name: string;
+    delivery_manager: string | null;
+    delivery_vehicle?: string | null;
+    email: string | null;
+    id: string;
+    monthly_revenue: number | string | null;
+    phone: string | null;
+    region: string | null;
+  };
+  const baseSelect = "id,customer_name,region,address,monthly_revenue,delivery_manager,email,phone";
+  let rows: CustomerMapRow[];
+  try {
+    rows = await supabaseRequest<CustomerMapRow[]>(
+      `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+    );
+  } catch (error) {
+    if (!isMissingColumnError(error)) throw error;
+    rows = await supabaseRequest<CustomerMapRow[]>(
+      `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+    );
+  }
+
+  const assignmentKeys = (options?.assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
+  const customers = rows
+    .filter((row) => {
+      if (!assignmentKeys.length) return true;
+      const fields = [row.delivery_manager, row.delivery_vehicle, row.email, row.phone].map(normalizeAssignmentKey).filter(Boolean);
+      return fields.some((field) => assignmentKeys.some((key) => matchesAssignmentKey(field, key)));
+    })
+    .map((row) => {
+      const monthlyRevenue = Number(row.monthly_revenue || 0);
+      return {
+        address: row.address || "",
+        customerName: row.customer_name,
+        deliveryManager: row.delivery_manager || undefined,
+        deliveryVehicle: row.delivery_vehicle || undefined,
+        email: row.email || undefined,
+        grade: getRevenueGrade(monthlyRevenue),
+        id: row.id,
+        monthlyRevenue,
+        phone: row.phone || undefined,
+        region: row.region || "미분류"
+      } satisfies CustomerMapSummaryItem;
+    });
+
+  return { customers, source: "supabase", truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT };
+}
+
 function normalizeAssignmentKey(value?: string | null) {
   return (value || "").toLowerCase().replace(/[\s\-_.()[\]{}]/g, "");
 }

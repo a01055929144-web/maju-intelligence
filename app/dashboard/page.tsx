@@ -4,7 +4,7 @@ import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-l
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
@@ -24,7 +24,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const [company, routePlan, customerMaster, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult, vehicleMasterResult] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId, { assignmentKeys }),
-    getCustomerMaster(companyId, { assignmentKeys }),
+    getCustomerMapSummaries(companyId, { assignmentKeys }),
     getChurnRiskCustomers(companyId).catch(() => []),
     getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
     isScopedStaffView && !customerSession?.userId
