@@ -4,7 +4,7 @@ import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-l
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
-import { getChurnRiskCustomers, getCompanyOriginAddress, getCompanySettings, getCompanyStaffInvitations, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMaster, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
@@ -21,11 +21,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
-  const [company, routePlan, customerMaster, originAddress, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult, vehicleMasterResult] = await Promise.all([
+  const [company, routePlan, customerMaster, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult, vehicleMasterResult] = await Promise.all([
     getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
     getTodayRoutePlan(companyId, { assignmentKeys }),
     getCustomerMaster(companyId, { assignmentKeys }),
-    getCompanyOriginAddress(companyId),
     getChurnRiskCustomers(companyId).catch(() => []),
     getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
     isScopedStaffView && !customerSession?.userId
@@ -35,6 +34,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     companyId ? listVehicleMaster(vehicleMasterRepository, companyId).catch(() => ({ available: false, vehicles: [] })) : Promise.resolve({ available: false, vehicles: [] })
   ]);
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
+  // getCompanyOriginAddress()는 내부에서 getCompanySettings()를 다시 호출합니다. 지도 첫 요청에서
+  // 같은 회사 행을 두 번 조회하지 않고, 위에서 이미 받은 설정의 정규화된 출발지 주소를 재사용합니다.
+  const originAddress = company.originAddress;
   // 2026-08-31 피드백 대응: 회원가입 단계는 물류 출발지 주소를 받지 않아, 고객사가 회사 설정에서
   // 직접 채우기 전까지는 모든 배송/영업 거리 계산이 조용히 기본값(마주식자재 창고 주소)으로
   // 이뤄집니다. 고객사 화면에서는 이를 알아챌 방법이 없었으므로 배너로 알립니다.

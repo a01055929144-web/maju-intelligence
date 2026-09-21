@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Camera, CheckCircle2, ChevronRight, Clock, MapPinned, Phone, Route, Truck } from "lucide-react";
+import { Building2, History, MessageSquareText, Route, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
-import { MobileAccordionStep } from "@/components/mobile-accordion-step";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
+import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { MobileRouteList } from "@/components/mobile-route-list";
-import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
@@ -68,20 +67,24 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
     ? Math.round(myStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0) * 10) / 10
     : 0;
   const routeDurationMinutes = isPersonalized ? myStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0) : 0;
-  const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops[0];
+  const completedCustomerIds = new Set(completionEvents.map((event) => event.customerId));
+  const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops.find((stop) => !completedCustomerIds.has(stop.id)) || todayStops[0];
+  const selectedStopIndex = selectedStop ? todayStops.findIndex((stop) => stop.id === selectedStop.id) : -1;
+  const nextPendingStop = selectedStopIndex >= 0 ? todayStops.slice(selectedStopIndex + 1).find((stop) => !completedCustomerIds.has(stop.id)) : undefined;
   const hasExplicitSelectedStop = Boolean(resolvedSearchParams?.customer && todayStops.some((stop) => stop.id === resolvedSearchParams.customer));
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const heroCopy = getMobileHeroCopy(workspaceRole);
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] text-slate-950">
-      <section className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col bg-white shadow-[0_20px_80px_rgba(15,23,42,0.12)]">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+    <main className="min-h-screen bg-[#0b1019] text-white">
+      <MobileThemeShell>
+      <section className="mobile-app-frame mx-auto flex min-h-screen w-full max-w-[480px] flex-col shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
+        <header className="mobile-card sticky top-0 z-10 shrink-0 border-b px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-black text-slate-950">{session.companyName}</p>
-              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{driverName}님</p>
+              <p className="truncate text-sm font-black">MAJU 오늘의 배송</p>
+              <p className="mobile-muted mt-0.5 truncate text-xs font-bold">{driverName} · {session.companyName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
@@ -91,29 +94,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
         </header>
 
-        <div className="flex-1 space-y-3 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4">
-          {isScopedStaffView ? (
-            <MobileDriverRouteSummary
-              area={routeArea}
-              distanceKm={routeDistanceKm}
-              durationMinutes={routeDurationMinutes}
-              sourceReady={sourceReady}
-              totalStops={visibleRouteTotal}
-            />
-          ) : (
-            <>
-              <section className="rounded-xl bg-teal-700 p-4 text-white shadow-[0_12px_28px_rgba(15,118,110,0.18)]">
-                <p className="text-xs font-black text-white/70">오늘 코스</p>
-                <h1 className="mt-1 truncate text-2xl font-black leading-tight">{heroCopy.title}</h1>
-              </section>
-              <section className="grid grid-cols-3 gap-2">
-                <MobileMetric icon={Building2} label="방문처" value={sourceReady ? `${visibleRouteTotal}곳` : "등록 필요"} />
-                <MobileMetric icon={Route} label="거리" value={sourceReady ? `${routeDistanceKm.toLocaleString()}km` : "-"} />
-                <MobileMetric icon={Clock} label="시간" value={sourceReady ? formatMinutes(routeDurationMinutes) : "-"} />
-              </section>
-            </>
-          )}
-
+        <div className="flex-1 space-y-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
           {!sourceReady ? (
             <MobileOperationalEmptyState />
           ) : null}
@@ -124,7 +105,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </p>
           ) : null}
 
-          {!isScopedStaffView ? (
+          {false && !isScopedStaffView ? (
             <MobileRouteContextBar
               area={routeArea}
               selectedStopName={selectedStop?.name || "선택 거래처 없음"}
@@ -133,19 +114,16 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             />
           ) : null}
 
-          <MobileAccordionStep defaultOpen={!hasExplicitSelectedStop} label="1. 오늘 코스 · 길게 눌러 순서 변경" targetId="route-list">
-            <MobileRouteList completedCustomerIds={completionEvents.map((event) => event.customerId)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
-          </MobileAccordionStep>
+          <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
-            <MobileAccordionStep defaultOpen={hasExplicitSelectedStop} label="2. 매장 · 지도 · 전화" targetId="selected-customer">
-            <section className="scroll-mt-24 overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_12px_30px_rgba(15,118,110,0.08)]" id="selected-customer">
-              <div className="border-b border-teal-100 bg-teal-50 p-4">
+            <section className="mobile-card scroll-mt-24 overflow-hidden rounded-2xl border shadow-[0_12px_30px_rgba(0,0,0,0.12)]" id="selected-customer">
+              <div className="border-b border-[var(--mobile-border)] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-            <p className="text-xs font-black text-teal-700">선택 매장</p>
-                    <h2 className="mt-1 truncate text-xl font-black text-slate-950">{selectedStop.name}</h2>
-                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{selectedStop.address || selectedStop.region}</p>
+            <p className="mobile-warning text-xs font-black">진행중</p>
+                    <h2 className="mt-1 truncate text-xl font-black">{selectedStop.name}</h2>
+                    <p className="mobile-muted mt-1 truncate text-xs font-bold">{selectedStop.address || selectedStop.region} · {selectedStop.distanceKm || 0}km</p>
                   </div>
                   <Badge className="shrink-0 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">{selectedStop.industry || "업종"}</Badge>
                 </div>
@@ -161,67 +139,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 />
               </div>
             </section>
-            </MobileAccordionStep>
-          ) : null}
-
-          {/* Legacy server-rendered list retained only as source reference. */}
-          {false ? <section className="scroll-mt-24 rounded-xl border border-slate-200 bg-white" id="route-list-legacy">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
-              <div className="min-w-0">
-                <p className="truncate font-black text-slate-950">{driverName}</p>
-                <p className="mt-1 truncate text-xs font-bold text-slate-500">{routeArea} · 모바일 코스</p>
-              </div>
-              <Truck className="h-5 w-5 shrink-0 text-teal-700" />
-            </div>
-            <div className="divide-y divide-slate-100">
-              {todayStops.map((stop, index) => (
-                // 2026-08-28 피드백 대응(기사님이 "전화" 배지를 눌러도 실제로 전화가 안 걸림):
-                // 예전에는 이 배지가 전체 카드를 감싸는 <Link> 안의 장식용 <span>이라 눌러도 상세
-                // 페이지로 이동만 됐습니다. tel: 링크는 진짜 <a>라야 하는데, <Link>(=<a>) 안에
-                // <a>를 중첩하면 무효한 HTML이라, 카드 전체 클릭은 배경에 깔린 투명 오버레이
-                // <Link>로 처리하고 전화 배지만 그 위(z-10)에 별도 형제 <a href="tel:...">로 둡니다.
-                <div className={`relative flex items-start gap-3 p-4 transition hover:bg-slate-50 ${selectedStop?.id === stop.id ? "bg-teal-50/70" : ""}`} key={stop.id}>
-                  <Link aria-label={stop.name} className="absolute inset-0" href={`/mobile/today?customer=${encodeURIComponent(stop.id)}`} />
-                  <span className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black text-white ${selectedStop?.id === stop.id ? "bg-teal-700" : "bg-slate-900"}`}>{index + 1}</span>
-                  <div className="relative z-10 min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-black text-slate-950">{stop.name}</p>
-                      <Badge className="shrink-0 bg-slate-100 text-slate-700">{stop.region}</Badge>
-                    </div>
-                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{stop.address || "주소 확인 필요"}</p>
-                    <div className="relative z-10 mt-2 flex flex-wrap gap-1.5">
-                      <SmallAction icon={MapPinned} label={`${stop.distanceKm}km`} />
-                      <SmallAction icon={Clock} label={`${stop.durationMinutes}분`} />
-                      {stop.phone ? (
-                        <a
-                          className="relative z-10 inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-700 hover:bg-teal-100"
-                          href={`tel:${stop.phone}`}
-                        >
-                          <Phone className="h-3 w-3" />
-                          전화
-                        </a>
-                      ) : (
-                        <SmallAction icon={Phone} label="연락처 없음" />
-                      )}
-                    </div>
-                  </div>
-                  <ChevronRight className="relative z-10 mt-1 h-4 w-4 shrink-0 text-slate-300" />
-                </div>
-              ))}
-              {!todayStops.length ? (
-                <div className="p-4 text-sm font-bold leading-6 text-slate-500">
-                  오늘 배정된 코스가 없습니다.
-                </div>
-              ) : null}
-            </div>
-          </section> : null}
+          ) : <MobileOperationalEmptyState />}
 
           {selectedStop ? (
-            <section className="space-y-3">
-              <MobileAccordionStep label="3. 적재위치" targetId="loading-position">
-              <MobileLoadingAttachmentPanel customerId={selectedStop.id} customerName={selectedStop.name} loadingPosition={selectedStop.loadingPosition} />
-              </MobileAccordionStep>
-              <MobileAccordionStep label="4. 배송완료 · 사진 · 메모" targetId="delivery-proof">
+            <>
+            <section>
               <MobileDeliveryProofPanel
                 companyName={companySettings.name || session.companyName}
                 customerId={selectedStop.id}
@@ -230,10 +152,14 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 deliveryIssueMessage={companySettings.deliveryIssueMessage}
                 deliveryPartialMessage={companySettings.deliveryPartialMessage}
                 loadingPosition={selectedStop.loadingPosition}
+                nextCustomerId={nextPendingStop?.id}
                 notificationPhone={companySettings.notificationPhone}
                 notificationSenderName={companySettings.notificationSenderName}
+                driverName={driverName}
+                driverPhone={session.operationalPhone}
               />
-              <details className="group border-t border-blue-100 bg-white">
+            </section>
+              <details className="mobile-card group mt-3 rounded-xl border">
                 <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-black text-slate-600">
                   추가 방문 메모
                   <span className="text-teal-700 group-open:hidden">선택 입력</span>
@@ -241,19 +167,18 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 </summary>
                 <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
               </details>
-              </MobileAccordionStep>
-            </section>
-          ) : null}
-
+            </>
+          ) : <MobileOperationalEmptyState />}
         </div>
 
-        <footer aria-label="현장 처리 순서" className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-slate-200 bg-white px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_40px_rgba(15,23,42,0.08)]">
-          <FooterItem active href="/mobile/today#route-list" icon={Route} label="코스" />
-          <FooterItem href={selectedStop ? `/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#selected-customer` : "/mobile/today#route-list"} icon={Building2} label="매장·이동" />
-          <FooterItem href={selectedStop ? `/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#loading-position` : "/mobile/today#route-list"} icon={Camera} label="적재" />
-          <FooterItem href={selectedStop ? `/mobile/today?customer=${encodeURIComponent(selectedStop.id)}#delivery-proof` : "/mobile/today#route-list"} icon={CheckCircle2} label="완료·메모" />
+        <footer aria-label="모바일 보조 메뉴" className="mobile-bottom-nav sticky bottom-0 z-20 grid grid-cols-4 border-t px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5">
+          <FooterItem active href="#route-list" icon={Route} label="오늘 배송" />
+          <FooterItem href="/customers/data" icon={Store} label="전체 거래처" />
+          <FooterItem href="/dashboard/settings#message-templates" icon={MessageSquareText} label="메시지 편집" />
+          <FooterItem href="#delivery-history" icon={History} label="배송 기록" />
         </footer>
       </section>
+      </MobileThemeShell>
     </main>
   );
 }
@@ -287,6 +212,10 @@ function MobileRouteContextBar({
       </div>
     </section>
   );
+}
+
+function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
+  return <Link className={`mobile-bottom-nav-item flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-black ${active ? "is-active" : ""}`} href={href}><Icon className="h-4 w-4" />{label}</Link>;
 }
 
 function MobileDriverRouteSummary({
@@ -342,24 +271,6 @@ function MobileMetric({ icon: Icon, label, value }: { icon: typeof Route; label:
       <p className="mt-3 text-[11px] font-black text-slate-500">{label}</p>
       <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
     </div>
-  );
-}
-
-function SmallAction({ icon: Icon, label }: { icon: typeof MapPinned; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-600">
-      <Icon className="h-3 w-3" />
-      {label}
-    </span>
-  );
-}
-
-function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
-  return (
-    <Link className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-black ${active ? "bg-teal-50 text-teal-800" : "text-slate-400"}`} href={href}>
-      <Icon className="h-4 w-4" />
-      {label}
-    </Link>
   );
 }
 

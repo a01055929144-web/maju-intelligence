@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,19 +26,33 @@ export function IndustryBackfillPreview() {
   const [preview, setPreview] = useState<BackfillPreview | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!loading) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   const loadPreview = async () => {
     setLoading(true);
+    setElapsedSeconds(0);
     setError("");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
     try {
-      const response = await fetch("/api/admin/industry-backfill", { cache: "no-store" });
+      const response = await fetch("/api/admin/industry-backfill", { cache: "no-store", signal: controller.signal });
       const payload = (await response.json()) as { message?: string; preview?: BackfillPreview };
       if (!response.ok || !payload.preview) throw new Error(payload.message || "후보를 불러오지 못했습니다.");
       setPreview(payload.preview);
     } catch (loadError) {
       setPreview(null);
-      setError(loadError instanceof Error ? loadError.message : "후보를 불러오지 못했습니다.");
+      setError(loadError instanceof DOMException && loadError.name === "AbortError"
+        ? "15초 안에 조회가 끝나지 않았습니다. 잠시 후 다시 시도하세요."
+        : loadError instanceof Error ? loadError.message : "후보를 불러오지 못했습니다.");
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   };
@@ -62,7 +76,7 @@ export function IndustryBackfillPreview() {
             type="button"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "조회 중" : preview ? "다시 조회" : "후보 조회"}
+            {loading ? `후보 확인 중 · ${elapsedSeconds}초` : preview ? "다시 조회" : "후보 조회"}
           </button>
         </div>
       </CardHeader>
@@ -70,6 +84,13 @@ export function IndustryBackfillPreview() {
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900">
           이 화면은 데이터를 변경하지 않습니다. 실제 적용은 운영 DB 백업과 후보 검토가 끝난 뒤 별도 명령으로만 진행합니다.
         </div>
+
+        {loading ? (
+          <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3" aria-live="polite">
+            <p className="text-sm font-black text-teal-900">운영 데이터를 읽고 후보를 분류하고 있습니다.</p>
+            <p className="mt-1 text-xs font-bold text-teal-700">{elapsedSeconds < 5 ? "거래처와 리드 조회 중" : "후보 집계 및 표본 구성 중"} · 최대 15초</p>
+          </div>
+        ) : null}
 
         {error ? (
           <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">

@@ -96,6 +96,64 @@ body {
   text-rendering: geometricPrecision;
 }
 
+.mobile-theme-shell[data-mobile-theme="dark"] {
+  --mobile-bg: #0b1120;
+  --mobile-surface: #121b2b;
+  --mobile-surface-raised: #192437;
+  --mobile-text: #f8fafc;
+  --mobile-muted: #a8b5c8;
+  --mobile-border: #34445c;
+  --mobile-accent: #5eead4;
+  --mobile-accent-soft: #153c3b;
+  --mobile-accent-text: #ccfbf1;
+  --mobile-warning: #f7b955;
+  background: var(--mobile-bg);
+  color: var(--mobile-text);
+  color-scheme: dark;
+}
+
+.mobile-theme-shell[data-mobile-theme="light"] {
+  --mobile-bg: #f3f6fa;
+  --mobile-surface: #ffffff;
+  --mobile-surface-raised: #e8eef5;
+  --mobile-text: #172033;
+  --mobile-muted: #5b687b;
+  --mobile-border: #c8d2df;
+  --mobile-accent: #087f72;
+  --mobile-accent-soft: #d9f3ed;
+  --mobile-accent-text: #115e59;
+  --mobile-warning: #c87916;
+  background: var(--mobile-bg);
+  color: var(--mobile-text);
+  color-scheme: light;
+}
+
+.mobile-theme-toggle {
+  border-color: #475569;
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.mobile-theme-shell[data-mobile-theme="light"] .mobile-theme-toggle {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.mobile-app-frame { background: var(--mobile-bg); color: var(--mobile-text); }
+.mobile-card { background: var(--mobile-surface) !important; border-color: var(--mobile-border) !important; color: var(--mobile-text) !important; }
+.mobile-card-raised { background: var(--mobile-surface-raised) !important; border-color: var(--mobile-border) !important; color: var(--mobile-text) !important; }
+.mobile-muted { color: var(--mobile-muted) !important; }
+.mobile-accent { color: var(--mobile-accent) !important; }
+.mobile-accent-soft { background: var(--mobile-accent-soft) !important; color: var(--mobile-accent-text) !important; }
+.mobile-warning { color: var(--mobile-warning) !important; }
+.mobile-bottom-nav { background: var(--mobile-surface); border-color: var(--mobile-border); box-shadow: 0 -10px 26px rgba(2,6,23,.16); }
+.mobile-bottom-nav-item { color: var(--mobile-muted); }
+.mobile-bottom-nav-item.is-active { background: var(--mobile-accent-soft); color: var(--mobile-accent-text); }
+.mobile-route-active-row { background: var(--mobile-accent-soft); color: var(--mobile-text); }
+.mobile-route-active-title { color: var(--mobile-text); }
+.mobile-theme-shell input,.mobile-theme-shell textarea,.mobile-theme-shell select { background: var(--mobile-surface-raised); border-color: var(--mobile-border); color: var(--mobile-text); }
+
 button,
 input,
 select {

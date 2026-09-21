@@ -60,6 +60,11 @@ customer (거래처 마커), lead (신규 리드 오버레이), analytics (요�
 - 배송 히스토리 월간 캘린더 + 확정 순서 vs 실제 GPS 경로 비교
 
 ## Task (이번에 진행할 작업이 있으면 여기 채움)
+**(2026-09-21 지도 첫 화면 성능·로딩 개선)**
+- `/dashboard`가 `getCompanySettings()`와 그 함수를 다시 호출하는 `getCompanyOriginAddress()`를 동시에 실행하던 중복 회사 설정 조회를 제거하고, 이미 정규화된 `company.originAddress`를 재사용합니다.
+- 지도 최초 진입에 필요하지 않은 거래처 첨부 업로드·하차지 사진 갤러리를 별도 동적 청크로 분리했습니다. 두 기능은 해당 상세 영역이 실제로 열릴 때만 로드됩니다.
+- 대형 지도 청크 로딩 중 중앙 스피너만 보이던 화면을 지도·좌우 패널 비율을 유지하는 반응형 스켈레톤과 `작업 진행 중` 상태로 교체했습니다. 좁은 폭에서는 지도 영역만 우선 보여주고, `xl`(1366/1920 포함)에서는 280px/가변/320px 3열 구조로 최종 화면의 공간감을 미리 유지합니다.
+
 **(2026-09-14 1단계 완료) `sales-route-map-workspace.tsx` 순수 유틸 분리**
 - React 상태와 무관한 거리·유류비·합계·시간/거리 표시·등급 배지·로컬 JSON 유틸을 `lib/route-map-utils.ts`로 이동했습니다.
 - 기존 외부 import 호환성은 원 파일의 re-export로 유지하고, `today-course-view`, `delivery-history-view`, `permit-leads-view`는 새 leaf 모듈을 직접 참조하도록 변경했습니다.

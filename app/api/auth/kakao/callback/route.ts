@@ -15,6 +15,7 @@ type KakaoUserResponse = {
   id?: number;
   kakao_account?: {
     email?: string;
+    phone_number?: string;
     profile?: {
       nickname?: string;
       profile_image_url?: string;
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest) {
       avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
       email: kakaoUser.kakao_account?.email,
       kakaoUserId: String(kakaoUser.id),
-      name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname
+      name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+      phoneNumber: kakaoUser.kakao_account?.phone_number
     };
 
     const result = inviteCode

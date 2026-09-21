@@ -37,6 +37,7 @@ export type CustomerSession = {
   // 개인/오너 계정은 직원 초대명이 없으므로 회사 설정의 대표자/담당자명을 운영 표시명으로 씁니다.
   // getCustomerSession이 멤버십을 검증할 때 최신 값을 다시 읽어 설정 변경 후 재로그인 없이 반영합니다.
   operationalDisplayName?: string;
+  operationalPhone?: string;
 };
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
@@ -109,6 +110,7 @@ export async function getCustomerSession() {
       assignedManagerName: membership.assignedManagerName,
       assignedVehicle: membership.assignedVehicle,
       operationalDisplayName: role === "owner" ? membership.companyOwnerName : session.operationalDisplayName,
+      operationalPhone: membership.userPhone || session.operationalPhone,
       role,
       workspaceRole
     };

@@ -7,6 +7,7 @@ import { Bell, Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapP
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { MessageTemplateManager } from "@/components/message-template-manager";
 import { CompanySettings } from "@/lib/store";
 
 export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
@@ -251,6 +252,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 />
               </div>
             </div>
+            <MessageTemplateManager mode="company" />
           </div>
         </section>
 

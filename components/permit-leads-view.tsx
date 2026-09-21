@@ -127,6 +127,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [queues, setQueues] = useState<PermitLeadQueues | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [refreshingLeads, setRefreshingLeads] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "map">("table");
 
   const [periodFilter, setPeriodFilter] = useState<"all" | PermitLeadPeriod>("all");
@@ -242,6 +243,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   const loadLeads = useCallback(() => {
     setLoadState((current) => (current === "ready" ? current : "loading"));
+    setRefreshingLeads(true);
     const params = new URLSearchParams();
     if (periodFilter !== "all") params.set("period", periodFilter);
     if (industryFilter) params.set("industry", industryFilter);
@@ -262,7 +264,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         setQueues(payload.queues || null);
         setLoadState("ready");
       })
-      .catch(() => setLoadState("error"));
+      .catch(() => setLoadState("error"))
+      .finally(() => setRefreshingLeads(false));
   }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded]);
 
   useEffect(() => {
@@ -270,13 +273,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }, [loadLeads]);
 
   useEffect(() => {
+    if (loadState !== "ready") return;
     fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/permits/sources"), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (payload) setSourceStatus(payload);
       })
       .catch(() => null);
-  }, []);
+  }, [loadState]);
 
   const loadKeywordSearchRegions = useCallback(() => {
     fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), { cache: "no-store" }, 12000)
@@ -288,8 +292,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }, []);
 
   useEffect(() => {
+    if (loadState !== "ready") return;
     loadKeywordSearchRegions();
-  }, [loadKeywordSearchRegions]);
+  }, [loadKeywordSearchRegions, loadState]);
 
   async function handleAddKeywordSearchRegion() {
     if (!newRegionLabel.trim()) return;
@@ -1357,7 +1362,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }
 
   return (
-    <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
+    <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-4 sm:pb-6">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-8">
         <DirectoryStat
           active={!hasActiveLeadFilters}
@@ -1487,11 +1492,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               탐색합니다. 야간에 기준점 일부를 자동으로 회전 탐색하고, 지금 바로 넓게 훑고 싶으면 버튼을 누르세요.
             </p>
           </div>
-          <button className="maju-button-secondary h-8 shrink-0 text-xs" disabled={keywordSweepBusy || !kakaoKeywordSearchConfigured} onClick={() => void handleKeywordLeadSweep()} type="button">
-            <Radar className="h-3.5 w-3.5" />
+          <button className="maju-button-secondary h-8 w-full shrink-0 justify-center text-xs sm:w-auto" disabled={keywordSweepBusy || !kakaoKeywordSearchConfigured} onClick={() => void handleKeywordLeadSweep()} type="button">
+            {keywordSweepBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
             {keywordSweepBusy ? "탐색 중" : "영업리드 추가 탐색"}
           </button>
         </div>
+        {keywordSweepBusy ? <InlineLoading className="mt-2 !justify-start !border-0 !bg-blue-50 !px-3 !py-2 !text-blue-700" label="기준점별 매장을 검색하고 중복 거래처를 제외하는 중입니다..." /> : null}
         {!kakaoKeywordSearchConfigured && sourceStatus ? (
           <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">KAKAO_REST_KEY가 설정되지 않아 영업리드 확장 탐색을 쓸 수 없습니다.</p>
         ) : null}
@@ -1573,11 +1579,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                   title="기거래처 반경 안 리드에 근접도 점수를, 주력 업종과 같은 리드에 업종 가산점을 매깁니다."
                   type="button"
                 >
-                  <Radar className="h-3.5 w-3.5" />
+                  {recommendBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
                   {recommendBusy ? "계산 중" : "추천 점수 갱신"}
                 </button>
               </div>
             </div>
+            {recommendBusy ? <InlineLoading className="!justify-start !border-0 !bg-teal-50 !px-3 !py-2 !text-teal-700" label="거래처 거리와 업종 적합도를 계산해 추천 순위를 갱신하는 중입니다..." /> : null}
             {recommendMessage ? <p className="text-xs font-bold text-teal-700">{recommendMessage}</p> : null}
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {leadSourceCards.map((source) => (
@@ -1824,7 +1831,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       </div>
 
       <div className="maju-section-card !overflow-visible">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
+        <div className="flex flex-col gap-2 border-b border-slate-200 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-1.5">
             {(["table", "map"] as const).map((mode) => (
               <button
@@ -1858,22 +1865,24 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex w-full items-center gap-1.5 sm:w-auto">
             <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadPermitLeadsExcel()} type="button">
               <Download className="h-3.5 w-3.5" />
               엑셀 다운로드
             </button>
-            <button className="maju-button-secondary h-8 text-xs" onClick={loadLeads} type="button">
-              <RefreshCw className="h-3.5 w-3.5" />
-              새로고침
+            <button className="maju-button-secondary h-8 flex-1 justify-center text-xs sm:flex-none" disabled={refreshingLeads} onClick={loadLeads} type="button">
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshingLeads ? "animate-spin" : ""}`} />
+              {refreshingLeads ? "불러오는 중" : "새로고침"}
             </button>
           </div>
         </div>
+        {refreshingLeads && loadState === "ready" ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-slate-50 !px-3 !py-2" label="최신 리드와 영업 상태를 불러오는 중입니다..." /> : null}
         {leadQualityMode === "keyword" && !keywordVolumeConfigured ? (
           <p className="mx-3 mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
             네이버 검색량 API가 아직 연결되지 않아 검색량순 정렬을 쓸 수 없습니다. 관리자에게 문의하세요.
           </p>
         ) : null}
+        {leadQualityMode === "keyword" && keywordVolumeLoading ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-violet-50 !px-3 !py-2 !text-violet-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
 
         <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -2181,19 +2190,20 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           </div>
         ) : null}
 
-        {actionMessage ? <p className="mx-3 mt-3 rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{actionMessage}</p> : null}
-        {bulkMessage ? <p className="mx-3 mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">{bulkMessage}</p> : null}
+        {actionMessage ? <p aria-live="polite" className="mx-3 mt-3 rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{actionMessage}</p> : null}
+        {bulkMessage ? <p aria-live="polite" className="mx-3 mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">{bulkMessage}</p> : null}
 
         <div className="p-3">
           {loadState === "loading" ? (
-            <p className="flex items-center justify-center gap-2 rounded-md border border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-500">
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-              신규 리드를 불러오는 중입니다.
-            </p>
+            <InlineLoading className="min-h-28 justify-center border-dashed bg-white" label="신규 리드와 영업 현황을 불러오는 중입니다..." />
           ) : loadState === "error" ? (
-            <p className="rounded-md border border-dashed border-rose-200 bg-rose-50 p-8 text-center text-sm font-bold text-rose-700">
-              신규 리드를 불러오지 못했습니다. 새로고침을 눌러 다시 시도하세요.
-            </p>
+            <div className="rounded-md border border-dashed border-rose-200 bg-rose-50 p-6 text-center">
+              <p className="text-sm font-bold text-rose-700">신규 리드를 불러오지 못했습니다.</p>
+              <button className="maju-button-secondary mx-auto mt-3 h-9 justify-center px-3 text-xs" disabled={refreshingLeads} onClick={loadLeads} type="button">
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshingLeads ? "animate-spin" : ""}`} />
+                다시 시도
+              </button>
+            </div>
           ) : !filteredLeads.length ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
               <p className="text-sm font-bold text-slate-600">{leads.length ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
@@ -2211,7 +2221,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               ) : null}
             </div>
           ) : viewMode === "map" ? (
-            <div className="h-[560px] overflow-hidden rounded-lg border border-slate-200">
+            <div className="h-[65dvh] min-h-[420px] overflow-hidden rounded-lg border border-slate-200 sm:h-[560px]">
               <KakaoAddressMap mapClassName="h-full w-full rounded-none border-0" markers={mapLeadMarkers} onMarkerClick={(marker) => setSelectedLead(filteredLeads.find((lead) => lead.id === marker.id) || null)} showList={false} />
             </div>
           ) : (
@@ -2349,6 +2359,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                   <p className="bg-slate-50/70 px-3 pb-2 text-[11px] font-bold text-slate-400">
                     선택한 리드는 현재 필터 화면 기준으로 처리됩니다. 전화·DM·견적·재연락 기록은 영업 이력에 저장됩니다.
                   </p>
+                ) : null}
+                {bulkActionBusy ? (
+                  <InlineLoading
+                    className="!justify-start !rounded-none !border-x-0 !border-b-0 !bg-blue-50 !px-3 !py-2 !text-blue-700"
+                    label={bulkActionBusy === "quote" ? "선택한 리드에 견적 요청을 기록하는 중입니다..." : bulkActionBusy === "quoteFollowUp" ? "견적 후속 일정을 기록하는 중입니다..." : "선택한 리드의 영업 이력을 저장하는 중입니다..."}
+                  />
                 ) : null}
               </div>
               <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">

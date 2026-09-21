@@ -66,11 +66,10 @@ import {
 import { LinkifiedText } from "@/components/linkified-text";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
-import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
-import { LoadingPositionGallery, LoadingPositionMediaItem } from "@/components/loading-position-gallery";
+import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
@@ -110,6 +109,15 @@ import {
   saveLocalJson,
   type RevenueGrade
 } from "@/lib/route-map-utils";
+
+const CustomerAttachmentUploadPanel = dynamic(
+  () => import("@/components/customer-attachment-upload-panel").then((module) => module.CustomerAttachmentUploadPanel),
+  { loading: () => <InlineLoading label="첨부 기능을 준비하는 중입니다." /> }
+);
+const LoadingPositionGallery = dynamic(
+  () => import("@/components/loading-position-gallery").then((module) => module.LoadingPositionGallery),
+  { loading: () => <InlineLoading label="하차지 사진을 불러오는 중입니다." /> }
+);
 export {
   clamp,
   deliveryCostRatio,

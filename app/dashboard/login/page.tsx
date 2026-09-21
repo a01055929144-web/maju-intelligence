@@ -90,15 +90,19 @@ export default function CustomerLoginPage() {
           </CardHeader>
           <CardContent>
             {recentLoginEmail ? (
-              <button
-                className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 transition hover:bg-teal-50 hover:text-teal-800"
-                onClick={() => setEmail(recentLoginEmail)}
-                type="button"
-              >
-                <Clock3 className="h-3.5 w-3.5 shrink-0" />
-                <span className="shrink-0">최근 로그인</span>
-                <span className="truncate">{recentLoginEmail}</span>
-              </button>
+              <div className="mb-3">
+                <button
+                  aria-label={`최근 사용 이메일 ${recentLoginEmail} 입력`}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 transition hover:bg-teal-50 hover:text-teal-800"
+                  onClick={() => setEmail(recentLoginEmail)}
+                  type="button"
+                >
+                  <Clock3 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="shrink-0">최근 사용 이메일</span>
+                  <span className="truncate">{recentLoginEmail}</span>
+                </button>
+                <p className="mt-1.5 text-[11px] font-bold text-slate-500">이메일만 채워지며 로그인 상태가 유지되는 것은 아닙니다.</p>
+              </div>
             ) : null}
             <form className="space-y-2.5" onSubmit={handleSubmit}>
               <input

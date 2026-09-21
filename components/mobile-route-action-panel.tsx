@@ -1,14 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Camera, Copy, MapPinned, Navigation, Phone } from "lucide-react";
+import { Copy, MapPinned, Phone } from "lucide-react";
 
 export function MobileRouteActionPanel({
   address,
-  customerId,
   customerName,
-  distanceKm,
-  durationMinutes,
   phone
 }: {
   address: string;
@@ -19,7 +16,6 @@ export function MobileRouteActionPanel({
   phone?: string;
 }) {
   const [copyMessage, setCopyMessage] = useState("");
-  const routeLabel = `${distanceKm || 0}km · ${durationMinutes || 0}분`;
   const mapUrl = `https://map.kakao.com/link/search/${encodeURIComponent(address || customerName)}`;
 
   async function copyAddress() {
@@ -32,20 +28,10 @@ export function MobileRouteActionPanel({
   }
 
   return (
-    <section className="scroll-mt-24 rounded-xl border border-teal-200 bg-teal-50/70 p-4" id="contact-actions">
-      <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-700 text-white">
-          <Navigation className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <p className="font-black text-slate-950">바로가기</p>
-          <p className="mt-1 truncate text-sm font-semibold text-slate-600">{customerName} · {routeLabel}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
+    <section className="p-3" id="contact-actions">
+      <div className="grid grid-cols-3 gap-2">
         <a
-          className="flex min-h-12 items-center justify-center gap-2 rounded-lg bg-teal-700 px-3 text-sm font-black text-white"
+          className="mobile-card-raised flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-black"
           href={mapUrl}
           rel="noreferrer"
           target="_blank"
@@ -54,27 +40,20 @@ export function MobileRouteActionPanel({
           지도
         </a>
         <a
-          className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-black ${phone ? "text-slate-800" : "pointer-events-none text-slate-300"}`}
+          className={`mobile-card-raised flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-black ${phone ? "" : "pointer-events-none opacity-45"}`}
           href={phone ? `tel:${phone}` : "#"}
         >
           <Phone className="h-4 w-4" />
           전화
         </a>
         <button
-          className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-black text-slate-800"
+          className="mobile-card-raised flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-black"
           onClick={copyAddress}
           type="button"
         >
           <Copy className="h-4 w-4" />
-          주소
+          주소복사
         </button>
-        <a
-          className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-sm font-black text-blue-800"
-          href={`/mobile/today?customer=${encodeURIComponent(customerId)}#loading-position`}
-        >
-          <Camera className="h-4 w-4" />
-          적재위치
-        </a>
       </div>
       {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
     </section>

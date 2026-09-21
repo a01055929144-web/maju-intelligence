@@ -239,7 +239,13 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       </div>
 
       {filteredUploads.length ? (
-        <div className="overflow-x-auto rounded-md border border-border">
+        <>
+        <div className="grid gap-3 md:hidden">
+          {pagedUploads.map((upload) => (
+            <UploadMobileCard key={upload.id} upload={upload} />
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto rounded-md border border-border md:block">
           <div className="min-w-[1320px]">
             <div className="grid grid-cols-[1.25fr_0.9fr_90px_105px_95px_95px_1.15fr_360px] bg-muted/70 px-4 py-3 text-xs font-black text-muted-foreground">
               <span>파일</span>
@@ -258,6 +264,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             </div>
           </div>
         </div>
+        </>
       ) : (
         <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
           <p className="font-black">조건에 맞는 업로드 이력이 없습니다.</p>
@@ -266,6 +273,49 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       )}
     </div>
   );
+}
+
+function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
+  const reasons = getUploadIssueReasons(upload);
+  const companyQuery = `companyId=${encodeURIComponent(upload.companyId)}`;
+
+  return (
+    <article className="rounded-lg border border-border bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="break-words font-black text-slate-950">{upload.filename}</p>
+          <p className="mt-1 text-xs font-semibold text-muted-foreground">{upload.company} · {upload.createdAt}</p>
+        </div>
+        <Badge className={statusClass(upload.status)}>{statusCopy[upload.status]}</Badge>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        <MobileMetric label="처리 행" value={upload.rows.toLocaleString()} />
+        <MobileMetric label="품질" value={`${upload.qualityScore}%`} />
+        <MobileMetric label="중복" value={`${upload.duplicateCount.toLocaleString()}건`} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(reasons.length ? reasons : ["정상 반영"]).map((reason) => (
+          <span className={`rounded-md px-2 py-1 text-[11px] font-black ${reasons.length ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`} key={reason}>{reason}</span>
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {upload.reportId ? <MobileAction href={`/reports/${upload.reportId}?${companyQuery}`} label="리포트" /> : <span className="inline-flex min-h-11 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">미생성</span>}
+        <MobileAction href={`/?${companyQuery}`} label="등록" />
+        <MobileAction href={`/crm/timeline?${companyQuery}`} label="원장" />
+        <MobileAction href={`/revenue/transactions?${companyQuery}`} label="매출" />
+        <MobileAction href={`/dashboard?${companyQuery}`} label="지도" />
+        <MobileAction href="/admin/companies" label="고객사" />
+      </div>
+    </article>
+  );
+}
+
+function MobileMetric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-md bg-slate-50 px-2 py-3"><p className="text-[11px] font-bold text-muted-foreground">{label}</p><p className="mt-1 text-sm font-black">{value}</p></div>;
+}
+
+function MobileAction({ href, label }: { href: string; label: string }) {
+  return <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2 text-xs font-bold" href={href}>{label}</Link>;
 }
 
 function UploadRow({ upload }: { upload: UploadHistoryItem }) {

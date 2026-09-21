@@ -14,6 +14,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
   const joinMode = inviteCode ? "company" : "personal";
   const errorMessage = describeOAuthError(errorCode);
   const invitePreview = inviteCode ? await getStaffInvitationPreview(inviteCode).catch(() => null) : null;
+  const canContinue = !inviteCode || invitePreview?.status === "pending" || invitePreview?.status === "accepted";
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f5f7fb] px-4 py-6 text-slate-950">
@@ -69,7 +70,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             </section>
           ) : null}
 
-          <OAuthLoginButtons inviteCode={inviteCode} />
+          {canContinue ? <OAuthLoginButtons inviteCode={inviteCode} /> : null}
           <p className="text-center text-xs font-bold leading-5 text-slate-500">
             {inviteCode ? "카카오 인증 후 바로 회사 코스로 연결됩니다." : "관리자에게 받은 초대 링크로 접속해주세요."}
           </p>
@@ -104,5 +105,5 @@ function describeOAuthError(errorCode: string): string {
     missing_google_env: "서버에 구글 로그인 환경변수가 아직 설정되지 않았습니다."
   };
 
-  return knownCodes[errorCode] || errorCode;
+  return knownCodes[errorCode] || "로그인 요청을 처리하지 못했습니다. 초대 링크에서 다시 시작해주세요.";
 }

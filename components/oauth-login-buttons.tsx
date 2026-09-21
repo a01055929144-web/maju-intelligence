@@ -19,9 +19,16 @@ export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
 
   return (
     <Link
-      className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition hover:brightness-95"
+      aria-disabled={moving}
+      className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition ${moving ? "pointer-events-none opacity-70" : "hover:brightness-95"}`}
       href={`/api/auth/kakao/start${query}`}
-      onClick={() => setMoving(true)}
+      onClick={(event) => {
+        if (moving) {
+          event.preventDefault();
+          return;
+        }
+        setMoving(true);
+      }}
     >
       {moving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KakaoMark />}
       {moving ? "카카오로 이동 중…" : "카카오로 계속"}

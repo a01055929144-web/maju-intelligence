@@ -553,6 +553,7 @@ export type StaffKakaoAcceptInput = {
   inviteCode: string;
   kakaoUserId: string;
   name?: string;
+  phoneNumber?: string;
 };
 export type PersonalKakaoWorkspaceInput = {
   avatarUrl?: string;
@@ -2551,6 +2552,7 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
   assignedManagerName?: string;
   assignedVehicle?: string;
   companyOwnerName?: string;
+  userPhone?: string;
   role?: StaffInvitation["role"] | "owner" | "member";
 }> {
   if (!input.companyId || !input.userId) return { active: false };
@@ -2559,11 +2561,11 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
   const rows = await supabaseRequest<
     Array<{
       role: StaffInvitation["role"] | "owner" | "member";
-      app_users: { status: string | null } | null;
+      app_users: { phone: string | null; status: string | null } | null;
       companies: { owner_name: string | null; status: string | null } | null;
     }>
   >(
-    `company_members?select=role,app_users(status),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
+    `company_members?select=role,app_users(status,phone),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
       input.userId
     )}&status=eq.active&limit=1`
   );
@@ -2578,6 +2580,7 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
     assignedManagerName: assignment?.assignedManagerName,
     assignedVehicle: assignment?.assignedVehicle,
     companyOwnerName: member.companies?.owner_name?.trim() || undefined,
+    userPhone: member.app_users?.phone?.trim() || undefined,
     role: member.role || "member"
   };
 }
@@ -2656,7 +2659,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
         kakao_user_id: kakaoUserId,
         last_login_at: now,
         name: displayName,
-        phone: invitation.employee_phone || null,
+        phone: invitation.employee_phone || normalizeKakaoPhone(input.phoneNumber) || null,
         role: "customer_member",
         status: "active"
       }
@@ -4330,6 +4333,13 @@ export async function upsertCustomerMaster(
     customer: savedCustomer,
     persisted: true
   };
+}
+
+function normalizeKakaoPhone(value?: string) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("82")) return `0${digits.slice(2)}`;
+  return digits;
 }
 
 export type IndustryBackfillPreview = {
@@ -9831,6 +9841,77 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };
+}
+
+export type DeliveryMessageTemplate = {
+  id?: string;
+  templateKey: string;
+  label: string;
+  body: string;
+  sortOrder: number;
+  sourceTemplateId?: string;
+};
+
+type DeliveryMessageTemplateRow = {
+  id: string;
+  template_key: string;
+  label: string;
+  body: string;
+  sort_order: number;
+  source_template_id?: string | null;
+};
+
+function mapDeliveryMessageTemplate(row: DeliveryMessageTemplateRow): DeliveryMessageTemplate {
+  return { body: row.body, id: row.id, label: row.label, sortOrder: row.sort_order, sourceTemplateId: row.source_template_id || undefined, templateKey: row.template_key };
+}
+
+export async function getCompanyMessageTemplates(companyId: string): Promise<DeliveryMessageTemplate[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>(
+    `company_message_templates?select=id,template_key,label,body,sort_order&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&order=sort_order.asc,created_at.asc`
+  );
+  return rows.map(mapDeliveryMessageTemplate);
+}
+
+export async function replaceCompanyMessageTemplates(companyId: string, templates: DeliveryMessageTemplate[]) {
+  if (!isProductionStoreConfigured()) return { persisted: false, templates };
+  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  if (!templates.length) return { persisted: true, templates: [] };
+  const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>("company_message_templates", {
+    method: "POST",
+    body: JSON.stringify(templates.map((template, index) => ({ company_id: companyId, template_key: template.templateKey, label: template.label.trim(), body: template.body.trim(), sort_order: index * 10 + 10, is_active: true })))
+  });
+  return { persisted: true, templates: rows.map(mapDeliveryMessageTemplate) };
+}
+
+export async function getDriverMessageTemplates(companyId: string, driverId: string, importDefaults = true): Promise<DeliveryMessageTemplate[]> {
+  if (!isProductionStoreConfigured()) return [];
+  if (importDefaults) {
+    const [defaults, current] = await Promise.all([
+      getCompanyMessageTemplates(companyId),
+      supabaseRequest<DeliveryMessageTemplateRow[]>(`driver_message_templates?select=id,template_key,label,body,sort_order,source_template_id&company_id=eq.${encodeURIComponent(companyId)}&driver_id=eq.${encodeURIComponent(driverId)}`)
+    ]);
+    const existingKeys = new Set(current.map((item) => item.template_key));
+    const missing = defaults.filter((item) => !existingKeys.has(item.templateKey));
+    if (missing.length) {
+      await supabaseRequest("driver_message_templates", { method: "POST", body: JSON.stringify(missing.map((template, index) => ({ company_id: companyId, driver_id: driverId, source_template_id: template.id, template_key: template.templateKey, label: template.label, body: template.body, sort_order: current.length * 10 + index * 10 + 10 }))) });
+    }
+  }
+  const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>(
+    `driver_message_templates?select=id,template_key,label,body,sort_order,source_template_id&company_id=eq.${encodeURIComponent(companyId)}&driver_id=eq.${encodeURIComponent(driverId)}&order=sort_order.asc,created_at.asc`
+  );
+  return rows.map(mapDeliveryMessageTemplate);
+}
+
+export async function replaceDriverMessageTemplates(companyId: string, driverId: string, templates: DeliveryMessageTemplate[]) {
+  if (!isProductionStoreConfigured()) return { persisted: false, templates };
+  await supabaseRequest(`driver_message_templates?company_id=eq.${encodeURIComponent(companyId)}&driver_id=eq.${encodeURIComponent(driverId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  if (!templates.length) return { persisted: true, templates: [] };
+  const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>("driver_message_templates", {
+    method: "POST",
+    body: JSON.stringify(templates.map((template, index) => ({ company_id: companyId, driver_id: driverId, source_template_id: template.sourceTemplateId || null, template_key: template.templateKey, label: template.label.trim(), body: template.body.trim(), sort_order: index * 10 + 10 })))
+  });
+  return { persisted: true, templates: rows.map(mapDeliveryMessageTemplate) };
 }
 
 /**
