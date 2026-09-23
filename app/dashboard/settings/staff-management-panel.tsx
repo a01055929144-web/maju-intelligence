@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Minus, Plus, Send, Share2, ShieldCheck, Smartphone, Tags, Trash2, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Minus, Plus, Send, Share2, ShieldCheck, Smartphone, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
@@ -287,10 +287,8 @@ export function StaffManagementPanel({
             <Users className="mr-1 h-3.5 w-3.5" />
             직원 관리
           </Badge>
-          <h2 className="text-2xl font-black text-slate-950">직원 초대</h2>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-            이름과 연락처를 입력하면 카카오 가입용 초대 링크가 생성됩니다. 직원 추가·수정은 대표/관리자만 할 수 있습니다.
-          </p>
+          <h2 className="text-2xl font-bold text-slate-950">직원 초대</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">직원 정보를 입력하고 카카오 가입 링크를 보내세요.</p>
         </div>
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
@@ -310,22 +308,12 @@ export function StaffManagementPanel({
 
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
-          <div className="grid gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4 md:grid-cols-3">
-            <OnboardingStep
-              icon={<Link2 className="h-4 w-4" />}
-              title="1. 초대 생성"
-              description="관리자가 직원명, 연락처, 업무 구분을 등록합니다."
-            />
-            <OnboardingStep
-              icon={<Smartphone className="h-4 w-4" />}
-              title="2. 카카오 가입"
-              description="직원은 초대 링크로 모바일 가입 흐름에 들어갑니다."
-            />
-            <OnboardingStep
-              icon={<Tags className="h-4 w-4" />}
-              title="3. 거래처 배정"
-              description="가입 후 거래처 담당자 값과 연결되면 모바일에 담당 거래처만 표시됩니다."
-            />
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-950">
+            <span className="font-semibold">초대 생성</span>
+            <span aria-hidden="true" className="text-blue-300">→</span>
+            <span className="font-semibold">카카오 가입</span>
+            <span aria-hidden="true" className="text-blue-300">→</span>
+            <span className="font-semibold">거래처 배정</span>
           </div>
 
           {invitations.length ? (
@@ -539,24 +527,24 @@ export function StaffManagementPanel({
               <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
-              <p className="font-black text-slate-950">직원 초대 만들기</p>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">생성된 링크를 직원에게 보내면 모바일 가입 흐름으로 이어집니다.</p>
+              <p className="font-bold text-slate-950">직원 추가</p>
+              <p className="mt-1 text-sm leading-5 text-slate-500">생성된 링크를 직원에게 보내세요.</p>
             </div>
           </div>
           {canManageMembers ? (
             <div className="mt-4 grid gap-3">
-              <p className="-mb-1 text-xs font-bold leading-5 text-slate-500">여러 명을 한 번에 초대하려면 아래에 줄을 추가해 이름·연락처를 입력하세요.</p>
+              <p className="-mb-1 text-xs leading-5 text-slate-500">여러 명은 연락처 줄을 추가해 한 번에 초대할 수 있습니다.</p>
               <div className="grid gap-2">
                 {inviteRows.map((row) => (
                   <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5" key={row.id}>
                     <input
-                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                       placeholder="직원명"
                       value={row.employeeName}
                       onChange={(event) => updateInviteRow(row.id, { employeeName: event.target.value })}
                     />
                     <input
-                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                       placeholder="연락처"
                       value={row.employeePhone}
                       onChange={(event) => updateInviteRow(row.id, { employeePhone: event.target.value })}
@@ -574,7 +562,7 @@ export function StaffManagementPanel({
                 ))}
               </div>
               <button
-                className="inline-flex h-9 w-fit items-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50"
+                className="inline-flex h-9 w-fit items-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                 onClick={addInviteRow}
                 type="button"
               >
@@ -582,7 +570,7 @@ export function StaffManagementPanel({
                 연락처 추가
               </button>
               <select
-                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={inviteRole}
                 onChange={(event) => setInviteRole(event.target.value)}
               >
@@ -592,9 +580,9 @@ export function StaffManagementPanel({
                   </option>
                 ))}
               </select>
-              <p className="-mt-1 text-xs font-bold leading-5 text-slate-500">역할은 화면 정리와 담당 업무 표시용이며, 위 모든 줄에 동일하게 적용됩니다.</p>
+              <p className="-mt-1 text-xs leading-5 text-slate-500">선택한 업무가 모든 초대 대상에게 적용됩니다.</p>
               <Button
-                className="h-11 bg-teal-700 font-black hover:bg-teal-800"
+                className="h-11 bg-teal-700 font-semibold hover:bg-teal-800"
                 disabled={!inviteRows.some((row) => row.employeeName.trim()) || creating}
                 onClick={createStaff}
                 type="button"
@@ -669,18 +657,6 @@ function StaffSignal({ icon, label, tone = "default", value }: { icon: ReactNode
       <div>{icon}</div>
       <p className="mt-3 text-xs font-bold text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function OnboardingStep({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
-  return (
-    <div className="rounded-lg bg-white/80 p-3 ring-1 ring-inset ring-blue-100">
-      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-        <span className="text-blue-700">{icon}</span>
-        {title}
-      </div>
-      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p>
     </div>
   );
 }

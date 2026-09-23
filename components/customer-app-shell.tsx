@@ -94,7 +94,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               {collapsed ? (
                 <>
                   <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#b9ed5c] text-sm font-black text-[#101827]">M</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#b9ed5c] text-sm font-bold text-[#101827]">M</span>
                   </Link>
                   <button
                     aria-label="사이드바 펼치기"
@@ -108,9 +108,9 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ) : (
                 <div className="flex w-full items-center justify-between gap-2">
                   <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#b9ed5c] text-sm font-black text-[#101827]">M</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#b9ed5c] text-sm font-bold text-[#101827]">M</span>
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-black">MAJU Intelligence</span>
+                      <span className="block truncate text-sm font-bold">MAJU Intelligence</span>
                       <span className="block truncate text-xs font-medium text-slate-400">{companyName}</span>
                     </span>
                   </Link>
@@ -129,7 +129,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             <nav className="flex-1 space-y-4 overflow-auto p-3">
               {visibleNavigationGroups.map((group) => (
                 <div key={group.label}>
-                  {!collapsed ? <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{group.label}</p> : null}
+                  {!collapsed ? <p className="mb-2 px-2 text-xs font-medium text-slate-400">{group.label}</p> : null}
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       if (item.children && item.children.length) {
@@ -186,7 +186,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                         >
                           <item.icon className={`h-4 w-4 ${selected ? "text-slate-950" : "text-slate-500"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-[10px] text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
+                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-xs text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
                         </Link>
                       );
                     })}
@@ -251,7 +251,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ) : (
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                   <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
-                  <span className="text-sm font-black text-slate-900">{activeWorkspaceLabel}</span>
+                  <span className="text-sm font-semibold text-slate-900">{activeWorkspaceLabel}</span>
                   {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                 </div>
               )}

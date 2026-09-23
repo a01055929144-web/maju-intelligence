@@ -87,12 +87,12 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         <header className="mobile-card sticky top-0 z-10 shrink-0 border-b px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-black">MAJU 오늘의 배송</p>
+              <p className="truncate text-sm font-semibold">MAJU 오늘의 배송</p>
               <p className="mobile-muted mt-0.5 truncate text-xs font-bold">{driverName} · {session.companyName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
-              <Link className="inline-flex h-8 items-center rounded-lg px-2 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
+              <Link className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
             </div>
           </div>
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
@@ -121,14 +121,14 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
-            <section className="mobile-card scroll-mt-24 overflow-hidden rounded-2xl border shadow-[0_12px_30px_rgba(0,0,0,0.12)]" id="selected-customer">
+            <section className="mobile-card scroll-mt-24 overflow-hidden rounded-2xl shadow-[0_12px_30px_rgba(0,0,0,0.12)]" id="selected-customer">
               <div className="border-b border-[var(--mobile-border)] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-            <p className={`text-xs font-black ${selectedStopCompleted ? "text-teal-400" : "mobile-warning"}`}>
+            <p className={`text-xs font-semibold ${selectedStopCompleted ? "text-teal-400" : "mobile-warning"}`}>
               {selectedStopCompleted ? "배송완료" : "진행 중"}
             </p>
-                    <h2 className="mt-1 truncate text-xl font-black">{selectedStop.name}</h2>
+                    <h2 className="mt-1 truncate text-xl font-bold">{selectedStop.name}</h2>
                     <p className="mobile-muted mt-1 truncate text-xs font-bold">{selectedStop.address || selectedStop.region} · {selectedStop.distanceKm || 0}km</p>
                   </div>
                   <Badge className="shrink-0 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">{selectedStop.industry || "업종"}</Badge>
@@ -167,7 +167,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               />
             </section>
               <details className="mobile-card group mt-3 rounded-xl border">
-                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-black text-slate-600">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-semibold text-slate-600">
                   추가 방문 메모
                   <span className="text-teal-700 group-open:hidden">선택 입력</span>
                   <span className="hidden text-teal-700 group-open:inline">닫기</span>
@@ -212,8 +212,8 @@ function MobileRouteContextBar({
       <div className="grid grid-cols-3 divide-x divide-slate-100">
         {items.map((item) => (
           <div className="min-w-0 px-3 py-2.5" key={item.label}>
-            <p className="text-[11px] font-black text-slate-400">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
+            <p className="text-xs font-medium text-slate-500">{item.label}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-950">{item.value}</p>
           </div>
         ))}
       </div>
@@ -222,7 +222,7 @@ function MobileRouteContextBar({
 }
 
 function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
-  return <Link className={`mobile-bottom-nav-item flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-black ${active ? "is-active" : ""}`} href={href}><Icon className="h-4 w-4" />{label}</Link>;
+  return <Link className={`mobile-bottom-nav-item flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-semibold ${active ? "is-active" : ""}`} href={href}><Icon className="h-4 w-4" />{label}</Link>;
 }
 
 function MobileDriverRouteSummary({
@@ -242,10 +242,10 @@ function MobileDriverRouteSummary({
     <section className="flex items-center justify-between gap-3 rounded-xl bg-teal-700 px-4 py-3 text-white shadow-[0_10px_24px_rgba(15,118,110,0.16)]">
       <div className="min-w-0">
         <p className="truncate text-xs font-bold text-white/70">오늘 코스 · {area}</p>
-        <p className="mt-0.5 text-lg font-black">{sourceReady ? `${totalStops.toLocaleString()}곳` : "코스 확인 필요"}</p>
+        <p className="mt-0.5 text-lg font-bold">{sourceReady ? `${totalStops.toLocaleString()}곳` : "코스 확인 필요"}</p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-black">{sourceReady ? `${distanceKm.toLocaleString()}km` : "-"}</p>
+        <p className="text-sm font-semibold">{sourceReady ? `${distanceKm.toLocaleString()}km` : "-"}</p>
         <p className="mt-0.5 text-xs font-bold text-white/70">{sourceReady ? formatMinutes(durationMinutes) : "-"}</p>
       </div>
     </section>
@@ -260,9 +260,9 @@ function MobileOperationalEmptyState() {
           <Building2 className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <p className="font-black text-slate-950">매장 등록 필요</p>
+          <p className="font-semibold text-slate-950">매장 등록 필요</p>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">관리자가 매장과 코스를 배정하면 표시됩니다.</p>
-          <Link className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-sm" href="/?type=customer-master">
+          <Link className="mt-3 inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-xs font-semibold text-white shadow-sm" href="/?type=customer-master">
             등록 화면
           </Link>
         </div>
@@ -275,8 +275,8 @@ function MobileMetric({ icon: Icon, label, value }: { icon: typeof Route; label:
   return (
     <div className="min-h-[92px] rounded-xl border border-slate-200 bg-white p-3">
       <Icon className="h-4 w-4 text-teal-700" />
-      <p className="mt-3 text-[11px] font-black text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-lg font-black text-slate-950">{value}</p>
+      <p className="mt-3 text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-lg font-bold text-slate-950">{value}</p>
     </div>
   );
 }

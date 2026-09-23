@@ -61,7 +61,7 @@ export default async function AdminPage() {
               <CardContent className="p-4">
                 <Icon className="mb-4 h-5 w-5 text-primary" />
                 <p className="text-xs font-bold text-muted-foreground">{label as string}</p>
-                <p className="mt-1 text-3xl font-black">{value as string}</p>
+                <p className="mt-1 text-3xl font-bold tracking-[-0.03em]">{value as string}</p>
               </CardContent>
             </Card>
           ))}
@@ -75,9 +75,7 @@ export default async function AdminPage() {
                   <Building2 className="h-5 w-5 text-primary" />
                   운영 시작 작업
                 </CardTitle>
-                <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  어드민은 고객사 생성, 데이터 적재 확인, 고객사 미리보기 순서로 운영합니다.
-                </p>
+                <p className="mt-2 text-sm text-muted-foreground">고객사 생성부터 데이터 확인까지 순서대로 진행하세요.</p>
               </div>
               <Badge className="w-fit bg-slate-100 text-slate-700">권장 순서</Badge>
             </div>

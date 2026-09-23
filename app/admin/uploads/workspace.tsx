@@ -295,12 +295,12 @@ function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {(reasons.length ? reasons : ["정상 반영"]).map((reason) => (
-          <span className={`rounded-md px-2 py-1 text-[11px] font-black ${reasons.length ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`} key={reason}>{reason}</span>
+          <span className={`rounded-md px-2 py-1 text-xs font-semibold ${reasons.length ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`} key={reason}>{reason}</span>
         ))}
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2">
         {upload.reportId ? <MobileAction href={`/reports/${upload.reportId}?${companyQuery}`} label="리포트" /> : <span className="inline-flex min-h-11 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">미생성</span>}
-        <MobileAction href={`/?${companyQuery}`} label="등록" />
+        <MobileAction href={`/?${companyQuery}`} label={upload.status === "failed" ? "재업로드" : "등록"} tone={upload.status === "failed" ? "danger" : "default"} />
         <MobileAction href={`/crm/timeline?${companyQuery}`} label="원장" />
         <MobileAction href={`/revenue/transactions?${companyQuery}`} label="매출" />
         <MobileAction href={`/dashboard?${companyQuery}`} label="지도" />
@@ -311,11 +311,11 @@ function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
 }
 
 function MobileMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-md bg-slate-50 px-2 py-3"><p className="text-[11px] font-bold text-muted-foreground">{label}</p><p className="mt-1 text-sm font-black">{value}</p></div>;
+  return <div className="rounded-md bg-slate-50 px-2 py-3"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-sm font-bold">{value}</p></div>;
 }
 
-function MobileAction({ href, label }: { href: string; label: string }) {
-  return <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2 text-xs font-bold" href={href}>{label}</Link>;
+function MobileAction({ href, label, tone = "default" }: { href: string; label: string; tone?: "danger" | "default" }) {
+  return <Link className={`inline-flex min-h-11 items-center justify-center rounded-md border px-2 text-xs font-bold ${tone === "danger" ? "border-rose-600 bg-rose-600 text-white" : "border-border bg-white"}`} href={href}>{label}</Link>;
 }
 
 function UploadRow({ upload }: { upload: UploadHistoryItem }) {
@@ -349,12 +349,12 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
       <div className="flex flex-wrap gap-1.5">
         {reasons.length ? (
           reasons.map((reason) => (
-            <span key={reason} className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-800">
+            <span key={reason} className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
               {reason}
             </span>
           ))
         ) : (
-          <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700">정상 반영</span>
+          <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">정상 반영</span>
         )}
       </div>
       <div className="flex justify-center gap-2">
@@ -365,8 +365,8 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         ) : (
           <span className="inline-flex min-h-11 items-center justify-center rounded-md bg-muted px-2.5 text-xs font-bold text-muted-foreground">미생성</span>
         )}
-        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/?${companyQuery}`}>
-          등록
+        <Link className={`inline-flex min-h-11 items-center justify-center rounded-md border px-2.5 text-xs font-bold transition ${upload.status === "failed" ? "border-rose-600 bg-rose-600 text-white hover:bg-rose-700" : "border-border bg-white hover:bg-muted"}`} href={`/?${companyQuery}`}>
+          {upload.status === "failed" ? "재업로드" : "등록"}
         </Link>
         <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/crm/timeline?${companyQuery}`}>
           원장

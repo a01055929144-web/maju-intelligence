@@ -58,8 +58,8 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           <MessageSquareText className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <span className="mb-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">메모</span>
-          <p className="truncate font-black text-slate-950">{customerName}</p>
+          <span className="mb-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">메모</span>
+          <p className="truncate font-semibold text-slate-950">{customerName}</p>
         </div>
       </div>
 
@@ -79,7 +79,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         <div className="flex flex-wrap gap-2">
           {quickMemos.map((item) => (
             <button
-              className="min-h-[2.75rem] rounded-full border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+              className="min-h-[2.75rem] rounded-full border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               key={item}
               onClick={() => setMemo(item)}
               type="button"
@@ -103,7 +103,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           onChange={(event) => setNextAction(event.target.value)}
         />
 
-        <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!memo.trim() || saving} onClick={submit}>
+        <Button className="h-11 bg-teal-700 font-semibold hover:bg-teal-800" disabled={!memo.trim() || saving} onClick={submit}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
           {saving ? "저장 중" : status === "saved" ? "저장 완료" : "메모 저장"}
         </Button>

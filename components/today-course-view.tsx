@@ -422,14 +422,14 @@ export function TodayCourseView({
             >
               <PanelLeftOpen className="h-4 w-4" />
             </button>
-            <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">경유 코스</div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{vehicles.length}</span>
+            <div className="[writing-mode:vertical-rl] text-xs font-semibold text-slate-500">경유 코스</div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{vehicles.length}</span>
           </div>
         ) : (
           <>
             <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-black text-slate-950">경유 코스</p>
+                <p className="text-sm font-semibold text-slate-950">경유 코스</p>
                 <p className="mt-1 text-xs font-bold text-slate-500">차량을 고른 뒤 경유 거래처를 계산합니다.</p>
               </div>
               <button
@@ -443,7 +443,7 @@ export function TodayCourseView({
             </div>
             <div className="space-y-2 border-b border-slate-200/80 bg-white p-3">
               <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-900 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 onChange={(event) => onSelectVehicle(event.target.value)}
                 value={selectedVehicleId}
               >
@@ -466,7 +466,7 @@ export function TodayCourseView({
             </div>
             <div className="border-b border-slate-200/80 p-3">
               <div className="maju-panel bg-slate-50 p-3">
-                <p className="text-xs font-black text-slate-500">실사용 순서</p>
+                <p className="text-xs font-semibold text-slate-500">실사용 순서</p>
                 <div className="mt-3 grid gap-2">
                   <RouteWorkStep active={!isVehicleScoped} done={isVehicleScoped} label="배송차 선택" />
                   <RouteWorkStep active={isVehicleScoped && selectedRouteStores.length > 0} done={isVehicleScoped && selectedRouteStores.length > 0} label="경유 거래처 선택" />
@@ -482,8 +482,8 @@ export function TodayCourseView({
                 type="button"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-black text-slate-950">전체 거래처 보기</p>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-200">{stores.length}곳</span>
+                  <p className="text-sm font-semibold text-slate-950">전체 거래처 보기</p>
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">{stores.length}곳</span>
                 </div>
                 <p className="mt-1 text-xs font-bold text-slate-500">전체 위치 확인용 · 경유 계산은 차량 선택 후 진행</p>
               </button>
@@ -495,8 +495,8 @@ export function TodayCourseView({
                   type="button"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-black text-slate-950">{vehicle.name}</p>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-emerald-700 ring-1 ring-inset ring-emerald-200">{vehicle.stops.length}곳</span>
+                    <p className="text-sm font-semibold text-slate-950">{vehicle.name}</p>
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{vehicle.stops.length}곳</span>
                   </div>
                   <p className="mt-1 text-xs font-bold text-slate-500">{[vehicle.driver, vehicle.area].filter(Boolean).join(" · ")}</p>
                 </button>
@@ -545,14 +545,14 @@ export function TodayCourseView({
             >
               <PanelLeftOpen className="h-4 w-4" />
             </button>
-            <div className="[writing-mode:vertical-rl] text-xs font-black text-slate-500">경유 코스</div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{selectedRouteStores.length}</span>
+            <div className="[writing-mode:vertical-rl] text-xs font-semibold text-slate-500">경유 코스</div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{selectedRouteStores.length}</span>
           </div>
         ) : (
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
               <div className="min-w-0">
-                  <p className="text-sm font-black text-slate-950">{selectedDriver} 경유 순서</p>
+                  <p className="text-sm font-semibold text-slate-950">{selectedDriver} 경유 순서</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">
                   선택 {selectedRouteStoresAll.length}곳 · 계산 {selectedRouteStores.length}/{tmapWaypointLimit}곳 · 경유 {routeDistanceKm.toLocaleString()}km · {formatMinutes(routeDurationMinutes)}
                 </p>
@@ -568,7 +568,7 @@ export function TodayCourseView({
             </div>
             <div className="flex gap-1.5 border-b border-slate-200/80 bg-slate-50/60 p-2">
               <button
-                className={`h-8 flex-1 rounded-md text-xs font-black transition ${
+                className={`h-9 flex-1 rounded-md text-xs font-semibold transition ${
                   routeRightPanelTab === "list" ? "bg-white text-slate-950 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-700"
                 }`}
                 onClick={() => setRouteRightPanelTab("list")}
@@ -577,7 +577,7 @@ export function TodayCourseView({
                 거래처 · 경유 {selectedRouteStoresAll.length}곳
               </button>
               <button
-                className={`h-8 flex-1 rounded-md text-xs font-black transition ${
+                className={`h-9 flex-1 rounded-md text-xs font-semibold transition ${
                   routeRightPanelTab === "summary" ? "bg-white text-slate-950 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:text-slate-700"
                 }`}
                 onClick={() => setRouteRightPanelTab("summary")}
@@ -592,16 +592,16 @@ export function TodayCourseView({
                 <div className="maju-panel mb-3 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-black text-slate-950">출발 기준</p>
+                      <p className="text-sm font-semibold text-slate-950">출발 기준</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         회사 출발지 또는 현재 위치에서 바로 경유 계산을 시작할 수 있습니다.
                       </p>
                     </div>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{routeOriginLabel}</span>
+                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{routeOriginLabel}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
-                      className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                      className={`h-10 rounded-md border px-3 text-xs font-semibold transition ${
                         routeOriginMode === "company" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
                       }`}
                       onClick={() => {
@@ -613,7 +613,7 @@ export function TodayCourseView({
                       회사 출발지
                     </button>
                     <button
-                      className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                      className={`h-10 rounded-md border px-3 text-xs font-semibold transition ${
                         routeOriginMode === "current" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                       onClick={useCurrentLocationAsOrigin}
@@ -632,7 +632,7 @@ export function TodayCourseView({
                   <RouteMetric label={routeSequence ? "티맵 경유 시간" : "출발지 기준 시간합"} value={formatMinutes(routeDurationMinutes)} />
                 </div>
                 <div className={`mb-3 rounded-md border p-3 ${routeSequence ? "border-emerald-200 bg-emerald-50" : isVehicleScoped && selectedRouteStores.length ? "border-slate-200 bg-slate-50" : "border-amber-200 bg-amber-50"}`}>
-                  <p className={`text-sm font-black ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-slate-900" : "text-amber-800"}`}>
+                  <p className={`text-sm font-semibold ${routeSequence ? "text-emerald-800" : isVehicleScoped && selectedRouteStores.length ? "text-slate-900" : "text-amber-800"}`}>
                     {routeSequence ? "티맵 계산 완료" : isVehicleScoped && selectedRouteStores.length ? "티맵 계산 대기" : isVehicleScoped ? "경유지 선택 필요" : "배송차 선택 필요"}
                   </p>
                   <p className={`mt-1 text-xs font-bold leading-5 ${routeSequence ? "text-emerald-700" : isVehicleScoped && selectedRouteStores.length ? "text-slate-600" : "text-amber-800"}`}>
@@ -659,7 +659,7 @@ export function TodayCourseView({
                 ) : null}
                 {isVehicleScoped ? (
                   <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-black text-slate-900">오늘 배송 선택 · 루트 최적화 · 모바일 반영</p>
+                    <p className="text-xs font-semibold text-slate-900">오늘 배송 선택 · 루트 최적화 · 모바일 반영</p>
                     <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                       {selectedDriver === "배송차 선택 필요"
                         ? "배송차에 담당자가 배정돼야 확정할 수 있습니다."
@@ -719,10 +719,10 @@ export function TodayCourseView({
                   <button className="maju-button-secondary h-8 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={clearRouteStores} type="button">
                     오늘 배송 없음
                   </button>
-                  <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-700">
+                  <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-semibold text-slate-700">
                     {activeRouteBatchIndex + 1}/{routeBatchCount}묶음 · 계산 {selectedRouteStores.length}곳
                   </span>
-                  {inactiveSelectedCount ? <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-600">다른 묶음 {inactiveSelectedCount}곳</span> : null}
+                  {inactiveSelectedCount ? <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-semibold text-slate-600">다른 묶음 {inactiveSelectedCount}곳</span> : null}
                 </div>
                 {routeBatchCount > 1 ? (
                   <div className="flex flex-wrap gap-2">
@@ -751,10 +751,10 @@ export function TodayCourseView({
               <div className="border-b border-slate-200 bg-slate-50/80 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-black text-slate-950">선택한 경유지</p>
+                    <p className="text-sm font-semibold text-slate-950">선택한 경유지</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">현재 묶음 {selectedRouteStores.length}곳을 티맵 계산에 사용합니다.</p>
                   </div>
-                  <span className="rounded-md bg-white px-2 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">
                     {activeRouteBatchIndex + 1}/{routeBatchCount}
                   </span>
                 </div>
@@ -811,17 +811,17 @@ export function TodayCourseView({
                               <CheckCircle2 className="h-4 w-4" />
                             </span>
                           ) : (
-                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black text-white shadow-sm ${isNextStop ? "bg-teal-500" : "bg-teal-700"}`}>
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ${isNextStop ? "bg-teal-500" : "bg-teal-700"}`}>
                               {routeBatchStart + index + 1}
                             </span>
                           )}
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
-                              <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
+                              <span className="block truncate text-sm font-semibold text-slate-950">{store.name}</span>
                               {isCompleted ? (
-                                <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">완료</span>
+                                <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">완료</span>
                               ) : isNextStop ? (
-                                <span className="shrink-0 rounded-full bg-teal-600 px-1.5 py-0.5 text-[10px] font-black text-white">다음 배송지</span>
+                                <span className="shrink-0 rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">다음 배송지</span>
                               ) : null}
                             </span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
@@ -842,7 +842,7 @@ export function TodayCourseView({
                                 originAddress={routeOriginAddress}
                               />
                               <span
-                                className="maju-button-secondary px-2 py-1 text-[11px]"
+                                className="maju-button-secondary px-2 py-1 text-xs"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   toggleRouteStore(store.id);
@@ -859,7 +859,7 @@ export function TodayCourseView({
                   </div>
                 ) : (
                   <div className="maju-empty-state bg-white p-4">
-                    <p className="text-sm font-black text-slate-700">선택한 경유지가 없습니다.</p>
+                    <p className="text-sm font-semibold text-slate-700">선택한 경유지가 없습니다.</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">아래 거래처 목록에서 추가 버튼을 누르세요.</p>
                   </div>
                 )}
@@ -872,7 +872,7 @@ export function TodayCourseView({
               <div className="p-3">
                 {routeSequence?.legs.length ? (
                   <div className={`mb-3 rounded-md border p-3 ${routeRoadPointCount ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                    <p className={`text-xs font-black ${routeRoadPointCount ? "text-emerald-800" : "text-amber-800"}`}>
+                    <p className={`text-xs font-semibold ${routeRoadPointCount ? "text-emerald-800" : "text-amber-800"}`}>
                       {routeRoadPointCount ? "티맵 경유 경로 반영됨" : "거리·시간 계산됨 · 도로 경로 좌표 없음"}
                     </p>
                     <p className={`mt-1 text-xs font-bold leading-5 ${routeRoadPointCount ? "text-emerald-700" : "text-amber-800"}`}>
@@ -884,8 +884,8 @@ export function TodayCourseView({
                 {routeSequence?.legs.length ? (
                   <div className="mb-3 rounded-md border border-slate-200 bg-white p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-xs font-black text-slate-950">구간별 예상 유류비</p>
-                      <span className="text-[11px] font-bold text-slate-500">
+                      <p className="text-xs font-semibold text-slate-950">구간별 예상 유류비</p>
+                      <span className="text-xs font-medium text-slate-500">
                         {courseFuelPriceReady ? `${courseFuelType === "gasoline" ? "휘발유" : "경유"} ${courseFuelPricePerLiter.toLocaleString()}원/L 기준` : "유가 정보를 불러오는 중"}
                       </span>
                     </div>
@@ -899,7 +899,7 @@ export function TodayCourseView({
                               {fromLabel} → {toLabel}
                             </span>
                             <span className="shrink-0 text-xs font-bold text-slate-500">{leg.distanceKm.toLocaleString()}km</span>
-                            <span className="shrink-0 text-xs font-black text-teal-700">
+                            <span className="shrink-0 text-xs font-semibold text-teal-700">
                               {courseFuelPriceReady ? `${routeSequenceLegFuelCosts[index]?.toLocaleString() || 0}원` : "-"}
                             </span>
                           </div>
@@ -907,8 +907,8 @@ export function TodayCourseView({
                       })}
                     </div>
                     <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
-                      <span className="text-xs font-black text-slate-950">구간 합계</span>
-                      <span className="text-xs font-black text-teal-700">
+                      <span className="text-xs font-semibold text-slate-950">구간 합계</span>
+                      <span className="text-xs font-semibold text-teal-700">
                         {courseFuelPriceReady ? `${routeSequenceFuelCostWon.toLocaleString()}원` : "유가 정보를 불러오는 중"}
                       </span>
                     </div>
@@ -916,12 +916,12 @@ export function TodayCourseView({
                 ) : null}
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-black text-slate-950">{isVehicleScoped ? "거래처 선택" : "배송차 선택 필요"}</p>
+                    <p className="text-sm font-semibold text-slate-950">{isVehicleScoped ? "거래처 선택" : "배송차 선택 필요"}</p>
                     <p className="mt-1 text-xs font-bold text-slate-500">
                       {isVehicleScoped ? "거래처를 누르면 지도 위치가 이동하고, 추가 버튼으로 경유지에 넣습니다." : "왼쪽에서 배송차를 선택하면 해당 차량의 거래처가 표시됩니다."}
                     </p>
                   </div>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{routeCandidateStores.length}곳</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{routeCandidateStores.length}곳</span>
                 </div>
                 <div className="space-y-2">
                   {routeCandidateStores.length ? (
@@ -946,26 +946,26 @@ export function TodayCourseView({
                     >
                       <div className="flex items-start gap-3">
                         <span
-                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${
+                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold ${
                             activeForRoute ? "bg-teal-700 text-white" : selectedForRoute ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-500"
                           }`}
                         >
                           {selectedForRoute ? selectedOrder : index + 1}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-black text-slate-950">{store.name}</span>
+                          <span className="block truncate text-sm font-semibold text-slate-950">{store.name}</span>
                           <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                           <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-2">
                           <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                           {activeForRoute ? (
-                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">계산</span>
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">계산</span>
                           ) : selectedForRoute ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-600">대기</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">대기</span>
                           ) : null}
                           <span
-                            className={`rounded-md px-2 py-1 text-[11px] font-black ${
+                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
                               selectedForRoute ? "bg-teal-600 text-white" : "bg-teal-700 text-white hover:bg-teal-800"
                             }`}
                             onClick={(event) => {
@@ -982,7 +982,7 @@ export function TodayCourseView({
                     })
                   ) : (
                     <div className="maju-empty-state bg-white p-4">
-                      <p className="text-sm font-black text-slate-700">{isVehicleScoped ? "조건에 맞는 거래처가 없습니다." : "배송차를 먼저 선택하세요."}</p>
+                      <p className="text-sm font-semibold text-slate-700">{isVehicleScoped ? "조건에 맞는 거래처가 없습니다." : "배송차를 먼저 선택하세요."}</p>
                       <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                         {isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."}
                       </p>
@@ -1057,7 +1057,7 @@ function DeliveryProofPanel({
       <div className="maju-panel mt-3 border-slate-200 bg-slate-50 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+          <p className="flex items-center gap-2 text-sm font-semibold text-slate-950">
             <Camera className="h-4 w-4 text-slate-700" />
             배송완료 증빙
           </p>
@@ -1065,14 +1065,14 @@ function DeliveryProofPanel({
             {store.name} 도착 후 사진을 남기고 점주님께 발송할 알림을 준비합니다.
           </p>
         </div>
-        <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">{proofs.length}건</span>
+        <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">{proofs.length}건</span>
       </div>
         <label className="mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-left transition hover:border-slate-400 hover:bg-slate-50">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
           <Plus className="h-4 w-4" />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-sm font-black text-slate-900">{fileName || "도착 사진/영상 선택"}</span>
+          <span className="block truncate text-sm font-semibold text-slate-900">{fileName || "도착 사진/영상 선택"}</span>
           <span className="mt-1 block text-xs font-bold text-slate-500">파일명과 발송 상태를 기록합니다.</span>
         </span>
         <input
@@ -1092,7 +1092,7 @@ function DeliveryProofPanel({
           { label: "문자 발송 대기", value: "sms" }
         ].map((item) => (
           <button
-            className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+            className={`h-9 rounded-md border px-3 text-xs font-semibold transition ${
               messageChannel === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
             key={item.value}
@@ -1110,7 +1110,7 @@ function DeliveryProofPanel({
           { label: "이슈발생", value: "issue" }
         ].map((item) => (
           <button
-            className={`h-9 rounded-md border px-2 text-xs font-black transition ${
+            className={`h-9 rounded-md border px-2 text-xs font-semibold transition ${
               deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
             key={item.value}
@@ -1129,7 +1129,7 @@ function DeliveryProofPanel({
       />
       <div className="maju-panel mt-3 border-slate-200 p-3">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
+          <p className="text-xs font-semibold text-slate-500">점주 발송 문구</p>
           <button
             className="maju-button-secondary h-8 px-2.5"
             onClick={copyOwnerMessage}
@@ -1159,14 +1159,14 @@ function DeliveryProofPanel({
           {proofs.slice(0, 3).map((proof) => (
             <div className="rounded-md border border-slate-200 bg-white p-2" key={`${proof.recordedAt}-${proof.fileName}`}>
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-xs font-black text-slate-900">{proof.fileName}</p>
-                <span className={`rounded px-2 py-0.5 text-[11px] font-black ${proof.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                <p className="truncate text-xs font-semibold text-slate-900">{proof.fileName}</p>
+                <span className={`rounded px-2 py-0.5 text-xs font-semibold ${proof.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                   {proof.persisted ? "저장 완료" : "로컬 기록"} · {proof.messageChannel === "kakao" ? "카톡" : "문자"}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] font-black text-slate-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
               <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
-              <p className="mt-1 text-[11px] font-bold text-slate-400">{proof.recordedAt}</p>
+              <p className="mt-1 text-xs font-medium text-slate-400">{proof.recordedAt}</p>
             </div>
           ))}
         </div>

@@ -7,6 +7,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getLatestReport, getReportById } from "@/lib/store";
+import { ReportActions } from "./report-actions";
 
 export default async function ReportDetailPage({
   params,
@@ -38,7 +39,7 @@ export default async function ReportDetailPage({
         <section className="mx-auto max-w-[720px] px-4 py-10">
           <div className="maju-section-card p-6 text-center">
             <ShieldAlert className="mx-auto h-9 w-9 text-amber-600" />
-            <h2 className="mt-3 text-lg font-black text-slate-950">리포트 조회 권한이 없습니다.</h2>
+            <h2 className="mt-3 text-lg font-bold text-slate-950">리포트 조회 권한이 없습니다.</h2>
             <p className="mt-2 text-sm font-semibold text-slate-600">대표 또는 관리자에게 권한을 요청하세요.</p>
             <Link className="maju-button-primary mt-5" href="/dashboard">
               지도 홈으로 이동
@@ -137,21 +138,24 @@ export default async function ReportDetailPage({
         <Card className="border-slate-200 bg-white shadow-sm">
           <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
             <div>
-              <Badge className="mb-3 bg-teal-700 text-white">{report.companyName}</Badge>
-              <h2 className="text-xl font-black leading-tight text-slate-950">우선 작업: {primaryAction.title}</h2>
-              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">낮은 점수 항목부터 보완해 거래처 원장, 코스, 매출 분석 기준을 맞춥니다.</p>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <Badge className="bg-teal-700 text-white">핵심 결론 · {report.companyName}</Badge>
+                <ReportActions companyName={report.companyName} />
+              </div>
+              <h2 className="text-xl font-bold leading-tight text-slate-950">{reportGrade} · {primaryAction.title}부터 시작하세요</h2>
+              <p className="mt-2 text-sm font-medium leading-6 text-slate-600">가장 낮은 {primaryAction.label} 점수를 먼저 보완하면 거래처 원장, 코스, 매출 분석의 정확도를 함께 높일 수 있습니다.</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white transition hover:bg-teal-800" href={primaryAction.href}>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-bold text-white transition hover:bg-teal-800" href={primaryAction.href}>
                   우선 작업 열기
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50" href={companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard"}>
+                <Link className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard"}>
                   지도 홈
                 </Link>
               </div>
             </div>
             <div className="rounded-lg border border-white/80 bg-white p-4 shadow-sm">
-              <p className="text-xs font-black text-slate-400">리포트 운영 기준</p>
+              <p className="text-xs font-semibold text-slate-500">결론을 뒷받침하는 핵심 근거</p>
               <div className="mt-3 grid gap-2">
                 <ReportRunMetric label="회사 건강도" value={`${report.health.total}점`} />
                 <ReportRunMetric label="우선 보완 항목" value={primaryAction.label} />
@@ -161,11 +165,17 @@ export default async function ReportDetailPage({
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div aria-labelledby="report-evidence-title" className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-teal-700">2. 판단 근거</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950" id="report-evidence-title">운영 데이터와 점수</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
           <Metric icon={Building2} label="거래처" value={`${report.customers}개`} />
           <Metric icon={MapPin} label="거래지역" value={`${report.regions}개`} />
           <Metric icon={Target} label="신규 기회" value={`${report.newOpportunities}곳`} />
           <Metric icon={Route} label="평균 배송거리" value={`${report.avgDeliveryKm.toFixed(1)}km`} />
+          </div>
         </div>
 
         <ReportBasisPanel
@@ -188,11 +198,11 @@ export default async function ReportDetailPage({
             </CardHeader>
             <CardContent>
               <div className="mb-6 flex items-end gap-3">
-                <span className="text-7xl font-black text-primary">{report.health.total}</span>
+                <span className="text-7xl font-bold text-primary">{report.health.total}</span>
                 <span className="pb-3 text-sm font-bold text-muted-foreground">점</span>
               </div>
               <div className="mb-6 rounded-md border border-primary/15 bg-primary/5 p-4">
-                <p className="text-sm font-black text-primary">{reportGrade}</p>
+                <p className="text-sm font-bold text-primary">{reportGrade}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">
                   영업력, 배송효율, CRM관리, 신규영업, 거래처 집중도, 리스크를 가중 평균한 회사 건강도입니다.
                 </p>
@@ -222,7 +232,7 @@ export default async function ReportDetailPage({
               {reportSummary.map((item) => (
                 <div key={item.label} className="rounded-md border border-border bg-muted/35 p-4">
                   <Badge className="mb-2 bg-white text-slate-600">{item.label}</Badge>
-                  <p className="text-lg font-black text-slate-950">{item.title}</p>
+                  <p className="text-lg font-bold text-slate-950">{item.title}</p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-muted-foreground">{item.body}</p>
                 </div>
               ))}
@@ -230,7 +240,12 @@ export default async function ReportDetailPage({
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div aria-labelledby="report-actions-title" className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-teal-700">3. 권장 행동</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950" id="report-actions-title">지금 실행할 작업</h2>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -241,7 +256,7 @@ export default async function ReportDetailPage({
             <CardContent className="grid gap-3 md:grid-cols-3">
               {actionPlan.map(([period, action]) => (
                 <div key={period} className="rounded-md border border-border bg-white p-4">
-                  <p className="text-sm font-black text-primary">{period}</p>
+                  <p className="text-sm font-bold text-primary">{period}</p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{action}</p>
                 </div>
               ))}
@@ -257,7 +272,7 @@ export default async function ReportDetailPage({
             </CardHeader>
             <CardContent>
               <div className="mb-3 flex items-end gap-2">
-                <span className="text-4xl font-black text-slate-950">{dataConfidence}</span>
+                <span className="text-4xl font-bold text-slate-950">{dataConfidence}</span>
                 <span className="pb-1 text-sm font-bold text-muted-foreground">%</span>
               </div>
               <Progress value={dataConfidence} />
@@ -266,6 +281,7 @@ export default async function ReportDetailPage({
               </p>
             </CardContent>
           </Card>
+          </div>
         </div>
 
         <Card className="border-slate-200/80 shadow-sm">
@@ -274,7 +290,7 @@ export default async function ReportDetailPage({
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <ClipboardList className="h-5 w-5 text-primary" />
-                  점수 기반 실행 보드
+                  후속 실행 보드
                 </CardTitle>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">낮은 점수 항목부터 실제 운영 화면으로 이동해 보완합니다.</p>
               </div>
@@ -288,7 +304,12 @@ export default async function ReportDetailPage({
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div aria-labelledby="report-detail-title" className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-slate-500">세부 분석</p>
+            <h2 className="mt-1 text-lg font-bold text-slate-950" id="report-detail-title">지역·업종·추천 리드 근거</h2>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-3">
           <ReportBlock title="거래처 분포" icon={MapPin}>
             {report.regionDistribution.slice(0, 6).map((item) => (
               <Line key={item.region} label={item.region} value={`${item.count}개`} hint={`잠재 ${item.potential}곳`} />
@@ -304,6 +325,7 @@ export default async function ReportDetailPage({
               <Line key={lead.name} label={lead.name} value={`${lead.score}점`} hint={lead.region} />
             ))}
           </ReportBlock>
+          </div>
         </div>
 
         <Card>
@@ -380,8 +402,8 @@ function ReportBasisPanel({
         {items.map((item) => (
           <div className="min-w-0 px-4 py-3" key={item.label}>
             <p className="maju-muted-label">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+            <p className="mt-1 truncate text-sm font-bold text-slate-950">{item.value}</p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-500">{item.helper}</p>
           </div>
         ))}
       </div>
@@ -395,7 +417,7 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
       <CardContent className="min-w-0 p-4">
         <Icon className="mb-4 h-5 w-5 text-primary" />
         <p className="truncate text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 truncate text-2xl font-black">{value}</p>
+        <p className="mt-1 truncate text-2xl font-bold">{value}</p>
       </CardContent>
     </Card>
   );
@@ -404,8 +426,8 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: s
 function ReportRunMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-[11px] font-black text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+      <p className="text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-sm font-bold text-slate-950">{value}</p>
     </div>
   );
 }
@@ -434,14 +456,14 @@ function ScoreActionCard({
     <Link className="group flex min-h-56 flex-col rounded-md border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:bg-teal-50/40" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black text-slate-400">{label}</p>
-          <p className={`mt-2 text-4xl font-black leading-none ${tone.value}`}>{score}</p>
+          <p className="text-xs font-semibold text-slate-500">{label}</p>
+          <p className={`mt-2 text-4xl font-bold leading-none ${tone.value}`}>{score}</p>
         </div>
         <Badge className={tone.badge}>{tone.text}</Badge>
       </div>
-      <p className="mt-4 text-sm font-black text-slate-950">{title}</p>
+      <p className="mt-4 text-sm font-bold text-slate-950">{title}</p>
       <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <span className="mt-auto inline-flex text-xs font-black text-teal-800 transition group-hover:translate-x-0.5">작업 화면 열기</span>
+      <span className="mt-auto inline-flex text-xs font-semibold text-teal-800 transition group-hover:translate-x-0.5">작업 화면 열기</span>
     </Link>
   );
 }
@@ -467,7 +489,7 @@ function Line({ label, value, hint }: { label: string; value: string; hint: stri
         <p className="font-bold">{label}</p>
         <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
-      <span className="text-lg font-black">{value}</span>
+      <span className="text-lg font-bold">{value}</span>
     </div>
   );
 }

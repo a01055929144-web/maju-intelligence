@@ -1202,8 +1202,8 @@ export default function CrmTimelinePage() {
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[11px] font-black text-slate-500">{item.label}</span>
-                    <span className="mt-0.5 block truncate text-sm font-black text-slate-950">{item.value}</span>
+                    <span className="block text-xs font-semibold text-slate-500">{item.label}</span>
+                    <span className="mt-0.5 block truncate text-sm font-bold text-slate-950">{item.value}</span>
                   </span>
                 </div>
               );
@@ -1426,7 +1426,7 @@ export default function CrmTimelinePage() {
               </div>
             ) : null}
             {filteredCustomers.length ? (
-              <div className="grid grid-cols-[20px_minmax(0,1fr)_44px_64px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+              <div className="grid grid-cols-[20px_minmax(0,1fr)_48px_68px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500">
                 <input
                   aria-label="현재 페이지 전체 선택"
                   checked={pagedCustomers.some(({ customer }) => Boolean(customer.id)) && pagedCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
@@ -1477,11 +1477,11 @@ export default function CrmTimelinePage() {
                       }}
                       type="button"
                     >
-                      <span className="block truncate text-sm font-black text-slate-950">{customer.customerName}</span>
-                      <span className="block truncate text-[11px] font-bold text-slate-400">{customer.region}</span>
+                      <span className="block truncate text-sm font-bold text-slate-950">{customer.customerName}</span>
+                      <span className="block truncate text-xs font-medium text-slate-500">{customer.region}</span>
                     </button>
-                    <Badge className={`justify-self-center px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
-                    <Badge className={`justify-self-end px-1.5 py-0 text-[10px] ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                    <Badge className={`justify-self-center px-2 py-0.5 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                    <Badge className={`justify-self-end px-2 py-0.5 text-xs ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                       {issues.length ? "보완" : "가능"}
                     </Badge>
                   </div>
@@ -1528,7 +1528,7 @@ export default function CrmTimelinePage() {
             <div className="maju-section-card scroll-mt-28 p-4" id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <h2 className="truncate text-[26px] font-black leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
+                  <h2 className="truncate text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
                   </p>
@@ -1541,7 +1541,7 @@ export default function CrmTimelinePage() {
                         {duplicateCandidates.map((customer) => (
                           <div className="flex items-center gap-1" key={customer.id}>
                             <button
-                              className="rounded border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-bold text-rose-800 hover:bg-rose-100"
+                              className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-100"
                               onClick={() => jumpToCustomer(customer.id)}
                               type="button"
                             >
@@ -1549,7 +1549,7 @@ export default function CrmTimelinePage() {
                             </button>
                             {customer.id ? (
                               <button
-                                className="rounded border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-md border border-rose-300 bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
                                 disabled={mergingCustomerId === customer.id}
                                 onClick={() => void mergeDuplicateIntoSelected(customer.id as string, customer.address || customer.customerName)}
                                 type="button"
@@ -1560,7 +1560,7 @@ export default function CrmTimelinePage() {
                           </div>
                         ))}
                       </div>
-                      {mergeMessage ? <p className="mt-1.5 text-[11px] font-bold text-rose-900">{mergeMessage}</p> : null}
+                      {mergeMessage ? <p className="mt-2 text-xs font-semibold leading-5 text-rose-900">{mergeMessage}</p> : null}
                     </div>
                   ) : null}
                 </div>
@@ -1953,11 +1953,11 @@ export default function CrmTimelinePage() {
                             {newAttachmentFiles.length ? (
                               <span className="mt-2 flex flex-wrap gap-1">
                                 {newAttachmentFiles.slice(0, 4).map((file) => (
-                                  <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-teal-100" key={`${file.name}-${file.size}`}>
+                                  <span className="max-w-[180px] truncate rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-teal-100" key={`${file.name}-${file.size}`}>
                                     {file.name}
                                   </span>
                                 ))}
-                                {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
+                                {newAttachmentFiles.length > 4 ? <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-500">+{newAttachmentFiles.length - 4}</span> : null}
                               </span>
                             ) : null}
                           </span>
@@ -2690,9 +2690,9 @@ function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string
     <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
       <div>
         <p className="maju-muted-label">{eyebrow}</p>
-        <p className="mt-0.5 text-sm font-black text-slate-950">{title}</p>
+        <p className="mt-0.5 text-sm font-bold text-slate-950">{title}</p>
       </div>
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">원장</span>
+      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">원장</span>
     </div>
   );
 }
@@ -2825,8 +2825,8 @@ function AttachmentChecklistPanel({
     <div className="maju-section-card mt-4 overflow-hidden">
       <div className="maju-card-header flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm font-black text-slate-950">첨부자료 준비 상태</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">필수 자료가 채워질수록 원장 신뢰도가 올라갑니다.</p>
+          <p className="text-sm font-bold text-slate-950">첨부자료 준비 상태</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">필수 자료가 채워질수록 원장 신뢰도가 올라갑니다.</p>
         </div>
         <Badge className={progress === 100 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {readyCount}/{checklist.length} 완료
@@ -2835,7 +2835,7 @@ function AttachmentChecklistPanel({
       <div className="h-1.5 bg-slate-100">
         <div className="h-full bg-emerald-600" style={{ width: `${progress}%` }} />
       </div>
-      <div className="hidden grid-cols-[140px_72px_80px_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black text-slate-400 md:grid">
+      <div className="hidden grid-cols-[140px_72px_100px_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 md:grid">
         <span>자료명</span>
         <span>구분</span>
         <span>상태</span>
@@ -2845,7 +2845,7 @@ function AttachmentChecklistPanel({
         {checklist.map((item) => (
           <div
             key={item.type}
-            className={`grid gap-2 px-4 py-3 md:grid-cols-[140px_72px_80px_minmax(0,1fr)] md:items-center md:gap-3 ${
+            className={`grid gap-2 px-4 py-3 md:grid-cols-[140px_72px_100px_minmax(0,1fr)] md:items-center md:gap-3 ${
               item.type === "loading_position"
                 ? "bg-teal-50/60"
                 : item.count > 0
@@ -2854,14 +2854,15 @@ function AttachmentChecklistPanel({
             }`}
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-black text-slate-950">{item.label}</p>
-              {item.type === "loading_position" ? <p className="mt-0.5 text-[11px] font-black text-teal-700">배송 최우선 자료</p> : null}
+              <p className="truncate text-sm font-bold text-slate-950">{item.label}</p>
+              {item.type === "loading_position" ? <p className="mt-0.5 text-xs font-semibold text-teal-700">배송 최우선 자료</p> : null}
             </div>
             <Badge className={`w-fit ${item.required ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100" : "bg-slate-100 text-slate-600"}`}>
               {item.required ? "필수" : "선택"}
             </Badge>
-            <Badge className={`w-fit ${item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-              {item.count > 0 ? `${item.count}건` : "대기"}
+            <Badge className={`w-fit gap-1 ${item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+              {item.count > 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+              {item.count > 0 ? `${item.count}건 등록` : "자료 필요"}
             </Badge>
             <p className="min-w-0 text-xs font-bold leading-5 text-slate-500 md:truncate" title={item.description}>
               {item.description}

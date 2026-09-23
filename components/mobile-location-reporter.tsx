@@ -257,7 +257,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
 
   return (
     <div
-      className={`mt-2 max-w-full rounded-xl border px-2.5 py-1.5 text-[11px] font-black ${
+      className={`mt-2 max-w-full rounded-xl border px-3 py-2 text-xs font-semibold ${
         needsAction ? "border-amber-200 bg-amber-50 text-amber-800" : "border-teal-100 bg-white/90 text-teal-800"
       }`}
     >
@@ -266,7 +266,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         <span className="min-w-0 flex-1 truncate">{currentCustomerName ? `${label} · ${currentCustomerName}` : label}</span>
         {needsAction ? (
           <button
-            className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-[10px] font-black text-amber-800 ring-1 ring-inset ring-amber-200"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200"
             onClick={() => { if (isOnline) requestCurrentPosition(true); }}
             type="button"
           >
@@ -276,13 +276,13 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         ) : null}
       </div>
       {needsAction ? (
-        <p aria-live="polite" className="mt-1 text-[10px] font-bold leading-4 text-amber-700">
+        <p aria-live="polite" className="mt-1 text-xs font-medium leading-5 text-amber-700">
           {detail || "브라우저 위치 권한과 로그인 상태를 확인하세요."}
           {queuedCount > 0 ? ` · 전송 대기 ${queuedCount.toLocaleString()}건은 휴대폰에 보관 중입니다.` : ""}
         </p>
       ) : null}
       {!needsAction && (lastAccuracyMeters !== null || queuedCount > 0) ? (
-        <p className="mt-1 truncate text-[10px] font-bold text-teal-700/80">
+        <p className="mt-1 truncate text-xs font-medium text-teal-700/80">
           {lastAccuracyMeters !== null ? `오차 ${lastAccuracyMeters.toLocaleString()}m` : "오차 확인 중"}
           {queuedCount > 0 ? ` · 대기 ${queuedCount.toLocaleString()}건` : ""}
         </p>

@@ -108,6 +108,9 @@ export default function CustomerDataManagementPage() {
   }, [adminCompanyId]);
 
   const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
+  const completedCount = uploads.filter((upload) => upload.status === "completed").length;
+  const failedCount = uploads.filter((upload) => upload.status === "failed").length;
+  const duplicateCount = uploads.reduce((sum, upload) => sum + upload.duplicateCount, 0);
 
   // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
   type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
@@ -133,10 +136,24 @@ export default function CustomerDataManagementPage() {
       <div className="mx-auto max-w-[1560px] space-y-4">
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "현재 페이지", value: `${uploads.length.toLocaleString()}건`, tone: "border-slate-200 bg-white text-slate-900" },
+            { label: "완료", value: `${completedCount.toLocaleString()}건`, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
+            { label: "중복 후보", value: `${duplicateCount.toLocaleString()}건`, tone: "border-amber-200 bg-amber-50 text-amber-900" },
+            { label: "실패·재시도 필요", value: `${failedCount.toLocaleString()}건`, tone: "border-rose-200 bg-rose-50 text-rose-900" }
+          ].map((item) => (
+            <div className={`rounded-lg border p-4 ${item.tone}`} key={item.label}>
+              <p className="text-xs font-semibold opacity-70">{item.label}</p>
+              <p className="mt-1 text-2xl font-bold">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
         <div className="maju-section-card">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 p-4">
             <div>
-              <h2 className="flex items-center gap-2 text-base font-black text-slate-950">
+              <h2 className="flex items-center gap-2 text-base font-bold text-slate-950">
                 <Save className="h-4 w-4 text-teal-700" />
                 업로드 이력
               </h2>
@@ -183,7 +200,7 @@ export default function CustomerDataManagementPage() {
             ) : (
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-black uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold text-slate-500">
                     <SortableTh active={sortKey === "filename"} className="px-4 py-2.5" direction={sortDirection} label="파일명" onClick={() => toggleSort("filename")} />
                     <SortableTh active={sortKey === "rows"} className="px-4 py-2.5" direction={sortDirection} label="건수" onClick={() => toggleSort("rows")} />
                     <SortableTh active={sortKey === "qualityScore"} className="px-4 py-2.5" direction={sortDirection} label="품질점수" onClick={() => toggleSort("qualityScore")} />
@@ -216,7 +233,7 @@ export default function CustomerDataManagementPage() {
                       <td className="px-4 py-2.5 text-slate-500">{upload.createdAt}</td>
                       <td className="px-4 py-2.5">
                         {upload.status === "failed" ? (
-                          <Link className="text-xs font-bold text-teal-700 underline underline-offset-2" href={dataRegistrationHref}>
+                          <Link className="inline-flex h-9 items-center rounded-md bg-rose-600 px-3 text-xs font-bold text-white transition hover:bg-rose-700" href={dataRegistrationHref}>
                             다시 업로드
                           </Link>
                         ) : (

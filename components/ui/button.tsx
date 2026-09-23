@@ -15,7 +15,7 @@ const variants = {
 
 const sizes = {
   default: "h-11 px-4 text-sm",
-  sm: "h-9 px-3 text-xs",
+  sm: "h-9 px-3 text-sm",
   icon: "h-10 w-10"
 };
 
@@ -23,7 +23,7 @@ export function Button({ className, variant = "default", size = "default", ...pr
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
         variants[variant],
         sizes[size],
         className

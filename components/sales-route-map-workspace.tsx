@@ -1748,7 +1748,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         // 보여졌으면 좋겠어"): 직원이 새로 접속(위치 보고 시작)하면 화면 하단 중앙에 눈에 띄는
         // 배너를 몇 초간 띄웁니다. 새로고침 없이도 바로 알 수 있도록 8초 폴링과 함께 동작합니다.
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-emerald-300 bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-[0_10px_30px_rgba(5,150,105,0.45)]">
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(5,150,105,0.35)]">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
@@ -1761,7 +1761,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div>
             <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em]">오늘의 운영 지도</h2>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+            <p className="mt-0.5 text-xs font-medium text-slate-500">
               {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
             </p>
           </div>
@@ -1769,10 +1769,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         <div className="flex max-w-full flex-wrap items-center justify-start gap-2 xl:justify-end">
           {activeView === "map" ? (
             <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
-              <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">탐색</span>
               <button
                 aria-pressed={leadRadiusOpen}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
                   leadRadiusOpen ? "bg-[#101827] text-white" : "text-slate-600 hover:bg-white"
                 }`}
                 onClick={() => setLeadRadiusOpen((value) => !value)}
@@ -1784,7 +1783,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </button>
               <button
                 aria-pressed={showAllLeadsOnMap}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
                   showAllLeadsOnMap ? "bg-[#101827] text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
                 }`}
                 onClick={() =>
@@ -1803,7 +1802,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </div>
           ) : null}
           <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
-            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">표시</span>
             {[
               { label: "등급별", value: "grade" },
               { label: "차량별", value: "vehicle" }
@@ -1811,7 +1809,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               const selected = markerViewMode === item.value;
               return (
                 <button
-                  className={`h-9 rounded-md px-3 text-xs font-black transition ${
+                  className={`h-9 rounded-md px-3 text-xs font-semibold transition ${
                     selected ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
                   }`}
                   key={item.value}
@@ -1824,13 +1822,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             })}
           </div>
           <nav className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
-            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무</span>
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
               return (
                 <button
-                  className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
+                  className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
                     selected ? "bg-[#101827] text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
@@ -1852,10 +1849,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           >
             <Truck className="h-4 w-4 shrink-0 text-slate-800" />
             <span className="whitespace-nowrap">라이브차 {liveVehicleSummary.active}대</span>
-            {liveVehicleSummary.stale ? <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-inset ring-slate-200">지연 {liveVehicleSummary.stale}</span> : null}
+            {liveVehicleSummary.stale ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
-          <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
-            <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">화면</span>
+          <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-50 p-1">
             <button
               aria-expanded={statsExpanded}
               aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
@@ -1982,7 +1978,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
                 {registeredMatches.length ? (
                   <div className="border-b border-slate-100">
-                    <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                    <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
                       등록된 거래처 {registeredMatches.length.toLocaleString()}곳
                     </p>
                     {registeredMatches.map((store) => (
@@ -1998,17 +1994,17 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         type="button"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-slate-950">{store.name}</p>
+                          <p className="truncate text-sm font-semibold text-slate-950">{store.name}</p>
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                         </div>
-                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">지도에서 보기</span>
+                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">지도에서 보기</span>
                       </button>
                     ))}
                   </div>
                 ) : null}
                 {leadMatches.length ? (
                   <div className="border-b border-slate-100">
-                    <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-400">
+                    <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
                       신규 리드 {leadMatches.length.toLocaleString()}건
                     </p>
                     {leadMatches.map((lead) => (
@@ -2024,18 +2020,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         type="button"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                          <p className="truncate text-sm font-semibold text-slate-950">{lead.businessName}</p>
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                         </div>
-                        <span className="shrink-0 rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-black text-cyan-700">리드 카드 보기</span>
+                        <span className="shrink-0 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700">리드 카드 보기</span>
                       </button>
                     ))}
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5">
-                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">미등록 매장 · 카카오맵 검색</p>
+                  <p className="text-xs font-semibold text-slate-500">미등록 매장 · 카카오맵 검색</p>
                   {unregisteredResults.length ? (
-                    <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-black text-slate-500">
+                    <label className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-500">
                       <input
                         checked={selectedResultIds.size > 0 && selectedResultIds.size === unregisteredResults.length}
                         className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
@@ -2069,7 +2065,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                             type="checkbox"
                           />
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-black text-slate-950">{result.name}</p>
+                            <p className="truncate text-sm font-semibold text-slate-950">{result.name}</p>
                             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
                               {result.roadAddress || result.address || "주소 정보 없음"}
                             </p>
@@ -2150,10 +2146,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               >
                 출발지
               </button>
-              <span className={`min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-black ${sourceReady ? "bg-white text-slate-700 ring-1 ring-inset ring-slate-200" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}`}>
+              <span className={`min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-semibold ${sourceReady ? "bg-white text-slate-700" : "bg-amber-50 text-amber-800"}`}>
                 {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
               </span>
-              <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200">
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                 {sourceReady
                   ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}${visibleMapLayerCounts.staleVehicles ? `(+지연 ${visibleMapLayerCounts.staleVehicles})` : ""}`
                   : "등록 필요"}
@@ -2163,24 +2159,24 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         </div>
         {statsExpanded ? (
           <div className="flex min-h-8 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <span className="text-xs font-black text-slate-500">현재 조건</span>
+            <span className="text-xs font-semibold text-slate-500">현재 조건</span>
             {activeFilterLabels.length ? (
               activeFilterLabels.map((label) => (
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200" key={label}>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700" key={label}>
                   {label}
                 </span>
               ))
             ) : sourceReady ? (
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200">전체 거래처 표시 중</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">전체 거래처 표시 중</span>
             ) : (
-              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800 ring-1 ring-inset ring-amber-100">거래처 등록 대기</span>
+              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">거래처 등록 대기</span>
             )}
           </div>
         ) : null}
         {activeView === "map" && leadRadiusOpen ? (
           <div className="space-y-2 rounded-lg border border-teal-100 bg-teal-50/60 px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-black text-teal-800">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-teal-800">
                 <Radar className="h-3.5 w-3.5" />
                 리드 반경
               </span>
@@ -2191,7 +2187,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   { label: "전체 거래처", value: "all" as const }
                 ].map((item) => (
                   <button
-                    className={`h-7 rounded-md px-2.5 text-[11px] font-black transition ${
+                    className={`h-8 rounded-md px-2.5 text-xs font-semibold transition ${
                       leadRadiusAnchorMode === item.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"
                     }`}
                     key={item.value}
@@ -2212,7 +2208,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </div>
               {leadRadiusAnchorMode === "customer" ? (
                 <select
-                  className="h-8 min-w-[160px] flex-1 rounded-md border border-teal-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300 sm:flex-none"
+                  className="h-8 min-w-[160px] flex-1 rounded-md border border-teal-200 bg-white px-2 text-xs font-semibold text-slate-950 outline-none focus:border-teal-300 sm:flex-none"
                   onChange={(event) => setLeadRadiusCustomerId(event.target.value)}
                   value={leadRadiusCustomerId}
                 >
@@ -2224,21 +2220,21 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   ))}
                 </select>
               ) : leadRadiusAnchorMode === "all" ? (
-                <span className="rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-inset ring-teal-100">
+                <span className="rounded-md bg-white px-2 py-1 text-xs font-medium text-slate-500">
                   주소 확인된 거래처 {geocodableStoresForRadius.length.toLocaleString()}곳 기준
                 </span>
               ) : leadRadiusPoint ? (
-                <span className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-inset ring-teal-100">
+                <span className="flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-xs font-medium text-slate-600">
                   지도 클릭 지점 기준
-                  <button className="font-black text-teal-700 underline decoration-dotted underline-offset-2 hover:text-teal-900" onClick={resetLeadSearchPoint} type="button">
+                  <button className="font-semibold text-teal-700 underline decoration-dotted underline-offset-2 hover:text-teal-900" onClick={resetLeadSearchPoint} type="button">
                     지점 다시 선택
                   </button>
                 </span>
               ) : null}
-              <label className="flex items-center gap-1 text-[11px] font-bold text-slate-600">
+              <label className="flex items-center gap-1 text-xs font-medium text-slate-600">
                 반경
                 <input
-                  className="h-8 w-14 rounded-md border border-teal-200 bg-white px-1.5 text-center text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300"
+                  className="h-8 w-14 rounded-md border border-teal-200 bg-white px-1.5 text-center text-xs font-semibold text-slate-950 outline-none focus:border-teal-300"
                   max={50}
                   min={0.5}
                   onChange={(event) => setLeadRadiusKm(Number(event.target.value) || DEFAULT_LEAD_SEARCH_RADIUS_KM)}
@@ -2249,7 +2245,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 km
               </label>
               <button
-                className="maju-button-primary h-8 shrink-0 text-[11px]"
+                className="maju-button-primary h-8 shrink-0 text-xs"
                 disabled={leadRadiusSearching || (leadRadiusAnchorMode === "point" && !leadRadiusPoint)}
                 onClick={() => void runMapLeadRadiusSearch()}
                 type="button"
@@ -2260,10 +2256,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
             {leadRadiusAnchorMode === "point" && !leadRadiusPoint ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-teal-100 pt-2">
-                <span className="text-[11px] font-black text-slate-500">빠른 선택</span>
+                <span className="text-xs font-semibold text-slate-500">빠른 선택</span>
                 {[0.5, 1, 1.5, 3, 5].map((presetKm) => (
                   <button
-                    className="h-7 rounded-full border border-teal-200 bg-white px-3 text-[11px] font-black text-teal-700 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-8 rounded-full border border-teal-200 bg-white px-3 text-xs font-semibold text-teal-700 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!mapCenterPoint}
                     key={presetKm}
                     onClick={() => runPresetRadiusSearch(presetKm)}
@@ -2273,20 +2269,20 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     현재 위치 {presetKm}km
                   </button>
                 ))}
-                <span className="text-[11px] font-bold text-slate-500">
+                <span className="text-xs font-medium text-slate-500">
                   또는 지도를 클릭해 원하는 지점에 기본 {DEFAULT_LEAD_SEARCH_RADIUS_KM}km 반경을 바로 만드세요.
                 </span>
               </div>
             ) : null}
 
             {leadRadiusResult || leadRadiusError || (leadRadiusAnchorMode !== "point" || leadRadiusPoint) ? (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-teal-100 pt-2 text-[11px] font-bold">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-teal-100 pt-2 text-xs font-medium">
                 {leadRadiusResult ? (
-                  <span className="font-black text-teal-800">
+                  <span className="font-semibold text-teal-800">
                     반경 {leadRadiusResult.radiusKm}km 안 리드 {leadRadiusResult.leads.length.toLocaleString()}곳 지도에 표시 중
                   </span>
                 ) : null}
-                {leadRadiusError ? <span className="font-black text-rose-600">{leadRadiusError}</span> : null}
+                {leadRadiusError ? <span className="font-semibold text-rose-600">{leadRadiusError}</span> : null}
                 {leadRadiusAnchorMode !== "point" || leadRadiusPoint ? (
                   <span className="text-teal-700">지도 위 원 가장자리의 흰 손잡이를 드래그해 반경을 조절할 수 있습니다.</span>
                 ) : null}
@@ -2299,12 +2295,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         좋아보임")을 받아, 네이버 부동산 스타일 드릴다운 칩 목록 대신 시군구·동 2단 드롭다운으로 바꿨습니다. */}
         {activeView === "map" && showAllLeadsOnMap && mapLeadRegionOptions.length ? (
           <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <span className="flex shrink-0 items-center gap-1 text-[11px] font-black text-slate-400">
+            <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-slate-500">
               <MapPin className="h-3.5 w-3.5" />
               지역
             </span>
             <select
-              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-black text-slate-700 outline-none focus:border-teal-300"
+              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-teal-300"
               onChange={(event) => selectMapLeadRegionSigungu(event.target.value)}
               value={mapLeadRegionSigungu}
             >
@@ -2316,7 +2312,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               ))}
             </select>
             <select
-              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-black text-slate-700 outline-none focus:border-teal-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 outline-none focus:border-teal-300 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
               disabled={!mapLeadRegionSigungu || !mapLeadDongOptions.length}
               onChange={(event) => setMapLeadRegionDong(event.target.value)}
               value={mapLeadRegionDong}
@@ -2332,7 +2328,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         ) : null}
         {activeView === "map" && showAllLeadsOnMap ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <span className="flex shrink-0 items-center gap-1.5 text-xs font-black text-slate-600">
+            <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-600">
               <Layers className="h-3.5 w-3.5" />
               리드 전체 필터
             </span>
@@ -2340,7 +2336,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
                 <button
-                  className={`h-8 px-2.5 text-[11px] font-black transition ${mapLeadTypeFilter === option.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                  className={`h-8 px-2.5 text-xs font-semibold transition ${mapLeadTypeFilter === option.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
                   key={option.value}
                   onClick={() => setMapLeadTypeFilter(option.value)}
                   type="button"
@@ -2351,14 +2347,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </div>
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               <button
-                className={`h-8 px-2.5 text-[11px] font-black transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                className={`h-8 px-2.5 text-xs font-semibold transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
                 onClick={() => setShowDismissedLeadsOnMap(false)}
                 type="button"
               >
                 활성 리드
               </button>
               <button
-                className={`h-8 px-2.5 text-[11px] font-black transition ${showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                className={`h-8 px-2.5 text-xs font-semibold transition ${showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
                 onClick={() => setShowDismissedLeadsOnMap(true)}
                 type="button"
               >
@@ -2366,7 +2362,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </button>
             </div>
             <select
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
               value={mapLeadIndustryFilter}
             >

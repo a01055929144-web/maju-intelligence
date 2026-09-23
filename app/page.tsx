@@ -996,7 +996,7 @@ function DataRegistrationSidePanel({
   return (
     <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
       <div className="px-2 pb-2 pt-1">
-        <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">진행 요약</p>
+        <p className="text-xs font-semibold text-slate-500">진행 요약</p>
         <p className="mt-1 text-xs font-bold leading-5 text-slate-500">기초정보 저장 후 매출 원장을 반복 갱신합니다.</p>
       </div>
       {items.map((item) => {
@@ -1016,10 +1016,10 @@ function DataRegistrationSidePanel({
                 <item.icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
                 <span className="block truncate text-sm font-black">{item.label}</span>
               </span>
-              <span className={`block truncate text-[11px] font-bold ${selected ? "text-white/70" : "text-slate-400"}`}>{item.description}</span>
+              <span className={`block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{item.description}</span>
             </span>
             {item.badge ? (
-              <Badge className={selected ? "shrink-0 bg-white px-1.5 py-0 text-[10px] text-slate-950 ring-1 ring-inset ring-white/70" : "shrink-0 bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>
+              <Badge className={selected ? "shrink-0 bg-white px-2 py-0.5 text-xs text-slate-950 ring-1 ring-inset ring-white/70" : "shrink-0 bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"}>
                 {item.badge}
               </Badge>
             ) : null}
@@ -1083,7 +1083,7 @@ function DataRegistrationFlowBar({
     <section className="maju-section-card p-2">
       <div className="mb-2 flex flex-col gap-1 px-2 pt-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">작업 선택</p>
+          <p className="text-xs font-semibold text-slate-500">작업 선택</p>
           <p className="mt-0.5 text-xs font-bold text-slate-500">거래처, 매출, 저장 상태를 한 번에 전환합니다.</p>
         </div>
         <Badge className={persisted ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-100" : canAnalyze ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100" : "bg-slate-100 text-slate-600"}>
@@ -1116,15 +1116,15 @@ function DataRegistrationFlowBar({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black ring-1 ring-inset ${selected ? "bg-white/10 text-white/80 ring-white/20" : "bg-white/70 text-slate-500 ring-slate-200"}`}>
+                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${selected ? "bg-white/10 text-white/80 ring-white/20" : "bg-white/70 text-slate-500 ring-slate-200"}`}>
                     {index + 1}
                   </span>
                   <span className={`truncate text-sm font-black ${selected ? "text-white" : "text-slate-950"}`}>{step.label}</span>
                 </span>
-                <span className={`mt-0.5 block truncate text-[11px] font-bold ${selected ? "text-white/70" : "text-slate-500"}`}>{step.description}</span>
+                <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{step.description}</span>
               </span>
               <span
-                className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-black ${
+                className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
                   selected
                     ? "bg-white text-slate-950 ring-1 ring-inset ring-white/70"
                     : step.ready
@@ -1901,7 +1901,7 @@ function Onboarding({
                     </p>
                     <ul className="mt-1.5 space-y-0.5">
                       {duplicateNotice.matches.map((match) => (
-                        <li className="text-[11px] font-bold text-amber-800" key={match.customerName + match.address}>
+                        <li className="text-xs font-semibold text-amber-800" key={match.customerName + match.address}>
                           · {match.customerName}{match.address ? ` (${match.address})` : ""}
                         </li>
                       ))}
@@ -1983,7 +1983,7 @@ function Onboarding({
                         {isAddressField ? <span className="block text-xs font-bold text-blue-700">위 거래처명 검색으로 선택하면 자동 반영됩니다. 매장이 검색되지 않으면 직접 입력하세요.</span> : null}
                         {isBusinessNameField ? <span className="block text-xs font-bold text-blue-700">실제 매장을 검색해 선택하면 카카오 지도 기준 주소·전화·업종이 자동 반영됩니다. 사업자등록증 원본과는 다를 수 있어요.</span> : null}
                         {isKakaoSourced ? (
-                          <span className="flex items-center gap-1 text-[11px] font-bold text-amber-700">
+                          <span className="flex items-center gap-1 text-xs font-semibold text-amber-700">
                             <Info className="h-3 w-3 shrink-0" />
                             카카오 지도 정보 · 사업자등록증 값 아님, 원본과 대조하세요
                           </span>
@@ -2045,7 +2045,7 @@ function Onboarding({
               <FileSpreadsheet className="h-4 w-4 shrink-0 text-slate-700" />
               <div className="min-w-0">
                 <p className="truncate text-xs font-black text-slate-800">자료 도구</p>
-                <p className="truncate text-[11px] font-bold text-slate-400">{template.label} 기준</p>
+                <p className="truncate text-xs font-medium text-slate-500">{template.label} 기준</p>
               </div>
             </div>
             <div className="grid gap-1.5 sm:grid-cols-4 xl:min-w-[620px]">
@@ -2160,19 +2160,19 @@ function Onboarding({
                         >
                           <span className="flex items-center justify-between gap-3">
                             <span className="flex min-w-0 items-center gap-2">
-                              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md text-[11px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-xs font-semibold ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                                 {tab.step}
                               </span>
                               <span className="min-w-0">
                                 <span className="block truncate text-xs font-black">{tab.label}</span>
-                                <span className={`mt-0.5 block truncate text-[11px] font-bold ${selected ? "text-slate-600" : "text-slate-400"}`}>{tab.actionHint}</span>
+                                <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-slate-600" : "text-slate-500"}`}>{tab.actionHint}</span>
                               </span>
                             </span>
                             <span className="flex shrink-0 items-center gap-1.5">
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${toneClass}`}>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${toneClass}`}>
                                 {tab.statusLabel}
                               </span>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selected ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                                 {tab.value}
                               </span>
                             </span>
@@ -2181,7 +2181,7 @@ function Onboarding({
                       );
                     })}
                   </div>
-                  <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-500">
+                  <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500">
                     <span className="rounded-md bg-teal-700 px-2 py-0.5 font-black text-white">{activeReviewTab.label}</span>
                     <span className="truncate">{activeReviewTab.actionHint}</span>
                   </div>
@@ -2320,18 +2320,18 @@ function DataRegistrationQuickPanel({
           <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center">
             <div className="flex min-w-[150px] items-center gap-2">
               <Badge className="bg-teal-700 text-white ring-1 ring-inset ring-teal-700">등록 설정</Badge>
-              <Badge className={`w-fit px-2.5 py-1 text-[11px] font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
+              <Badge className={`w-fit px-2.5 py-1 text-xs font-semibold ring-1 ${statusTone}`}>{nextLabel}</Badge>
             </div>
             <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
               <div className="min-w-0">
-                <p className="mb-1 text-[11px] font-black text-slate-400">등록 데이터</p>
+                <p className="mb-1 text-xs font-semibold text-slate-500">등록 데이터</p>
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {typeOptions.map((option) => {
                     const selected = activeType === option.id;
                     const Icon = option.icon;
                     return (
                       <button
-                        className={`flex h-11 min-w-0 items-center gap-2 rounded-md border px-3 text-left transition ${
+                        className={`flex min-h-14 min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left transition ${
                           selected ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                         key={option.id}
@@ -2339,8 +2339,11 @@ function DataRegistrationQuickPanel({
                         type="button"
                       >
                         <Icon className={selected ? "h-4 w-4 shrink-0 text-white" : "h-4 w-4 shrink-0 text-slate-400"} />
-                        <span className="min-w-0 flex-1 truncate text-sm font-black">{option.label}</span>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${selected ? "bg-white text-slate-950" : "bg-slate-100 text-slate-400"}`}>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-bold">{option.label}</span>
+                          <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{option.description}</span>
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${selected ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500"}`}>
                           {option.value}
                         </span>
                       </button>
@@ -2349,14 +2352,14 @@ function DataRegistrationQuickPanel({
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-[11px] font-black text-slate-400">입력 방식</p>
+                <p className="mb-1 text-xs font-semibold text-slate-500">입력 방식</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {modeOptions.map((option) => {
                     const selected = entryMode === option.id;
                     const Icon = option.icon;
                     return (
                       <button
-                        className={`flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-md border px-2 text-center transition ${
+                        className={`flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-md border px-2 py-2 text-left transition ${
                           selected ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                         key={option.id}
@@ -2364,7 +2367,10 @@ function DataRegistrationQuickPanel({
                         type="button"
                       >
                         <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
-                        <span className="truncate text-sm font-black">{option.label}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-bold">{option.label}</span>
+                          <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{option.description}</span>
+                        </span>
                       </button>
                     );
                   })}
@@ -2377,10 +2383,10 @@ function DataRegistrationQuickPanel({
         <div className="border-t border-slate-200 bg-slate-50/80 p-3 xl:border-l xl:border-t-0">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[11px] font-black text-slate-400">현재 작업</p>
-              <p className="mt-0.5 truncate text-sm font-black text-slate-950">{typeLabel} · {selectedMode.label}</p>
+              <p className="text-xs font-semibold text-slate-500">현재 작업</p>
+              <p className="mt-0.5 truncate text-sm font-bold text-slate-950">{typeLabel} · {selectedMode.label}</p>
             </div>
-            <Badge className={`shrink-0 px-2 py-1 text-[11px] font-black ring-1 ${statusTone}`}>{nextLabel}</Badge>
+            <Badge className={`shrink-0 px-2 py-1 text-xs font-semibold ring-1 ${statusTone}`}>{nextLabel}</Badge>
           </div>
           <div className="mt-2 overflow-hidden rounded-md border border-slate-200 bg-white">
             {[
@@ -2388,8 +2394,8 @@ function DataRegistrationQuickPanel({
               ["파일", rows ? filename : "선택 전"]
             ].map(([label, value]) => (
               <div className="grid grid-cols-[92px_minmax(0,1fr)] border-b border-slate-100 last:border-b-0" key={label}>
-                <span className="bg-slate-50 px-3 py-2 text-[11px] font-black text-slate-400">{label}</span>
-                <span className="truncate px-3 py-2 text-xs font-black text-slate-900">{value}</span>
+                <span className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">{label}</span>
+                <span className="truncate px-3 py-2 text-xs font-bold text-slate-900">{value}</span>
               </div>
             ))}
           </div>
@@ -4341,6 +4347,7 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
   const [pageSize, setPageSize] = useState<ListPageSize>(10);
   const completedCount = uploads.filter((upload) => upload.status === "completed").length;
   const failedCount = uploads.filter((upload) => upload.status === "failed").length;
+  const duplicateCount = uploads.reduce((sum, upload) => sum + upload.duplicateCount, 0);
   const averageQuality = uploads.length ? Math.round(uploads.reduce((sum, upload) => sum + upload.qualityScore, 0) / uploads.length) : 0;
   // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
   type UploadHistorySortKey = "createdAt" | "duplicateCount" | "filename" | "healthScore" | "qualityScore" | "rows" | "status";
@@ -4367,15 +4374,16 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
     <div className="maju-section-card mb-4 overflow-hidden">
       <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+          <p className="flex items-center gap-2 text-sm font-bold text-slate-950">
             <History className="h-4 w-4 text-slate-500" />
             최근 등록 이력
           </p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">저장된 업로드 결과와 품질, 중복 후보를 확인합니다.</p>
         </div>
-        <div className="grid gap-2 text-xs lg:min-w-[520px] lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
+        <div className="grid gap-2 text-xs sm:grid-cols-2 lg:min-w-[650px] lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
           <MiniStatus label="완료" value={`${completedCount.toLocaleString()}건`} />
           <MiniStatus label="실패" value={`${failedCount.toLocaleString()}건`} />
+          <MiniStatus label="중복 후보" value={`${duplicateCount.toLocaleString()}건`} />
           <MiniStatus label="평균 품질" value={uploads.length ? `${averageQuality}%` : "-"} />
           {uploads.length ? (
             <div className="flex flex-wrap items-center gap-1 rounded-md bg-white px-2 py-2">
@@ -4474,8 +4482,8 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
               {latestUploads.map((upload) => (
                 <tr key={upload.id} className="align-middle hover:bg-slate-50/80">
                   <td className="min-w-0 border-r border-slate-100 px-4 py-3">
-                    <p className="truncate font-black text-slate-900">{upload.filename}</p>
-                    <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-500">
+                    <p className="truncate font-bold text-slate-900">{upload.filename}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-slate-500">
                       <Clock className="h-3.5 w-3.5" />
                       {upload.createdAt}
                     </p>
@@ -4489,17 +4497,26 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
                   <td className="border-r border-slate-100 px-3 py-3 text-right font-black text-slate-700">{upload.duplicateCount.toLocaleString()}개</td>
                   <td className="border-r border-slate-100 px-3 py-3 text-right font-black text-slate-900">{upload.healthScore}점</td>
                   <td className="border-r border-slate-100 px-3 py-3">
-                    <div className="flex items-center justify-between gap-2 text-[11px] font-black text-slate-500">
+                    <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
                       <span>품질</span>
                       <span>{upload.qualityScore}%</span>
                     </div>
                     <Progress className="mt-1.5 h-1.5" value={upload.qualityScore} />
                   </td>
                   <td className="px-3 py-3">
-                    <Link className="maju-button-secondary inline-flex h-8 w-full items-center justify-center gap-1 px-2 text-xs" href={`/reports/${upload.reportId}`}>
-                      확인
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
+                    {upload.status === "failed" ? (
+                      <Link className="inline-flex h-9 w-full items-center justify-center gap-1 rounded-md bg-rose-600 px-2 text-xs font-bold text-white transition hover:bg-rose-700" href="#entry-panel">
+                        재업로드
+                        <Upload className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : upload.reportId ? (
+                      <Link className="maju-button-secondary inline-flex h-9 w-full items-center justify-center gap-1 px-2 text-xs" href={`/reports/${upload.reportId}`}>
+                        결과 확인
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : (
+                      <span className="inline-flex h-9 w-full items-center justify-center rounded-md bg-slate-100 px-2 text-xs font-semibold text-slate-500">생성 대기</span>
+                    )}
                   </td>
                 </tr>
               ))}

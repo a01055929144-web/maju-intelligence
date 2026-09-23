@@ -228,23 +228,23 @@ select {
   }
 
   .maju-button {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold transition duration-150;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold transition duration-150;
   }
 
   .maju-button-primary {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#101827] px-3 text-xs font-bold text-white shadow-none transition duration-150 hover:bg-[#1b2639] active:translate-y-px;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#101827] px-3.5 text-sm font-semibold text-white shadow-none transition duration-150 hover:bg-[#1b2639] active:translate-y-px;
   }
 
   .maju-button-secondary {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-none transition duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:translate-y-px;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 shadow-none transition duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:translate-y-px;
   }
 
   .maju-button-blue {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-lime-300 bg-lime-100 px-3 text-xs font-bold text-slate-900 shadow-none transition duration-150 hover:border-lime-400 hover:bg-lime-200 active:translate-y-px;
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-lime-300 bg-lime-100 px-3.5 text-sm font-semibold text-slate-900 shadow-none transition duration-150 hover:border-lime-400 hover:bg-lime-200 active:translate-y-px;
   }
 
   .maju-nav-item {
-    @apply flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-bold transition duration-150;
+    @apply flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition duration-150;
   }
 
   .maju-nav-item-active {
@@ -260,6 +260,6 @@ select {
   }
 
   .maju-muted-label {
-    @apply text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400;
+    @apply text-xs font-medium text-slate-500;
   }
 }
