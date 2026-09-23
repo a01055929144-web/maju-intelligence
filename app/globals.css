@@ -3,10 +3,8 @@
 @tailwind utilities;
 
 html {
-  /* 전체적으로 글씨와 여백이 커 보인다는 피드백에 따라 기준 폰트 크기를 살짝 줄였습니다.
-     Tailwind의 텍스트(text-sm 등)와 여백(p-3, gap-2, h-10 등) 유틸리티는 대부분 rem 기준이라
-     이 값 하나로 앱 전체의 글씨와 여백이 함께 조금씩 줄어듭니다. */
-  font-size: 90%;
+  /* 정보 밀도는 유지하되 본문이 지나치게 작아 보이지 않도록 기본 축소 폭을 완화합니다. */
+  font-size: 94%;
 }
 
 /* 2026-08-28 피드백 대응(모바일 가독성이 떨어짐: 글자·버튼이 너무 작고 정보가 빽빽함).
@@ -16,7 +14,7 @@ html {
    버튼류의 최소 터치 영역을 44px(iOS 권장 기준)로 확보합니다. 데스크톱 레이아웃은 그대로 둡니다. */
 @media (max-width: 767px) {
   html {
-    font-size: 102%;
+    font-size: 100%;
   }
 
   .text-\[9px\] {
@@ -95,9 +93,20 @@ body {
   background: var(--maju-canvas);
   color: hsl(var(--foreground));
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    var(--font-maju-sans), "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", ui-sans-serif,
+    system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.012em;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+/* 기존 화면 곳곳의 800~900 굵기는 작은 글자에서 뭉쳐 보였습니다.
+   400/500/600/700의 네 단계로 정돈해 제목과 버튼의 위계는 유지하면서 인상을 가볍게 합니다. */
+body .font-extrabold,
+body .font-black {
+  font-weight: 700;
 }
 
 .mobile-theme-shell[data-mobile-theme="dark"] {
