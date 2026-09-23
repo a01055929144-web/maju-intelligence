@@ -28,10 +28,10 @@ export function MobileRouteActionPanel({
   }
 
   return (
-    <section className="p-3" id="contact-actions">
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+    <section id="contact-actions">
+      <div className="grid grid-cols-3 gap-2">
         <a
-          className="mobile-card-raised flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold"
+          className="mobile-card-raised flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold"
           href={mapUrl}
           rel="noreferrer"
           target="_blank"
@@ -40,14 +40,14 @@ export function MobileRouteActionPanel({
           지도
         </a>
         <a
-          className={`mobile-card-raised flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold ${phone ? "" : "pointer-events-none opacity-45"}`}
+          className={`mobile-card-raised flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold ${phone ? "" : "pointer-events-none opacity-45"}`}
           href={phone ? `tel:${phone}` : "#"}
         >
           <Phone className="h-4 w-4" />
           전화
         </a>
         <button
-          className="mobile-card-raised flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold"
+          className="mobile-card-raised flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold"
           onClick={copyAddress}
           type="button"
         >

@@ -121,8 +121,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
-            <section className="mobile-card scroll-mt-24 overflow-hidden rounded-2xl shadow-[0_12px_30px_rgba(0,0,0,0.12)]" id="selected-customer">
-              <div className="border-b border-[var(--mobile-border)] p-4">
+            <section className="mobile-card scroll-mt-24 overflow-hidden rounded-xl border" id="selected-customer">
+              <div className="border-b border-[var(--mobile-border)] px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
             <p className={`text-xs font-semibold ${selectedStopCompleted ? "text-teal-400" : "mobile-warning"}`}>
