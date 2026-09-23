@@ -62,6 +62,28 @@ describe("organization data exposure policy", () => {
       expect(getCustomerAssignmentKeys(session)).toBeUndefined();
     }
   });
+
+  it("keeps daily route confirmation tenant-scoped and manager-gated", () => {
+    const source = readFileSync(resolve(process.cwd(), "app/api/routes/confirm-order/route.ts"), "utf8");
+    expect(source).toContain("getRequestAuthScope(request, body?.companyId)");
+    expect(source).toContain('scopeHasCapability(scope, "manage_sales")');
+    expect(source).toContain("saveRouteOrderConfirmation(scope.companyId");
+  });
+
+  it("forces field staff GPS history to their own user and assignment", () => {
+    const source = readFileSync(resolve(process.cwd(), "app/api/staff/location/route.ts"), "utf8");
+    expect(source).toContain("const scopedUserId = isScopedStaffView ? scope.customerSession?.userId : undefined");
+    expect(source).toContain("const eventUserId = isScopedStaffView ? scopedUserId : requestedUserId");
+    expect(source).toContain("deliveryVehicle: isScopedStaffView");
+    expect(source).toContain("driverName: isScopedStaffView");
+  });
+
+  it("blocks field staff from company-wide dated delivery history", () => {
+    const source = readFileSync(resolve(process.cwd(), "app/api/routes/history/route.ts"), "utf8");
+    expect(source).toContain("shouldScopeCustomerData(scope.customerSession)");
+    expect(source).toContain("전체 배송 히스토리는 대표 또는 관리자만 조회할 수 있습니다.");
+    expect(source).toContain("status: 403");
+  });
 });
 
 function makeSession(

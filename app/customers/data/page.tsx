@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, RefreshCw, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
@@ -74,6 +74,7 @@ export default function CustomerDataManagementPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<HistoryPageSize>(10);
   const [hasMore, setHasMore] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -100,7 +101,7 @@ export default function CustomerDataManagementPage() {
     return () => {
       active = false;
     };
-  }, [adminCompanyId, page, pageSize]);
+  }, [adminCompanyId, page, pageSize, reloadToken]);
 
   useEffect(() => {
     setPage(1);
@@ -167,7 +168,16 @@ export default function CustomerDataManagementPage() {
                 업로드 이력을 불러오는 중입니다...
               </p>
             ) : loadError ? (
-              <p className="p-4 text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 새로고침해서 다시 시도해주세요.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <p className="text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 이 화면에서 바로 다시 확인할 수 있습니다.</p>
+                <button
+                  className="inline-flex h-9 items-center gap-1 rounded-md border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 hover:bg-rose-50"
+                  onClick={() => setReloadToken((value) => value + 1)}
+                  type="button"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> 다시 시도
+                </button>
+              </div>
             ) : uploads.length === 0 ? (
               <p className="p-4 text-sm font-bold text-slate-400">업로드 이력이 아직 없습니다. 거래처 관리 &gt; 등록에서 엑셀을 업로드해보세요.</p>
             ) : (

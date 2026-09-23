@@ -2681,6 +2681,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 />
               }
               liveVehicleError={liveVehicleConnectionError}
+              todayCompletions={todayCompletions}
               onAddDriver={addManualDriver}
               onDeleteVehicle={deleteVehicle}
               onSelectLiveVehicle={selectLiveVehicle}
@@ -3181,6 +3182,7 @@ function DeliveryAssignmentPanel({
   liveVehicleDetails,
   liveVehicleError,
   liveVehicles,
+  todayCompletions,
   onAddDriver,
   onDeleteVehicle,
   onSelectLiveVehicle,
@@ -3201,6 +3203,7 @@ function DeliveryAssignmentPanel({
   readonly liveVehicleDetails: ReactNode;
   readonly liveVehicleError: string;
   readonly liveVehicles: StaffVehicleLocation[];
+  readonly todayCompletions: DeliveryCompletionEvent[];
   readonly onAddDriver: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   readonly onDeleteVehicle: (vehicle: DeliveryVehicle) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectLiveVehicle: (vehicle: StaffVehicleLocation) => void;
@@ -3251,6 +3254,19 @@ function DeliveryAssignmentPanel({
     if (liveStatusFilter === "offline") return !live;
     return true;
   });
+  const completedCustomerIds = new Set(todayCompletions.map((completion) => completion.customerId));
+  const deliverySummary = vehicles.reduce(
+    (summary, vehicle) => {
+      const scheduled = vehicle.stops.length;
+      const completed = vehicle.stops.filter((stop) => completedCustomerIds.has(stop.id)).length;
+      summary.scheduled += scheduled;
+      summary.completed += completed;
+      summary.pending += Math.max(0, scheduled - completed);
+      if (!scheduled && !vehicle.isUnassigned) summary.noDelivery += 1;
+      return summary;
+    },
+    { completed: 0, noDelivery: 0, pending: 0, scheduled: 0 }
+  );
 
   async function connectLiveVehicle(location: StaffVehicleLocation) {
     const invitation = assignmentRows.find((item) => item.acceptedBy === location.userId);
@@ -3374,6 +3390,20 @@ function DeliveryAssignmentPanel({
             );
           })}
         </div>
+        <div className="grid grid-cols-4 gap-1" aria-label="오늘 배송 현황">
+          {[
+            { label: "예정", value: deliverySummary.scheduled, tone: "bg-sky-50 text-sky-800 ring-sky-100" },
+            { label: "완료", value: deliverySummary.completed, tone: "bg-emerald-50 text-emerald-800 ring-emerald-100" },
+            { label: "대기", value: deliverySummary.pending, tone: "bg-amber-50 text-amber-800 ring-amber-100" },
+            { label: "배송 없음", value: deliverySummary.noDelivery, tone: "bg-slate-100 text-slate-600 ring-slate-200" }
+          ].map((item) => (
+            <div className={`rounded-md px-1.5 py-2 text-center ring-1 ring-inset ${item.tone}`} key={item.label}>
+              <p className="text-[9px] font-black">{item.label}</p>
+              <p className="mt-0.5 text-sm font-black">{item.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] font-bold leading-4 text-slate-400">예정·완료·대기는 매장 수, 배송 없음은 오늘 확정 매장이 없는 담당자 수입니다.</p>
       </div>
       {liveVehicleDetails}
       <div className="border-b border-slate-100 p-3">
@@ -3396,6 +3426,8 @@ function DeliveryAssignmentPanel({
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
           const liveVehicle = liveVehicleByDeliveryGroup.get(vehicle.id);
+          const completedCount = vehicle.stops.filter((stop) => completedCustomerIds.has(stop.id)).length;
+          const pendingCount = Math.max(0, vehicle.stops.length - completedCount);
           return (
             <div
               className={`w-full px-4 py-3 text-left transition ${
@@ -3495,6 +3527,17 @@ function DeliveryAssignmentPanel({
                           <Edit3 className="h-3.5 w-3.5" />
                         </span>
                       </div>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
+                    {vehicle.stops.length ? (
+                      <>
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-black text-sky-800">예정 {vehicle.stops.length}</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">완료 {completedCount}</span>
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800">대기 {pendingCount}</span>
+                      </>
+                    ) : vehicle.isUnassigned ? null : (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600">오늘 배송 없음</span>
                     )}
                   </div>
                   {deleteError?.vehicleId === vehicle.id ? (

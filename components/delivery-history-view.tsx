@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2, MapPin, Truck } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, RotateCcw, Truck, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -37,6 +37,8 @@ function formatDateKeyLabel(dateKey: string) {
 }
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+type PendingFollowUp = "redelivery" | "cancelled" | "checked";
+const FOLLOW_UP_STORAGE_KEY = "maju-delivery-history-follow-up-v1";
 
 // 아래 위치/경로 요약 로직은 components/sales-route-map-workspace.tsx의 VehicleAnalysisModal이 쓰는
 // 것과 동일한 판단 기준(GPS 오차 150m 초과·5분 이상 공백·시속 120km 초과 구간 제외)입니다. 그 파일의
@@ -118,6 +120,29 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [activeDriverName, setActiveDriverName] = useState("");
+  const [pendingFollowUps, setPendingFollowUps] = useState<Record<string, PendingFollowUp>>({});
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(FOLLOW_UP_STORAGE_KEY);
+      if (saved) setPendingFollowUps(JSON.parse(saved) as Record<string, PendingFollowUp>);
+    } catch {
+      // 확인 표시는 보조 UI이므로 브라우저 저장소를 쓸 수 없으면 현재 세션에서만 유지합니다.
+    }
+  }, []);
+
+  const setPendingFollowUp = (customerId: string, status: PendingFollowUp) => {
+    const key = `${selectedDate}:${customerId}`;
+    setPendingFollowUps((current) => {
+      const next = { ...current, [key]: status };
+      try {
+        window.localStorage.setItem(FOLLOW_UP_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // 상태 자체는 현재 화면에 유지합니다.
+      }
+      return next;
+    });
+  };
 
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
 
@@ -397,11 +422,37 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                         </div>
                         <div className="mt-2 space-y-1">
                           {pendingPlannedStores.map((store) => (
-                            <button className="flex w-full items-center justify-between rounded-md bg-white px-2.5 py-2 text-left text-[11px] font-black text-slate-800 ring-1 ring-inset ring-slate-100" key={store.id} onClick={() => onOpenStore(store.id)} type="button">
-                              <span className="truncate">{store.name}</span><span className={todayIsSelected ? "text-amber-700" : "text-rose-700"}>{todayIsSelected ? "대기" : "미완료"}</span>
-                            </button>
+                            <div className="rounded-md bg-white px-2.5 py-2 ring-1 ring-inset ring-slate-100" key={store.id}>
+                              <button className="flex w-full items-center justify-between text-left text-[11px] font-black text-slate-800" onClick={() => onOpenStore(store.id)} type="button">
+                                <span className="truncate">{store.name}</span><span className={todayIsSelected ? "text-amber-700" : "text-rose-700"}>{todayIsSelected ? "대기" : "미완료"}</span>
+                              </button>
+                              {!todayIsSelected ? (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {([
+                                    { icon: RotateCcw, label: "재배송", status: "redelivery" as const },
+                                    { icon: XCircle, label: "취소", status: "cancelled" as const },
+                                    { icon: CheckCircle2, label: "확인", status: "checked" as const }
+                                  ]).map((action) => {
+                                    const selected = pendingFollowUps[`${selectedDate}:${store.id}`] === action.status;
+                                    const Icon = action.icon;
+                                    return (
+                                      <button
+                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black ring-1 ring-inset ${selected ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`}
+                                        key={action.status}
+                                        onClick={() => setPendingFollowUp(store.id, action.status)}
+                                        type="button"
+                                      >
+                                        <Icon className="h-3 w-3" />
+                                        {action.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                            </div>
                           ))}
                         </div>
+                        {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 선택 매장도 다음 날 전체 배송 후보에 자동으로 다시 표시됩니다. 이 확인표시는 현재 브라우저에 저장됩니다.</p> : null}
                       </div>
                     ) : activeDriver.planMatchedThatDay ? (
                       <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">확정 코스의 모든 배송이 완료됐습니다.</p>

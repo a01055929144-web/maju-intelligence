@@ -141,8 +141,9 @@ function AttachmentSlot({
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadCount, setUploadCount] = useState(0);
+  const [retryFiles, setRetryFiles] = useState<File[]>([]);
 
-  async function uploadFiles(fileList: FileList | null) {
+  async function uploadFiles(fileList: FileList | File[] | null) {
     const files = Array.from(fileList || []);
     if (!files.length || saveState === "saving") return;
 
@@ -158,6 +159,7 @@ function AttachmentSlot({
     }
 
     setErrorMessage("");
+    setRetryFiles([]);
     setUploadCount(files.length);
     setSaveState("saving");
 
@@ -166,6 +168,7 @@ function AttachmentSlot({
     // 언급해 몇 개가 실제로 성공했는지 알 수 없었습니다. 이제 모든 파일을 끝까지 시도하고,
     // 성공/실패 개수와 실패한 파일 이름을 함께 보여줍니다.
     const failedFiles: string[] = [];
+    const failedFileObjects: File[] = [];
     let successCount = 0;
     for (const file of files) {
       const formData = new FormData();
@@ -181,6 +184,7 @@ function AttachmentSlot({
       if (!response?.ok) {
         const errorPayload = (await response?.json().catch(() => null)) as { message?: string } | null;
         failedFiles.push(`${file.name}${errorPayload?.message ? ` (${errorPayload.message})` : ""}`);
+        failedFileObjects.push(file);
         continue;
       }
 
@@ -190,11 +194,13 @@ function AttachmentSlot({
         successCount += 1;
       } else {
         failedFiles.push(`${file.name} (원장 연결 응답 없음)`);
+        failedFileObjects.push(file);
       }
     }
 
     if (failedFiles.length) {
       setSaveState("error");
+      setRetryFiles(failedFileObjects);
       setErrorMessage(
         successCount
           ? `${successCount}/${files.length}개 업로드 완료, 실패: ${failedFiles.join(", ")} (다시 시도해주세요)`
@@ -204,6 +210,7 @@ function AttachmentSlot({
     }
 
     setSaveState("saved");
+    setRetryFiles([]);
   }
 
   const hasFile = Boolean(existingItems.length);
@@ -269,7 +276,20 @@ function AttachmentSlot({
           {uploadCount.toLocaleString()}개 업로드 완료
         </p>
       ) : <span className="mt-1.5 h-[16px]" aria-hidden="true" />}
-      {saveState === "error" ? <p className="mt-1.5 text-[11px] font-bold text-rose-600">{errorMessage}</p> : null}
+      {saveState === "error" ? (
+        <div className="mt-1.5 space-y-1.5">
+          <p className="text-[11px] font-bold text-rose-600">{errorMessage}</p>
+          {retryFiles.length ? (
+            <button
+              className="inline-flex min-h-9 items-center gap-1 rounded-md border border-rose-200 bg-white px-2.5 text-[11px] font-black text-rose-700 hover:bg-rose-50"
+              onClick={() => void uploadFiles(retryFiles)}
+              type="button"
+            >
+              <RefreshCw className="h-3 w-3" /> 실패 {retryFiles.length.toLocaleString()}개만 다시 시도
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

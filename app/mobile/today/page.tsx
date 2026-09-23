@@ -70,7 +70,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const completedCustomerIds = new Set(completionEvents.map((event) => event.customerId));
   const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops.find((stop) => !completedCustomerIds.has(stop.id)) || todayStops[0];
   const selectedStopIndex = selectedStop ? todayStops.findIndex((stop) => stop.id === selectedStop.id) : -1;
-  const nextPendingStop = selectedStopIndex >= 0 ? todayStops.slice(selectedStopIndex + 1).find((stop) => !completedCustomerIds.has(stop.id)) : undefined;
+  const nextPendingStop = selectedStopIndex >= 0
+    ? [...todayStops.slice(selectedStopIndex + 1), ...todayStops.slice(0, selectedStopIndex)]
+        .find((stop) => !completedCustomerIds.has(stop.id))
+    : undefined;
+  const selectedStopCompleted = selectedStop ? completedCustomerIds.has(selectedStop.id) : false;
   const hasExplicitSelectedStop = Boolean(resolvedSearchParams?.customer && todayStops.some((stop) => stop.id === resolvedSearchParams.customer));
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
@@ -121,7 +125,9 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <div className="border-b border-[var(--mobile-border)] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-            <p className="mobile-warning text-xs font-black">진행중</p>
+            <p className={`text-xs font-black ${selectedStopCompleted ? "text-teal-400" : "mobile-warning"}`}>
+              {selectedStopCompleted ? "배송완료" : "진행 중"}
+            </p>
                     <h2 className="mt-1 truncate text-xl font-black">{selectedStop.name}</h2>
                     <p className="mobile-muted mt-1 truncate text-xs font-bold">{selectedStop.address || selectedStop.region} · {selectedStop.distanceKm || 0}km</p>
                   </div>
@@ -153,6 +159,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 deliveryPartialMessage={companySettings.deliveryPartialMessage}
                 loadingPosition={selectedStop.loadingPosition}
                 nextCustomerId={nextPendingStop?.id}
+                nextCustomerName={nextPendingStop?.name}
                 notificationPhone={companySettings.notificationPhone}
                 notificationSenderName={companySettings.notificationSenderName}
                 driverName={driverName}

@@ -268,7 +268,12 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
           </button>
         ) : null}
       </div>
-      {needsAction ? <p className="mt-1 truncate text-[10px] font-bold text-amber-700">{detail || "브라우저 위치 권한과 로그인 상태를 확인하세요."}</p> : null}
+      {needsAction ? (
+        <p aria-live="polite" className="mt-1 text-[10px] font-bold leading-4 text-amber-700">
+          {detail || "브라우저 위치 권한과 로그인 상태를 확인하세요."}
+          {queuedCount > 0 ? ` · 전송 대기 ${queuedCount.toLocaleString()}건은 휴대폰에 보관 중입니다.` : ""}
+        </p>
+      ) : null}
       {!needsAction && (lastAccuracyMeters !== null || queuedCount > 0) ? (
         <p className="mt-1 truncate text-[10px] font-bold text-teal-700/80">
           {lastAccuracyMeters !== null ? `오차 ${lastAccuracyMeters.toLocaleString()}m` : "오차 확인 중"}

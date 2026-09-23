@@ -53,6 +53,7 @@ export function MobileDeliveryProofPanel({
   deliveryPartialMessage,
   loadingPosition,
   nextCustomerId,
+  nextCustomerName,
   notificationPhone,
   notificationSenderName
 }: {
@@ -66,6 +67,7 @@ export function MobileDeliveryProofPanel({
   deliveryPartialMessage?: string;
   loadingPosition?: string;
   nextCustomerId?: string;
+  nextCustomerName?: string;
   notificationPhone?: string;
   notificationSenderName?: string;
 }) {
@@ -461,8 +463,17 @@ export function MobileDeliveryProofPanel({
         {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "3. 사진 + 메시지 카카오로 공유"}
       </Button>
 
+      {status === "idle" && files.length ? (
+        <p className="mt-2 text-center text-[11px] font-bold text-slate-400">
+          {nextCustomerName ? `저장 완료 후 ${nextCustomerName}(으)로 자동 이동합니다.` : "저장 완료 후 오늘 코스를 새로고침합니다."}
+        </p>
+      ) : null}
+
       {status === "error" ? (
-        <p className="mt-2 text-xs font-bold text-rose-600">{errorDetail || "저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요."}</p>
+        <div aria-live="assertive" className="mt-2 rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-xs font-bold leading-5 text-rose-200">
+          <p>{errorDetail || "저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요."}</p>
+          <p className="mt-1 text-rose-300">위 버튼을 다시 누르면 완료된 단계는 건너뛰고 실패한 단계만 재시도합니다.</p>
+        </div>
       ) : null}
       {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">원장 저장 완료</p> : null}
       {messageResult ? <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-800 ring-1 ring-inset ring-blue-100">{messageResult}</p> : null}
