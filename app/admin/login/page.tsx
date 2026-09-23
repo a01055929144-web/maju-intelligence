@@ -43,17 +43,15 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center maju-app-bg px-4 py-10">
-      <Card className="w-full max-w-md">
+    <main className="flex min-h-screen items-center justify-center bg-[#101827] px-4 py-10">
+      <Card className="w-full max-w-md rounded-[24px] shadow-[0_24px_80px_rgba(0,0,0,.28)]">
         <CardHeader>
-          <Badge className="mb-3 w-fit bg-primary/10 text-primary">
+          <Badge className="mb-3 w-fit bg-lime-100 text-slate-950 ring-1 ring-inset ring-lime-200">
             <ShieldCheck className="mr-1 h-3.5 w-3.5" />
             MAJU Admin
           </Badge>
-          <CardTitle className="text-2xl">관리자 로그인</CardTitle>
-          <p className="text-sm leading-6 text-muted-foreground">
-            고객사 계정을 생성하고 회사별 데이터 접근을 관리하는 관리자 전용 화면입니다. 로그인하면 고객사 운영 세션은 자동으로 종료됩니다.
-          </p>
+          <CardTitle className="text-2xl">플랫폼 관리자</CardTitle>
+          <p className="text-sm leading-6 text-muted-foreground">고객사, 계정, 배포 환경을 관리합니다.</p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -61,7 +59,7 @@ export default function AdminLoginPage() {
               <span className="text-xs font-bold text-muted-foreground">이메일</span>
               <input
                 autoComplete="username"
-                className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-11 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 id="admin-login-email"
                 name="email"
                 value={email}
@@ -73,7 +71,7 @@ export default function AdminLoginPage() {
               <span className="text-xs font-bold text-muted-foreground">비밀번호</span>
               <input
                 autoComplete="current-password"
-                className="h-11 w-full rounded-md border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-11 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 id="admin-login-password"
                 name="password"
                 value={password}

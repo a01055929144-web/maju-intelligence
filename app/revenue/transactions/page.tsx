@@ -69,7 +69,7 @@ export default async function RevenueTransactionsPage({
           원장 업로드
         </Link>
       }
-      subtitle="ERP 원장 기준으로 거래처·품목·금액을 확인합니다."
+      subtitle="거래처별 매출과 품목 거래를 확인합니다."
       title="매출 원장"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}

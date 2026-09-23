@@ -64,21 +64,26 @@ html {
 }
 
 :root {
-  --background: 210 30% 98%;
-  --foreground: 222 34% 14%;
+  --background: 216 29% 97%;
+  --foreground: 222 47% 11%;
   --card: 0 0% 100%;
-  --card-foreground: 222 34% 14%;
-  --primary: 174 72% 28%;
-  --primary-foreground: 0 0% 100%;
-  --muted: 210 28% 95%;
-  --muted-foreground: 215 18% 43%;
-  --accent: 211 74% 46%;
-  --accent-foreground: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 221 46% 13%;
+  --primary-foreground: 78 90% 72%;
+  --muted: 214 32% 94%;
+  --muted-foreground: 215 16% 42%;
+  --accent: 78 74% 58%;
+  --accent-foreground: 222 47% 11%;
   --destructive: 0 72% 50%;
   --destructive-foreground: 0 0% 100%;
   --border: 207 29% 88%;
   --input: 207 29% 88%;
-  --ring: 174 72% 28%;
+  --ring: 78 74% 48%;
+  --maju-ink: #101827;
+  --maju-ink-soft: #182235;
+  --maju-lime: #b9ed5c;
+  --maju-lime-strong: #9bd63c;
+  --maju-canvas: #f4f6f8;
 }
 
 * {
@@ -87,13 +92,12 @@ html {
 
 body {
   margin: 0;
-  background:
-    linear-gradient(180deg, #f8fafc 0%, #f3f6f9 48%, #eef3f7 100%),
-    #f6f8fb;
+  background: var(--maju-canvas);
   color: hsl(var(--foreground));
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 .mobile-theme-shell[data-mobile-theme="dark"] {
@@ -173,80 +177,80 @@ select {
   input,
   select,
   textarea {
-    @apply border-slate-200 bg-white/95 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15;
+    @apply border-slate-200 bg-white shadow-none transition placeholder:text-slate-400 focus:border-lime-500 focus:ring-2 focus:ring-lime-400/20;
   }
 }
 
 @layer components {
   .maju-app-bg {
-    @apply bg-[linear-gradient(180deg,#f8fafc_0%,#f3f6f9_52%,#eef3f7_100%)];
+    @apply bg-[#f4f6f8];
   }
 
   .maju-surface {
-    @apply border border-slate-200 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)];
+    @apply border border-slate-200/90 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)];
   }
 
   .maju-panel {
-    @apply rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.035)];
+    @apply rounded-xl border border-slate-200/90 bg-white shadow-none;
   }
 
   .maju-section-card {
-    @apply overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.045)];
+    @apply overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.04)];
   }
 
   .maju-card-header {
-    @apply border-b border-slate-200 bg-slate-50 px-3 py-2.5;
+    @apply border-b border-slate-100 bg-white px-4 py-3;
   }
 
   .maju-stat-card {
-    @apply rounded-md border border-slate-200 bg-white p-2.5 shadow-[0_1px_0_rgba(15,23,42,0.025)];
+    @apply rounded-xl border border-slate-200/90 bg-white p-3 shadow-none;
   }
 
   .maju-filter-box {
-    @apply rounded-md border border-slate-200 bg-white p-1.5 shadow-[0_1px_0_rgba(15,23,42,0.025)];
+    @apply rounded-xl border border-slate-200/90 bg-white p-1.5 shadow-none;
   }
 
   .maju-search-field {
-    @apply flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.025)];
+    @apply flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 shadow-none;
   }
 
   .maju-empty-state {
-    @apply rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-center;
+    @apply rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-5 text-center;
   }
 
   .maju-button {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-black transition duration-150;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold transition duration-150;
   }
 
   .maju-button-primary {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)] transition duration-150 hover:bg-teal-800 active:translate-y-px;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#101827] px-3 text-xs font-bold text-white shadow-none transition duration-150 hover:bg-[#1b2639] active:translate-y-px;
   }
 
   .maju-button-secondary {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] transition duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:translate-y-px;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-none transition duration-150 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:translate-y-px;
   }
 
   .maju-button-blue {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 text-xs font-black text-blue-800 shadow-[0_1px_0_rgba(15,23,42,0.025)] transition duration-150 hover:border-blue-200 hover:bg-blue-100 active:translate-y-px;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-lime-300 bg-lime-100 px-3 text-xs font-bold text-slate-900 shadow-none transition duration-150 hover:border-lime-400 hover:bg-lime-200 active:translate-y-px;
   }
 
   .maju-nav-item {
-    @apply flex h-10 items-center gap-3 rounded-md px-3 text-sm font-black transition duration-150;
+    @apply flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-bold transition duration-150;
   }
 
   .maju-nav-item-active {
-    @apply bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)];
+    @apply bg-[#b9ed5c] text-[#101827] shadow-none;
   }
 
   .maju-nav-item-idle {
-    @apply text-slate-600 hover:bg-slate-100 hover:text-slate-950;
+    @apply text-slate-300 hover:bg-white/10 hover:text-white;
   }
 
   .maju-section-title {
-    @apply text-sm font-black text-slate-950;
+    @apply text-sm font-bold tracking-[-0.01em] text-slate-950;
   }
 
   .maju-muted-label {
-    @apply text-[11px] font-black uppercase tracking-wide text-slate-400;
+    @apply text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400;
   }
 }

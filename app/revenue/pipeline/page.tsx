@@ -66,7 +66,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="방문 기록과 견적 요청을 매출 후보로 정리합니다."
+      subtitle="견적 요청과 후속 영업 기회를 관리합니다."
       title="기회 관리"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}

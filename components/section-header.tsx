@@ -17,11 +17,11 @@ export function SectionHeader({
   readonly title: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-white px-4 py-3.5">
       <div className="min-w-0">
-        {eyebrow ? <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">{eyebrow}</p> : null}
+        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{eyebrow}</p> : null}
         <div className={`flex min-w-0 items-center gap-1.5 ${eyebrow ? "mt-1" : ""}`}>
-          <h2 className={`truncate font-black text-slate-950 ${eyebrow ? "text-lg" : "text-sm"}`}>{title}</h2>
+          <h2 className={`truncate font-bold tracking-[-0.02em] text-slate-950 ${eyebrow ? "text-lg" : "text-sm"}`}>{title}</h2>
           <InfoTooltip size={eyebrow ? "lg" : "md"} text={description} />
         </div>
       </div>

@@ -79,14 +79,15 @@ export default function CompanySignupPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center maju-app-bg px-4 py-10">
-      <Card className="w-full max-w-md">
+    <main className="flex min-h-screen items-center justify-center bg-[#eef1f4] px-4 py-10">
+      <Card className="w-full max-w-md rounded-[24px] shadow-[0_18px_50px_rgba(15,23,42,.10)]">
         <CardHeader>
-          <Badge className="mb-3 w-fit bg-primary/10 text-primary">
+          <Badge className="mb-3 w-fit bg-lime-100 text-slate-950 ring-1 ring-inset ring-lime-200">
             <Building2 className="mr-1 h-3.5 w-3.5" />
             MAJU Company
           </Badge>
-          <CardTitle className="text-2xl">회사 가입</CardTitle>
+          <CardTitle className="text-2xl">회사 시작하기</CardTitle>
+          <p className="text-sm font-medium text-slate-500">운영 책임자 계정과 회사 정보를 등록합니다.</p>
         </CardHeader>
         <CardContent>
           <form className="space-y-2.5" onSubmit={handleSubmit}>

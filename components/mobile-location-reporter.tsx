@@ -35,6 +35,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   const [lastSentAt, setLastSentAt] = useState("");
   const [lastAccuracyMeters, setLastAccuracyMeters] = useState<number | null>(null);
   const [queuedCount, setQueuedCount] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
   const flushPromiseRef = useRef<Promise<void> | null>(null);
   const lastPostAtRef = useRef(0);
   const lastContextPostKeyRef = useRef("");
@@ -177,6 +178,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
     }
 
     refreshQueuedCount();
+    setIsOnline(navigator.onLine);
     const watchId = navigator.geolocation.watchPosition(
       (position) => postPosition(position),
       (error) => {
@@ -196,10 +198,13 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
     };
     const handleFocus = () => requestCurrentPosition(true);
     const handleOnline = async () => {
+      setIsOnline(true);
+      setDetail("인터넷이 다시 연결되어 대기 위치를 전송하고 있습니다.");
       await flushQueuedLocations();
       requestCurrentPosition(true);
     };
     const handleOffline = () => {
+      setIsOnline(false);
       setDetail("오프라인입니다. 위치는 대기열에 저장됩니다.");
       setState("error");
     };
@@ -236,7 +241,9 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   }, [currentCustomerId, deliveryVehicle, requestCurrentPosition]);
 
   const label =
-    state === "ready"
+    !isOnline
+      ? "오프라인 · 위치 보관 중"
+      : state === "ready"
       ? lastSentAt
         ? `위치 공유 ${lastSentAt}`
         : "위치 공유 중"
@@ -260,11 +267,11 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         {needsAction ? (
           <button
             className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-[10px] font-black text-amber-800 ring-1 ring-inset ring-amber-200"
-            onClick={() => requestCurrentPosition(true)}
+            onClick={() => { if (isOnline) requestCurrentPosition(true); }}
             type="button"
           >
             <RefreshCw className="h-3 w-3" />
-            재시도
+            {!isOnline ? "연결 대기" : state === "blocked" ? "권한 재요청" : "지금 전송"}
           </button>
         ) : null}
       </div>

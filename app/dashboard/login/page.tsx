@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { Building2, Check, Clock3, Lock, LogIn, Smartphone } from "lucide-react";
+import { ArrowRight, Building2, Check, Clock3, Lock, LogIn, MapPinned, Route, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,23 +77,59 @@ export default function CustomerLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center maju-app-bg px-4 py-10">
-      <div className="grid w-full max-w-3xl gap-5 md:grid-cols-2 md:items-start">
-        <Card>
+    <main className="flex min-h-screen items-center justify-center bg-[#eef1f4] px-4 py-8 sm:px-6">
+      <div className="grid w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,.12)] lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="relative hidden min-h-[660px] overflow-hidden bg-[#101827] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full border-[48px] border-[#b9ed5c]/10" />
+          <div className="absolute bottom-24 right-10 h-40 w-40 rounded-full bg-[#b9ed5c]/5 blur-2xl" />
+          <div className="relative">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#b9ed5c] text-base font-black text-[#101827]">M</span>
+              <div>
+                <p className="text-base font-bold">MAJU Intelligence</p>
+                <p className="text-xs font-medium text-slate-400">Sales & delivery operations</p>
+              </div>
+            </div>
+            <h1 className="mt-16 max-w-sm text-[38px] font-bold leading-[1.18] tracking-[-0.045em]">
+              오늘의 배송을<br />한 화면에서 끝내세요.
+            </h1>
+            <p className="mt-5 max-w-sm text-sm font-medium leading-6 text-slate-300">
+              배차, 최적 경로, 실시간 차량, 배송 증빙을 하나의 운영 흐름으로 연결합니다.
+            </p>
+          </div>
+
+          <div className="relative space-y-3">
+            {[
+              { icon: MapPinned, label: "거래처와 차량을 한 지도에서 확인" },
+              { icon: Route, label: "배송 순서를 자동으로 최적화" },
+              { icon: Truck, label: "완료 사진과 운행기록을 자동 보관" }
+            ].map((item) => (
+              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3" key={item.label}>
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#b9ed5c]/15 text-[#b9ed5c]">
+                  <item.icon className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-semibold text-slate-200">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="space-y-4 p-4 sm:p-8 lg:p-10">
+        <Card className="rounded-2xl border-slate-200 shadow-none">
           <CardHeader>
-            <Badge className="mb-3 w-fit bg-primary/10 text-primary">
+            <Badge className="mb-3 w-fit bg-lime-100 text-slate-900 ring-1 ring-inset ring-lime-200">
               <Building2 className="mr-1 h-3.5 w-3.5" />
-              MAJU Company
+              관리자
             </Badge>
-            <CardTitle className="text-2xl">고객사 로그인</CardTitle>
-            <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">회사 대표/관리자 계정으로 이메일 로그인합니다.</p>
+            <CardTitle className="text-2xl font-bold tracking-[-0.03em]">운영 화면 로그인</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">대표·관리자는 이메일로 로그인하세요.</p>
           </CardHeader>
           <CardContent>
             {recentLoginEmail ? (
               <div className="mb-3">
                 <button
                   aria-label={`최근 사용 이메일 ${recentLoginEmail} 입력`}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 transition hover:bg-teal-50 hover:text-teal-800"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-lime-100 hover:text-slate-950"
                   onClick={() => setEmail(recentLoginEmail)}
                   type="button"
                 >
@@ -101,7 +137,6 @@ export default function CustomerLoginPage() {
                   <span className="shrink-0">최근 사용 이메일</span>
                   <span className="truncate">{recentLoginEmail}</span>
                 </button>
-                <p className="mt-1.5 text-[11px] font-bold text-slate-500">이메일만 채워지며 로그인 상태가 유지되는 것은 아닙니다.</p>
               </div>
             ) : null}
             <form className="space-y-2.5" onSubmit={handleSubmit}>
@@ -140,9 +175,10 @@ export default function CustomerLoginPage() {
                 <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
                 <span className="text-xs font-extrabold text-muted-foreground">개인 PC에서만</span>
               </label>
-              <Button className="mt-1.5 w-full" disabled={loading}>
+              <Button className="mt-1.5 h-12 w-full rounded-xl bg-[#101827] font-bold text-white hover:bg-[#1b2639]" disabled={loading}>
                 {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
                 {loading ? "로그인 확인 중…" : "로그인"}
+                {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}
               </Button>
               <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/forgot-password">
                 비밀번호를 잊으셨나요?
@@ -157,29 +193,30 @@ export default function CustomerLoginPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200 bg-slate-50/70 shadow-none">
           <CardHeader>
             <Badge className="mb-3 w-fit bg-[#FEE500]/30 text-[#7a5c00]">
               <Smartphone className="mr-1 h-3.5 w-3.5" />
               직원용
             </Badge>
-            <CardTitle className="text-2xl">카카오 로그인</CardTitle>
-            <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">카카오톡 초대를 받은 직원은 여기서 카카오 로그인하세요.</p>
+            <CardTitle className="text-xl font-bold tracking-[-0.025em]">직원 카카오 로그인</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">초대받은 직원은 카카오로 바로 시작하세요.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             <OAuthLoginButtons />
             <Link
-              className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:border-teal-300 hover:bg-teal-50/60"
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-lime-400 hover:bg-lime-50"
               href="/mobile/join"
             >
               <Smartphone className="h-4 w-4" />
               모바일 화면으로 카카오 로그인
             </Link>
-            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold leading-5 text-slate-500">
-              카카오 계정만으로는 회사 데이터에 연결되지 않습니다. 관리자가 발급한 초대 링크로 먼저 가입해야 합니다.
+            <p className="text-center text-xs font-medium leading-5 text-slate-500">
+              처음 한 번은 관리자가 보낸 초대 링크가 필요합니다.
             </p>
           </CardContent>
         </Card>
+        </div>
       </div>
     </main>
   );

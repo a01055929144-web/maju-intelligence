@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatMinutes } from "@/lib/route-map-utils";
-import { DeliveryCompletionEvent, DeliveryHistoryDay, DeliveryHistoryDriverGroup, StaffLocationEvent } from "@/lib/store";
+import { DeliveryCompletionEvent, DeliveryHistoryDay, DeliveryHistoryDriverGroup, DeliveryHistoryFollowUpStatus, StaffLocationEvent } from "@/lib/store";
 import { RouteMetric, StoreRow } from "@/components/sales-route-map-workspace";
 
 // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
@@ -37,9 +37,6 @@ function formatDateKeyLabel(dateKey: string) {
 }
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
-type PendingFollowUp = "redelivery" | "cancelled" | "checked";
-const FOLLOW_UP_STORAGE_KEY = "maju-delivery-history-follow-up-v1";
-
 // 아래 위치/경로 요약 로직은 components/sales-route-map-workspace.tsx의 VehicleAnalysisModal이 쓰는
 // 것과 동일한 판단 기준(GPS 오차 150m 초과·5분 이상 공백·시속 120km 초과 구간 제외)입니다. 그 파일의
 // 내부(비-export) 헬퍼라 가져다 쓸 수 없어 이 화면에서 같은 로직을 그대로 다시 씁니다.
@@ -120,28 +117,30 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [activeDriverName, setActiveDriverName] = useState("");
-  const [pendingFollowUps, setPendingFollowUps] = useState<Record<string, PendingFollowUp>>({});
+  const [followUpSavingId, setFollowUpSavingId] = useState("");
+  const [followUpError, setFollowUpError] = useState("");
 
-  useEffect(() => {
+  const setPendingFollowUp = async (customerId: string, status: DeliveryHistoryFollowUpStatus) => {
+    if (followUpSavingId) return;
+    setFollowUpSavingId(customerId);
+    setFollowUpError("");
     try {
-      const saved = window.localStorage.getItem(FOLLOW_UP_STORAGE_KEY);
-      if (saved) setPendingFollowUps(JSON.parse(saved) as Record<string, PendingFollowUp>);
-    } catch {
-      // 확인 표시는 보조 UI이므로 브라우저 저장소를 쓸 수 없으면 현재 세션에서만 유지합니다.
+      const response = await fetchWithTimeout("/api/routes/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, customerId, date: selectedDate, status })
+      }, 10000);
+      const payload = (await response.json().catch(() => null)) as { error?: string; followUp?: NonNullable<DeliveryHistoryDay["followUps"]>[number] } | null;
+      if (!response.ok || !payload?.followUp) throw new Error(payload?.error || "후속 처리를 저장하지 못했습니다.");
+      setHistory((current) => current ? {
+        ...current,
+        followUps: [...(current.followUps || []).filter((item) => item.customerId !== customerId), payload.followUp!]
+      } : current);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : "후속 처리를 저장하지 못했습니다.");
+    } finally {
+      setFollowUpSavingId("");
     }
-  }, []);
-
-  const setPendingFollowUp = (customerId: string, status: PendingFollowUp) => {
-    const key = `${selectedDate}:${customerId}`;
-    setPendingFollowUps((current) => {
-      const next = { ...current, [key]: status };
-      try {
-        window.localStorage.setItem(FOLLOW_UP_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // 상태 자체는 현재 화면에 유지합니다.
-      }
-      return next;
-    });
   };
 
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
@@ -433,13 +432,15 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                                     { icon: XCircle, label: "취소", status: "cancelled" as const },
                                     { icon: CheckCircle2, label: "확인", status: "checked" as const }
                                   ]).map((action) => {
-                                    const selected = pendingFollowUps[`${selectedDate}:${store.id}`] === action.status;
+                                    const followUp = history.followUps?.find((item) => item.customerId === store.id);
+                                    const selected = followUp?.status === action.status;
                                     const Icon = action.icon;
                                     return (
                                       <button
                                         className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black ring-1 ring-inset ${selected ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`}
                                         key={action.status}
-                                        onClick={() => setPendingFollowUp(store.id, action.status)}
+                                        disabled={Boolean(followUpSavingId)}
+                                        onClick={() => void setPendingFollowUp(store.id, action.status)}
                                         type="button"
                                       >
                                         <Icon className="h-3 w-3" />
@@ -449,10 +450,15 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                                   })}
                                 </div>
                               ) : null}
+                              {!todayIsSelected && history.followUps?.find((item) => item.customerId === store.id) ? (() => {
+                                const followUp = history.followUps.find((item) => item.customerId === store.id)!;
+                                return <p className="mt-1.5 text-[9px] font-bold text-slate-400">{followUp.processedByName} · {new Date(followUp.processedAt).toLocaleString("ko-KR")}</p>;
+                              })() : null}
                             </div>
                           ))}
                         </div>
-                        {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 선택 매장도 다음 날 전체 배송 후보에 자동으로 다시 표시됩니다. 이 확인표시는 현재 브라우저에 저장됩니다.</p> : null}
+                        {followUpError ? <p className="mt-2 text-[10px] font-black text-rose-700">{followUpError}</p> : null}
+                        {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 선택 매장도 다음 날 전체 배송 후보에 자동으로 다시 표시됩니다. 후속 상태와 처리자·처리시각은 회사별 운영 기록으로 저장됩니다.</p> : null}
                       </div>
                     ) : activeDriver.planMatchedThatDay ? (
                       <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">확정 코스의 모든 배송이 완료됐습니다.</p>

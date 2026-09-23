@@ -41,14 +41,14 @@ export default async function CompanySettingsPage() {
       companyName={session.companyName}
       rightAction={
           <Link
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-800"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
             href="/dashboard"
           >
             <ArrowLeft className="h-4 w-4" />
             대시보드
           </Link>
       }
-      subtitle="회사 정보와 물류 출발지"
+      subtitle="회사, 출발지, 직원 권한을 관리합니다."
       title="회사 설정"
       userName={session.name}
       workspaceRole={session.workspaceRole}

@@ -1757,24 +1757,23 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         </div>
       ) : null}
-      <header className="flex shrink-0 flex-col gap-1.5 border-b border-slate-200 bg-white px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
+      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="text-[16px] font-black leading-tight">영업·배송 지도</h2>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
-            {sourceReady ? `${allStores.length}곳` : "거래처 등록 필요"}
-          </span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 ring-1 ring-inset ring-slate-200">
-            {sourceReady ? `${realVehicleCount}대` : "배송차 대기"}
-          </span>
+          <div>
+            <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em]">오늘의 운영 지도</h2>
+            <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+              {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
+            </p>
+          </div>
         </div>
         <div className="flex max-w-full flex-wrap items-center justify-start gap-2 xl:justify-end">
           {activeView === "map" ? (
-            <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+            <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
               <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">탐색</span>
               <button
                 aria-pressed={leadRadiusOpen}
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
-                  leadRadiusOpen ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-teal-800 hover:bg-teal-50"
+                  leadRadiusOpen ? "bg-[#101827] text-white" : "text-slate-600 hover:bg-white"
                 }`}
                 onClick={() => setLeadRadiusOpen((value) => !value)}
                 title="지도를 클릭해 원하는 지점 주변 반경 안의 신규·영업 리드를 찾습니다."
@@ -1786,7 +1785,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <button
                 aria-pressed={showAllLeadsOnMap}
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
-                  showAllLeadsOnMap ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  showAllLeadsOnMap ? "bg-[#101827] text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
                 }`}
                 onClick={() =>
                   setShowAllLeadsOnMap((value) => {
@@ -1803,7 +1802,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </button>
             </div>
           ) : null}
-          <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+          <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
             <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">표시</span>
             {[
               { label: "등급별", value: "grade" },
@@ -1813,7 +1812,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               return (
                 <button
                   className={`h-9 rounded-md px-3 text-xs font-black transition ${
-                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                    selected ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
@@ -1824,7 +1823,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               );
             })}
           </div>
-          <nav className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+          <nav className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
             <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">업무</span>
             {workspaceViews.map((item) => {
               const Icon = item.icon;
@@ -1832,7 +1831,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               return (
                 <button
                   className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-black transition ${
-                    selected ? "bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                    selected ? "bg-[#101827] text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => changeWorkspaceView(item.value)}
@@ -1846,16 +1845,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             })}
           </nav>
           <button
-            className="flex h-11 shrink-0 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-900 shadow-[0_8px_18px_rgba(15,118,110,0.12)] transition hover:border-teal-300 hover:bg-teal-100"
+            className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-lime-300 bg-lime-100 px-3 text-xs font-bold text-slate-950 transition hover:bg-lime-200"
             onClick={() => setMarkerViewMode("vehicle")}
             title={`최근 수신 ${liveVehicleSummary.latestLabel} · ${STAFF_LOCATION_FRESHNESS_MINUTES}분 이내 활성, 초과 시 지연`}
             type="button"
           >
-            <Truck className="h-4 w-4 shrink-0 text-teal-700" />
+            <Truck className="h-4 w-4 shrink-0 text-slate-800" />
             <span className="whitespace-nowrap">라이브차 {liveVehicleSummary.active}대</span>
             {liveVehicleSummary.stale ? <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-inset ring-slate-200">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
-          <div className="flex h-11 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-[0_1px_0_rgba(15,23,42,0.025)]">
+          <div className="flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
             <span className="hidden px-2 text-[10px] font-black uppercase tracking-wide text-slate-400 2xl:inline">화면</span>
             <button
               aria-expanded={statsExpanded}
@@ -1963,7 +1962,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       <section
         className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-white px-4 py-2 ${
           activeView === "map"
-            ? "xl:absolute xl:inset-x-2 xl:top-2 xl:z-20 xl:space-y-1.5 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:px-3 xl:py-2 xl:shadow-[0_10px_28px_rgba(15,23,42,.12)]"
+            ? "xl:absolute xl:inset-x-3 xl:top-3 xl:z-20 xl:space-y-1.5 xl:rounded-2xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-3 xl:py-2.5 xl:shadow-[0_12px_32px_rgba(15,23,42,.12)] xl:backdrop-blur"
             : ""
         }`}
         ref={mapHeaderRef}

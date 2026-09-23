@@ -7,8 +7,6 @@ import { useEffect, useState } from "react";
 import {
   Building2,
   LogOut,
-  MapPinned,
-  MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -41,7 +39,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
-  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-teal-700 text-white ring-1 ring-inset ring-teal-700";
+  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
   const settingsLabel = mode === "admin-preview" ? "고객사" : "출발지";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
@@ -90,17 +88,17 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
           높이에 고정해야 section이 실제로 h-full만큼만 받고, 그 안의 xl:overflow-y-auto가 넘치는
           내용을 스크롤로 보여줄 수 있습니다. */}
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full xl:grid-rows-[minmax(0,1fr)]" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-200 bg-white shadow-[6px_0_22px_rgba(15,23,42,0.035)] lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+        <aside className="border-b border-slate-800 bg-[#101827] text-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:border-slate-800">
           <div className="flex h-full flex-col">
-            <div className={`border-b border-slate-200/80 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
+            <div className={`border-b border-white/10 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
               {collapsed ? (
                 <>
                   <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#b9ed5c] text-sm font-black text-[#101827]">M</span>
                   </Link>
                   <button
                     aria-label="사이드바 펼치기"
-                    className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
+                    className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 text-slate-300 transition hover:bg-white/10 hover:text-white lg:inline-flex"
                     onClick={() => setCollapsed((value) => !value)}
                     type="button"
                   >
@@ -110,15 +108,15 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ) : (
                 <div className="flex w-full items-center justify-between gap-2">
                   <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-700 text-sm font-black text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]">M</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#b9ed5c] text-sm font-black text-[#101827]">M</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-black">MAJU Intelligence</span>
-                      <span className="block truncate text-xs font-bold text-slate-500">{companyName}</span>
+                      <span className="block truncate text-xs font-medium text-slate-400">{companyName}</span>
                     </span>
                   </Link>
                   <button
                     aria-label="사이드바 접기"
-                    className="maju-button-secondary hidden h-8 w-8 shrink-0 px-0 lg:inline-flex"
+                    className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 text-slate-300 transition hover:bg-white/10 hover:text-white lg:inline-flex"
                     onClick={() => setCollapsed((value) => !value)}
                     type="button"
                   >
@@ -131,7 +129,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             <nav className="flex-1 space-y-4 overflow-auto p-3">
               {visibleNavigationGroups.map((group) => (
                 <div key={group.label}>
-                  {!collapsed ? <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-slate-400">{group.label}</p> : null}
+                  {!collapsed ? <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{group.label}</p> : null}
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       if (item.children && item.children.length) {
@@ -146,17 +144,17 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                               title={item.label}
                             >
                               {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-white" : "text-slate-400"}`} />
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-slate-950" : "text-slate-500"}`} />
                             </Link>
                           );
                         }
                         return (
                           <div key={`${group.label}-${item.label}`}>
-                            <div className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-black ${groupSelected ? "text-slate-950" : "text-slate-700"}`}>
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-slate-900" : "text-slate-400"}`} />
+                            <div className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold ${groupSelected ? "text-white" : "text-slate-300"}`}>
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-lime-300" : "text-slate-500"}`} />
                               <span className="min-w-0 flex-1 truncate">{item.label}</span>
                             </div>
-                            <div className="ml-[26px] space-y-1 border-l border-slate-200 pl-2.5">
+                            <div className="ml-[26px] space-y-1 border-l border-white/10 pl-2.5">
                               {item.children.map((child) => {
                                 const childSelected = isCurrentNavItem(pathname, child.href) || (!pathname && active === child.active);
                                 return (
@@ -186,8 +184,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                           href={itemHref}
                           title={collapsed ? item.label : undefined}
                         >
-                          {selected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
-                          <item.icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
+                          <item.icon className={`h-4 w-4 ${selected ? "text-slate-950" : "text-slate-500"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
                           {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-[10px] text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-[10px] text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
                         </Link>
@@ -198,7 +195,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ))}
             </nav>
 
-            <div className={`border-t border-slate-200/80 bg-white ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
+            <div className={`border-t border-white/10 bg-[#101827] ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
               {collapsed ? (
                 <>
                   {mode === "customer" ? (
@@ -213,8 +210,8 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-slate-950">{companyName}</p>
-                    {userName ? <p className="truncate text-xs font-bold text-slate-500">{userName}님</p> : null}
+                    <p className="truncate text-sm font-bold text-white">{companyName}</p>
+                    {userName ? <p className="truncate text-xs font-medium text-slate-400">{userName}님</p> : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {mode === "customer" ? (
@@ -237,7 +234,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
         </aside>
 
         <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:min-h-0 xl:flex-col" : ""}`}>
-          <header className={`${compactMapHome ? "hidden" : "sticky top-0 z-20"} shrink-0 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.035)] ${fullBleed ? "xl:static" : ""}`}>
+          <header className={`${compactMapHome ? "hidden" : "sticky top-0 z-20"} shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur ${fullBleed ? "xl:static" : ""}`}>
             <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
               {!hidePageTitle ? (
                 <div className="min-w-0">
@@ -247,7 +244,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                     {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <h1 className="truncate text-[24px] font-black tracking-normal text-slate-900">{title}</h1>
+                    <h1 className="truncate text-[24px] font-bold tracking-[-0.03em] text-slate-950">{title}</h1>
                     {subtitle ? <InfoTooltip text={subtitle} /> : null}
                   </div>
                 </div>
@@ -259,26 +256,10 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 </div>
               )}
               <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
-                <Link
-                  className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none"
-                  href={settingsHref}
-                  title={settingsLabel}
-                >
-                  <MapPinned className="h-4 w-4" />
-                  <span className="hidden 2xl:inline">{settingsLabel}</span>
-                </Link>
-                <Link
-                  className="maju-button-primary h-8 shrink-0 px-2.5 text-xs shadow-none"
-                  href={scopedHref("/assistant")}
-                  title="AI 영업"
-                >
-                  <MessageSquareText className="h-4 w-4" />
-                  <span className="hidden 2xl:inline">AI</span>
-                </Link>
                 {mode === "customer" ? (
-                  <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="모바일로 보기">
+                  <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="기사 화면 열기">
                     <Smartphone className="h-4 w-4" />
-                    <span className="hidden 2xl:inline">모바일</span>
+                    <span className="hidden xl:inline">기사 화면</span>
                   </Link>
                 ) : null}
                 {rightAction}

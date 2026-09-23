@@ -25,12 +25,12 @@ const navItems = [
 
 export function AdminPageHeader({ active, badge, session, subtitle, title }: AdminPageHeaderProps) {
   return (
-    <header className="border-b border-slate-200/80 bg-white/[0.78] backdrop-blur-2xl">
+    <header className="border-b border-slate-800 bg-[#101827] text-white">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">{badge}</Badge>
-          <h1 className="truncate text-[26px] font-black tracking-normal text-slate-900">{title}</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-500">
+          <Badge className="mb-2 bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300">{badge}</Badge>
+          <h1 className="truncate text-[26px] font-bold tracking-[-0.035em] text-white">{title}</h1>
+          <p className="mt-1 text-sm font-medium text-slate-400">
             {subtitle} · {session.name} · {session.role}
           </p>
         </div>
@@ -41,7 +41,7 @@ export function AdminPageHeader({ active, badge, session, subtitle, title }: Adm
               <Link
                 key={item.href}
                 className={`maju-nav-item justify-center border ${
-                  selected ? "border-teal-500 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white/92 text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.03)] hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                  selected ? "border-lime-300 bg-lime-200 text-slate-950" : "border-white/10 bg-white/[0.04] text-slate-300 shadow-none hover:border-white/20 hover:bg-white/10 hover:text-white"
                 }`}
                 href={item.href}
               >

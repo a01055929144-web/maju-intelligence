@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, shouldScopeCustomerData } from "@/lib/auth";
-import { getDeliveryHistoryForDate, getDeliveryHistorySummary } from "@/lib/store";
+import { getDeliveryHistoryForDate, getDeliveryHistorySummary, saveDeliveryHistoryFollowUp, type DeliveryHistoryFollowUpStatus } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -48,5 +48,34 @@ export async function GET(request: NextRequest) {
       { error: error instanceof Error ? error.message : "배송 히스토리를 불러오지 못했습니다." },
       { headers: noStoreHeaders, status: 400 }
     );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const body = (await request.json().catch(() => null)) as { companyId?: string; customerId?: string; date?: string; status?: DeliveryHistoryFollowUpStatus } | null;
+  const scope = await getRequestAuthScope(request, body?.companyId);
+  if (!scope.ok || !scope.companyId) return NextResponse.json({ error: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
+  if (shouldScopeCustomerData(scope.customerSession)) {
+    return NextResponse.json({ error: "배송 미완료 후속 처리는 대표 또는 관리자만 할 수 있습니다." }, { headers: noStoreHeaders, status: 403 });
+  }
+  const customerId = (body?.customerId || "").trim();
+  const date = body?.date || "";
+  const status = body?.status;
+  if (!customerId || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !status || !["redelivery", "cancelled", "checked"].includes(status)) {
+    return NextResponse.json({ error: "날짜, 거래처, 후속 처리 상태를 확인해 주세요." }, { headers: noStoreHeaders, status: 400 });
+  }
+  try {
+    const followUp = await saveDeliveryHistoryFollowUp(
+      scope.companyId,
+      { customerId, routeDate: date, status },
+      {
+        name: scope.customerSession?.name || scope.adminSession?.name || "관리자",
+        role: scope.customerSession?.workspaceRole || scope.adminSession?.role || "unknown",
+        userId: scope.customerSession?.userId
+      }
+    );
+    return NextResponse.json({ followUp }, { headers: noStoreHeaders });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "후속 처리를 저장하지 못했습니다." }, { headers: noStoreHeaders, status: 400 });
   }
 }

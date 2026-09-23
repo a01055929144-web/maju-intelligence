@@ -54,7 +54,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="방문 기록과 견적 요청을 바로 쓸 문장으로 정리합니다."
+      subtitle="방문 기록으로 후속 문장과 견적 메모를 만듭니다."
       title="AI 영업"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
@@ -63,8 +63,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
         <div className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-black text-slate-950">후속 작업</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">방문 · 견적 기준</p>
+              <p className="maju-section-title">오늘의 영업 초안</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">방문 기록과 견적 요청 기준</p>
             </div>
             <Badge className={drafts.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{drafts.length ? "초안 생성됨" : "방문 기록 필요"}</Badge>
           </div>
@@ -77,8 +77,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
 
         <div className="maju-section-card">
           <div className="maju-card-header">
-            <p className="maju-section-title">바로가기 요약</p>
-            <p className="mt-1 maju-muted-label">방문 기록 · 견적 후속 · 방문 코스로 바로 이동</p>
+            <p className="maju-section-title">다음 작업</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">기록 확인부터 방문 코스까지</p>
           </div>
           <div className="grid lg:grid-cols-3">
             {assistantActions.map((action) => (
@@ -99,9 +99,9 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
             <div>
               <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
-                실행 초안
+                검토할 초안
               </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">담당자가 검토 후 사용합니다. 텍스트 저장으로 초안을 기기에 보관할 수 있습니다.</p>
+              <p className="mt-1 text-sm font-medium text-slate-500">내용을 확인한 뒤 복사하거나 파일로 저장하세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
@@ -149,7 +149,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               <div className="p-10 text-center">
                 <Sparkles className="mx-auto mb-3 h-8 w-8 text-teal-700" />
                 <p className="font-black text-slate-950">생성할 후속 초안이 없습니다.</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">샘플 문구를 표시하지 않습니다. 실제 방문 결과를 기록하면 해당 데이터로 초안이 생성됩니다.</p>
+                <p className="mt-1 text-sm font-medium text-slate-500">방문 결과를 기록하면 초안이 자동으로 생성됩니다.</p>
               </div>
             ) : null}
           </div>
@@ -188,10 +188,10 @@ function AssistantBasisPanel({
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">생성 기준</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-500">방문 결과와 영업 메모를 문장으로 정리합니다.</p>
+          <p className="mt-1 text-xs font-medium leading-5 text-slate-500">방문 결과와 영업 메모 기준</p>
         </div>
-        <p className="text-xs font-bold leading-5 text-slate-600">
-          초안 품질은 거래처 메모, 견적 상태, 방문 코스에 좌우됩니다. 발송 전 담당자 검토가 필요합니다.
+        <p className="text-xs font-medium leading-5 text-slate-600">
+          거래처 메모와 견적 상태가 구체적일수록 초안이 정확해집니다.
         </p>
         <div className="flex flex-wrap gap-2">
           {actionLinks.map((item) => {

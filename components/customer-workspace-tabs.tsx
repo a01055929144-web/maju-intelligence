@@ -40,30 +40,30 @@ export function CustomerWorkspaceTabs() {
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
       <SectionHeader
         badge={
-          <span className="w-fit shrink-0 rounded-md bg-teal-700 px-2.5 py-1 text-[11px] font-black text-white ring-1 ring-inset ring-teal-700">
+          <span className="w-fit shrink-0 rounded-lg bg-lime-100 px-2.5 py-1 text-[11px] font-bold text-slate-900 ring-1 ring-inset ring-lime-200">
             거래처 작업
           </span>
         }
         description="등록, 원장, 등록 이력 조회를 한 흐름으로 봅니다."
         title="거래처 관리"
       />
-      <div className="grid gap-1.5 border-t border-slate-200 bg-slate-50 p-1.5 sm:grid-cols-3">
+      <div className="grid gap-1.5 border-t border-slate-100 bg-slate-50/70 p-1.5 sm:grid-cols-3">
         {WORKSPACE_TABS.map((tab, index) => {
           const selected = pathname === tab.href;
           return (
             <Link
-              className={`flex min-h-11 items-center gap-2.5 rounded-md border px-3 py-2 text-sm font-black transition ${
+              className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-bold transition ${
                 selected
-                  ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
+                  ? "border-[#101827] bg-[#101827] text-white"
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
               }`}
               href={hrefWithCompany(tab.href)}
               key={tab.href}
             >
-              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-black ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
+              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-bold ${selected ? "bg-[#b9ed5c] text-[#101827]" : "bg-slate-100 text-slate-500"}`}>
                 {index + 1}
               </span>
               <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />

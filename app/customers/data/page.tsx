@@ -126,7 +126,7 @@ export default function CustomerDataManagementPage() {
       companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="등록 이력, 누락, 미매칭 확인"
+      subtitle="업로드 결과와 누락 데이터를 확인합니다."
       title="등록 이력 조회"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >

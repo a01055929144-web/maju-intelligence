@@ -17,13 +17,13 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
   const canContinue = !inviteCode || invitePreview?.status === "pending" || invitePreview?.status === "accepted";
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f7fb] px-4 py-6 text-slate-950">
-      <section className="w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_20px_80px_rgba(15,23,42,0.10)]">
+    <main className="grid min-h-screen place-items-center bg-[#101827] px-4 py-6 text-slate-950">
+      <section className="w-full max-w-[420px] rounded-[24px] border border-white/10 bg-white p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
         <header className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-700 text-sm font-black text-white">M</span>
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#b9ed5c] text-sm font-black text-[#101827]">M</span>
           <div>
-            <p className="text-sm font-black">MAJU Intelligence</p>
-            <h1 className="text-xl font-black">{joinMode === "company" ? "직원 초대 가입" : "직원 로그인"}</h1>
+            <p className="text-xs font-medium text-slate-500">MAJU Intelligence</p>
+            <h1 className="text-xl font-bold tracking-[-0.025em]">{joinMode === "company" ? "배송팀 합류" : "직원 로그인"}</h1>
           </div>
         </header>
 
@@ -41,20 +41,20 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
           ) : null}
 
           {inviteCode ? (
-            <section className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
+            <section className="rounded-xl border border-lime-200 bg-lime-50 p-4">
               {invitePreview ? (
                 <div>
-                  <p className="text-lg font-black text-slate-950">{invitePreview.companyName}</p>
-                  <p className="mt-1 text-sm font-bold text-slate-600">{invitePreview.employeeName} · {invitePreview.maskedPhone || "연락처 미등록"}</p>
+                  <p className="text-lg font-bold text-slate-950">{invitePreview.companyName}</p>
+                  <p className="mt-1 text-sm font-medium text-slate-600">{invitePreview.employeeName} · {invitePreview.maskedPhone || "연락처 미등록"}</p>
                   {invitePreview.status === "pending" ? (
                     <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      초대 확인 완료
+                      가입 가능
                     </p>
                   ) : invitePreview.status === "accepted" ? (
                     <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      이미 가입됨
+                      바로 로그인 가능
                     </p>
                   ) : (
                     <p className="mt-3 text-xs font-bold text-amber-800">
@@ -71,8 +71,8 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
           ) : null}
 
           {canContinue ? <OAuthLoginButtons inviteCode={inviteCode} /> : null}
-          <p className="text-center text-xs font-bold leading-5 text-slate-500">
-            {inviteCode ? "카카오 인증 후 바로 회사 코스로 연결됩니다." : "관리자에게 받은 초대 링크로 접속해주세요."}
+          <p className="text-center text-xs font-medium leading-5 text-slate-500">
+            {inviteCode ? "카카오 로그인 후 오늘 코스로 이동합니다." : "초대 링크가 없다면 관리자에게 요청하세요."}
           </p>
         </div>
       </section>

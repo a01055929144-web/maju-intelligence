@@ -541,9 +541,19 @@ export type DeliveryHistoryDriverGroup = {
   planMatchedThatDay: boolean;
   plannedCustomerIds: string[];
 };
+export type DeliveryHistoryFollowUpStatus = "cancelled" | "checked" | "redelivery";
+export type DeliveryHistoryFollowUp = {
+  customerId: string;
+  processedAt: string;
+  processedByName: string;
+  processedByRole: string;
+  routeDate: string;
+  status: DeliveryHistoryFollowUpStatus;
+};
 export type DeliveryHistoryDay = {
   date: string;
   drivers: DeliveryHistoryDriverGroup[];
+  followUps: DeliveryHistoryFollowUp[];
   totalCompletions: number;
   unassignedCompletions: DeliveryCompletionEvent[];
 };
@@ -3542,13 +3552,13 @@ export async function getDeliveryHistorySummary(companyId: string | undefined, r
 // 없으면 어느 담당자 소속인지 지금 등록된 거래처의 담당자 값으로만 최선 추정합니다(과거 시점의
 // 실제 담당자와 다를 수 있어 planMatchedThatDay로 그 차이를 구분해서 알려줍니다).
 export async function getDeliveryHistoryForDate(companyId: string | undefined, date: string): Promise<DeliveryHistoryDay> {
-  const empty: DeliveryHistoryDay = { date, drivers: [], totalCompletions: 0, unassignedCompletions: [] };
+  const empty: DeliveryHistoryDay = { date, drivers: [], followUps: [], totalCompletions: 0, unassignedCompletions: [] };
   if (!companyId || !isProductionStoreConfigured()) return empty;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return empty;
 
   try {
     const { start, end } = kstDayRangeIso(date);
-    const [noteRows, confirmationRows, locationRows, customerMaster] = await Promise.all([
+    const [noteRows, confirmationRows, locationRows, customerMaster, followUpRows] = await Promise.all([
       supabaseRequest<Array<{ created_at: string; customer_id: string; id: string; memo: string }>>(
         `customer_notes?select=id,customer_id,memo,created_at&company_id=eq.${encodeURIComponent(companyId)}&note_type=eq.delivery&created_at=gte.${encodeURIComponent(
           start
@@ -3573,7 +3583,10 @@ export async function getDeliveryHistoryForDate(companyId: string | undefined, d
           companyId
         )}&recorded_at=gte.${encodeURIComponent(start)}&recorded_at=lte.${encodeURIComponent(end)}&order=recorded_at.asc&limit=6000`
       ).catch(() => []),
-      getCustomerMaster(companyId).catch(() => ({ customers: [] as CustomerMasterItem[], source: "empty" as const, truncated: false }))
+      getCustomerMaster(companyId).catch(() => ({ customers: [] as CustomerMasterItem[], source: "empty" as const, truncated: false })),
+      supabaseRequest<Array<{ customer_id: string; processed_at: string; processed_by_name: string; processed_by_role: string; route_date: string; status: DeliveryHistoryFollowUpStatus }>>(
+        `delivery_route_follow_ups?select=customer_id,route_date,status,processed_by_name,processed_by_role,processed_at&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${encodeURIComponent(date)}`
+      ).catch(() => [])
     ]);
 
     const customerById = new Map(customerMaster.customers.map((customer) => [customer.id, customer]));
@@ -3677,7 +3690,15 @@ export async function getDeliveryHistoryForDate(companyId: string | undefined, d
 
     const totalCompletions = drivers.reduce((sum, group) => sum + group.completions.length, 0) + unassignedCompletions.length;
 
-    return { date, drivers, totalCompletions, unassignedCompletions };
+    const followUps = followUpRows.map((row) => ({
+      customerId: row.customer_id,
+      processedAt: row.processed_at,
+      processedByName: row.processed_by_name,
+      processedByRole: row.processed_by_role,
+      routeDate: row.route_date,
+      status: row.status
+    }));
+    return { date, drivers, followUps, totalCompletions, unassignedCompletions };
   } catch {
     return empty;
   }
@@ -4000,6 +4021,50 @@ export async function getCustomerMaster(
     customers: scopedCustomers,
     source: "supabase",
     truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT
+  };
+}
+
+export async function saveDeliveryHistoryFollowUp(
+  companyId: string,
+  input: { customerId: string; routeDate: string; status: DeliveryHistoryFollowUpStatus },
+  actor: { name: string; role: string; userId?: string }
+): Promise<DeliveryHistoryFollowUp> {
+  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.routeDate)) throw new Error("처리할 배송 날짜가 올바르지 않습니다.");
+  if (!(["redelivery", "cancelled", "checked"] as string[]).includes(input.status)) throw new Error("지원하지 않는 후속 처리입니다.");
+  const confirmations = await supabaseRequest<Array<{ customer_ids: unknown }>>(
+    `route_plan_confirmations?select=customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${encodeURIComponent(input.routeDate)}`
+  );
+  const planned = confirmations.some((row) => Array.isArray(row.customer_ids) && row.customer_ids.includes(input.customerId));
+  if (!planned) throw new Error("해당 날짜의 확정 코스에서 거래처를 확인할 수 없습니다.");
+  const processedAt = new Date().toISOString();
+  const rows = await supabaseRequest<Array<{ customer_id: string; processed_at: string; processed_by_name: string; processed_by_role: string; route_date: string; status: DeliveryHistoryFollowUpStatus }>>(
+    "delivery_route_follow_ups?on_conflict=company_id,route_date,customer_id&select=customer_id,route_date,status,processed_by_name,processed_by_role,processed_at",
+    {
+      body: JSON.stringify([{
+        company_id: companyId,
+        customer_id: input.customerId,
+        processed_at: processedAt,
+        processed_by_name: actor.name || "시스템",
+        processed_by_role: actor.role || "unknown",
+        processed_by_user_id: actor.userId || null,
+        route_date: input.routeDate,
+        status: input.status,
+        updated_at: processedAt
+      }]),
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      method: "POST"
+    }
+  );
+  const row = rows[0];
+  if (!row) throw new Error("후속 처리 결과를 확인하지 못했습니다.");
+  return {
+    customerId: row.customer_id,
+    processedAt: row.processed_at,
+    processedByName: row.processed_by_name,
+    processedByRole: row.processed_by_role,
+    routeDate: row.route_date,
+    status: row.status
   };
 }
 
