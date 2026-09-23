@@ -78,7 +78,7 @@ export default function CustomerLoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#eef1f4] px-4 py-8 sm:px-6">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,.12)] lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid min-w-0 w-[calc(100vw-2rem)] max-w-5xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,.12)] lg:grid-cols-[0.9fr_1.1fr]">
         <section className="relative hidden min-h-[660px] overflow-hidden bg-[#101827] p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full border-[48px] border-[#b9ed5c]/10" />
           <div className="absolute bottom-24 right-10 h-40 w-40 rounded-full bg-[#b9ed5c]/5 blur-2xl" />
