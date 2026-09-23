@@ -15,10 +15,12 @@ export async function GET(request: NextRequest) {
       ? []
       : await getStaffVehicleLocations(scope.companyId, { userId: scopedUserId });
     const includeEvents = request.nextUrl.searchParams.get("events") === "true";
+    const date = request.nextUrl.searchParams.get("date") || undefined;
     const requestedUserId = request.nextUrl.searchParams.get("userId") || undefined;
     const eventUserId = isScopedStaffView ? scopedUserId : requestedUserId;
     const events = includeEvents && (!isScopedStaffView || Boolean(eventUserId))
       ? await getStaffLocationEvents(scope.companyId, {
+          date,
           hours: Number(request.nextUrl.searchParams.get("hours")) || 12,
           userId: eventUserId
         })
@@ -32,6 +34,7 @@ export async function GET(request: NextRequest) {
           driverName: isScopedStaffView
             ? scope.customerSession?.assignedManagerName || scope.customerSession?.name
             : request.nextUrl.searchParams.get("driverName") || undefined,
+          date,
           hours: Number(request.nextUrl.searchParams.get("hours")) || 12
         })
       : undefined;

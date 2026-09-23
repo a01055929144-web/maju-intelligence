@@ -198,6 +198,11 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
     [history, activeDriverName]
   );
   const routeMetrics = useMemo(() => summarizeLocationEvents(activeDriver?.events || []), [activeDriver]);
+  const pendingPlannedStores = useMemo(() => {
+    if (!activeDriver?.planMatchedThatDay) return [];
+    const completedIds = new Set(activeDriver.completions.map((completion) => completion.customerId));
+    return activeDriver.plannedCustomerIds.filter((id) => !completedIds.has(id)).map((id) => storeById.get(id)).filter((store): store is StoreRow => Boolean(store));
+  }, [activeDriver, storeById]);
   const routePath = useMemo(() => createLocationRoutePath(activeDriver?.events || []), [activeDriver]);
   const markers = useMemo<KakaoMapMarker[]>(() => {
     if (!activeDriver) return [];
@@ -382,8 +387,25 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                       <RouteMetric label="실제 이동" value={`${routeMetrics.distanceKm.toLocaleString()}km`} />
                       <RouteMetric label="운행 시간" value={formatMinutes(routeMetrics.durationMinutes)} />
                       <RouteMetric label="완료 매장" value={`${activeDriver.completions.length.toLocaleString()}곳`} />
-                      <RouteMetric label="배송차량" value={activeDriver.deliveryVehicle || "-"} />
+                      <RouteMetric label={todayIsSelected ? "배송 대기" : "미완료"} value={`${pendingPlannedStores.length.toLocaleString()}곳`} />
                     </div>
+                    {pendingPlannedStores.length ? (
+                      <div className={`mt-3 rounded-lg border p-3 ${todayIsSelected ? "border-amber-200 bg-amber-50" : "border-rose-200 bg-rose-50"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`text-xs font-black ${todayIsSelected ? "text-amber-900" : "text-rose-900"}`}>{todayIsSelected ? "아직 배송 전" : "배송 미완료 확인 필요"}</p>
+                          <Badge className={todayIsSelected ? "bg-white text-amber-800" : "bg-white text-rose-800"}>{pendingPlannedStores.length}곳</Badge>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          {pendingPlannedStores.map((store) => (
+                            <button className="flex w-full items-center justify-between rounded-md bg-white px-2.5 py-2 text-left text-[11px] font-black text-slate-800 ring-1 ring-inset ring-slate-100" key={store.id} onClick={() => onOpenStore(store.id)} type="button">
+                              <span className="truncate">{store.name}</span><span className={todayIsSelected ? "text-amber-700" : "text-rose-700"}>{todayIsSelected ? "대기" : "미완료"}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : activeDriver.planMatchedThatDay ? (
+                      <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">확정 코스의 모든 배송이 완료됐습니다.</p>
+                    ) : null}
                     <div className="mt-3 rounded-lg border border-slate-200 bg-white">
                       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
                         <p className="text-xs font-black text-slate-950">방문 순서</p>

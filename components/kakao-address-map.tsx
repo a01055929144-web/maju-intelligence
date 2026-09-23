@@ -1156,7 +1156,7 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
   // 거래처 마커 오른쪽 위에 작은 초록 체크 배지를 얹습니다. 마커 자체의 등급 색/모양은 그대로 두고
   // 배지만 덧붙여, "이 매장은 이미 오늘 방문·완료됐다"를 지도에서 바로 구분할 수 있게 합니다.
   const completedBadge = marker.completed
-    ? `<span style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:999px;background:#059669;border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1;color:#ffffff;font-weight:900;">✓</span>`
+    ? `<span style="position:absolute;top:-7px;right:-7px;min-width:22px;height:22px;padding:0 4px;border-radius:999px;background:#047857;border:3px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:#ffffff;font-weight:900;box-shadow:0 4px 10px rgba(4,120,87,.4);">✓</span>`
     : "";
   const completedTitleSuffix = marker.completed ? " · 오늘 배송완료" : "";
 

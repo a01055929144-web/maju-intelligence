@@ -20,10 +20,6 @@ export async function POST(request: NextRequest) {
   if (!driverName) {
     return NextResponse.json({ message: "배송담당자가 지정되지 않았습니다. 담당자가 배정된 배송차만 코스를 확정할 수 있습니다." }, { status: 400 });
   }
-  if (!customerIds.length) {
-    return NextResponse.json({ message: "확정할 경유지가 없습니다." }, { status: 400 });
-  }
-
   const confirmedBy = scope.role === "customer" ? scope.customerSession?.name || undefined : "관리자";
 
   const result = await saveRouteOrderConfirmation(scope.companyId, driverName, customerIds, confirmedBy);

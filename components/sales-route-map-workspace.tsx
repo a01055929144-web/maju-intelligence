@@ -453,6 +453,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     loading: boolean;
     vehicle: StaffVehicleLocation | null;
   }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
+  const [vehicleAnalysisDate, setVehicleAnalysisDate] = useState(() => localDateKey());
   // 2026-09-07 피드백: "분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도 구현할 수
   // 있도록해줘" — 팝업(VehicleAnalysisModal)을 열지 않아도, 라이브 차량 목록에서 "경로" 버튼으로
   // 같은 실제 GPS 이동 경로를 메인 지도에 바로 겹쳐 볼 수 있게 합니다. 한 번에 한 대만 표시합니다
@@ -947,7 +948,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     let toastTimer: number | undefined;
     const load = async () => {
       try {
-        const params = new URLSearchParams({ completions: "true", hours: "20" });
+        const params = new URLSearchParams({ completions: "true", date: localDateKey() });
         if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
         const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
         const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; error?: string; locations?: StaffVehicleLocation[] } | null;
@@ -1020,10 +1021,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     };
   }, [liveVehicleLocations]);
   const openVehicleAnalysis = useCallback(
-    async (vehicle: StaffVehicleLocation) => {
+    async (vehicle: StaffVehicleLocation, date = localDateKey()) => {
+      setVehicleAnalysisDate(date);
       setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, vehicle });
       try {
-        const search = new URLSearchParams({ completions: "true", events: "true", hours: "12", userId: vehicle.userId });
+        const search = new URLSearchParams({ completions: "true", date, events: "true", userId: vehicle.userId });
         if (vehicle.deliveryVehicle) search.set("deliveryVehicle", vehicle.deliveryVehicle);
         if (vehicle.driverName) search.set("driverName", vehicle.driverName);
         if (churnRiskCompanyId) search.set("companyId", churnRiskCompanyId);
@@ -2789,12 +2791,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           currentStore={vehicleAnalysis.vehicle.currentCustomerId ? storeById.get(vehicleAnalysis.vehicle.currentCustomerId) : undefined}
           error={vehicleAnalysis.error}
           events={vehicleAnalysis.events}
+          date={vehicleAnalysisDate}
           loading={vehicleAnalysis.loading}
           onClose={() => setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null })}
           onOpenStore={(storeId) => {
             setSelectedId(storeId);
             setPreviewStoreId(storeId);
             setRightPanelTab("stores");
+            setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null });
+          }}
+          onDateChange={(date) => void openVehicleAnalysis(vehicleAnalysis.vehicle!, date)}
+          onOpenHistory={() => {
+            setActiveView("history");
             setVehicleAnalysis({ completions: [], events: [], error: "", loading: false, vehicle: null });
           }}
           vehicle={vehicleAnalysis.vehicle}
@@ -4887,19 +4895,25 @@ function LiveVehicleStatusPanel({
 function VehicleAnalysisModal({
   completions,
   currentStore,
+  date,
   error,
   events,
   loading,
   onClose,
+  onDateChange,
+  onOpenHistory,
   onOpenStore,
   vehicle
 }: {
   readonly completions: DeliveryCompletionEvent[];
   readonly currentStore?: StoreRow;
+  readonly date: string;
   readonly error: string;
   readonly events: StaffLocationEvent[];
   readonly loading: boolean;
   readonly onClose: () => void;
+  readonly onDateChange: (date: string) => void;
+  readonly onOpenHistory: () => void;
   readonly onOpenStore: (storeId: string) => void;
   readonly vehicle: StaffVehicleLocation;
 }) {
@@ -4944,12 +4958,14 @@ function VehicleAnalysisModal({
             <p className="text-xs font-black uppercase text-teal-700">운행 기록 분석</p>
             <h2 className="mt-1 truncate text-xl font-black text-slate-950">{vehicle.deliveryVehicle || vehicle.driverName}</h2>
             <p className="mt-1 text-xs font-bold text-slate-500">
-              {vehicle.driverName} · {currentStore ? `현재 작업 ${currentStore.name}` : "최근 12시간 GPS 기록"}
+              {vehicle.driverName} · {date} 날짜별 GPS·배송 기록
             </p>
           </div>
-          <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">
-            닫기
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <input aria-label="운행 기록 날짜" className="h-9 rounded-md border border-slate-200 px-2 text-xs font-black text-slate-700" max={localDateKey()} onChange={(event) => onDateChange(event.target.value)} type="date" value={date} />
+            <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onOpenHistory} type="button">전체 기간 기록</button>
+            <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">닫기</button>
+          </div>
         </header>
         <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1fr_280px]">
           <div className="min-h-[420px] bg-slate-100">
@@ -4960,7 +4976,7 @@ function VehicleAnalysisModal({
             ) : events.length ? (
               <KakaoAddressMap mapClassName="h-full min-h-[420px] rounded-none border-0" markers={markers} routePath={routePath} showList={false} />
             ) : (
-              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-slate-500">최근 12시간 동안 저장된 GPS 기록이 없습니다.</div>
+              <div className="grid h-full min-h-[420px] place-items-center p-6 text-center text-sm font-bold text-slate-500">선택한 날짜에 저장된 GPS 기록이 없습니다.</div>
             )}
           </div>
           <aside className="min-h-0 overflow-auto border-l border-slate-200 bg-white p-4">
@@ -5015,7 +5031,7 @@ function VehicleAnalysisModal({
                     ))}
                   </div>
                 ) : (
-                  <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">최근 12시간 배송 완료 기록이 없습니다.</p>
+                  <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">선택한 날짜의 배송 완료 기록이 없습니다.</p>
                 )}
               </div>
             </div>
@@ -9428,4 +9444,11 @@ const ACCESS_METHOD_TYPE_OPTIONS: Array<{ icon: LucideIcon; label: string }> = [
 
 function getAccessMethodIcon(type?: string): LucideIcon {
   return ACCESS_METHOD_TYPE_OPTIONS.find((option) => option.label === type)?.icon || KeyRound;
+}
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

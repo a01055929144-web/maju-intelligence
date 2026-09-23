@@ -3366,9 +3366,11 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
   }
 }
 
-export async function getStaffLocationEvents(companyId?: string, options: { hours?: number; userId?: string } = {}): Promise<StaffLocationEvent[]> {
+export async function getStaffLocationEvents(companyId?: string, options: { date?: string; hours?: number; userId?: string } = {}): Promise<StaffLocationEvent[]> {
   if (!companyId || !isProductionStoreConfigured()) return [];
-  const since = new Date(Date.now() - Math.max(1, options.hours || 12) * 60 * 60 * 1000).toISOString();
+  const dateRange = options.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date) ? kstDayRangeIso(options.date) : null;
+  const since = dateRange?.start || new Date(Date.now() - Math.max(1, options.hours || 12) * 60 * 60 * 1000).toISOString();
+  const untilFilter = dateRange ? `&recorded_at=lte.${encodeURIComponent(dateRange.end)}` : "";
   const userFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
   try {
     const rows = await supabaseRequest<
@@ -3386,7 +3388,7 @@ export async function getStaffLocationEvents(companyId?: string, options: { hour
     >(
       `staff_location_events?select=id,user_id,driver_name,delivery_vehicle,latitude,longitude,accuracy_m,recorded_at,current_customer_id&company_id=eq.${encodeURIComponent(
         companyId
-      )}&recorded_at=gte.${encodeURIComponent(since)}${userFilter}&order=recorded_at.asc&limit=3000`
+      )}&recorded_at=gte.${encodeURIComponent(since)}${untilFilter}${userFilter}&order=recorded_at.asc&limit=6000`
     );
     return rows
       .map((row) => ({
@@ -3409,10 +3411,12 @@ export async function getStaffLocationEvents(companyId?: string, options: { hour
 
 export async function getDeliveryCompletionEvents(
   companyId?: string,
-  options: { deliveryVehicle?: string; driverName?: string; hours?: number } = {}
+  options: { date?: string; deliveryVehicle?: string; driverName?: string; hours?: number } = {}
 ): Promise<DeliveryCompletionEvent[]> {
   if (!companyId || !isProductionStoreConfigured()) return [];
-  const since = new Date(Date.now() - Math.max(1, options.hours || 12) * 60 * 60 * 1000).toISOString();
+  const dateRange = options.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date) ? kstDayRangeIso(options.date) : null;
+  const since = dateRange?.start || new Date(Date.now() - Math.max(1, options.hours || 12) * 60 * 60 * 1000).toISOString();
+  const untilFilter = dateRange ? `&created_at=lte.${encodeURIComponent(dateRange.end)}` : "";
   try {
     const rows = await supabaseRequest<
       Array<{
@@ -3425,13 +3429,26 @@ export async function getDeliveryCompletionEvents(
     >(
       `customer_notes?select=id,customer_id,memo,next_action,created_at&company_id=eq.${encodeURIComponent(
         companyId
-      )}&note_type=eq.delivery&created_at=gte.${encodeURIComponent(since)}&order=created_at.asc&limit=500`
+      )}&note_type=eq.delivery&created_at=gte.${encodeURIComponent(since)}${untilFilter}&order=created_at.asc&limit=1000`
     );
     if (!rows.length) return [];
 
-    const routePlan = await getTodayRoutePlan(companyId).catch(() => null);
-    const routeStops = (routePlan?.groups || []).flatMap((group) => group.stops);
-    const stopByCustomerId = new Map(routeStops.map((stop) => [stop.id, stop]));
+    const [customerMap, confirmationMap] = await Promise.all([
+      getCustomerMapSummaries(companyId).catch(() => ({ customers: [] as CustomerMapSummaryItem[], source: "empty" as const, truncated: false })),
+      getRouteOrderConfirmationMap(companyId, options.date).catch(() => new Map<string, string[]>())
+    ]);
+    const stopByCustomerId = new Map(
+      customerMap.customers.map((customer) => {
+        const confirmedIds = customer.deliveryManager ? confirmationMap.get(customer.deliveryManager) : undefined;
+        const confirmedIndex = confirmedIds?.indexOf(customer.id) ?? -1;
+        return [customer.id, {
+          deliveryDriver: customer.deliveryManager,
+          deliveryVehicle: customer.deliveryVehicle,
+          name: customer.customerName,
+          order: confirmedIndex >= 0 ? confirmedIndex + 1 : undefined
+        }] as const;
+      })
+    );
     const driverName = normalizeComparableText(options.driverName);
     const deliveryVehicle = normalizeComparableText(options.deliveryVehicle);
     const filtered = rows.filter((row) => {
@@ -8301,10 +8318,10 @@ export async function refreshAllCompaniesRecommendationScores(): Promise<Recomme
 // 별로 확정한 오늘 방문 순서(route_plan_confirmations)를 오늘 날짜 기준으로 읽어와,
 // { 담당자 이름 -> 확정된 거래처 id 순서 } 맵으로 돌려줍니다. 확정 기록이 없으면 빈 맵을 돌려주고,
 // 이 경우 아래 getTodayRoutePlan은 예전과 동일하게 원장 순서를 그대로 씁니다(동작 변화 없음).
-async function getRouteOrderConfirmationMap(companyId: string): Promise<Map<string, string[]>> {
+async function getRouteOrderConfirmationMap(companyId: string, date?: string): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
   if (!isProductionStoreConfigured()) return map;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : toKstDateKey(new Date().toISOString());
   const rows = await supabaseRequest<Array<{ driver_name: string; customer_ids: unknown }>>(
     `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${today}`
   ).catch(() => []);
@@ -8317,7 +8334,7 @@ async function getRouteOrderConfirmationMap(companyId: string): Promise<Map<stri
 export async function saveRouteOrderConfirmation(companyId: string | undefined, driverName: string, customerIds: string[], confirmedBy?: string) {
   const resolvedCompanyId = companyId || getDefaultCompanyId();
   if (!isProductionStoreConfigured()) return { persisted: false };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toKstDateKey(new Date().toISOString());
   await supabaseRequest("route_plan_confirmations?on_conflict=company_id,driver_name,route_date", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -8400,6 +8417,13 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
         routeProvider,
         updatedAt: customer.updatedAt
       };
+    })
+    // 오늘 코스를 한 번 확정한 담당자는 확정 목록에 포함된 거래처만 배송 대상으로 봅니다.
+    // 목록에서 뺀 거래처는 삭제가 아니라 "오늘 배송 없음"이며, 다음 날에는 다시 전체 후보로 돌아옵니다.
+    .filter((stop) => {
+      const driverKey = (stop.deliveryDriver || "").trim();
+      const confirmedIds = driverKey ? routeOrderConfirmations.get(driverKey) : undefined;
+      return confirmedIds === undefined || confirmedIds.includes(stop.id);
     });
 
   const groupMap = new Map<string, RoutePlanStop[]>();

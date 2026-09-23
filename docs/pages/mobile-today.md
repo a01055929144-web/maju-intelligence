@@ -60,6 +60,9 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 - [x] 현장 단계 내비게이션을 상단 고정 헤더로 이동하고 기사 전용 현황을 한 줄 요약으로 축소
 
 ## TODO
+
+- [x] 데스크톱에서 확정한 오늘 배송 대상과 티맵 최적화 순서를 모바일 기사 코스에 반영
+- [x] 당일 배송 없음으로 제외된 거래처는 모바일 오늘 코스에서 숨김
 - [ ] **origin의 "simplify mobile field UX" 병합 결과 재검토**: 이 변경으로 "현장 실행 순서" 4단계 진행 패널(구 `MobileFieldFlowPanel`)과 운영 기준 패널의 담당자/업무구분 표시(구 `MobileOperationBasisPanel`)가 제거되고 더 단순한 `MobileRouteContextBar`로 대체됐다. 텍스트 단순화 수준을 넘어 실제 정보 표시량이 줄어든 변경이라, 사용자가 실사용해보고 이 방향이 맞는지 확인이 필요하다. 되돌리길 원하면 git 히스토리에서 병합 직전 버전을 복원할 수 있다.
 
 ## KNOWN ISSUES

@@ -306,8 +306,8 @@ export function TodayCourseView({
       return;
     }
     const customerIds = sequencedRouteStores.map((store) => store.id);
-    if (!customerIds.length) {
-      setRouteConfirmState({ status: "error", message: "확정할 경유지가 없습니다. 아래 목록에서 경유지를 먼저 추가하세요." });
+    if (customerIds.length > 1 && !routeSequence) {
+      setRouteConfirmState({ status: "error", message: "먼저 티맵 루트 최적화를 실행하세요. 계산된 최적 순서로 오늘 코스를 확정합니다." });
       return;
     }
     setRouteConfirmState({ status: "saving" });
@@ -326,7 +326,7 @@ export function TodayCourseView({
         setRouteConfirmState({ status: "error", message: payload?.message || "코스 확정 저장에 실패했습니다. 잠시 후 다시 시도하세요." });
         return;
       }
-      setRouteConfirmState({ status: "saved", message: `${driverName}님의 오늘 코스 ${customerIds.length}곳 순서가 저장됐습니다. 모바일 화면에도 반영됩니다.` });
+      setRouteConfirmState({ status: "saved", message: customerIds.length ? `${driverName}님의 최적화 코스 ${customerIds.length}곳이 저장됐습니다. 모바일 화면에도 반영됩니다.` : `${driverName}님의 오늘 배송을 '없음'으로 저장했습니다.` });
     } catch {
       setRouteConfirmState({ status: "error", message: "네트워크 오류로 코스 확정 저장에 실패했습니다. 연결을 확인한 뒤 다시 시도하세요." });
     }
@@ -657,21 +657,25 @@ export function TodayCourseView({
                 {routeSequence && sequencedRouteStores.length ? (
                   <FullRouteNavigateAction originLabel={routeOriginLabel} originPoint={routeSequence.originPoint} stores={sequencedRouteStores} stopPointByAddress={routeStopPointByAddress} />
                 ) : null}
-                {isVehicleScoped && sequencedRouteStores.length ? (
+                {isVehicleScoped ? (
                   <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-black text-slate-900">코스 확정 · 모바일 반영</p>
+                    <p className="text-xs font-black text-slate-900">오늘 배송 선택 · 루트 최적화 · 모바일 반영</p>
                     <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                       {selectedDriver === "배송차 선택 필요"
                         ? "배송차에 담당자가 배정돼야 확정할 수 있습니다."
-                        : `여기서 확정해야 ${selectedDriver}님의 모바일 화면에도 이 순서가 그대로 반영됩니다.`}
+                        : sequencedRouteStores.length > 1 && !routeSequence
+                          ? "배송할 매장을 선택한 뒤 티맵 계산을 실행하면 최적화된 순서로 확정할 수 있습니다. 선택하지 않은 매장은 오늘 배송 없음으로 제외됩니다."
+                          : sequencedRouteStores.length
+                            ? `최적화된 순서를 ${selectedDriver}님의 모바일 화면에 반영합니다.`
+                            : "오늘 배송할 매장이 없으면 빈 코스로 확정하세요. 내일은 전체 배정 거래처가 다시 후보로 표시됩니다."}
                     </p>
                     <button
                       className="maju-button-primary mt-2 w-full disabled:cursor-not-allowed disabled:bg-slate-300"
-                      disabled={routeConfirmState.status === "saving" || !selectedVehicle?.driver}
+                      disabled={routeConfirmState.status === "saving" || !selectedVehicle?.driver || (sequencedRouteStores.length > 1 && !routeSequence)}
                       onClick={confirmRouteOrder}
                       type="button"
                     >
-                      {routeConfirmState.status === "saving" ? "저장 중" : `오늘 코스 ${sequencedRouteStores.length}곳 순서 확정`}
+                      {routeConfirmState.status === "saving" ? "저장 중" : sequencedRouteStores.length ? `최적화 코스 ${sequencedRouteStores.length}곳 확정` : "오늘 배송 없음으로 확정"}
                     </button>
                     {routeConfirmState.status === "saved" || routeConfirmState.status === "error" ? (
                       <p
@@ -713,7 +717,7 @@ export function TodayCourseView({
                     전체 선택
                   </button>
                   <button className="maju-button-secondary h-8 text-slate-600 disabled:cursor-not-allowed disabled:opacity-40" disabled={!isVehicleScoped} onClick={clearRouteStores} type="button">
-                    선택 해제
+                    오늘 배송 없음
                   </button>
                   <span className="inline-flex h-8 items-center rounded-md bg-slate-100 px-3 text-xs font-black text-slate-700">
                     {activeRouteBatchIndex + 1}/{routeBatchCount}묶음 · 계산 {selectedRouteStores.length}곳
