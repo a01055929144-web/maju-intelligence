@@ -90,8 +90,10 @@ export default function CustomerLoginPage() {
                 <p className="text-xs font-medium text-slate-400">Sales & delivery operations</p>
               </div>
             </div>
-            <h1 className="mt-16 max-w-sm text-[38px] font-bold leading-[1.18] tracking-[-0.045em]">
-              오늘의 배송을<br />한 화면에서 끝내세요.
+            <h1 className="mt-16 text-[36px] font-bold leading-[1.18] tracking-[-0.045em]">
+              <span className="block whitespace-nowrap">오늘의 배송을</span>
+              <span className="block whitespace-nowrap">한 화면에서</span>
+              <span className="block whitespace-nowrap">끝내세요.</span>
             </h1>
             <p className="mt-5 max-w-sm text-sm font-medium leading-6 text-slate-300">
               배차, 최적 경로, 실시간 차량, 배송 증빙을 하나의 운영 흐름으로 연결합니다.
@@ -114,8 +116,8 @@ export default function CustomerLoginPage() {
           </div>
         </section>
 
-        <div className="space-y-4 p-4 sm:p-8 lg:p-10">
-        <Card className="rounded-2xl border-slate-200 shadow-none">
+        <div className="min-w-0 space-y-4 p-4 sm:p-8 lg:p-10">
+        <Card className="min-w-0 overflow-hidden rounded-2xl border-slate-200 shadow-none">
           <CardHeader>
             <Badge className="mb-3 w-fit bg-lime-100 text-slate-900 ring-1 ring-inset ring-lime-200">
               <Building2 className="mr-1 h-3.5 w-3.5" />
@@ -161,7 +163,7 @@ export default function CustomerLoginPage() {
                 placeholder="비밀번호"
               />
               {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-primary/30 hover:bg-teal-50/60">
+              <label className="flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl border border-border bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-primary/30 hover:bg-lime-50/60">
                 <span className="flex items-center gap-2">
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-md border ${
@@ -173,7 +175,7 @@ export default function CustomerLoginPage() {
                   로그인 상태 유지
                 </span>
                 <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
-                <span className="text-xs font-extrabold text-muted-foreground">개인 PC에서만</span>
+                <span className="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:inline">개인 PC에서만</span>
               </label>
               <Button className="mt-1.5 h-12 w-full rounded-xl bg-[#101827] font-bold text-white hover:bg-[#1b2639]" disabled={loading}>
                 {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
@@ -193,7 +195,7 @@ export default function CustomerLoginPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-slate-200 bg-slate-50/70 shadow-none">
+        <Card className="min-w-0 overflow-hidden rounded-2xl border-slate-200 bg-slate-50/70 shadow-none">
           <CardHeader>
             <Badge className="mb-3 w-fit bg-[#FEE500]/30 text-[#7a5c00]">
               <Smartphone className="mr-1 h-3.5 w-3.5" />
@@ -211,7 +213,7 @@ export default function CustomerLoginPage() {
               <Smartphone className="h-4 w-4" />
               모바일 화면으로 카카오 로그인
             </Link>
-            <p className="text-center text-xs font-medium leading-5 text-slate-500">
+            <p className="break-keep text-center text-xs font-medium leading-5 text-slate-500">
               처음 한 번은 관리자가 보낸 초대 링크가 필요합니다.
             </p>
           </CardContent>
