@@ -112,7 +112,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
   const [actionError, setActionError] = useState("");
   const [banner, setBanner] = useState<{ tone: "success" | "fail"; message: string } | null>(null);
   const [registering, setRegistering] = useState(false);
-  const [statusChanging, setStatusChanging] = useState(false);
+  const [statusChanging, setStatusChanging] = useState<"" | "active" | "paused" | "canceled">("");
 
   const loadStatus = useCallback(async () => {
     setLoadError("");
@@ -175,7 +175,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
   const handleStatusChange = useCallback(
     async (status: "active" | "paused" | "canceled") => {
       setActionError("");
-      setStatusChanging(true);
+      setStatusChanging(status);
       try {
         const response = await fetch("/api/billing/subscription", {
           method: "PATCH",
@@ -188,7 +188,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "설정을 변경하지 못했습니다.");
       } finally {
-        setStatusChanging(false);
+        setStatusChanging("");
       }
     },
     [companyId, loadStatus]
@@ -196,13 +196,16 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
 
   if (loadError) {
     return (
-      <div className="maju-filter-box border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-900">{loadError}</div>
+      <div className="maju-filter-box flex flex-col items-start gap-3 border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+        <span>{loadError}</span>
+        <button className="maju-button-secondary shrink-0" onClick={() => void loadStatus()} type="button">다시 불러오기</button>
+      </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="maju-section-card flex items-center justify-center gap-2 p-10 text-sm font-bold text-slate-500">
+      <div aria-live="polite" className="maju-section-card flex items-center justify-center gap-2 p-10 text-sm font-medium text-slate-500">
         <Loader2 className="h-4 w-4 animate-spin" />
         결제 정보를 불러오는 중입니다…
       </div>
@@ -241,52 +244,52 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
         <div className="grid gap-4 p-4 md:grid-cols-3">
           <div>
             <p className="maju-muted-label">등록된 카드</p>
-            <p className="mt-1 flex items-center gap-2 text-lg font-black text-slate-950">
+            <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-slate-950">
               <CreditCard className="h-4 w-4 text-slate-400" />
               {subscription.cardNumberMasked || "미등록"}
             </p>
           </div>
           <div>
             <p className="maju-muted-label">월 이용료</p>
-            <p className="mt-1 text-lg font-black text-slate-950">
+            <p className="mt-1 text-lg font-semibold text-slate-950">
               {subscription.planAmountWon > 0 ? `${subscription.planAmountWon.toLocaleString()}원` : "관리자 설정 대기"}
             </p>
           </div>
           <div>
             <p className="maju-muted-label">다음 청구일</p>
-            <p className="mt-1 text-lg font-black text-slate-950">{subscription.nextBillingDate || "-"}</p>
+            <p className="mt-1 text-lg font-semibold text-slate-950">{subscription.nextBillingDate || "-"}</p>
           </div>
         </div>
         {subscription.lastPaymentStatus ? (
-          <div className={`mx-4 mb-4 rounded-lg px-3 py-2 text-xs font-bold ${subscription.lastPaymentStatus === "succeeded" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+          <div className={`mx-4 mb-4 rounded-lg px-3 py-2.5 text-sm font-medium ${subscription.lastPaymentStatus === "succeeded" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
             최근 결제: {subscription.lastPaymentStatus === "succeeded" ? "성공" : `실패 (${subscription.lastPaymentMessage || "사유 미상"})`}
             {subscription.lastPaymentAt ? ` · ${new Date(subscription.lastPaymentAt).toLocaleString("ko-KR")}` : ""}
           </div>
         ) : null}
 
-        {actionError ? <div className="mx-4 mb-4 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{actionError}</div> : null}
+        {actionError ? <div aria-live="polite" className="mx-4 mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-800">{actionError}</div> : null}
 
         <div className="flex flex-wrap gap-2 border-t border-slate-100 p-4">
-          <button className="maju-button-primary" disabled={registering} onClick={handleRegisterCard} type="button">
+          <button aria-busy={registering} className="maju-button-primary min-h-11" disabled={registering || !data.configured} onClick={handleRegisterCard} type="button">
             {registering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
-            {subscription.billingKey ? "카드 변경" : "카드 등록"}
+            {registering ? "카드 등록 화면 준비 중..." : subscription.billingKey ? "카드 변경" : "카드 등록"}
           </button>
           {subscription.billingKey && subscription.status !== "active" && subscription.status !== "canceled" ? (
-            <button className="maju-button-secondary" disabled={statusChanging} onClick={() => handleStatusChange("active")} type="button">
-              <PlayCircle className="h-3.5 w-3.5" />
-              자동결제 재개
+            <button aria-busy={statusChanging === "active"} className="maju-button-secondary min-h-11" disabled={Boolean(statusChanging)} onClick={() => handleStatusChange("active")} type="button">
+              {statusChanging === "active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+              {statusChanging === "active" ? "재개하는 중..." : "자동결제 재개"}
             </button>
           ) : null}
           {subscription.status === "active" ? (
-            <button className="maju-button-secondary" disabled={statusChanging} onClick={() => handleStatusChange("paused")} type="button">
-              <PauseCircle className="h-3.5 w-3.5" />
-              일시중지
+            <button aria-busy={statusChanging === "paused"} className="maju-button-secondary min-h-11" disabled={Boolean(statusChanging)} onClick={() => handleStatusChange("paused")} type="button">
+              {statusChanging === "paused" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PauseCircle className="h-3.5 w-3.5" />}
+              {statusChanging === "paused" ? "중지하는 중..." : "일시중지"}
             </button>
           ) : null}
           {subscription.status !== "canceled" && subscription.billingKey ? (
-            <button className="maju-button-secondary text-rose-700" disabled={statusChanging} onClick={() => handleStatusChange("canceled")} type="button">
-              <XCircle className="h-3.5 w-3.5" />
-              해지
+            <button aria-busy={statusChanging === "canceled"} className="maju-button-secondary min-h-11 text-rose-700" disabled={Boolean(statusChanging)} onClick={() => handleStatusChange("canceled")} type="button">
+              {statusChanging === "canceled" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+              {statusChanging === "canceled" ? "해지하는 중..." : "해지"}
             </button>
           ) : null}
         </div>
@@ -319,7 +322,8 @@ function PaymentHistoryTable({ payments }: { readonly payments: SubscriptionPaym
           누적 결제 {totalSucceeded.toLocaleString()}원
         </Badge>
       </div>
-      <div className="overflow-x-auto">
+      <p className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 sm:hidden">표를 좌우로 밀어 결제 상세를 확인하세요.</p>
+      <div className="overflow-x-auto overscroll-x-contain">
         <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="text-left text-xs font-black text-slate-500">
