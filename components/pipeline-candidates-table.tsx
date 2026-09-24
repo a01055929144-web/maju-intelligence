@@ -33,12 +33,13 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
     <section className="maju-section-card scroll-mt-28" id="pipeline-table">
       <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black text-slate-950">후보 목록</h2>
-          <p className="mt-1 text-sm font-semibold text-slate-500">견적·관심 거래처 우선순위</p>
+          <h2 className="text-lg font-semibold text-slate-950">후보 목록</h2>
+          <p className="mt-1 text-sm text-slate-500">견적·관심 거래처 우선순위</p>
         </div>
         <Badge className="bg-teal-700 text-white">가중 {weightedRevenue.toLocaleString()}만원</Badge>
       </div>
-      <div className="overflow-x-auto">
+      <p className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 sm:hidden">표를 좌우로 밀어 전체 항목을 확인하세요.</p>
+      <div className="overflow-x-auto overscroll-x-contain">
         <table className="w-full min-w-[880px] border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="text-left text-xs font-black text-slate-500">

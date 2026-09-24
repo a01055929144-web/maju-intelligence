@@ -34,6 +34,7 @@ type CustomerAppShellProps = {
 
 export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
   const pathname = usePathname();
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
@@ -122,11 +123,20 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   >
                     <PanelLeftClose className="h-4 w-4" />
                   </button>
+                  <button
+                    aria-expanded={mobileMenuOpen}
+                    aria-label={mobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/15 text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
+                    onClick={() => setMobileMenuOpen((value) => !value)}
+                    type="button"
+                  >
+                    {mobileMenuOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+                  </button>
                 </div>
               )}
             </div>
 
-            <nav className="flex-1 space-y-4 overflow-auto p-3">
+            <nav className={`${mobileMenuOpen ? "block" : "hidden"} flex-1 space-y-4 overflow-auto p-3 lg:block`}>
               {visibleNavigationGroups.map((group) => (
                 <div key={group.label}>
                   {!collapsed ? <p className="mb-2 px-2 text-xs font-medium text-slate-400">{group.label}</p> : null}
@@ -195,7 +205,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               ))}
             </nav>
 
-            <div className={`border-t border-white/10 bg-[#101827] ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
+            <div className={`${mobileMenuOpen ? "block" : "hidden"} border-t border-white/10 bg-[#101827] lg:block ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
               {collapsed ? (
                 <>
                   {mode === "customer" ? (
