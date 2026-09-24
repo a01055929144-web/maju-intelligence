@@ -99,32 +99,32 @@ export default async function RevenueTransactionsPage({
           <form className="flex flex-wrap items-end gap-2 border-b border-slate-100 px-4 py-3" method="GET">
             {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
             <label className="space-y-1">
-              <span className="block text-[11px] font-bold text-slate-500">시작일</span>
+              <span className="block text-xs font-medium text-slate-500">시작일</span>
               <input
-                className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold outline-none focus:border-teal-400"
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400"
                 defaultValue={dateFrom}
                 name="from"
                 type="date"
               />
             </label>
             <label className="space-y-1">
-              <span className="block text-[11px] font-bold text-slate-500">종료일</span>
+              <span className="block text-xs font-medium text-slate-500">종료일</span>
               <input
-                className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold outline-none focus:border-teal-400"
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400"
                 defaultValue={dateTo}
                 name="to"
                 type="date"
               />
             </label>
-            <button className="maju-button-secondary h-9" type="submit">
+            <button className="maju-button-secondary h-10" type="submit">
               기간 적용
             </button>
             {dateFrom || dateTo ? (
-              <Link className="maju-button-secondary h-9" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
+              <Link className="maju-button-secondary h-10" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
                 기간 초기화
               </Link>
             ) : null}
-            {dateFrom || dateTo ? <span className="text-[11px] font-bold text-teal-700">{dateFrom || "처음"} ~ {dateTo || "현재"} 기간 적용 중</span> : null}
+            {dateFrom || dateTo ? <span className="text-xs font-semibold text-teal-700">{dateFrom || "처음"} ~ {dateTo || "현재"} 기간 적용 중</span> : null}
           </form>
           <div className="grid md:grid-cols-4">
             <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
@@ -262,13 +262,23 @@ function RevenueDataBasisPanel({
   ];
 
   return (
-    <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+    <details className="maju-section-card group">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <p className="maju-section-title">운영 기준 데이터</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">거래처 매칭·품목·누적 매출 산정 기준</p>
+        </div>
+        <span className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
+          기준 확인
+          <TrendingUp className="h-4 w-4 transition group-open:rotate-90" />
+        </span>
+      </summary>
+      <div className="grid gap-3 border-y border-slate-200/80 bg-slate-50/70 px-4 py-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
         <div>
           <p className="maju-section-title">운영 기준 데이터</p>
           <p className="mt-1 maju-muted-label normal-case tracking-normal">매출 원장이 지도 홈과 AI 리포트에 반영되는 기준값입니다.</p>
         </div>
-        <p className="text-xs font-bold leading-5 text-slate-600">
+        <p className="text-sm font-medium leading-6 text-slate-600">
           거래처 정보와 매출 원장의 사업자번호 또는 상호명·주소가 맞아야 거래처별 매출, 등급, 품목 이탈 분석이 정확해집니다.
         </p>
       </div>
@@ -276,14 +286,14 @@ function RevenueDataBasisPanel({
         {items.map((item) => (
           <div className="min-w-0 px-4 py-3" key={item.label}>
             <p className="maju-muted-label">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950" title={item.value}>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-950" title={item.value}>
               {item.value}
             </p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-500">{item.helper}</p>
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -295,7 +305,7 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: st
       </div>
       <div className="min-w-0">
         <p className="maju-muted-label">{label}</p>
-        <p className="mt-0.5 truncate text-xl font-black text-slate-950">{value}</p>
+        <p className="mt-0.5 truncate text-xl font-semibold text-slate-950">{value}</p>
       </div>
     </div>
   );
@@ -330,7 +340,7 @@ function SalesSignalCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="maju-muted-label">{label}</p>
-          <p className="mt-1 truncate text-xl font-black text-slate-950">{value}</p>
+          <p className="mt-1 truncate text-xl font-semibold text-slate-950">{value}</p>
         </div>
         <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
           {ready ? "준비" : "확인"}

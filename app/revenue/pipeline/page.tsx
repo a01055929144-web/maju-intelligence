@@ -180,18 +180,28 @@ function PipelineBasisPanel({
   ];
 
   return (
-    <div className="maju-section-card">
+    <details className="maju-section-card group">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <p className="maju-section-title">집계 기준</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">방문 결과·견적 상태·전환 확률 산정 기준</p>
+        </div>
+        <span className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
+          기준 확인
+          <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
+        </span>
+      </summary>
       {/*
         세 번째 칸을 auto로 두면 flex-wrap 버튼 묶음의 줄바꿈 전 최대 너비를 기준으로 트랙 크기가
         고정돼, 가운데 설명 문단(minmax(0,1fr))이 극단적으로 눌려 한 글자씩 줄바꿈되는 문제가
         있었습니다. minmax(0,auto)로 바꿔 필요할 때는 줄어들 수 있게 했습니다.
       */}
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+      <div className="grid gap-3 border-y border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">집계 기준</p>
           <p className="mt-1 maju-muted-label normal-case tracking-normal">방문 결과 기반</p>
         </div>
-        <p className="text-xs font-bold leading-5 text-slate-600">확정 매출이 아닌 실행 후보입니다. 견적 요청과 관심 거래처부터 처리합니다.</p>
+        <p className="text-sm font-medium leading-6 text-slate-600">확정 매출이 아닌 실행 후보입니다. 견적 요청과 관심 거래처부터 처리합니다.</p>
         <div className="flex flex-wrap gap-2">
           {actionLinks.map((item) => {
             const Icon = item.icon;
@@ -209,12 +219,12 @@ function PipelineBasisPanel({
         {items.map((item) => (
           <div className="min-w-0 px-4 py-3" key={item.label}>
             <p className="maju-muted-label">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-950">{item.value}</p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-500">{item.helper}</p>
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -225,7 +235,7 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: st
         <Icon className="h-5 w-5" />
       </div>
       <p className="maju-muted-label">{label}</p>
-      <p className="mt-1 truncate text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-1 truncate text-2xl font-semibold text-slate-950">{value}</p>
     </div>
   );
 }
@@ -251,8 +261,8 @@ function PipelineActionCard({
     <div className={`border-b border-slate-200 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${toneClassName}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase opacity-70">{label}</p>
-          <p className="mt-1 text-2xl font-black text-slate-950">{value}</p>
+          <p className="text-xs font-semibold opacity-70">{label}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
         </div>
         <Badge className="bg-white/80 text-slate-700">다음 액션</Badge>
       </div>
