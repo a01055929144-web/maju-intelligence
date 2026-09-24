@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -81,7 +82,7 @@ export function SalesTransactionTable({
         </div>
         <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{items.length.toLocaleString()}행 표시</Badge>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2">
+      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-3 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex h-10 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500">
             보기
@@ -104,9 +105,9 @@ export function SalesTransactionTable({
             {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {items.length.toLocaleString()}행
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:gap-1">
           <button
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={currentPage <= 1}
             onClick={() => setPage((value) => Math.max(1, value - 1))}
             type="button"
@@ -117,7 +118,7 @@ export function SalesTransactionTable({
             {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
           </span>
           <button
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={currentPage >= totalPages}
             onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
             type="button"
@@ -183,14 +184,19 @@ export function SalesTransactionTable({
         </table>
       </div>
       {truncated ? (
-        <div className="space-y-1.5 border-t border-slate-100 p-3">
+        <div aria-live="polite" className="space-y-1.5 border-t border-slate-100 p-3">
           <button
             className="maju-button-secondary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isLoadingMore}
             onClick={() => void loadMore()}
             type="button"
           >
-            {isLoadingMore ? "불러오는 중..." : "더 불러오기"}
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                거래내역을 불러오는 중입니다.
+              </>
+            ) : "더 불러오기"}
           </button>
           {loadMoreError ? <p className="text-center text-xs font-bold text-rose-600">{loadMoreError}</p> : null}
         </div>

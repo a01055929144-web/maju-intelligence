@@ -96,37 +96,37 @@ export default async function RevenueTransactionsPage({
               {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
             </Badge>
           </div>
-          <form className="flex flex-wrap items-end gap-2 border-b border-slate-100 px-4 py-3" method="GET">
+          <form className="grid gap-3 border-b border-slate-100 px-4 py-4 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end" method="GET">
             {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
-            <label className="space-y-1">
+            <label className="min-w-0 space-y-1">
               <span className="block text-xs font-medium text-slate-500">시작일</span>
               <input
-                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400"
+                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400 lg:w-auto"
                 defaultValue={dateFrom}
                 name="from"
                 type="date"
               />
             </label>
-            <label className="space-y-1">
+            <label className="min-w-0 space-y-1">
               <span className="block text-xs font-medium text-slate-500">종료일</span>
               <input
-                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400"
+                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400 lg:w-auto"
                 defaultValue={dateTo}
                 name="to"
                 type="date"
               />
             </label>
-            <button className="maju-button-secondary h-10" type="submit">
+            <button className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" type="submit">
               기간 적용
             </button>
             {dateFrom || dateTo ? (
-              <Link className="maju-button-secondary h-10" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
+              <Link className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
                 기간 초기화
               </Link>
             ) : null}
-            {dateFrom || dateTo ? <span className="text-xs font-semibold text-teal-700">{dateFrom || "처음"} ~ {dateTo || "현재"} 기간 적용 중</span> : null}
+            {dateFrom || dateTo ? <span className="self-center rounded-full bg-teal-50 px-3 py-2 text-center text-xs font-semibold text-teal-700 sm:col-span-2 lg:col-span-1">{dateFrom || "처음"} ~ {dateTo || "현재"} 기간 적용 중</span> : null}
           </form>
-          <div className="grid md:grid-cols-4">
+          <div className="grid grid-cols-2 md:grid-cols-4">
             <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
             <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
             <Metric icon={Store} label="거래처 수" value={`${sales.customerCount.toLocaleString()}곳`} />
@@ -313,7 +313,7 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: st
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="maju-stat-card min-w-[150px] text-right">
+    <div className="maju-stat-card min-w-[132px] shrink-0 text-right sm:min-w-[150px]">
       <p className="maju-muted-label">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
     </div>
@@ -347,7 +347,7 @@ function SalesSignalCard({
         </Badge>
       </div>
       <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <Link className="maju-button-secondary mt-4" href={actionHref}>
+      <Link className="maju-button-secondary mt-4 w-full justify-center sm:w-auto" href={actionHref}>
         {actionLabel}
       </Link>
     </div>
@@ -373,7 +373,7 @@ function RankedRevenueRow({
 }) {
   return (
     <div className="bg-white p-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-teal-700 text-xs font-black text-white">{index}</span>
@@ -382,7 +382,7 @@ function RankedRevenueRow({
           </div>
           <p className="mt-1 text-xs font-bold text-muted-foreground">{meta}</p>
         </div>
-        <p className="shrink-0 text-right text-sm font-black text-primary">{value}</p>
+        <p className="shrink-0 text-sm font-black text-primary sm:text-right">{value}</p>
       </div>
       <div className="mt-3 flex items-center gap-3">
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">

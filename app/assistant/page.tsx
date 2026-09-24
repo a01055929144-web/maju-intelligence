@@ -59,12 +59,12 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4 sm:px-4">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-3 sm:px-4 sm:py-4">
         <div className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="maju-section-title">영업 초안 작업 흐름</p>
-              <p className="mt-1 text-sm text-slate-500">방문 기록을 확인하고 초안을 검토한 뒤 후속 업무로 이어가세요.</p>
+              <p className="mt-1 text-sm text-slate-500">기록 확인 → 초안 검토 → 후속 업무 순서로 진행하세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
@@ -74,7 +74,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               <span className="text-sm text-slate-400">후속 {followUps} · 견적 {quotes}</span>
             </div>
           </div>
-          <div className="grid lg:grid-cols-3">
+          <div className="grid sm:grid-cols-3">
             {assistantActions.map((action) => (
               <AssistantActionCard key={action.label} {...action} />
             ))}
@@ -88,7 +88,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
                 검토할 초안
               </h2>
-              <p className="mt-1 text-sm text-slate-500">내용을 검토하고 복사 또는 저장한 뒤 다음 액션을 진행하세요.</p>
+              <p className="mt-1 text-sm text-slate-500">내용을 확인한 뒤 복사하거나 파일로 저장하세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
@@ -99,22 +99,22 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           </div>
           <div className="divide-y divide-slate-100">
             {drafts.map((draft) => (
-              <article key={draft.id} className="grid gap-4 p-4 hover:bg-slate-50/60 xl:grid-cols-[220px_minmax(0,1fr)_220px]">
+              <article key={draft.id} className="grid gap-4 p-4 transition-colors hover:bg-slate-50/60 sm:p-5 xl:grid-cols-[200px_minmax(0,1fr)_220px]">
                 <div className="min-w-0">
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
                     <Badge className="bg-teal-100 text-teal-800">{typeLabels[draft.type]}</Badge>
                     <Badge className="bg-slate-100 text-slate-700">{draft.region}</Badge>
                   </div>
                   <p className="truncate text-sm font-semibold text-slate-950">{draft.leadName}</p>
-                  <p className="mt-1 text-xs text-slate-500">영업 후속 대상</p>
+                  <p className="mt-1 text-xs text-slate-500">후속 영업 대상</p>
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold text-slate-950">{draft.title}</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CopyTextButton text={draft.body} />
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+                      <CopyTextButton className="w-full justify-center sm:w-auto" text={draft.body} />
                       <a
-                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         download={`영업-초안-${draft.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`}
                         href={`data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${draft.title}\n거래처: ${draft.leadName}\n지역: ${draft.region}\n유형: ${typeLabels[draft.type]}\n\n${draft.body}\n\n다음 액션: ${draft.nextAction}\n`)}`}
                         aria-label={`${draft.leadName} ${draft.title} 텍스트 저장`}
@@ -124,7 +124,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                       </a>
                     </div>
                   </div>
-                  <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">{draft.body}</p>
+                  <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">{draft.body}</p>
                 </div>
                 <div className="rounded-lg border border-teal-100 bg-teal-50/50 p-3">
                   <p className="text-xs font-semibold text-teal-800">복사·저장 후 다음 액션</p>
@@ -135,8 +135,8 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
             {!drafts.length ? (
               <div className="p-8 text-center sm:p-12">
                 <Sparkles className="mx-auto mb-3 h-8 w-8 text-teal-700" />
-                <p className="font-semibold text-slate-950">아직 실제 방문 기록으로 만든 초안이 없습니다.</p>
-                <p className="mt-1 text-sm text-slate-500">방문 결과와 영업 메모를 남기면 이곳에 후속 문장과 견적 메모가 생성됩니다.</p>
+                <p className="font-semibold text-slate-950">검토할 초안이 없습니다.</p>
+                <p className="mt-1 text-sm text-slate-500">방문 결과와 메모를 남기면 후속 문장과 견적 메모가 생성됩니다.</p>
                 <Link
                   className="maju-button-primary mt-5"
                   href={companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline"}
@@ -165,7 +165,7 @@ function AssistantActionCard({
   value: string;
 }) {
   return (
-    <Link className="group border-b border-slate-200 p-4 transition hover:bg-teal-50/40 lg:border-b-0 lg:border-r last:lg:border-r-0" href={href}>
+    <Link className="group border-b border-slate-200 p-4 transition hover:bg-teal-50/40 sm:border-b-0 sm:border-r last:sm:border-r-0" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-700">{label}</p>

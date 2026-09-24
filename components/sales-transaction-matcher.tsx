@@ -112,7 +112,7 @@ export function SalesTransactionMatcher({
       </div>
 
       {message ? (
-        <div className={`px-4 py-2 text-xs font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+        <div aria-live="polite" className={`px-4 py-3 text-sm font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`} role="status">
           {message.text}
         </div>
       ) : null}
@@ -128,7 +128,8 @@ export function SalesTransactionMatcher({
                 </p>
               </div>
               <button
-                className="maju-button-secondary"
+                aria-expanded={openKey === group.customerKey}
+                className="maju-button-secondary w-full justify-center sm:w-auto"
                 onClick={() => {
                   setOpenKey(openKey === group.customerKey ? null : group.customerKey);
                   setQuery(openKey === group.customerKey ? "" : group.customerName);
@@ -141,7 +142,7 @@ export function SalesTransactionMatcher({
             </div>
 
             {openKey === group.customerKey ? (
-              <div className="maju-filter-box mt-3 bg-slate-50/60 p-3">
+              <div className="maju-filter-box mt-3 bg-slate-50/60 p-3" role="region" aria-label={`${group.customerName} 거래처 연결`}>
                 <div className="maju-search-field">
                   <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   <input
@@ -167,9 +168,9 @@ export function SalesTransactionMatcher({
                         onClick={() => void submitMatch(group.customerKey, customer.id, customer.customerName)}
                         type="button"
                       >
-                        <span className="min-w-0 truncate">
-                          {customer.customerName}
-                          <span className="ml-2 text-slate-400">{customer.address || customer.region || "주소 미등록"}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate">{customer.customerName}</span>
+                          <span className="mt-0.5 block truncate font-medium text-slate-400">{customer.address || customer.region || "주소 미등록"}</span>
                         </span>
                         {submittingKey === group.customerKey ? <span className="shrink-0 text-teal-600">연결 중…</span> : null}
                       </button>

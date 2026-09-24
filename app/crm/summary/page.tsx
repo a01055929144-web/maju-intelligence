@@ -129,6 +129,7 @@ export default function CrmSummaryPage() {
   const [customers, setCustomers] = useState<CustomerSummaryRow[]>([]);
   const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "empty" | "error">("loading");
   const [operationsSummary, setOperationsSummary] = useState<Record<string, OperationsSummaryEntry>>({});
+  const [isOperationsSummaryLoading, setIsOperationsSummaryLoading] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [tablePage, setTablePage] = useState(1);
@@ -212,8 +213,10 @@ export default function CrmSummaryPage() {
     const ids = customers.map((customer) => customer.id).filter((id): id is string => Boolean(id));
     if (!ids.length) {
       setOperationsSummary({});
+      setIsOperationsSummaryLoading(false);
       return;
     }
+    setIsOperationsSummaryLoading(true);
 
     async function loadSummary() {
       // 2026-08-31 성능 감사 대응: 배치별 ID 목록이 이미 다 정해져 있어(이전 배치 응답에 의존하지
@@ -238,6 +241,10 @@ export default function CrmSummaryPage() {
     loadSummary().then((merged) => {
       if (!active) return;
       setOperationsSummary(merged);
+      setIsOperationsSummaryLoading(false);
+    }).catch(() => {
+      if (!active) return;
+      setIsOperationsSummaryLoading(false);
     });
 
     return () => {
@@ -371,15 +378,15 @@ export default function CrmSummaryPage() {
             description="지도 홈이 사용하는 거래처 기준입니다."
           />
           <div className="p-3">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[150px_repeat(3,minmax(0,1fr))]">
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[170px_minmax(220px,1.25fr)_repeat(2,minmax(0,1fr))]">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
                 <div className="flex items-center gap-1">
                   <p className="maju-muted-label">원장 상태</p>
                   <InfoTooltip size="sm" text={ledgerStatusDescription} tone={hasOperationalLedger ? "emerald" : "amber"} />
                 </div>
                 <Badge className={`mt-1.5 ${hasOperationalLedger ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ledgerStatusLabel}</Badge>
               </div>
-              <SummaryCard helper={hasOperationalLedger ? "지도 홈 기준" : "거래처 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} />
+              <SummaryCard helper={hasOperationalLedger ? `운영 가능 ${readyCustomerCount.toLocaleString()}곳 · 보완 필요 ${needsAttentionCount.toLocaleString()}곳` : "거래처 등록 필요"} label="전체 거래처" value={hasOperationalLedger ? `${customers.length}곳` : "등록 필요"} tone="primary" />
               <SummaryCard helper="매출 상위 등급" label="A등급" value={`${customers.filter((customer) => customer.grade === "A").length}곳`} tone="emerald" />
               <SummaryCard helper={hasOperationalLedger ? "방문 결과 기준" : "방문 기록 등록 후 집계"} label="예상매출" value={hasOperationalLedger ? `${expectedRevenue.toLocaleString()}만원` : "등록 후"} tone="violet" />
             </div>
@@ -447,7 +454,10 @@ export default function CrmSummaryPage() {
             </div>
             <div className="min-w-0 px-3 py-3">
               <p className="text-[11px] font-black uppercase text-slate-400">메모 이력</p>
-              <p className="mt-1 text-sm font-black text-slate-950">{realMemoCount.toLocaleString()}건</p>
+              <p className="mt-1 flex items-center gap-1.5 text-sm font-black text-slate-950">
+                {isOperationsSummaryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-700" /> : null}
+                {isOperationsSummaryLoading ? "집계 중" : `${realMemoCount.toLocaleString()}건`}
+              </p>
             </div>
           </div>
         </div>
@@ -479,6 +489,7 @@ export default function CrmSummaryPage() {
             <label className="maju-search-field lg:max-w-xs">
               <Search className="h-4 w-4 text-slate-400" />
               <input
+                aria-label="거래처 검색"
                 className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
                 onChange={(event) => {
                   setTableSearch(event.target.value);
@@ -553,7 +564,7 @@ export default function CrmSummaryPage() {
                바꿉니다. */}
           <p className="print-only hidden px-3 pb-2 pt-3 text-sm font-black text-slate-950">거래처 전체 현황 · 사업자 상태·메모·첨부 현황</p>
           {filteredRows.length ? (
-            <div className="grid min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+            <div className="hidden min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400 md:grid print:grid">
               <span>거래처명</span>
               <span>대표자명</span>
               <span>연락처</span>
@@ -564,12 +575,26 @@ export default function CrmSummaryPage() {
               <span className="text-center">적재위치</span>
             </div>
           ) : (
-            <div className="m-3 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500">
-              {customerSource === "loading" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
-              {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : "조건에 맞는 거래처가 없습니다."}
+            <div className="m-3 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500">
+              <span className="flex items-center gap-1.5">
+                {customerSource === "loading" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
+                {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : hasCustomers ? "검색·상태 조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}
+              </span>
+              {customerSource !== "loading" && hasCustomers ? (
+                <button
+                  className="maju-button-secondary no-print min-h-10 text-xs"
+                  onClick={() => {
+                    setTableSearch("");
+                    setStatusFilter("all");
+                  }}
+                  type="button"
+                >
+                  검색 조건 초기화
+                </button>
+              ) : null}
             </div>
           )}
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 max-md:hidden print:block">
             {pagedRows.map((customer) => {
               const summaryEntry = customer.id ? operationsSummary[customer.id] : undefined;
               const status = customer.businessStatus || "확인 필요";
@@ -647,6 +672,42 @@ export default function CrmSummaryPage() {
               );
             })}
           </div>
+          <div className="divide-y divide-slate-100 md:hidden print:hidden">
+            {pagedRows.map((customer) => {
+              const summaryEntry = customer.id ? operationsSummary[customer.id] : undefined;
+              const status = customer.businessStatus || "확인 필요";
+              return (
+                <Link
+                  className="block space-y-3 px-4 py-4 transition active:bg-slate-50"
+                  href={withCompanyQuery(customer.id ? `/crm/timeline?customerId=${encodeURIComponent(customer.id)}` : "/crm/timeline")}
+                  key={`mobile-${customer.id || customer.customerName}`}
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-[15px] font-black text-slate-950">{customer.customerName}</span>
+                      <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{customer.address || "주소 미등록"}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <Badge className={`px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${businessStatusToneClassName(status)}`}>{status}</Badge>
+                    </span>
+                  </span>
+                  <span className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <MobileCustomerField label="대표자" value={customer.representativeName || "미등록"} />
+                    <MobileCustomerField label="연락처" value={customer.phone || "미등록"} />
+                    <MobileCustomerField label="사업자번호" value={customer.businessNumber ? formatBusinessRegistrationNumber(customer.businessNumber) : "미등록"} />
+                    <MobileCustomerField label="메모" value={summaryEntry?.latestMemo || "메모 없음"} />
+                  </span>
+                  <span className="flex items-center gap-2 border-t border-slate-100 pt-3 text-[11px] font-black">
+                    <span className={customer.businessLicenseFileUrl ? "text-emerald-700" : "text-slate-400"}>사업자등록증 {customer.businessLicenseFileUrl ? "등록" : "미등록"}</span>
+                    <span className="text-slate-300">·</span>
+                    <span className={summaryEntry?.loadingPositionPhotoUrl ? "text-teal-700" : "text-slate-400"}>적재위치 {summaryEntry?.loadingPositionPhotoUrl ? "등록" : "미등록"}</span>
+                    <span className="ml-auto text-teal-700">상세 보기</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
           </div>
         </div>
       </section>
@@ -685,10 +746,20 @@ function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready"
   );
 }
 
-function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string; label: string; tone?: "slate" | "emerald" | "blue" | "violet"; value: string }) {
+function MobileCustomerField({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="min-w-0">
+      <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="mt-0.5 block truncate font-bold text-slate-700">{value}</span>
+    </span>
+  );
+}
+
+function SummaryCard({ label, value, helper, tone = "slate" }: { helper: string; label: string; tone?: "slate" | "primary" | "emerald" | "blue" | "violet"; value: string }) {
   const toneClassName = {
     blue: "text-blue-700",
     emerald: "text-emerald-700",
+    primary: "text-teal-800",
     slate: "text-slate-950",
     violet: "text-violet-700"
   }[tone];
