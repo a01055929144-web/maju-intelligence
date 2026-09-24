@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { ArrowRight, Building2, Check, Clock3, Lock, LogIn, MapPinned, Route, Smartphone, Truck } from "lucide-react";
+import { ArrowRight, Building2, Check, Clock3, Loader2, LogIn, MapPinned, Route, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,7 +121,7 @@ export default function CustomerLoginPage() {
           <CardHeader>
             <Badge className="mb-3 w-fit bg-lime-100 text-slate-900 ring-1 ring-inset ring-lime-200">
               <Building2 className="mr-1 h-3.5 w-3.5" />
-              관리자
+              회사 운영자
             </Badge>
             <CardTitle className="text-2xl font-bold tracking-[-0.03em]">운영 화면 로그인</CardTitle>
             <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">대표·관리자는 이메일로 로그인하세요.</p>
@@ -177,16 +177,17 @@ export default function CustomerLoginPage() {
                 <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
                 <span className="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:inline">개인 PC에서만</span>
               </label>
-              <Button className="mt-1.5 h-12 w-full rounded-xl bg-[#101827] font-bold text-white hover:bg-[#1b2639]" disabled={loading}>
-                {loading ? <Lock className="h-4 w-4 animate-pulse" /> : <LogIn className="h-4 w-4" />}
-                {loading ? "로그인 확인 중…" : "로그인"}
+              <Button aria-busy={loading} className="mt-1.5 h-12 w-full rounded-xl bg-[#101827] font-bold text-white hover:bg-[#1b2639]" disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                {loading ? "계정과 작업공간 확인 중…" : "로그인"}
                 {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}
               </Button>
+              {loading ? <p aria-live="polite" className="text-center text-xs font-medium text-slate-500">로그인이 완료되면 운영 화면으로 자동 이동합니다.</p> : null}
               <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/forgot-password">
                 비밀번호를 잊으셨나요?
               </Link>
               <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/admin/login">
-                관리자 계정으로 로그인
+                플랫폼 관리자 로그인
               </Link>
               <Link className="block text-center text-sm font-bold text-primary underline-offset-4 hover:underline" href="/signup">
                 처음이신가요? 회사 가입하기

@@ -20,7 +20,8 @@ export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
   return (
     <Link
       aria-disabled={moving}
-      className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-black text-[#191919] shadow-[0_10px_24px_rgba(250,204,21,0.20)] transition ${moving ? "pointer-events-none opacity-70" : "hover:brightness-95"}`}
+      aria-live="polite"
+      className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#FEE500] px-4 py-3 text-sm font-semibold text-[#191919] shadow-[0_8px_20px_rgba(250,204,21,0.16)] transition ${moving ? "pointer-events-none opacity-70" : "hover:brightness-95"}`}
       href={`/api/auth/kakao/start${query}`}
       onClick={(event) => {
         if (moving) {
@@ -31,7 +32,7 @@ export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
       }}
     >
       {moving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KakaoMark />}
-      {moving ? "카카오로 이동 중…" : "카카오로 계속"}
+      {moving ? "카카오 로그인 준비 중…" : "카카오로 계속"}
     </Link>
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, ClipboardEdit, Download, FileText, MessageSquareText, Route, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, ClipboardEdit, Download, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CopyTextButton } from "@/components/copy-text-button";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -63,22 +63,16 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
         <div className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="maju-section-title">오늘의 영업 초안</p>
-              <p className="mt-1 text-xs font-medium text-slate-500">방문 기록과 견적 요청 기준</p>
+              <p className="maju-section-title">영업 초안 작업 흐름</p>
+              <p className="mt-1 text-sm text-slate-500">방문 기록을 확인하고 초안을 검토한 뒤 후속 업무로 이어가세요.</p>
             </div>
-            <Badge className={drafts.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{drafts.length ? "초안 생성됨" : "방문 기록 필요"}</Badge>
-          </div>
-          <div className="grid md:grid-cols-3">
-            <Metric icon={Sparkles} label="생성 초안" value={`${drafts.length}개`} />
-            <Metric icon={MessageSquareText} label="후속 메시지" value={`${followUps}개`} />
-            <Metric icon={FileText} label="견적 메모" value={`${quotes}개`} />
-          </div>
-        </div>
-
-        <div className="maju-section-card">
-          <div className="maju-card-header">
-            <p className="maju-section-title">다음 작업</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">기록 확인부터 방문 코스까지</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                {hasLiveDraftData ? "실제 방문 기록 기반" : "방문 기록 필요"}
+              </Badge>
+              <span className="text-sm font-semibold text-slate-700">초안 {drafts.length.toLocaleString()}개</span>
+              <span className="text-sm text-slate-400">후속 {followUps} · 견적 {quotes}</span>
+            </div>
           </div>
           <div className="grid lg:grid-cols-3">
             {assistantActions.map((action) => (
@@ -87,21 +81,14 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           </div>
         </div>
 
-        <AssistantBasisPanel
-          draftsCount={drafts.length}
-          followUps={followUps}
-          quotes={quotes}
-          companyId={isAdminPreview ? companyId || "" : ""}
-        />
-
         <section className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950">
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
                 검토할 초안
               </h2>
-              <p className="mt-1 text-sm font-medium text-slate-500">내용을 확인한 뒤 복사하거나 파일로 저장하세요.</p>
+              <p className="mt-1 text-sm text-slate-500">내용을 검토하고 복사 또는 저장한 뒤 다음 액션을 진행하세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
@@ -118,16 +105,16 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                     <Badge className="bg-teal-100 text-teal-800">{typeLabels[draft.type]}</Badge>
                     <Badge className="bg-slate-100 text-slate-700">{draft.region}</Badge>
                   </div>
-                  <p className="truncate text-sm font-black text-slate-950">{draft.leadName}</p>
-                  <p className="mt-1 text-xs font-bold text-slate-400">영업 후속 대상</p>
+                  <p className="truncate text-sm font-semibold text-slate-950">{draft.leadName}</p>
+                  <p className="mt-1 text-xs text-slate-500">영업 후속 대상</p>
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-black text-slate-950">{draft.title}</p>
+                    <p className="font-semibold text-slate-950">{draft.title}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <CopyTextButton text={draft.body} />
                       <a
-                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         download={`영업-초안-${draft.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`}
                         href={`data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${draft.title}\n거래처: ${draft.leadName}\n지역: ${draft.region}\n유형: ${typeLabels[draft.type]}\n\n${draft.body}\n\n다음 액션: ${draft.nextAction}\n`)}`}
                         aria-label={`${draft.leadName} ${draft.title} 텍스트 저장`}
@@ -137,85 +124,32 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
                       </a>
                     </div>
                   </div>
-                  <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">{draft.body}</p>
+                  <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">{draft.body}</p>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <p className="text-xs font-black text-slate-400">다음 액션</p>
-                  <p className="mt-2 text-sm font-black leading-6 text-slate-950">{draft.nextAction}</p>
+                <div className="rounded-lg border border-teal-100 bg-teal-50/50 p-3">
+                  <p className="text-xs font-semibold text-teal-800">복사·저장 후 다음 액션</p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-950">{draft.nextAction}</p>
                 </div>
               </article>
             ))}
             {!drafts.length ? (
-              <div className="p-10 text-center">
+              <div className="p-8 text-center sm:p-12">
                 <Sparkles className="mx-auto mb-3 h-8 w-8 text-teal-700" />
-                <p className="font-black text-slate-950">생성할 후속 초안이 없습니다.</p>
-                <p className="mt-1 text-sm font-medium text-slate-500">방문 결과를 기록하면 초안이 자동으로 생성됩니다.</p>
+                <p className="font-semibold text-slate-950">아직 실제 방문 기록으로 만든 초안이 없습니다.</p>
+                <p className="mt-1 text-sm text-slate-500">방문 결과와 영업 메모를 남기면 이곳에 후속 문장과 견적 메모가 생성됩니다.</p>
+                <Link
+                  className="maju-button-primary mt-5"
+                  href={companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline"}
+                >
+                  방문 기록 작성
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
             ) : null}
           </div>
         </section>
       </section>
     </CustomerAppShell>
-  );
-}
-
-function AssistantBasisPanel({
-  companyId,
-  draftsCount,
-  followUps,
-  quotes
-}: {
-  companyId: string;
-  draftsCount: number;
-  followUps: number;
-  quotes: number;
-}) {
-  const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);
-  const items = [
-    { label: "방문 기록", value: `${draftsCount.toLocaleString()}개 초안`, helper: "메모·방문 결과 기준" },
-    { label: "후속 메시지", value: `${followUps.toLocaleString()}개`, helper: "고객 응대 초안" },
-    { label: "견적 메모", value: `${quotes.toLocaleString()}개`, helper: "파이프라인 연결" },
-    { label: "코스 연결", value: "방문 순서 확인", helper: "현장 실행 기준" }
-  ];
-  const actionLinks = [
-    { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "기록 보완" },
-    { href: withCompanyQuery("/revenue/pipeline"), icon: TrendingUp, label: "기회 확인" },
-    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈" }
-  ];
-
-  return (
-    <div className="maju-section-card">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
-        <div>
-          <p className="maju-section-title">생성 기준</p>
-          <p className="mt-1 text-xs font-medium leading-5 text-slate-500">방문 결과와 영업 메모 기준</p>
-        </div>
-        <p className="text-xs font-medium leading-5 text-slate-600">
-          거래처 메모와 견적 상태가 구체적일수록 초안이 정확해집니다.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {actionLinks.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link className="maju-button-secondary" href={item.href} key={item.label}>
-                <Icon className="h-3.5 w-3.5" />
-                {item.label}
-                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-      <div className="grid divide-y divide-slate-100 md:grid-cols-4 md:divide-x md:divide-y-0">
-        {items.map((item) => (
-          <div className="min-w-0 px-4 py-3" key={item.label}>
-            <p className="maju-muted-label">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-black text-slate-950">{item.value}</p>
-            <p className="mt-1 truncate text-[11px] font-bold text-slate-500">{item.helper}</p>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -234,25 +168,15 @@ function AssistantActionCard({
     <Link className="group border-b border-slate-200 p-4 transition hover:bg-teal-50/40 lg:border-b-0 lg:border-r last:lg:border-r-0" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-          <p className="mt-1 truncate text-xl font-black text-slate-950">{value}</p>
+          <p className="text-sm font-semibold text-slate-700">{label}</p>
+          <p className="mt-1 truncate text-xl font-bold text-slate-950">{value}</p>
         </div>
         <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">연결</Badge>
       </div>
-      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <span className="mt-4 inline-flex text-xs font-black text-teal-800 transition group-hover:translate-x-0.5">바로가기</span>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
+      <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-800 transition group-hover:translate-x-0.5">
+        바로가기 <ArrowRight className="h-3.5 w-3.5" />
+      </span>
     </Link>
-  );
-}
-
-function Metric({ icon: Icon, label, value }: { icon: typeof Sparkles; label: string; value: string }) {
-  return (
-    <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r last:md:border-r-0">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-        <Icon className="h-5 w-5" />
-      </div>
-      <p className="text-xs font-bold text-muted-foreground">{label}</p>
-      <p className="mt-1 text-3xl font-black">{value}</p>
-    </div>
   );
 }

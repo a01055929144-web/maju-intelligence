@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { FormEvent, useState } from "react";
-import { Bell, Building2, Check, ClipboardCheck, Database, FileSpreadsheet, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
+import { Bell, Building2, ClipboardCheck, Database, FileSpreadsheet, Loader2, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -67,7 +67,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   }
 
   return (
-    <form className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={handleSubmit}>
+    <form aria-busy={loading} className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={handleSubmit}>
       <div className="space-y-5">
         <section className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
@@ -305,13 +305,13 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         </section>
 
         {message ? (
-          <p className={`rounded-md px-3 py-2 text-sm font-bold ${messageOk ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{message}</p>
+          <p aria-live="polite" className={`rounded-md border px-3 py-2.5 text-sm font-medium ${messageOk ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-rose-100 bg-rose-50 text-rose-700"}`}>{message}</p>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-bold leading-5 text-slate-500">저장 후 지도 홈과 거래처 원장에서 같은 출발지 기준으로 계산됩니다.</p>
-          <Button className="shrink-0" disabled={loading}>
-            {loading ? <Check className="h-4 w-4 animate-pulse" /> : <Save className="h-4 w-4" />}
-            설정 저장
+          <p className="text-sm font-medium leading-5 text-slate-500">저장한 출발지는 지도와 거래처 거리 계산에 함께 적용됩니다.</p>
+          <Button className="min-w-32 shrink-0" disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {loading ? "저장하는 중..." : "설정 저장"}
           </Button>
         </div>
       </div>

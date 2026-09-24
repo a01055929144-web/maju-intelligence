@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Minus, Plus, Send, Share2, ShieldCheck, Smartphone, Trash2, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Plus, Send, Share2, ShieldCheck, Smartphone, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
@@ -132,7 +132,7 @@ export function StaffManagementPanel({
 
     if (!failed.length) {
       setInviteRows([makeEmptyInviteRow()]);
-      setMessage(created.length > 1 ? `${created.length}명 초대 링크 생성이 완료되었습니다. 각 링크를 복사·공유해 카카오 가입 안내에 사용하세요.` : "직원 초대 링크 저장이 완료되었습니다. 링크를 복사해 카카오 가입 안내에 사용하세요.");
+      setMessage(created.length > 1 ? `${created.length}명의 초대 링크를 만들었습니다. 각 링크를 직원에게 공유하세요.` : "초대 링크를 만들었습니다. 직원에게 공유하세요.");
       return;
     }
     setMessage(created.length ? `${created.length}명 생성 완료, 실패: ${failed.join(", ")}` : `초대 생성에 실패했습니다: ${failed.join(", ")}`);
@@ -288,7 +288,7 @@ export function StaffManagementPanel({
             직원 관리
           </Badge>
           <h2 className="text-2xl font-bold text-slate-950">직원 초대</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">직원 정보를 입력하고 카카오 가입 링크를 보내세요.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">직원별 업무와 초대 상태를 관리합니다.</p>
         </div>
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
@@ -309,11 +309,11 @@ export function StaffManagementPanel({
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-950">
-            <span className="font-semibold">초대 생성</span>
+            <span className="font-medium">링크 생성</span>
             <span aria-hidden="true" className="text-blue-300">→</span>
-            <span className="font-semibold">카카오 가입</span>
+            <span className="font-medium">직원 가입</span>
             <span aria-hidden="true" className="text-blue-300">→</span>
-            <span className="font-semibold">거래처 배정</span>
+            <span className="font-medium">배정 확인</span>
           </div>
 
           {invitations.length ? (
@@ -387,7 +387,8 @@ export function StaffManagementPanel({
                           </td>
                           <td className="px-3 py-3">
                             <select
-                              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label={`${invitation.employeeName} 담당 업무`}
+                              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={!canManageMembers || savingId === invitation.id}
                               value={invitation.role}
                               onChange={(event) => updateStaff(invitation, { role: event.target.value as StaffInvitation["role"] })}
@@ -413,6 +414,8 @@ export function StaffManagementPanel({
                           </td>
                           <td className="max-w-[170px] px-3 py-3">
                             <button
+                              aria-expanded={expanded}
+                              aria-label={`${invitation.employeeName} 배정 기준 ${expanded ? "닫기" : "열기"}`}
                               className="block w-full truncate text-left text-xs font-bold text-slate-600 underline decoration-dotted underline-offset-2 hover:text-teal-700"
                               onClick={() => setExpandedId(expanded ? "" : invitation.id)}
                               type="button"
@@ -516,7 +519,7 @@ export function StaffManagementPanel({
           ) : null}
           {!invitations.length ? (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm font-bold leading-6 text-slate-500">
-              아직 등록된 직원 초대가 없습니다. 오른쪽에서 직원명을 입력해 카카오 가입 링크를 먼저 생성하세요.
+              아직 등록된 직원이 없습니다. 오른쪽에서 이름을 입력해 초대 링크를 만드세요.
             </div>
           ) : null}
         </div>
@@ -528,12 +531,12 @@ export function StaffManagementPanel({
             </span>
             <div>
               <p className="font-bold text-slate-950">직원 추가</p>
-              <p className="mt-1 text-sm leading-5 text-slate-500">생성된 링크를 직원에게 보내세요.</p>
+              <p className="mt-1 text-sm leading-5 text-slate-500">이름과 담당 업무를 정한 뒤 링크를 공유하세요.</p>
             </div>
           </div>
           {canManageMembers ? (
             <div className="mt-4 grid gap-3">
-              <p className="-mb-1 text-xs leading-5 text-slate-500">여러 명은 연락처 줄을 추가해 한 번에 초대할 수 있습니다.</p>
+              <p className="-mb-1 text-sm leading-5 text-slate-500">여러 명을 추가하려면 입력 줄을 늘리세요.</p>
               <div className="grid gap-2">
                 {inviteRows.map((row) => (
                   <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5" key={row.id}>
@@ -570,6 +573,7 @@ export function StaffManagementPanel({
                 연락처 추가
               </button>
               <select
+                aria-label="초대할 직원의 담당 업무"
                 className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={inviteRole}
                 onChange={(event) => setInviteRole(event.target.value)}
@@ -580,20 +584,23 @@ export function StaffManagementPanel({
                   </option>
                 ))}
               </select>
-              <p className="-mt-1 text-xs leading-5 text-slate-500">선택한 업무가 모든 초대 대상에게 적용됩니다.</p>
+              <div className="-mt-1 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 text-sm leading-5 text-blue-900">
+                <p>선택한 담당 업무가 입력한 모든 직원에게 적용됩니다.</p>
+                <p className="mt-1 text-blue-700">화면에 보이는 거래처 범위는 가입 후 연결된 담당자·차량 기준으로 결정됩니다.</p>
+              </div>
               <Button
                 className="h-11 bg-teal-700 font-semibold hover:bg-teal-800"
                 disabled={!inviteRows.some((row) => row.employeeName.trim()) || creating}
                 onClick={createStaff}
                 type="button"
               >
-                {creating ? <Send className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
-                {creating ? "추가 중" : inviteRows.filter((row) => row.employeeName.trim()).length > 1 ? "직원 일괄 추가" : "직원 추가"}
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {creating ? "초대 링크 만드는 중..." : inviteRows.filter((row) => row.employeeName.trim()).length > 1 ? "초대 링크 일괄 생성" : "초대 링크 생성"}
               </Button>
 
               <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-white p-3">
-                <p className="text-xs font-black text-slate-900">담당 업무 항목 관리</p>
-                <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">
+                <p className="text-sm font-semibold text-slate-900">담당 업무 항목 관리</p>
+                <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
                   배송기사·영업직원·현장관리자·일반직원은 기본 제공 항목이라 삭제할 수 없습니다. 필요한 이름을 자유롭게 추가·삭제하세요.
                 </p>
                 {jobTitles.length ? (
@@ -635,7 +642,7 @@ export function StaffManagementPanel({
             </p>
           )}
           {message ? (
-            <p className={`mt-3 rounded-md px-3 py-2 text-xs font-bold leading-5 ${isErrorMessage(message) ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+            <p aria-live="polite" className={`mt-3 rounded-md border px-3 py-2.5 text-sm font-medium leading-5 ${isErrorMessage(message) ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
               {message}
             </p>
           ) : null}

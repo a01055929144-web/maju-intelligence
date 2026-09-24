@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, ArrowRight, Building2, ClipboardList, Database, FileSpreadsheet, Gauge, Settings, ShieldCheck, Target, UploadCloud, Users } from "lucide-react";
+import { Activity, ArrowRight, Building2, CheckCircle2, ClipboardList, Database, FileSpreadsheet, Gauge, Inbox, Settings, ShieldCheck, Target, UploadCloud, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -49,23 +49,32 @@ export default async function AdminPage() {
       <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
-        <div className="grid gap-3 lg:grid-cols-3">
-          {adminSignals.map((signal) => (
-            <AdminSignalCard key={signal.label} {...signal} />
-          ))}
-        </div>
-
         <div className="grid gap-4 md:grid-cols-4">
           {overview.map(([label, value, Icon]) => (
             <Card key={label as string} className="shadow-none">
               <CardContent className="p-4">
-                <Icon className="mb-4 h-5 w-5 text-primary" />
-                <p className="text-xs font-bold text-muted-foreground">{label as string}</p>
-                <p className="mt-1 text-3xl font-bold tracking-[-0.03em]">{value as string}</p>
+                <Icon className="mb-3 h-5 w-5 text-primary" />
+                <p className="text-sm font-medium text-muted-foreground">{label as string}</p>
+                <p className="mt-1 text-3xl font-semibold tracking-[-0.03em]">{value as string}</p>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        <Card className="border-slate-200 shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              운영 상태
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">확인이 필요한 항목을 먼저 점검하세요.</p>
+          </CardHeader>
+          <CardContent className="grid gap-2 lg:grid-cols-3">
+            {adminSignals.map((signal) => (
+              <AdminSignalRow key={signal.label} {...signal} />
+            ))}
+          </CardContent>
+        </Card>
 
         <Card className="border-slate-200 shadow-none">
           <CardHeader>
@@ -117,11 +126,13 @@ export default async function AdminPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {dashboard.jobs.map((job) => (
+              {dashboard.jobs.length === 0 ? (
+                <AdminEmptyState description="업로드가 완료되면 분석 진행 상태와 품질 점수가 여기에 표시됩니다." href="/admin/uploads" label="진행 중인 분석 작업이 없습니다" linkLabel="업로드 이력 확인" />
+              ) : dashboard.jobs.map((job) => (
                 <div key={job.id} className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-[1fr_120px_100px] md:items-center">
                   <div>
-                    <p className="font-black">{job.company}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="font-semibold">{job.company}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {job.id} · {job.rows.toLocaleString()} rows · {job.uploadedAt}
                     </p>
                   </div>
@@ -129,7 +140,7 @@ export default async function AdminPage() {
                     {job.status}
                   </Badge>
                   <div>
-                    <p className="mb-1 text-xs font-bold text-muted-foreground">품질 {job.qualityScore}%</p>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">품질 {job.qualityScore}%</p>
                     <Progress value={job.qualityScore} />
                   </div>
                 </div>
@@ -145,14 +156,16 @@ export default async function AdminPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {dashboard.dataQuality.map((item) => (
+              {dashboard.dataQuality.length === 0 ? (
+                <AdminEmptyState description="분석 결과가 생성되면 필수값과 중복 데이터 품질을 확인할 수 있습니다." label="품질 데이터가 아직 없습니다" />
+              ) : dashboard.dataQuality.map((item) => (
                 <div key={item.label}>
-                  <div className="mb-1 flex justify-between text-sm font-bold">
+                  <div className="mb-1 flex justify-between text-sm font-medium">
                     <span>{item.label}</span>
                     <span>{item.value}%</span>
                   </div>
                   <Progress value={item.value} />
-                  <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
                 </div>
               ))}
             </CardContent>
@@ -170,11 +183,11 @@ export default async function AdminPage() {
             <CardContent className="space-y-3">
               {dashboard.scoringWeights.map((weight) => (
                 <div key={weight.label} className="rounded-md border border-border p-3">
-                  <div className="mb-1 flex justify-between text-sm font-black">
+                  <div className="mb-1 flex justify-between text-sm font-medium">
                     <span>{weight.label}</span>
                     <span>{weight.value}%</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">{weight.note}</p>
+                  <p className="text-sm text-muted-foreground">{weight.note}</p>
                 </div>
               ))}
             </CardContent>
@@ -188,12 +201,14 @@ export default async function AdminPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-            {dashboard.leadQueue.map((lead, index) => (
+            {dashboard.leadQueue.length === 0 ? (
+              <AdminEmptyState description="분석을 완료하면 우선 연락할 거래처가 점수순으로 표시됩니다." label="추천 리드가 아직 없습니다" />
+            ) : dashboard.leadQueue.map((lead, index) => (
                 <div key={lead.name} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[44px_1fr_90px_130px] sm:items-center">
                   <span className="text-lg font-black text-primary">{index + 1}</span>
                   <div>
-                    <p className="font-bold">{lead.name}</p>
-                    <p className="text-xs text-muted-foreground">{lead.region}</p>
+                    <p className="font-semibold">{lead.name}</p>
+                    <p className="text-sm text-muted-foreground">{lead.region}</p>
                   </div>
                   <Badge className="justify-center bg-accent/20 text-foreground">{lead.score}점</Badge>
                   <LeadStatusSelect companyId={lead.companyId} leadId={lead.id} value={getLeadStatusValue(lead)} />
@@ -219,26 +234,28 @@ export default async function AdminPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {dashboard.uploadHistory.map((item) => (
+            {dashboard.uploadHistory.length === 0 ? (
+              <AdminEmptyState description="거래처 마스터나 매출 원장을 업로드하면 처리 결과가 이곳에 쌓입니다." href="/admin/uploads" label="업로드 이력이 없습니다" linkLabel="업로드 화면으로 이동" />
+            ) : dashboard.uploadHistory.map((item) => (
               <div key={item.id} className="grid gap-3 rounded-md border border-border p-4 lg:grid-cols-[1fr_130px_80px_80px_80px_110px] lg:items-center">
                 <div>
-                  <p className="font-black">{item.filename}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-semibold">{item.filename}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {item.company} · {item.createdAt} · {item.rows.toLocaleString()} rows
                   </p>
                 </div>
                 <Badge className="justify-center bg-primary/10 text-primary">{item.status}</Badge>
                 <div>
-                  <p className="text-xs font-bold text-muted-foreground">품질</p>
-                  <p className="text-lg font-black">{item.qualityScore}%</p>
+                  <p className="text-sm font-medium text-muted-foreground">품질</p>
+                  <p className="text-lg font-semibold">{item.qualityScore}%</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-muted-foreground">중복</p>
-                  <p className="text-lg font-black">{item.duplicateCount}건</p>
+                  <p className="text-sm font-medium text-muted-foreground">중복</p>
+                  <p className="text-lg font-semibold">{item.duplicateCount}건</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-muted-foreground">건강도</p>
-                  <p className="text-lg font-black text-primary">{item.healthScore}</p>
+                  <p className="text-sm font-medium text-muted-foreground">건강도</p>
+                  <p className="text-lg font-semibold text-primary">{item.healthScore}</p>
                 </div>
                 <Link
                   className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-3 text-xs font-bold transition hover:bg-muted"
@@ -292,7 +309,7 @@ function AdminActionCard({ description, href, icon: Icon, label }: { description
   );
 }
 
-function AdminSignalCard({
+function AdminSignalRow({
   description,
   href,
   label,
@@ -306,22 +323,37 @@ function AdminSignalCard({
   value: string;
 }) {
   return (
-    <Link className={`group rounded-md border p-4 transition ${ready ? "border-emerald-100 bg-emerald-50/70 hover:bg-emerald-50" : "border-amber-200 bg-amber-50/80 hover:bg-amber-50"}`} href={href}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-          <p className="mt-1 truncate text-2xl font-black text-slate-950">{value}</p>
+    <Link className={`group flex items-center gap-3 rounded-md border p-3 transition ${ready ? "border-emerald-100 bg-emerald-50/60 hover:bg-emerald-50" : "border-amber-200 bg-amber-50/70 hover:bg-amber-50"}`} href={href}>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-slate-950">{label}</p>
+          <span className="text-sm text-slate-500">{value}</span>
         </div>
+        <p className="mt-1 text-sm leading-5 text-slate-600">{description}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
         <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
           {ready ? "정상" : "확인"}
         </Badge>
+        <ArrowRight className="h-4 w-4 text-slate-500 transition group-hover:translate-x-0.5" />
       </div>
-      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <span className="mt-4 inline-flex items-center gap-1 text-xs font-black text-slate-800">
-        바로가기
-        <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-      </span>
     </Link>
+  );
+}
+
+function AdminEmptyState({ description, href, label, linkLabel }: { description: string; href?: string; label: string; linkLabel?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-5 py-8 text-center">
+      <Inbox className="h-6 w-6 text-slate-400" />
+      <p className="mt-3 font-semibold text-slate-900">{label}</p>
+      <p className="mt-1 max-w-md text-sm leading-6 text-slate-500">{description}</p>
+      {href && linkLabel ? (
+        <Link className="mt-4 inline-flex min-h-10 items-center gap-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100" href={href}>
+          {linkLabel}
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      ) : null}
+    </div>
   );
 }
 
