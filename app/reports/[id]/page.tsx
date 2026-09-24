@@ -304,12 +304,18 @@ export default async function ReportDetailPage({
           </CardContent>
         </Card>
 
-        <div aria-labelledby="report-detail-title" className="space-y-3">
-          <div>
-            <p className="text-xs font-semibold text-slate-500">세부 분석</p>
-            <h2 className="mt-1 text-lg font-bold text-slate-950" id="report-detail-title">지역·업종·추천 리드 근거</h2>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-3">
+        <details className="maju-section-card group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-500">세부 분석</p>
+              <h2 className="mt-1 text-base font-semibold text-slate-950" id="report-detail-title">지역·업종·추천 리드 근거</h2>
+            </div>
+            <span className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
+              상세 보기
+              <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
+            </span>
+          </summary>
+          <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-3">
           <ReportBlock title="거래처 분포" icon={MapPin}>
             {report.regionDistribution.slice(0, 6).map((item) => (
               <Line key={item.region} label={item.region} value={`${item.count}개`} hint={`잠재 ${item.potential}곳`} />
@@ -326,23 +332,27 @@ export default async function ReportDetailPage({
             ))}
           </ReportBlock>
           </div>
-        </div>
+        </details>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <details className="maju-section-card group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+            <span className="flex items-center gap-2 text-base font-semibold text-slate-950">
               <BarChart3 className="h-5 w-5 text-primary" />
-              실행 제안
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
+              AI 실행 제안
+            </span>
+            <span className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
+              {report.aiInsights.length.toLocaleString()}개 보기
+              <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
+            </span>
+          </summary>
+          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2">
             {report.aiInsights.map((insight) => (
               <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm font-semibold leading-6">
                 {insight}
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </details>
       </section>
     </CustomerAppShell>
   );
@@ -380,8 +390,18 @@ function ReportBasisPanel({
   ];
 
   return (
-    <Card className="overflow-hidden">
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
+    <details className="maju-section-card group">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <p className="maju-section-title">진단 기준</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">거래처·지역·배송·매출 데이터의 산정 근거</p>
+        </div>
+        <span className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
+          기준 확인
+          <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
+        </span>
+      </summary>
+      <div className="grid gap-3 border-y border-slate-200/80 bg-slate-50/70 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_minmax(0,auto)] xl:items-center">
         <div>
           <p className="maju-section-title">진단 기준</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">거래처, 지역, 배송, 매출 기준값입니다.</p>
@@ -407,7 +427,7 @@ function ReportBasisPanel({
           </div>
         ))}
       </div>
-    </Card>
+    </details>
   );
 }
 
