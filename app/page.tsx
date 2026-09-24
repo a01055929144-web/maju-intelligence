@@ -996,25 +996,25 @@ function DataRegistrationSidePanel({
   return (
     <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
       <div className="px-2 pb-2 pt-1">
-        <p className="text-xs font-semibold text-slate-500">진행 요약</p>
-        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">기초정보 저장 후 매출 원장을 반복 갱신합니다.</p>
+        <p className="text-xs font-semibold text-slate-500">데이터 등록</p>
+        <p className="mt-1 text-xs font-medium leading-5 text-slate-500">유형을 선택해 바로 시작하세요.</p>
       </div>
       {items.map((item) => {
         const selected = activeSection === item.key;
         return (
           <button
             key={item.key}
-            className={`maju-nav-item w-full text-left ${selected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
+            className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition ${selected ? "bg-[#101827] text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
             onClick={() => onSelect(item.key)}
             type="button"
           >
-            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-black ${selected ? "bg-white/10 text-white ring-1 ring-inset ring-white/20" : "bg-slate-100 text-slate-500"}`}>
+            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-semibold ${selected ? "bg-white/10 text-white ring-1 ring-inset ring-white/20" : "bg-slate-100 text-slate-500"}`}>
               {item.step}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
                 <item.icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
-                <span className="block truncate text-sm font-black">{item.label}</span>
+                <span className="block truncate text-sm font-semibold">{item.label}</span>
               </span>
               <span className={`block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{item.description}</span>
             </span>
@@ -1027,118 +1027,6 @@ function DataRegistrationSidePanel({
         );
       })}
     </nav>
-  );
-}
-
-function DataRegistrationFlowBar({
-  activeSection,
-  canAnalyze,
-  customerRows,
-  onSelect,
-  persisted,
-  salesRows
-}: {
-  activeSection: DataRegistrationSection;
-  canAnalyze: boolean;
-  customerRows: number;
-  onSelect: (section: DataRegistrationSection) => void;
-  persisted: boolean;
-  salesRows: number;
-}) {
-  const steps: Array<{
-    description: string;
-    icon: LucideIcon;
-    key: DataRegistrationSection;
-    label: string;
-    ready: boolean;
-    value: string;
-  }> = [
-    {
-      description: "회사 운영 기준값",
-      icon: Building2,
-      key: "customer",
-      label: "거래처 등록",
-      ready: customerRows > 0 || persisted,
-      value: customerRows ? `${customerRows.toLocaleString()}행` : "필수"
-    },
-    {
-      description: "ERP 거래원장 갱신",
-      icon: FileSpreadsheet,
-      key: "sales",
-      label: "매출 등록",
-      ready: salesRows > 0 || persisted,
-      value: salesRows ? `${salesRows.toLocaleString()}행` : "업데이트"
-    },
-    {
-      description: "저장 결과와 원장 확인",
-      icon: Save,
-      key: "history",
-      label: "저장·이력",
-      ready: persisted,
-      value: persisted ? "저장 완료" : canAnalyze ? "저장 가능" : "대기"
-    }
-  ];
-
-  return (
-    <section className="maju-section-card p-2">
-      <div className="mb-2 flex flex-col gap-1 px-2 pt-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold text-slate-500">작업 선택</p>
-          <p className="mt-0.5 text-xs font-bold text-slate-500">거래처, 매출, 저장 상태를 한 번에 전환합니다.</p>
-        </div>
-        <Badge className={persisted ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-100" : canAnalyze ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100" : "bg-slate-100 text-slate-600"}>
-          {persisted ? "저장 완료" : canAnalyze ? "저장 가능" : "입력 대기"}
-        </Badge>
-      </div>
-      <div className="grid gap-2 md:grid-cols-3">
-        {steps.map((step, index) => {
-          const Icon = step.icon;
-          const selected = activeSection === step.key;
-          return (
-            <button
-              className={`group flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition ${
-                selected
-                  ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
-                  : step.ready
-                    ? "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-              }`}
-              key={step.key}
-              onClick={() => onSelect(step.key)}
-              type="button"
-            >
-              <span
-                className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                  selected ? "bg-white/10 text-white ring-1 ring-inset ring-white/20" : step.ready ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${selected ? "bg-white/10 text-white/80 ring-white/20" : "bg-white/70 text-slate-500 ring-slate-200"}`}>
-                    {index + 1}
-                  </span>
-                  <span className={`truncate text-sm font-black ${selected ? "text-white" : "text-slate-950"}`}>{step.label}</span>
-                </span>
-                <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{step.description}</span>
-              </span>
-              <span
-                className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                  selected
-                    ? "bg-white text-slate-950 ring-1 ring-inset ring-white/70"
-                    : step.ready
-                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100"
-                      : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {step.value}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -1732,14 +1620,6 @@ function Onboarding({
       />
       <section className="min-w-0 space-y-3">
         <div className="space-y-3">
-          <DataRegistrationFlowBar
-            activeSection={sidebarSection}
-            canAnalyze={canAnalyze}
-            customerRows={uploadType === "customer-master" ? rawRows.length : 0}
-            onSelect={selectDataRegistrationSection}
-            persisted={pipelineMeta.persisted}
-            salesRows={uploadType === "sales-analysis" ? rawRows.length : 0}
-          />
           <DataRegistrationQuickPanel
             activeType={uploadType}
             canAnalyze={canAnalyze}
