@@ -162,7 +162,7 @@ export default function CustomerLoginPage() {
                 type="password"
                 placeholder="비밀번호"
               />
-              {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
+              {error ? <p aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">{error}</p> : null}
               <label className="flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl border border-border bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-primary/30 hover:bg-lime-50/60">
                 <span className="flex items-center gap-2">
                   <span

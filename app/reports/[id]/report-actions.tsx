@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, Share2 } from "lucide-react";
+import { Download, Loader2, Share2 } from "lucide-react";
 import { useState } from "react";
 
 export function ReportActions({ companyName }: { readonly companyName: string }) {
   const [message, setMessage] = useState("");
+  const [isSharing, setIsSharing] = useState(false);
 
   function saveAsPdf() {
     setMessage("인쇄 창에서 PDF로 저장할 수 있습니다.");
@@ -12,6 +13,9 @@ export function ReportActions({ companyName }: { readonly companyName: string })
   }
 
   async function shareReport() {
+    if (isSharing) return;
+    setIsSharing(true);
+    setMessage("");
     const shareData = {
       text: `${companyName} AI 리포트`,
       title: `${companyName} AI 리포트`,
@@ -29,6 +33,8 @@ export function ReportActions({ companyName }: { readonly companyName: string })
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setMessage("공유하지 못했습니다. 주소창의 링크를 복사해주세요.");
+    } finally {
+      setIsSharing(false);
     }
   }
 
@@ -38,9 +44,9 @@ export function ReportActions({ companyName }: { readonly companyName: string })
         <Download className="h-4 w-4" />
         PDF 저장
       </button>
-      <button className="maju-button-secondary h-10 px-4 text-sm" onClick={() => void shareReport()} type="button">
-        <Share2 className="h-4 w-4" />
-        공유
+      <button className="maju-button-secondary h-10 px-4 text-sm disabled:cursor-wait disabled:opacity-60" disabled={isSharing} onClick={() => void shareReport()} type="button">
+        {isSharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+        {isSharing ? "공유 준비 중" : "공유"}
       </button>
       {message ? <span className="w-full text-xs font-medium text-slate-500 sm:w-auto" role="status">{message}</span> : null}
     </div>

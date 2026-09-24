@@ -90,7 +90,7 @@ export default function CompanySignupPage() {
           <p className="text-sm font-medium text-slate-500">운영 책임자 계정과 회사 정보를 등록합니다.</p>
         </CardHeader>
         <CardContent>
-          <form className="space-y-2.5" onSubmit={handleSubmit}>
+          <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
             <input
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
               value={companyName}
@@ -184,12 +184,13 @@ export default function CompanySignupPage() {
               </label>
             </div>
 
-            {error ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{error}</p> : null}
+            {error ? <p aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">{error}</p> : null}
 
-            <Button className="mt-1.5 w-full" disabled={loading}>
+            <Button className="mt-1.5 min-h-12 w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              가입하기
+              {loading ? "회사 계정 만드는 중…" : "가입하기"}
             </Button>
+            {loading ? <p aria-live="polite" className="text-center text-xs font-medium text-slate-500">완료되면 운영 화면으로 자동 이동합니다.</p> : null}
 
             <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/dashboard/login">
               이미 계정이 있으신가요? 로그인

@@ -317,19 +317,19 @@ export default async function ReportDetailPage({
           </summary>
           <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-3">
           <ReportBlock title="거래처 분포" icon={MapPin}>
-            {report.regionDistribution.slice(0, 6).map((item) => (
+            {report.regionDistribution.length ? report.regionDistribution.slice(0, 6).map((item) => (
               <Line key={item.region} label={item.region} value={`${item.count}개`} hint={`잠재 ${item.potential}곳`} />
-            ))}
+            )) : <EmptyReportBlock message="거래처 주소를 등록하면 지역별 분포가 표시됩니다." />}
           </ReportBlock>
           <ReportBlock title="업종 분석" icon={BarChart3}>
-            {report.industryDistribution.map((item) => (
+            {report.industryDistribution.length ? report.industryDistribution.map((item) => (
               <Line key={item.industry} label={item.industry} value={`${item.share}%`} hint={`${item.count}개`} />
-            ))}
+            )) : <EmptyReportBlock message="거래처 업종을 등록하면 업종 비중이 표시됩니다." />}
           </ReportBlock>
           <ReportBlock title="추천 리드" icon={ClipboardList}>
-            {report.leadRecommendations.slice(0, 6).map((lead) => (
+            {report.leadRecommendations.length ? report.leadRecommendations.slice(0, 6).map((lead) => (
               <Line key={lead.name} label={lead.name} value={`${lead.score}점`} hint={lead.region} />
-            ))}
+            )) : <EmptyReportBlock message="리드 데이터가 쌓이면 우선 추천 대상이 표시됩니다." />}
           </ReportBlock>
           </div>
         </details>
@@ -346,11 +346,11 @@ export default async function ReportDetailPage({
             </span>
           </summary>
           <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2">
-            {report.aiInsights.map((insight) => (
+            {report.aiInsights.length ? report.aiInsights.map((insight) => (
               <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm font-semibold leading-6">
                 {insight}
               </div>
-            ))}
+            )) : <EmptyReportBlock message="분석할 운영 데이터가 충분해지면 실행 제안이 표시됩니다." />}
           </div>
         </details>
       </section>
@@ -512,4 +512,8 @@ function Line({ label, value, hint }: { label: string; value: string; hint: stri
       <span className="text-lg font-bold">{value}</span>
     </div>
   );
+}
+
+function EmptyReportBlock({ message }: { message: string }) {
+  return <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center text-xs font-semibold leading-5 text-slate-500">{message}</p>;
 }

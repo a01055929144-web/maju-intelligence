@@ -269,30 +269,35 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
 
         {actionError ? <div aria-live="polite" className="mx-4 mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-800">{actionError}</div> : null}
 
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 p-4">
-          <button aria-busy={registering} className="maju-button-primary min-h-11" disabled={registering || !data.configured} onClick={handleRegisterCard} type="button">
+        <div className="flex flex-col gap-2 border-t border-slate-100 p-4 sm:flex-row sm:flex-wrap">
+          <button aria-busy={registering} className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" disabled={registering || Boolean(statusChanging) || !data.configured} onClick={handleRegisterCard} type="button">
             {registering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
             {registering ? "카드 등록 화면 준비 중..." : subscription.billingKey ? "카드 변경" : "카드 등록"}
           </button>
           {subscription.billingKey && subscription.status !== "active" && subscription.status !== "canceled" ? (
-            <button aria-busy={statusChanging === "active"} className="maju-button-secondary min-h-11" disabled={Boolean(statusChanging)} onClick={() => handleStatusChange("active")} type="button">
+            <button aria-busy={statusChanging === "active"} className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" disabled={registering || Boolean(statusChanging)} onClick={() => handleStatusChange("active")} type="button">
               {statusChanging === "active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
               {statusChanging === "active" ? "재개하는 중..." : "자동결제 재개"}
             </button>
           ) : null}
           {subscription.status === "active" ? (
-            <button aria-busy={statusChanging === "paused"} className="maju-button-secondary min-h-11" disabled={Boolean(statusChanging)} onClick={() => handleStatusChange("paused")} type="button">
+            <button aria-busy={statusChanging === "paused"} className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" disabled={registering || Boolean(statusChanging)} onClick={() => handleStatusChange("paused")} type="button">
               {statusChanging === "paused" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PauseCircle className="h-3.5 w-3.5" />}
               {statusChanging === "paused" ? "중지하는 중..." : "일시중지"}
             </button>
           ) : null}
           {subscription.status !== "canceled" && subscription.billingKey ? (
-            <button aria-busy={statusChanging === "canceled"} className="maju-button-secondary min-h-11 text-rose-700" disabled={Boolean(statusChanging)} onClick={() => handleStatusChange("canceled")} type="button">
+            <button aria-busy={statusChanging === "canceled"} className="maju-button-secondary min-h-11 w-full justify-center text-rose-700 sm:w-auto" disabled={registering || Boolean(statusChanging)} onClick={() => handleStatusChange("canceled")} type="button">
               {statusChanging === "canceled" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
               {statusChanging === "canceled" ? "해지하는 중..." : "해지"}
             </button>
           ) : null}
         </div>
+        {registering || statusChanging ? (
+          <p aria-live="polite" className="border-t border-slate-100 px-4 py-3 text-center text-xs font-medium text-slate-500 sm:text-left">
+            요청을 처리하고 있습니다. 완료될 때까지 이 화면을 닫지 마세요.
+          </p>
+        ) : null}
       </div>
 
       <PaymentHistoryTable payments={payments} />

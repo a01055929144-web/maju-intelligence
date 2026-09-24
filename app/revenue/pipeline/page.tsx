@@ -100,8 +100,14 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
         </div>
 
         {pipelineError ? (
-          <div className="maju-filter-box border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-900">
-            저장 연결 또는 방문 기록 테이블을 확인하세요. 화면은 계속 사용할 수 있도록 비어 있는 상태로 표시합니다.
+          <div aria-live="polite" className="maju-filter-box flex flex-col gap-3 border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold">기회 현황을 불러오지 못했습니다.</p>
+              <p className="mt-1 font-medium text-amber-800">잠시 후 다시 시도해 주세요. 현재 화면의 수치는 임시로 0으로 표시됩니다.</p>
+            </div>
+            <Link className="maju-button-secondary min-h-11 shrink-0 justify-center bg-white sm:min-h-9" href={companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline"}>
+              다시 불러오기
+            </Link>
           </div>
         ) : null}
 

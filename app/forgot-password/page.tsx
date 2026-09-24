@@ -53,9 +53,9 @@ export default function ForgotPasswordPage() {
         </CardHeader>
         <CardContent>
           {submitted ? (
-            <p className="rounded-md bg-emerald-50 px-3 py-3 text-sm font-bold leading-6 text-emerald-800">{message}</p>
+            <p aria-live="polite" className="rounded-md bg-emerald-50 px-3 py-3 text-sm font-bold leading-6 text-emerald-800" role="status">{message}</p>
           ) : (
-            <form className="space-y-2.5" onSubmit={handleSubmit}>
+            <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
               <p className="mb-1 text-sm font-semibold leading-6 text-muted-foreground">가입하신 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.</p>
               <input
                 autoComplete="email"
@@ -67,10 +67,10 @@ export default function ForgotPasswordPage() {
                 placeholder="가입 이메일"
                 required
               />
-              {message ? <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">{message}</p> : null}
-              <Button className="mt-1.5 w-full" disabled={loading}>
+              {message ? <p aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">{message}</p> : null}
+              <Button className="mt-1.5 min-h-12 w-full" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                재설정 링크 받기
+                {loading ? "이메일 확인 중…" : "재설정 링크 받기"}
               </Button>
             </form>
           )}

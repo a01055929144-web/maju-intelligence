@@ -57,7 +57,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   }
 
   return (
-    <form className="space-y-2.5" onSubmit={handleSubmit}>
+    <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
       <input
         autoComplete="new-password"
         className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -81,16 +81,16 @@ export function ResetPasswordForm({ token }: { token: string }) {
         required
       />
       {error ? (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive">
+        <div aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">
           <p>{error}</p>
           <Link className="mt-1 inline-block underline underline-offset-2" href="/forgot-password">
             재설정 링크 다시 요청하기
           </Link>
         </div>
       ) : null}
-      <Button className="mt-1.5 w-full" disabled={loading}>
+      <Button className="mt-1.5 min-h-12 w-full" disabled={loading}>
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-        비밀번호 재설정
+        {loading ? "비밀번호 변경 중…" : "비밀번호 재설정"}
       </Button>
     </form>
   );

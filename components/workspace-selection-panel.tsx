@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Building2, UserRound } from "lucide-react";
+import { ArrowRight, Building2, Loader2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -89,8 +89,8 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
   }
 
   return (
-    <div>
-      {error ? <p className="m-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
+    <div aria-busy={busy}>
+      {error ? <p className="m-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700" role="alert">{error}</p> : null}
       <div className="divide-y divide-slate-200">
         {workspaceList.map((workspace) => {
           const isPersonal = workspace.workspaceType === "personal";
@@ -119,17 +119,20 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:flex-col sm:items-stretch">
-                <Button className="w-full sm:w-auto" disabled={busy || isCurrent} onClick={() => selectWorkspace(workspace.companyId)} size="sm">
-                  {isCurrent ? "사용 중" : pendingCompanyId === workspace.companyId ? "전환 중" : "전환"}
-                  {!isCurrent ? <ArrowRight className="h-4 w-4" /> : null}
+                <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={busy || isCurrent} onClick={() => selectWorkspace(workspace.companyId)} size="sm">
+                  {pendingCompanyId === workspace.companyId ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {isCurrent ? "사용 중" : pendingCompanyId === workspace.companyId ? "전환하는 중" : "이 작업공간 열기"}
+                  {!isCurrent && pendingCompanyId !== workspace.companyId ? <ArrowRight className="h-4 w-4" /> : null}
                 </Button>
                 <button
-                  className="text-xs font-bold text-slate-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-11 rounded-md px-3 text-xs font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8"
                   disabled={busy}
                   onClick={() => leaveWorkspace(workspace)}
                   type="button"
                 >
-                  {leavingCompanyId === workspace.companyId ? "나가는 중..." : "나가기"}
+                  {leavingCompanyId === workspace.companyId ? (
+                    <span className="inline-flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" />나가는 중</span>
+                  ) : "나가기"}
                 </button>
               </div>
             </div>
