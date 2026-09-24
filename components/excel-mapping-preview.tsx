@@ -39,7 +39,6 @@ export function ExcelHeaderMappingPreview({
   }, {});
   const requiredFields = fields.filter((field) => field.required);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
-  const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
   const mappedHeaderCount = Object.keys(mappedByHeader).length;
   const normalizedCardQuery = cardQuery.trim().toLowerCase();
   const visibleHeaders = headers.filter((header) => {
@@ -280,7 +279,6 @@ function MappingWorkspaceModal({
   const [fieldQuery, setFieldQuery] = useState("");
   const [autoMapMessage, setAutoMapMessage] = useState("");
   const requiredFields = fields.filter((field) => field.required);
-  const optionalFields = fields.filter((field) => !field.required);
   const mappedCount = fields.filter((field) => fieldMap[field.key]).length;
   const requiredMappedCount = requiredFields.length - missingRequiredFields.length;
   const filteredHeaders = useMemo(() => {

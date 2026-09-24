@@ -46,7 +46,6 @@ export function TodayCourseView({
   onSelectStore,
   onSelectVehicle,
   pendingAddStoreId,
-  routeTotals,
   selectedStoreId,
   selectedVehicle,
   selectedVehicleId,
@@ -71,7 +70,6 @@ export function TodayCourseView({
   readonly onSelectVehicle: (vehicleId: string) => void;
   /** 지도 홈에서 "경유지 추가"를 눌러 이 탭으로 넘어온 거래처 id — 마운트/변경 시 오늘 경유 선택에 자동 포함시킵니다. */
   readonly pendingAddStoreId?: string;
-  readonly routeTotals: { distanceKm: number; durationMinutes: number; expectedRevenue: number };
   readonly selectedStoreId: string;
   readonly selectedVehicle?: DeliveryVehicle;
   readonly selectedVehicleId: string;
@@ -527,7 +525,6 @@ export function TodayCourseView({
             onAddToRoute={() => toggleRouteStore(routeSelectedStore.id)}
             onClose={() => setRouteSelectedStoreId("")}
             onOpenDetail={() => onSelectStore(routeSelectedStore.id)}
-            originAddress={routeOriginAddress}
             store={routeSelectedStore}
             variant="grid"
           />

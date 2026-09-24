@@ -680,15 +680,16 @@ export function KakaoAddressMap({
       };
       vehicleAnimFrameRef.current.set(marker.id, requestAnimationFrame(step));
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, mapBootId, vehicleMarkers]);
 
   // 컴포넌트가 사라질 때 진행 중이던 차량 애니메이션 프레임을 전부 취소해, 이미 제거된 지도
   // 위에 setPosition을 계속 호출하는 일이 없게 합니다.
   useEffect(() => {
+    const animationFrames = vehicleAnimFrameRef.current;
+
     return () => {
-      vehicleAnimFrameRef.current.forEach((frameId) => cancelAnimationFrame(frameId));
-      vehicleAnimFrameRef.current.clear();
+      animationFrames.forEach((frameId) => cancelAnimationFrame(frameId));
+      animationFrames.clear();
     };
   }, []);
 

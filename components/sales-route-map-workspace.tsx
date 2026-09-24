@@ -12,15 +12,12 @@ import {
   ArrowUp,
   ArrowUpDown,
   CalendarDays,
-  Camera,
   Check,
   CheckCircle2,
   ChevronDown,
-  CircleSlash,
   Clock,
   Copy,
   CreditCard,
-  Crosshair,
   Download,
   Edit3,
   ExternalLink,
@@ -29,10 +26,8 @@ import {
   FileImage,
   Gauge,
   GripVertical,
-  Instagram,
   KeyRound,
   Layers,
-  ListFilter,
   Loader2,
   Lock,
   Maximize2,
@@ -56,8 +51,6 @@ import {
   Target,
   Trash2,
   Truck,
-  Upload,
-  UserCheck,
   UserRound,
   Warehouse,
   X,
@@ -70,8 +63,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
-import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
-import { buildNaverSearchUrl, buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
+import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import type {
@@ -82,7 +74,6 @@ import type {
   PermitLeadActionItem,
   PermitLeadItem,
   PermitLeadPeriod,
-  PermitLeadQueues,
   PossibleDuplicateCustomer,
   RoutePlan,
   RoutePlanStop,
@@ -772,7 +763,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAllLeadsOnMap]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
@@ -1231,7 +1221,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       staleVehicles: liveVehicleLocations.filter((location) => location.isStale).length
     };
   }, [markers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleLocations]);
-  const originMarker = mapMarkers.find((marker) => marker.tone === "origin");
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
   const visibleMapReadyStoreCount = useMemo(() => visibleStores.filter((store) => Boolean(store.address?.trim())).length, [visibleStores]);
@@ -1242,7 +1231,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const selectedGradeLabel = gradeFilter === "all" ? "전체" : `${gradeFilter}등급`;
   const selectedGradeCount = gradeFilter === "all" ? gradeBaseStores.length : gradeCounts[gradeFilter];
   const kpiSummary = activeView === "course" && courseSummary ? courseSummary : null;
-  const activeDistanceKm = kpiSummary?.distanceKm ?? routeTotals.distanceKm;
   const distanceKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 거래처까지";
   const durationKpiHelper = !sourceReady ? "거래처 등록 대기" : kpiSummary ? "티맵 경유 순서 기준" : "출발지에서 각 거래처까지";
   const vehicleFuelTypeById = useMemo(() => {
@@ -1267,7 +1255,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     : estimateFuelCostWon(fuelDistanceByType.diesel, fuelPrices.diesel?.pricePerLiter || 0) +
       estimateFuelCostWon(fuelDistanceByType.gasoline, fuelPrices.gasoline?.pricePerLiter || 0);
   const fuelPricesReady = activeFuelTypes.length > 0 && activeFuelTypes.every((type) => fuelPrices[type]);
-  const fuelBasisIsOpinet = activeFuelTypes.some((type) => fuelPrices[type]?.basis === "opinet");
   const fuelKpiHelper = !sourceReady
     ? "거래처 등록 대기"
     : fuelPricesReady
@@ -2598,7 +2585,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       })
                     }
                     onSave={(edit) => updateStore(previewStore.id, edit)}
-                    originAddress={originMarker?.address || ""}
                     store={previewStore}
                     vehicleOptions={vehicleNameOptions}
                   />
@@ -2817,7 +2803,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
           pendingAddStoreId={pendingCourseStoreId}
-          routeTotals={routeTotals}
           selectedStoreId={selectedId}
           selectedVehicle={selectedVehicle}
           selectedVehicleId={vehicleFilterId}
@@ -2851,7 +2836,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
-          areaOptions={deliveryDefaults.areas}
           driverOptions={deliveryDefaults.drivers}
           fuelPrices={fuelPrices}
           history={storeHistories[selectedStore.id] || []}
@@ -3945,17 +3929,17 @@ export function NavigateMenu({
   compact,
   destinationAddress,
   destinationName,
-  originAddress,
   knownDestinationPoint,
-  knownOriginPoint
+  knownOriginPoint,
+  originAddress
 }: {
   readonly compact?: boolean;
   readonly destinationAddress?: string;
   readonly destinationName: string;
-  readonly originAddress?: string;
   /** Skip the geocode round-trip when the caller already resolved these (e.g. from a Tmap route calc). */
   readonly knownDestinationPoint?: GeoPoint | null;
   readonly knownOriginPoint?: GeoPoint | null;
+  readonly originAddress?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -4117,7 +4101,6 @@ export function StoreQuickCard({
   onOpenDetail,
   onOpenQuote,
   onSave,
-  originAddress,
   store,
   variant = "floating",
   vehicleOptions
@@ -4137,7 +4120,6 @@ export function StoreQuickCard({
   readonly onOpenDetail: () => void;
   readonly onOpenQuote?: (store: StoreRow) => void;
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
-  readonly originAddress?: string;
   readonly store: StoreRow;
   /**
    * "floating": 지도 홈처럼 지도 위에 떠 있는 좌측 패널을 피해야 하는 전체화면 지도용 위치 계산.
@@ -5835,7 +5817,7 @@ function CustomerDirectoryView({
                 <tbody className="divide-y divide-slate-100">
                   {sortedStores.map((store) => (
                     <tr
-                      aria-selected={store.id === selectedStoreId}
+                      data-selected={store.id === selectedStoreId ? "true" : "false"}
                       className={`cursor-pointer transition hover:bg-slate-50 ${store.id === selectedStoreId ? "bg-teal-50/70 shadow-[inset_3px_0_0_#0f766e]" : "bg-white"}`}
                       key={store.id}
                       onClick={() => onSelectStore(store.id)}
@@ -7353,7 +7335,6 @@ export function getRouteStopAddress(store: StoreRow) {
 }
 
 function StoreDetail({
-  areaOptions,
   attachments,
   driverOptions,
   fuelPrices,
@@ -7370,7 +7351,6 @@ function StoreDetail({
   store,
   vehicleOptions
 }: {
-  readonly areaOptions: string[];
   readonly attachments: StoreAttachment;
   readonly driverOptions: string[];
   readonly fuelPrices: FuelPriceByType;
@@ -7405,7 +7385,7 @@ function StoreDetail({
   const [draftReviewSummary, setDraftReviewSummary] = useState(store.reviewSummary || "");
   const [draftReviewKeywords, setDraftReviewKeywords] = useState((store.reviewKeywords || []).join(", "));
   const [draftReviewSource, setDraftReviewSource] = useState(store.reviewSource || "");
-  const [draftDeliveryArea, setDraftDeliveryArea] = useState(store.deliveryArea || store.region);
+  const [draftDeliveryArea] = useState(store.deliveryArea || store.region);
   const [draftDeliveryDriver, setDraftDeliveryDriver] = useState(store.deliveryDriver || "");
   const [draftDeliveryVehicleName, setDraftDeliveryVehicleName] = useState(store.deliveryVehicleName || "");
   const [draftEmail, setDraftEmail] = useState(store.email);
@@ -8743,10 +8723,6 @@ export function RouteWorkStep({ active, done, label }: { active: boolean; done: 
   );
 }
 
-function PanelTitle({ title }: { readonly title: string }) {
-  return <p className="border-b border-slate-200 pb-2 text-xs font-black text-slate-500">{title}</p>;
-}
-
 function InfoRow({ icon, label, value }: { readonly icon?: React.ReactNode; readonly label: string; readonly value: string }) {
   return (
     <div className="grid gap-1.5 text-sm">
@@ -8850,7 +8826,6 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
   return vehicles.flatMap((vehicle, vehicleIndex) =>
     vehicle.stops.map((store, storeIndex) => {
       const marker = findMarkerForStore(existingMarkers, store);
-      const globalIndex = vehicleIndex * 15 + storeIndex;
       const details = store as StoreRow & RoutePlanStoreDetails;
       return {
         ...store,
@@ -9450,10 +9425,6 @@ function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {
   if (status === "active") return "정상";
   if (status === "closed") return "폐업";
   return "확인필요";
-}
-
-function getDocumentStatusLabel(status: StoreRow["businessCertificateStatus"]) {
-  return status === "received" ? "수취 완료" : "미수취";
 }
 
 function businessStatusClass(status: StoreRow["businessStatus"]) {

@@ -17,15 +17,12 @@ import {
   Database,
   Download,
   FileSpreadsheet,
-  HeartPulse,
   History,
   Info,
   LucideIcon,
   Save,
-  Search,
   Route,
   Sparkles,
-  Target,
   Upload
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +34,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { Progress } from "@/components/ui/progress";
 import { analyzeCompany, AnalysisResult } from "@/lib/analysis";
 import { isValidBusinessRegistrationNumber } from "@/lib/business-number";
-import { CustomerRow, sampleCustomers, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
+import { CustomerRow, UploadTemplateField, UploadTemplateType, uploadTemplates } from "@/lib/sample-data";
 import { SortableTh } from "@/components/sortable-th";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { useTableSort } from "@/lib/use-table-sort";
@@ -225,15 +222,6 @@ export default function Home() {
       return;
     }
     runPipeline(customers, rawRows, fieldMap, uploadedFilename || "registered-customers");
-  }
-
-  function runAnalysis() {
-    setIsAnalyzing(true);
-    setScreen("onboarding");
-    window.setTimeout(() => {
-      setIsAnalyzing(false);
-      setScreen("report");
-    }, 950);
   }
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
@@ -892,65 +880,6 @@ function Briefing({
   );
 }
 
-function MiniFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-white p-3">
-      <p className="text-xs font-bold text-muted-foreground">{label}</p>
-      <p className="mt-1 font-black">{value}</p>
-    </div>
-  );
-}
-
-function AddressMapPanel({
-  markers
-}: {
-  markers: ReadonlyArray<{ readonly address: string; readonly label: string; readonly name: string; readonly tone: "customer" | "lead" | "origin"; readonly x: number; readonly y: number }>;
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-white">
-      <div className="relative min-h-80 bg-[linear-gradient(90deg,rgba(15,118,110,0.10)_1px,transparent_1px),linear-gradient(180deg,rgba(15,118,110,0.10)_1px,transparent_1px)] bg-[size:42px_42px]">
-        <div className="absolute left-[10%] top-[20%] h-[62%] w-[74%] rounded-[40%] border-2 border-dashed border-primary/25" />
-        <div className="absolute left-[24%] top-[28%] h-[44%] w-[58%] rounded-[48%] border border-accent/60 bg-accent/10" />
-        <div className="absolute left-[42%] top-[31%] h-[2px] w-[30%] rotate-[28deg] bg-primary/30" />
-        <div className="absolute left-[55%] top-[44%] h-[2px] w-[20%] rotate-[42deg] bg-primary/30" />
-        <div className="absolute left-[30%] top-[42%] h-[2px] w-[44%] rotate-[18deg] bg-primary/20" />
-        {markers.map((marker) => (
-          <div
-            key={marker.name}
-            className="group absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
-          >
-            <span
-              className={
-                marker.tone === "origin"
-                  ? "flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-foreground text-xs font-black text-white shadow-panel"
-                  : marker.tone === "lead"
-                    ? "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-accent text-xs font-black text-foreground shadow-panel"
-                    : "flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-primary text-xs font-black text-white shadow-panel"
-              }
-            >
-              {marker.label}
-            </span>
-            <div className="pointer-events-none absolute left-1/2 top-10 z-10 hidden w-56 -translate-x-1/2 rounded-md border border-border bg-white p-3 text-xs shadow-panel group-hover:block">
-              <p className="font-black text-foreground">{marker.name}</p>
-              <p className="mt-1 leading-5 text-muted-foreground">{marker.address}</p>
-            </div>
-          </div>
-        ))}
-        <div className="absolute bottom-3 left-3 rounded-md border border-border bg-white/95 p-3 text-xs shadow-panel">
-          <p className="font-black">주소 기반 지도 시각화</p>
-          <p className="mt-1 text-muted-foreground">출발지, 거래처, 신규 리드 위치를 운영 기준 좌표로 표시합니다.</p>
-        </div>
-      </div>
-      <div className="grid gap-2 border-t border-border p-3 text-xs sm:grid-cols-3">
-        <span className="inline-flex items-center gap-2 font-bold"><span className="h-3 w-3 rounded-full bg-foreground" />출발지</span>
-        <span className="inline-flex items-center gap-2 font-bold"><span className="h-3 w-3 rounded-full bg-primary" />거래처</span>
-        <span className="inline-flex items-center gap-2 font-bold"><span className="h-3 w-3 rounded-full bg-accent" />신규 리드</span>
-      </div>
-    </div>
-  );
-}
-
 type DataRegistrationSection = "customer" | "sales" | "history";
 
 function DataRegistrationSidePanel({
@@ -1197,9 +1126,6 @@ function Onboarding({
     () => summarizeDataQuality(rawRows, requiredFields, fieldMap, exemptBusinessNumbers),
     [exemptBusinessNumbers, fieldMap, rawRows, requiredFields]
   );
-  const uploadHint = isMaster
-    ? "사업자 정보, 배송주소, 대표자, 연락처를 거래처 기준정보로 저장합니다."
-    : "거래처 key와 매출 행을 누적해 일/월/분기/반기/연 분석과 이탈 징후를 갱신합니다.";
   const hasDataRows = rawRows.length > 0;
   const hasBlockingQualityIssues = dataQuality.issueRows.length > 0 || dataQuality.invalidBusinessNumbers.length > 0;
   const latestUpload = uploadHistory[0];
@@ -1253,108 +1179,6 @@ function Onboarding({
       value: pipelineMeta.persisted ? "저장 완료" : "저장 확인 전"
     }
   ];
-  const implementationProgressItems = [
-    {
-      description: "거래처 등록과 매출 원장 등록 흐름을 구분했습니다.",
-      done: true,
-      label: "등록 흐름"
-    },
-    {
-      description: "엑셀 전체 미리보기와 ERP 헤더 매핑 전용화면을 제공합니다.",
-      done: true,
-      label: "엑셀 매핑"
-    },
-    {
-      description: "수기 등록, 주소 검색, 사업자번호 검증, 외부 지도 링크를 연결했습니다.",
-      done: true,
-      label: "수기 등록"
-    },
-    {
-      description: "OCR은 필수가 아닌 보조 입력으로 분리하고 첨부자료 기준을 정리했습니다.",
-      done: true,
-      label: "OCR·첨부"
-    },
-    {
-      description: "대시보드에서 거래처, 매출, 지도·코스 기준값의 일치 여부를 자동 점검합니다.",
-      done: true,
-      label: "운영 검증 자동화"
-    },
-    {
-      description: "저장 직후 서버 응답과 화면 반영 결과를 분리해서 확인할 수 있게 정리했습니다.",
-      done: true,
-      label: "저장 결과 대조"
-    },
-    {
-      description: "대시보드, 코스, 거래처 히스토리의 정보 밀도와 탭 구분을 정리했습니다.",
-      done: true,
-      label: "주요 화면 밀도 정리"
-    },
-    {
-      description: "모바일 직원 사용 흐름과 현장 완료 기록을 연결했습니다.",
-      done: true,
-      label: "모바일 현장 흐름"
-    },
-    {
-      description: "모바일 현장 기록이 거래처 원장, 메모·방문, 첨부자료로 연결되는 추적 화면을 추가했습니다.",
-      done: true,
-      label: "현장 기록 추적"
-    },
-    {
-      description: "지도 홈의 지도, 목록, 오늘 코스 영역이 잘리지 않도록 스크롤 기준을 정리했습니다.",
-      done: true,
-      label: "운영 QA 정리"
-    },
-    {
-      description: "수기 등록, 저장 상태, 검수 목록, 빈 상태 안내 문구를 운영자가 이해하기 쉽게 정리했습니다.",
-      done: true,
-      label: "운영 문구 정리"
-    },
-    {
-      description: "저장 상태, 업로드 이력, 지도 홈, 원장 확인 경로를 등록 화면에 고정했습니다.",
-      done: true,
-      label: "배포 전 체크리스트"
-    },
-    {
-      description: "등록 유형, 방식, 반영 화면, 저장 상태를 하나의 운영 기준 요약 카드로 압축했습니다.",
-      done: true,
-      label: "운영 카드 압축"
-    },
-    {
-      description: "관리자, 고객사 대시보드, 데이터 등록, 히스토리, 코스, 모바일 현장 경로를 점검 패널로 고정했습니다.",
-      done: true,
-      label: "핵심 플로우 점검"
-    },
-    {
-      description: "실배포 전 환경변수 점검 스크립트와 관리자 시스템 안내를 같은 기준으로 맞췄습니다.",
-      done: true,
-      label: "실배포 환경 점검"
-    },
-    {
-      description: "최종 검수 기록 문서와 배포 가이드의 환경변수/운영 테스트 기준을 정리했습니다.",
-      done: true,
-      label: "최종 검수 기록"
-    },
-    {
-      description: "Vercel Logs, Supabase Logs, 화면 Digest, companyId 기준의 오류 추적 순서를 정리했습니다.",
-      done: true,
-      label: "운영 로그 추적"
-    },
-    {
-      description: "운영 전환 릴리즈 범위, 배포 전 확인 항목, 알려진 제약, 다음 릴리즈 후보를 정리했습니다.",
-      done: true,
-      label: "릴리즈 노트 정리"
-    },
-    {
-      description: "배포 직후 확인할 Production URL 8개 경로와 통과 기준을 최종 QA 문서에 고정했습니다.",
-      done: true,
-      label: "Production 최종 확인"
-    },
-    {
-      description: "등록 진행률, 막힌 단계, 다음 확인 위치를 같은 상태판에서 확인하도록 정리했습니다.",
-      done: true,
-      label: "등록 상태 가시화"
-    }
-  ];
   const reviewTabs = [
     {
       actionHint: !hasDataRows ? "먼저 등록 데이터 준비" : complete ? "다음: 오류 확인" : "필수 헤더 연결",
@@ -1398,7 +1222,6 @@ function Onboarding({
   const currentLedgerLabel = uploadType === "customer-master" ? "거래처 히스토리 보기" : "매출 원장 보기";
   const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
   const routeHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
-  const mobileTodayHref = adminCompanyId ? `/mobile/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/mobile/today";
 
   useEffect(() => {
     if (!hasDataRows) {
@@ -2557,52 +2380,6 @@ function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], ca
   return [];
 }
 
-function ImplementationProgressCard({
-  items
-}: {
-  items: Array<{ description: string; done: boolean; label: string }>;
-}) {
-  const doneCount = items.filter((item) => item.done).length;
-  const progress = items.length ? Math.round((doneCount / items.length) * 100) : 0;
-  const nextItem = items.find((item) => !item.done) || items[items.length - 1];
-
-  return (
-    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_280px] lg:items-center">
-        <div>
-          <p className="text-xs font-black text-slate-400">현재 개선 진행률</p>
-          <p className="mt-1 text-3xl font-black text-slate-950">{progress}%</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">{doneCount}/{items.length}개 항목 완료</p>
-        </div>
-        <div>
-          <div className="flex items-center justify-between text-xs font-black text-slate-500">
-            <span>데이터 등록 실운영화</span>
-            <span>다음: {nextItem.label}</span>
-          </div>
-          <Progress className="mt-2 h-2" value={progress} />
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {items.map((item) => (
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
-                  item.done ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                }`}
-                key={item.label}
-              >
-                {item.done ? "완료" : "대기"} · {item.label}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
-          <p className="text-xs font-black text-blue-800">다음 작업</p>
-          <p className="mt-1 text-sm font-black leading-5 text-slate-950">{nextItem.label}</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">{nextItem.description}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function DeploymentReadinessChecklist({
   canAnalyze,
   dashboardHref,
@@ -2691,113 +2468,6 @@ function DeploymentReadinessChecklist({
             ))}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function CoreFlowCheckPanel({
-  dashboardHref,
-  dataHref,
-  ledgerHref,
-  mobileHref,
-  routeHref
-}: {
-  dashboardHref: string;
-  dataHref: string;
-  ledgerHref: string;
-  mobileHref: string;
-  routeHref: string;
-}) {
-  const flows = [
-    {
-      href: "/admin/system",
-      icon: Database,
-      label: "관리자 점검",
-      steps: ["환경변수", "저장 테이블", "Storage"],
-      summary: "저장 연결과 필수 테이블 상태 확인"
-    },
-    {
-      href: dashboardHref,
-      icon: BarChart3,
-      label: "고객사 대시보드",
-      steps: ["거래처 수", "매출 기준", "코스 기준"],
-      summary: "대표가 보는 운영 숫자 확인"
-    },
-    {
-      href: dataHref,
-      icon: Upload,
-      label: "데이터 등록",
-      steps: ["업로드", "매핑", "저장"],
-      summary: "거래처와 매출 원장 등록"
-    },
-    {
-      href: ledgerHref,
-      icon: History,
-      label: "거래처 히스토리",
-      steps: ["기본정보", "첨부자료", "메모·방문"],
-      summary: "매장별 원장과 현장 기록 확인"
-    },
-    {
-      href: routeHref,
-      icon: Route,
-      label: "지도 홈",
-      steps: ["지도", "차량 필터", "티맵 경유"],
-      summary: "출발지-매장 거리와 경유 코스 확인"
-    },
-    {
-      href: mobileHref,
-      icon: ClipboardList,
-      label: "모바일 현장",
-      steps: ["오늘 코스", "적재위치", "완료 증빙"],
-      summary: "직원이 현장에서 남기는 기록 확인"
-    }
-  ];
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">핵심 플로우 점검</Badge>
-            <h2 className="mt-3 text-lg font-black text-slate-950">실제 사용자가 누를 주요 경로</h2>
-          </div>
-          <p className="max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-            아래 6개 경로가 이어지면 등록, 원장, 지도, 리포트 흐름을 한 번에 확인할 수 있습니다.
-          </p>
-        </div>
-      </div>
-      <div className="grid gap-3 bg-slate-50/60 p-4 md:grid-cols-2 xl:grid-cols-3">
-        {flows.map((flow, index) => {
-          const Icon = flow.icon;
-          return (
-            <Link
-              className="group rounded-lg border border-slate-200 bg-white p-4 transition hover:border-teal-200 hover:bg-teal-50/50 hover:shadow-sm"
-              href={flow.href}
-              key={flow.label}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-md bg-teal-700 text-white">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span>
-                    <span className="block text-sm font-black text-slate-950">{index + 1}. {flow.label}</span>
-                    <span className="mt-1 block text-xs font-bold text-slate-500">{flow.summary}</span>
-                  </span>
-                </span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-teal-700" />
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {flow.steps.map((step) => (
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200" key={step}>
-                    {step}
-                  </span>
-                ))}
-              </div>
-            </Link>
-          );
-        })}
       </div>
     </div>
   );
@@ -2933,160 +2603,6 @@ function RegistrationEntrySummary({
       <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{modeLabel}</Badge>
       <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{rowsWaiting.toLocaleString()}행</Badge>
       <Badge className={stateClassName}>{stateLabel}</Badge>
-    </div>
-  );
-}
-
-function OperationalDataSplit({
-  activeType,
-  latestUploadAt,
-  onSelect,
-  rowsWaiting
-}: {
-  activeType: UploadTemplateType;
-  latestUploadAt?: string;
-  onSelect: (type: UploadTemplateType) => void;
-  rowsWaiting: number;
-}) {
-  const cards = [
-    {
-      checks: ["사업자번호", "배송주소", "담당자", "첨부자료"],
-      description: "지도, 배송차, 거래처 히스토리의 기준값",
-      icon: Building2,
-      key: "customer-master" as UploadTemplateType,
-      label: "거래처 등록",
-      rhythm: "최초 등록 후 수정",
-      target: "지도 · 히스토리 · 배송"
-    },
-    {
-      checks: ["거래처 key", "매출일자", "품목", "금액"],
-      description: "등급, 이탈, 리포트 수치를 갱신하는 반복 데이터",
-      icon: Banknote,
-      key: "sales-analysis" as UploadTemplateType,
-      label: "매출 원장",
-      rhythm: "일·월·분기 업로드",
-      target: "등급 · 원장 · 리포트"
-    }
-  ];
-
-  return (
-    <div className="rounded-md border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <Badge className="mb-2 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200">등록 유형</Badge>
-          <h2 className="text-xl font-black text-slate-950">거래처 기준값과 매출 원장을 구분합니다</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">거래처는 처음 저장하고, 매출은 주기적으로 갱신합니다.</p>
-        </div>
-        <div className="grid gap-2 text-xs font-black text-slate-500 sm:grid-cols-2">
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">대기 {rowsWaiting.toLocaleString()}행</span>
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">최근 {latestUploadAt || "없음"}</span>
-        </div>
-      </div>
-
-      <div className="grid gap-0 lg:grid-cols-2">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          const active = activeType === card.key;
-
-          return (
-            <button
-              key={card.key}
-              className={`border-b p-4 text-left transition last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0 ${
-                active ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white hover:bg-slate-50"
-              }`}
-              onClick={() => onSelect(card.key)}
-              type="button"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 gap-3">
-                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-md ${active ? "bg-white/10 text-white ring-1 ring-inset ring-white/20" : "bg-slate-100 text-slate-500"}`}>
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className={`text-base font-black ${active ? "text-white" : "text-slate-950"}`}>{card.label}</p>
-                    <p className={`mt-1 text-xs font-bold leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>{card.rhythm}</p>
-                  </div>
-                </div>
-                {active ? <CheckCircle2 className="h-5 w-5 shrink-0 text-white" /> : <Badge className="bg-slate-100 text-slate-600">선택</Badge>}
-              </div>
-              <div className="mt-4 grid overflow-hidden rounded-md border border-slate-200 bg-white md:grid-cols-2">
-                <div className="border-b border-slate-200 px-3 py-2 md:border-b-0 md:border-r">
-                  <p className="text-[11px] font-black text-slate-400">주기</p>
-                  <p className="mt-1 text-xs font-black text-slate-950">{card.rhythm}</p>
-                </div>
-                <div className="px-3 py-2">
-                  <p className="text-[11px] font-black text-slate-400">반영</p>
-                  <p className="mt-1 text-xs font-black text-slate-950">{card.target}</p>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {card.checks.map((check) => (
-                  <span key={check} className="rounded-md bg-white px-2 py-1 text-[11px] font-black text-slate-600 ring-1 ring-inset ring-slate-200">
-                    {check}
-                  </span>
-                ))}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function DataRegistrationDecisionPanel({
-  activeType,
-  entryMode,
-  latestUploadAt,
-  rowsWaiting
-}: {
-  activeType: UploadTemplateType;
-  entryMode: EntryMode;
-  latestUploadAt?: string;
-  rowsWaiting: number;
-}) {
-  const activeLabel = activeType === "customer-master" ? "거래처 등록" : "매출 원장";
-  const modeLabel = entryMode === "excel" ? "엑셀 대량 등록" : entryMode === "manual" ? "수기 1건 등록" : "OCR 보조 입력";
-  const syncTarget = activeType === "customer-master" ? "지도 · 거래처 히스토리 · 배송 코스" : "매출 원장 · 등급 · AI 리포트";
-  const modeHint =
-    entryMode === "excel"
-      ? "ERP 헤더 매핑 후 일괄 저장"
-      : entryMode === "manual"
-        ? "주소 검색과 사업자번호 검증 후 1건 저장"
-        : "OCR 후보값 확인 후 수기 보정";
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <Badge className="mb-2 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">현재 작업</Badge>
-          <h2 className="text-lg font-black text-slate-950">{activeLabel} · {modeLabel}</h2>
-          <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{modeHint} · {syncTarget}</p>
-        </div>
-        <div className="grid gap-2 text-xs font-black text-slate-600 sm:grid-cols-2">
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">대기 {rowsWaiting.toLocaleString()}행</span>
-          <span className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">최근 {latestUploadAt || "없음"}</span>
-        </div>
-      </div>
-      <div className="grid gap-0 md:grid-cols-3">
-        <MiniDecisionMetric icon={Building2} label="등록 유형" value={activeLabel} />
-        <MiniDecisionMetric icon={FileSpreadsheet} label="등록 방식" value={modeLabel} />
-        <MiniDecisionMetric icon={Save} label="반영 위치" value={syncTarget} />
-      </div>
-    </div>
-  );
-}
-
-function MiniDecisionMetric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
-  return (
-    <div className="flex min-h-[82px] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[11px] font-black text-slate-400">{label}</p>
-        <p className="mt-1 text-sm font-black leading-5 text-slate-950">{value}</p>
-      </div>
     </div>
   );
 }
@@ -4423,44 +3939,6 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
   );
 }
 
-function DataPreview({ fields, fieldMap, rows }: { fields: readonly UploadTemplateField[]; fieldMap: FieldMap; rows: RawRow[] }) {
-  const previewFields = fields.filter((field) => field.required || fieldMap[field.key]).slice(0, 5);
-  const previewRows = rows.slice(0, 3);
-
-  return (
-    <div className="maju-section-card mt-3 overflow-hidden">
-      <div className="maju-card-header flex items-center justify-between px-3 py-2">
-        <p className="text-xs font-black text-slate-500">미리보기</p>
-        <p className="text-xs font-bold text-slate-400">상위 {previewRows.length}행</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[360px] text-left text-xs">
-          <thead className="bg-slate-50 text-slate-500">
-            <tr>
-              {previewFields.map((field) => (
-                <th key={field.key} className="whitespace-nowrap px-3 py-2 font-black">
-                  {field.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {previewRows.map((row, index) => (
-              <tr key={index} className="border-t border-slate-100">
-                {previewFields.map((field) => (
-                  <td key={field.key} className="max-w-32 truncate px-3 py-2 font-bold text-slate-700">
-                    {String(row[fieldMap[field.key] || field.key] ?? "-") || "-"}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function PipelineStatusPanel({ steps, meta }: { steps: PipelineStep[]; meta: { rows: number; qualityScore: number; persisted: boolean } }) {
   const done = steps.filter((step) => step.status === "done").length;
   const progress = Math.round((done / steps.length) * 100);
@@ -4520,15 +3998,6 @@ function PipelineMetric({ icon: Icon, label, value }: { icon: typeof FileSpreads
       <Icon className="mb-2 h-4 w-4 text-primary" />
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-black">{value}</p>
-    </div>
-  );
-}
-
-function BigNumber({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <p className="text-sm font-bold text-muted-foreground">{label}</p>
-      <p className="mt-2 text-4xl font-black text-primary">{value}</p>
     </div>
   );
 }
@@ -4824,10 +4293,6 @@ function getOcrProviderLabel(provider?: string) {
   if (provider === "openai-vision") return "OpenAI Vision";
   if (provider === "sample" || provider === "assistive-check") return "OCR 보조 검증";
   return "대기";
-}
-
-function fieldLabelForHeader(header: string, fields: readonly UploadTemplateField[]) {
-  return fields.find((field) => field.key === header)?.label || header;
 }
 
 function summarizeDataQuality(

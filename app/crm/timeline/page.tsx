@@ -181,8 +181,8 @@ export default function CrmTimelinePage() {
   const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [timelineSource, setTimelineSource] = useState<"empty" | "supabase">("empty");
-  const [dbSummary, setDbSummary] = useState<DbSummary>(defaultDbSummary);
-  const [dbError, setDbError] = useState("");
+  const [, setDbSummary] = useState<DbSummary>(defaultDbSummary);
+  const [, setDbError] = useState("");
   const [customerSource, setCustomerSource] = useState<"loading" | "supabase" | "empty" | "error">("loading");
   const [selectedIndex, setSelectedIndex] = useState(0);
   // 거래처 검색·목록 사이드바가 항상 펼쳐져 있으면 옆의 선택 거래처 상세(원장/첨부자료)가 계속
@@ -503,7 +503,6 @@ export default function CrmTimelinePage() {
     }
   }
 
-  const quoteRequests = timeline.filter((item) => item.result === "quote-requested").length;
   const filteredCustomers = useMemo(() => {
     const keyword = customerSearch.trim().toLowerCase();
 
@@ -2642,16 +2641,6 @@ function OperationalActionStrip({
   );
 }
 
-function MiniMetric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={`maju-stat-card bg-slate-50/70 ${wide ? "col-span-2" : ""}`}>
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-
 function LedgerSectionLabel({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
@@ -3157,6 +3146,9 @@ function AttachmentPreviewModal({
         </div>
         <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3">
           {isImage ? (
+            // Customer attachments may come from arbitrary signed or external URLs, so Next Image
+            // cannot safely predeclare every remote host. Keep the native element for this preview.
+            // eslint-disable-next-line @next/next/no-img-element
             <img alt={attachment.title} className="mx-auto max-h-[75vh] w-auto object-contain" src={attachment.url} />
           ) : isVideo ? (
             <video className="mx-auto max-h-[75vh] w-full" controls src={attachment.url} />
@@ -3208,12 +3200,6 @@ function guessMimeType(url: string) {
   if (normalized.endsWith(".png")) return "image/png";
   if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
   return "";
-}
-
-function revenueGrade(monthlyRevenue: number) {
-  if (monthlyRevenue >= 350) return "A";
-  if (monthlyRevenue >= 180) return "B";
-  return "C";
 }
 
 function gradeClassName(grade: string) {

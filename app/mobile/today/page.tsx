@@ -50,7 +50,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const todayStops = isPersonalized ? myStops : [];
   // 직원 화면에서는 담당 거래처 수만 노출합니다. routePlan.totalStops는 회사 전체 건수이므로
   // 배정이 0건인 직원에게 폴백으로 보여주면 데이터 범위 정책을 우회해 전체 규모가 노출됩니다.
-  const visibleRouteTotal = isScopedStaffView ? todayStops.length : routePlan.totalStops;
   const myRegions = Array.from(new Set(myStops.map((stop) => stop.region)));
   const routeArea = isPersonalized
     ? myRegions.length > 1
@@ -63,10 +62,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
       : "거래처 등록 필요";
   // 2026-08-28 피드백 대응: 담당 코스가 없을 때 회사 전체 거리/시간(routePlan.totalDistanceKm 등)을
   // 보여주면 "이게 내 오늘 거리구나"라고 착각할 수 있어, 매칭된 코스가 없을 때는 0으로 표시합니다.
-  const routeDistanceKm = isPersonalized
-    ? Math.round(myStops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0) * 10) / 10
-    : 0;
-  const routeDurationMinutes = isPersonalized ? myStops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0) : 0;
   const completedCustomerIds = new Set(completionEvents.map((event) => event.customerId));
   const selectedStop = todayStops.find((stop) => stop.id === resolvedSearchParams?.customer) || todayStops.find((stop) => !completedCustomerIds.has(stop.id)) || todayStops[0];
   const selectedStopIndex = selectedStop ? todayStops.findIndex((stop) => stop.id === selectedStop.id) : -1;
@@ -75,10 +70,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         .find((stop) => !completedCustomerIds.has(stop.id))
     : undefined;
   const selectedStopCompleted = selectedStop ? completedCustomerIds.has(selectedStop.id) : false;
-  const hasExplicitSelectedStop = Boolean(resolvedSearchParams?.customer && todayStops.some((stop) => stop.id === resolvedSearchParams.customer));
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
-  const heroCopy = getMobileHeroCopy(workspaceRole);
 
   return (
     <main className="min-h-screen bg-[#0b1019] text-white">
@@ -107,15 +100,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800 ring-1 ring-inset ring-amber-100">
               배정된 거래처가 없습니다. 관리자에게 확인해주세요.
             </p>
-          ) : null}
-
-          {false && !isScopedStaffView ? (
-            <MobileRouteContextBar
-              area={routeArea}
-              selectedStopName={selectedStop?.name || "선택 거래처 없음"}
-              totalStops={sourceReady ? visibleRouteTotal : 0}
-              visibleStops={todayStops.length}
-            />
           ) : null}
 
           <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
@@ -189,69 +173,9 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
     </main>
   );
 }
-
-function MobileRouteContextBar({
-  area,
-  selectedStopName,
-  totalStops,
-  visibleStops
-}: {
-  area: string;
-  selectedStopName: string;
-  totalStops: number;
-  visibleStops: number;
-}) {
-  const items = [
-    { label: "권역", value: area },
-    { label: "코스", value: `${visibleStops.toLocaleString()}/${totalStops.toLocaleString()}곳` },
-    { label: "선택", value: selectedStopName }
-  ];
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="grid grid-cols-3 divide-x divide-slate-100">
-        {items.map((item) => (
-          <div className="min-w-0 px-3 py-2.5" key={item.label}>
-            <p className="text-xs font-medium text-slate-500">{item.label}</p>
-            <p className="mt-1 truncate text-sm font-semibold text-slate-950">{item.value}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
   return <Link className={`mobile-bottom-nav-item flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-semibold ${active ? "is-active" : ""}`} href={href}><Icon className="h-4 w-4" />{label}</Link>;
 }
-
-function MobileDriverRouteSummary({
-  area,
-  distanceKm,
-  durationMinutes,
-  sourceReady,
-  totalStops
-}: {
-  area: string;
-  distanceKm: number;
-  durationMinutes: number;
-  sourceReady: boolean;
-  totalStops: number;
-}) {
-  return (
-    <section className="flex items-center justify-between gap-3 rounded-xl bg-teal-700 px-4 py-3 text-white shadow-[0_10px_24px_rgba(15,118,110,0.16)]">
-      <div className="min-w-0">
-        <p className="truncate text-xs font-bold text-white/70">오늘 코스 · {area}</p>
-        <p className="mt-0.5 text-lg font-bold">{sourceReady ? `${totalStops.toLocaleString()}곳` : "코스 확인 필요"}</p>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold">{sourceReady ? `${distanceKm.toLocaleString()}km` : "-"}</p>
-        <p className="mt-0.5 text-xs font-bold text-white/70">{sourceReady ? formatMinutes(durationMinutes) : "-"}</p>
-      </div>
-    </section>
-  );
-}
-
 function MobileOperationalEmptyState() {
   return (
     <section className="rounded-xl border border-dashed border-teal-200 bg-teal-50/70 p-4">
@@ -269,47 +193,4 @@ function MobileOperationalEmptyState() {
       </div>
     </section>
   );
-}
-
-function MobileMetric({ icon: Icon, label, value }: { icon: typeof Route; label: string; value: string }) {
-  return (
-    <div className="min-h-[92px] rounded-xl border border-slate-200 bg-white p-3">
-      <Icon className="h-4 w-4 text-teal-700" />
-      <p className="mt-3 text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-lg font-bold text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function getMobileHeroCopy(role: ReturnType<typeof normalizeWorkspaceRole>) {
-  if (role === "driver") {
-    return {
-      title: "오늘 코스 확인",
-      description: "매장을 선택해 지도, 전화, 적재위치 사진/영상, 배송 특이사항을 바로 처리합니다."
-    };
-  }
-  if (role === "sales") {
-    return {
-      title: "오늘 코스 확인",
-      description: "매장을 선택해 전화, 위치, 상담 메모, 다음 액션을 빠르게 남깁니다."
-    };
-  }
-  if (role === "manager" || role === "owner") {
-    return {
-      title: "오늘 코스 확인",
-      description: "배송·영업 담당자의 오늘 코스, 매장 정보, 현장 기록을 모바일에서 함께 관리합니다."
-    };
-  }
-  return {
-    title: "오늘 코스 확인",
-    description: "매장을 선택하면 전화, 지도, 적재위치, 방문 메모 액션을 바로 실행할 수 있습니다."
-  };
-}
-
-
-function formatMinutes(minutes: number) {
-  if (!minutes) return "-";
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return hours ? `${hours}h ${rest}m` : `${rest}m`;
 }
