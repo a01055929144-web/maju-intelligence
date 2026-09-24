@@ -1175,68 +1175,36 @@ export default function CrmTimelinePage() {
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
-            description="거래처를 선택하면 아래 원장에서 확인·편집합니다."
+            description={`${filteredCustomers.length.toLocaleString()}곳 · 거래처를 선택하면 원장과 현장 기록이 열립니다.`}
           />
-          <div className="grid gap-2 border-t border-slate-200/80 bg-white p-3 sm:grid-cols-3">
-            {[
-              { label: "1. 거래처 선택", value: `${filteredCustomers.length.toLocaleString()}곳`, icon: Search },
-              { label: "2. 원장 확인", value: selectedCustomer.customerName || "미선택", icon: Building2 },
-              {
-                label: "3. 첨부·메모",
-                value:
-                  operationsStatus === "ready"
-                    ? `${combinedAttachments.length.toLocaleString()}건 · ${historyCount.toLocaleString()}건`
-                    : operationsStatus === "error"
-                      ? "조회 실패"
-                      : "확인 중",
-                icon: FileText
-              }
-            ].map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2"
-                  key={item.label}
-                >
-                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md ${index === 1 ? "bg-teal-700 text-white" : "bg-white text-teal-700 ring-1 ring-inset ring-teal-100"}`}>
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-xs font-semibold text-slate-500">{item.label}</span>
-                    <span className="mt-0.5 block truncate text-sm font-bold text-slate-950">{item.value}</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
           {/*
             검색·필터 사이드바(360~400px)가 거래처 상세(원장/첨부자료) 그리드 옆에 항상 펼쳐져 있으면,
             상세 쪽에 실제로 남는 폭이 좁아져 안의 정보가 눌려 보였습니다. 거래처를 고르면 목록을
             자동으로 접어서 상세가 전체 폭을 쓰게 하고, 필요할 때만 다시 펼치도록 했습니다.
           */}
-          <div className="space-y-4 border-t border-slate-200/80 bg-slate-50/50 p-4">
+          <div className="space-y-3 border-t border-slate-200/80 bg-slate-50/50 p-3">
             {listCollapsed ? (
               <button
                 aria-label="거래처 검색·목록 펼치기"
-                className="maju-section-card flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-50"
+                className="flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50"
                 onClick={() => setListCollapsed(false)}
                 type="button"
               >
                 <PanelLeftOpen className="h-4 w-4 shrink-0 text-slate-500" />
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span className="text-sm font-black text-slate-950">거래처 검색·목록</span>
-                  <span className="text-xs font-bold text-slate-500">
+                  <span className="text-sm font-bold text-slate-950">거래처 검색·목록</span>
+                  <span className="text-xs font-medium text-slate-500">
                     {selectedCustomer.customerName} 선택됨 · {filteredCustomers.length}/{customers.length}곳
                   </span>
                 </span>
               </button>
             ) : (
-            <aside className="maju-section-card">
-              <div className="border-b border-slate-200/80 p-4">
+            <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-200/80 px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-black text-slate-950">거래처 검색·필터</h2>
-                    <p className="mt-1 text-xs font-bold text-slate-500">검색 · 등급 · 보완 필요 항목</p>
+                    <h2 className="text-base font-bold text-slate-950">거래처 검색·필터</h2>
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">검색 · 등급 · 보완 항목</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
@@ -1252,11 +1220,10 @@ export default function CrmTimelinePage() {
                 </div>
               </div>
               <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
-                <p className="maju-muted-label px-0.5 pb-1.5">검색</p>
                 <label className="maju-search-field">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
-                    className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
+                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
                     onChange={(event) => setCustomerSearch(event.target.value)}
                     placeholder="상호명, 주소, 사업자번호 검색"
                     value={customerSearch}
@@ -1275,7 +1242,7 @@ export default function CrmTimelinePage() {
                     <div className="grid grid-cols-4 gap-1.5">
                       {(["all", "A", "B", "C"] as const).map((grade) => (
                         <button
-                          className={`h-9 rounded-md border text-xs font-black transition ${
+                          className={`h-9 rounded-md border text-xs font-semibold transition ${
                             gradeFilter === grade
                               ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
                               : "border-transparent bg-slate-50 text-slate-600 hover:border-teal-100 hover:bg-teal-50 hover:text-teal-800"
@@ -1290,7 +1257,7 @@ export default function CrmTimelinePage() {
                     </div>
                   </div>
                   <details className="maju-filter-box mt-3">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-1 text-xs font-black text-slate-500">
+                    <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 px-2 py-1 text-xs font-semibold text-slate-600">
                       상세 보완 필터
                       <Badge className="bg-slate-100 text-slate-600">{addressMissingCount + businessNumberMissingCount + contactMissingCount}건</Badge>
                     </summary>
@@ -1338,7 +1305,7 @@ export default function CrmTimelinePage() {
             {bulkSelectedIds.size ? (
               <div className="space-y-1.5 border-b border-teal-100 bg-teal-50/70 p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-black text-teal-900">{bulkSelectedIds.size.toLocaleString()}곳 선택됨</span>
+                  <span className="text-xs font-semibold text-teal-900">{bulkSelectedIds.size.toLocaleString()}곳 선택됨</span>
                   <input
                     className="h-8 min-w-0 flex-1 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400"
                     list="bulk-manager-options"
@@ -1358,16 +1325,16 @@ export default function CrmTimelinePage() {
                     선택 해제
                   </button>
                 </div>
-                {bulkManagerMessage ? <p className="text-[11px] font-bold text-teal-800">{bulkManagerMessage}</p> : null}
+                {bulkManagerMessage ? <p className="text-xs font-medium text-teal-800">{bulkManagerMessage}</p> : null}
               </div>
             ) : null}
             {filteredCustomers.length ? (
               <div className="space-y-2 border-b border-slate-200/80 bg-white px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-500">
+                  <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-500">
                     보기
                     <select
-                      className="h-6 border-0 bg-transparent p-0 text-[11px] font-black text-slate-900 outline-none focus:ring-0"
+                      className="h-7 border-0 bg-transparent p-0 text-xs font-semibold text-slate-900 outline-none focus:ring-0"
                       onChange={(event) => setCustomerPageSize(Number(event.target.value) as ListPageSize)}
                       value={customerPageSize}
                     >
@@ -1378,24 +1345,24 @@ export default function CrmTimelinePage() {
                       ))}
                     </select>
                   </label>
-                  <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-500">
+                  <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-500">
                     {customerPageStart.toLocaleString()}-{customerPageEnd.toLocaleString()} / {filteredCustomers.length.toLocaleString()}곳
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
                   <button
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={customerPage <= 1}
                     onClick={() => setCustomerPage((page) => Math.max(1, page - 1))}
                     type="button"
                   >
                     이전
                   </button>
-                  <span className="px-1 text-[11px] font-black text-slate-400">
+                  <span className="px-1 text-xs font-medium text-slate-500">
                     {customerPage.toLocaleString()} / {customerTotalPages.toLocaleString()}
                   </span>
                   <button
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={customerPage >= customerTotalPages}
                     onClick={() => setCustomerPage((page) => Math.min(customerTotalPages, page + 1))}
                     type="button"
@@ -1405,7 +1372,7 @@ export default function CrmTimelinePage() {
                   {operationFilter !== "all" ? (
                     <>
                       <button
-                        className="rounded-md border border-teal-100 bg-teal-50 px-2 py-1 text-[11px] font-black text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="min-h-9 rounded-md border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"
                         disabled={!pagedCustomers.length}
                         onClick={() => selectBulkCustomers("page")}
                         type="button"
@@ -1413,7 +1380,7 @@ export default function CrmTimelinePage() {
                         현재 페이지 선택
                       </button>
                       <button
-                        className="rounded-md border border-teal-200 bg-white px-2 py-1 text-[11px] font-black text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="min-h-9 rounded-md border border-teal-200 bg-white px-3 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
                         disabled={!filteredCustomers.length}
                         onClick={() => selectBulkCustomers("filtered")}
                         type="button"
