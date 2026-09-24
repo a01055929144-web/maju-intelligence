@@ -293,7 +293,7 @@ export function StaffManagementPanel({
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
 
-      <div className="grid gap-4 border-b border-slate-200 bg-white p-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-white p-3 sm:gap-4 sm:p-4 md:grid-cols-3 xl:grid-cols-5">
         <StaffSignal icon={<Users className="h-4 w-4" />} label="등록 직원" value={`${invitations.length}명`} />
         <StaffSignal icon={<Link2 className="h-4 w-4" />} label="초대 대기" value={`${pendingCount}명`} />
         <StaffSignal icon={<Smartphone className="h-4 w-4" />} label="가입 완료" value={`${acceptedCount}명`} />
@@ -539,9 +539,9 @@ export function StaffManagementPanel({
               <p className="-mb-1 text-sm leading-5 text-slate-500">여러 명을 추가하려면 입력 줄을 늘리세요.</p>
               <div className="grid gap-2">
                 {inviteRows.map((row) => (
-                  <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5" key={row.id}>
+                  <div className="grid grid-cols-[minmax(0,1fr)_40px] gap-1.5 sm:grid-cols-[1fr_1fr_auto]" key={row.id}>
                     <input
-                      className="h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                      className="col-span-2 h-10 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 sm:col-span-1"
                       placeholder="직원명"
                       value={row.employeeName}
                       onChange={(event) => updateInviteRow(row.id, { employeeName: event.target.value })}

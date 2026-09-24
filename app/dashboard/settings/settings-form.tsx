@@ -276,26 +276,32 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                   placeholder="예: -1001234567890"
                 />
                 <Button
-                  className="shrink-0"
+                  className="w-full shrink-0 sm:w-auto"
                   disabled={!form.telegramChatId.trim() || telegramTesting}
                   onClick={handleTelegramTest}
                   type="button"
                   variant="outline"
                 >
-                  <SendHorizonal className="h-4 w-4" />
+                  {telegramTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizonal className="h-4 w-4" />}
                   {telegramTesting ? "발송 중..." : "테스트 발송"}
                 </Button>
               </div>
             </label>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-500">
-              <p>설정 방법:</p>
+            <details className="group rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold leading-5 text-slate-500">
+              <summary className="cursor-pointer list-none px-3 py-2.5 font-bold text-slate-700 marker:content-none">
+                텔레그램 연결 방법 보기
+                <span aria-hidden="true" className="ml-1 text-slate-400 group-open:hidden">+</span>
+                <span aria-hidden="true" className="ml-1 hidden text-slate-400 group-open:inline">−</span>
+              </summary>
+              <div className="border-t border-slate-200 px-3 pb-3 pt-2">
               <ol className="mt-1.5 list-decimal space-y-1 pl-4">
                 <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
                 <li>그룹 chat_id를 확인합니다 — 그룹에 아무 메시지나 보낸 뒤, 브라우저에서 <code className="rounded bg-white px-1 py-0.5">https://api.telegram.org/bot(봇 토큰)/getUpdates</code>에 접속하면 <code className="rounded bg-white px-1 py-0.5">chat.id</code> 값(그룹은 보통 -로 시작하는 숫자)을 확인할 수 있습니다. 봇 토큰은 MAJU 담당자에게 문의하세요.</li>
                 <li>위 입력칸에 chat_id를 저장한 뒤 &quot;테스트 발송&quot;으로 실제 도착을 확인합니다.</li>
               </ol>
               <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 chat_id가 바뀌면 알림이 조용히 끊깁니다 — 주기적으로 테스트 발송으로 확인해주세요.</p>
-            </div>
+              </div>
+            </details>
             {telegramTestMessage ? (
               <p className={`text-xs font-bold ${telegramTestMessage.includes("실패") || telegramTestMessage.includes("먼저") ? "text-rose-600" : "text-emerald-700"}`}>
                 {telegramTestMessage}
@@ -307,9 +313,9 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         {message ? (
           <p aria-live="polite" className={`rounded-md border px-3 py-2.5 text-sm font-medium ${messageOk ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-rose-100 bg-rose-50 text-rose-700"}`}>{message}</p>
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="sticky bottom-2 z-10 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:static sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:bg-slate-50 sm:shadow-none">
           <p className="text-sm font-medium leading-5 text-slate-500">저장한 출발지는 지도와 거래처 거리 계산에 함께 적용됩니다.</p>
-          <Button className="min-w-32 shrink-0" disabled={loading}>
+          <Button className="w-full min-w-32 shrink-0 sm:w-auto" disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {loading ? "저장하는 중..." : "설정 저장"}
           </Button>

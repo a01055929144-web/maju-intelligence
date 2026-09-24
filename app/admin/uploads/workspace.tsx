@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, LoaderCircle, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
   const pageStart = filteredUploads.length ? (currentPage - 1) * pageSize + 1 : 0;
   const pageEnd = Math.min(filteredUploads.length, currentPage * pageSize);
   const issueUploads = useMemo(() => uploads.filter(needsReview), [uploads]);
+  const runningUploads = useMemo(() => uploads.filter((upload) => upload.status === "running"), [uploads]);
   const activeCompany = companyOptions.find((company) => company.id === companyId);
   const issueReasons = useMemo(() => getIssueReasonSummary(uploads), [uploads]);
 
@@ -86,6 +87,20 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
 
   return (
     <div className="space-y-4">
+      {runningUploads.length ? (
+        <div aria-live="polite" className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sky-950">
+          <div className="flex items-start gap-3">
+            <LoaderCircle className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-sky-700" />
+            <div>
+              <p className="font-black">데이터 처리 중 · {runningUploads.length.toLocaleString()}건</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-sky-800">
+                파일을 저장하고 분석 결과를 만드는 중입니다. 완료되면 상태와 품질 점수가 이 목록에 반영됩니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {issueUploads.length ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
           <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
@@ -160,10 +175,10 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             ))}
           </select>
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 xl:flex-wrap xl:overflow-visible xl:pb-0">
           {(Object.keys(statusCopy) as UploadStatusFilter[]).map((key) => (
             <button
-              className={`h-10 rounded-md border px-3 text-sm font-black transition ${
+              className={`h-10 shrink-0 rounded-md border px-3 text-sm font-black transition ${
                 status === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-foreground hover:bg-muted"
               }`}
               key={key}
@@ -183,7 +198,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         </Button>
       </div>
 
-      <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
+      <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-muted-foreground">검색 결과</span>
           <span className="font-black">{filteredUploads.length.toLocaleString()}건</span>
@@ -227,7 +242,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             다음
           </button>
         </div>
-        <div className="text-right text-xs font-bold text-muted-foreground">
+        <div className="text-left text-xs font-bold text-muted-foreground sm:text-right">
           {activeCompany ? (
             <span>
               {activeCompany.name} · 보완 {activeCompany.issues.toLocaleString()}건 / 전체 {activeCompany.total.toLocaleString()}건
@@ -280,7 +295,7 @@ function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
   const companyQuery = `companyId=${encodeURIComponent(upload.companyId)}`;
 
   return (
-    <article className="rounded-lg border border-border bg-white p-4 shadow-sm">
+    <article className={`rounded-lg border bg-white p-4 shadow-sm ${upload.status === "failed" ? "border-rose-200" : upload.status === "running" ? "border-sky-200" : "border-border"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="break-words font-black text-slate-950">{upload.filename}</p>
@@ -298,9 +313,17 @@ function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
           <span className={`rounded-md px-2 py-1 text-xs font-semibold ${reasons.length ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`} key={reason}>{reason}</span>
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {upload.reportId ? <MobileAction href={`/reports/${upload.reportId}?${companyQuery}`} label="리포트" /> : <span className="inline-flex min-h-11 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">미생성</span>}
-        <MobileAction href={`/?${companyQuery}`} label={upload.status === "failed" ? "재업로드" : "등록"} tone={upload.status === "failed" ? "danger" : "default"} />
+      {upload.status === "running" ? (
+        <div className="mt-3 flex items-center gap-2 rounded-md bg-sky-50 px-3 py-2 text-xs font-bold leading-5 text-sky-800">
+          <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" />
+          저장·분석 작업을 진행하고 있습니다.
+        </div>
+      ) : null}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {upload.reportId ? <MobileAction href={`/reports/${upload.reportId}?${companyQuery}`} label="결과 리포트" tone="primary" /> : <span className="inline-flex min-h-11 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">리포트 미생성</span>}
+        <MobileAction href={`/?${companyQuery}`} label={upload.status === "failed" ? "다시 업로드" : "데이터 등록"} tone={upload.status === "failed" ? "danger" : "default"} />
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-2">
         <MobileAction href={`/crm/timeline?${companyQuery}`} label="원장" />
         <MobileAction href={`/revenue/transactions?${companyQuery}`} label="매출" />
         <MobileAction href={`/dashboard?${companyQuery}`} label="지도" />
@@ -314,8 +337,13 @@ function MobileMetric({ label, value }: { label: string; value: string }) {
   return <div className="rounded-md bg-slate-50 px-2 py-3"><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-sm font-bold">{value}</p></div>;
 }
 
-function MobileAction({ href, label, tone = "default" }: { href: string; label: string; tone?: "danger" | "default" }) {
-  return <Link className={`inline-flex min-h-11 items-center justify-center rounded-md border px-2 text-xs font-bold ${tone === "danger" ? "border-rose-600 bg-rose-600 text-white" : "border-border bg-white"}`} href={href}>{label}</Link>;
+function MobileAction({ href, label, tone = "default" }: { href: string; label: string; tone?: "danger" | "default" | "primary" }) {
+  const toneClass = tone === "danger"
+    ? "border-rose-600 bg-rose-600 text-white"
+    : tone === "primary"
+      ? "border-primary bg-primary text-primary-foreground"
+      : "border-border bg-white text-foreground";
+  return <Link className={`inline-flex min-h-11 items-center justify-center rounded-md border px-2 text-center text-xs font-bold ${toneClass}`} href={href}>{label}</Link>;
 }
 
 function UploadRow({ upload }: { upload: UploadHistoryItem }) {
