@@ -1425,7 +1425,20 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         />
       </div>
 
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+      <details className="maju-section-card group" open>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-950">오늘 할 일</p>
+            <p className="mt-0.5 text-xs text-slate-500">전화·DM·정보 보강·방문·견적 후속 대상을 우선순위별로 확인합니다.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
+              {((queues?.callToday.length || 0) + (queues?.dmCandidates.length || 0) + (queues?.quoteFollowUps.length || 0)).toLocaleString()}건 우선
+            </span>
+            <ChevronDown className="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+          </div>
+        </summary>
+        <div className="grid gap-2 border-t border-slate-100 p-3 md:grid-cols-2 xl:grid-cols-3">
         <PermitLeadQueueCard
           description="인허가 신규성과 연락처가 모두 확인된 곳"
           icon={Phone}
@@ -1478,12 +1491,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           tone="pink"
           title="견적 후속"
         />
-      </div>
+        </div>
+      </details>
 
       <div className="maju-section-card p-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="flex items-center gap-1.5 text-sm font-black text-slate-950">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-950">
               <MapPinPlus className="h-4 w-4 text-primary" />
               영업리드 확장 탐색
             </p>
@@ -2229,25 +2243,25 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               <div className="shrink-0 divide-y divide-slate-100 border-b border-slate-200 bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                       선택 {selectedLeads.length.toLocaleString()}곳
                     </span>
                     {selectedLeads.length ? (
                       <span className="flex flex-wrap items-center gap-1">
-                        <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">전화 {selectedLeadSummary.phone.toLocaleString()}</span>
-                        <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-black text-pink-700 ring-1 ring-inset ring-pink-100">인스타 {selectedLeadSummary.instagram.toLocaleString()}</span>
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">견적 {selectedLeadSummary.quoteRequested.toLocaleString()}</span>
+                        <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-inset ring-teal-100">전화 {selectedLeadSummary.phone.toLocaleString()}</span>
+                        <span className="rounded-full bg-pink-50 px-2 py-0.5 text-xs font-semibold text-pink-700 ring-1 ring-inset ring-pink-100">인스타 {selectedLeadSummary.instagram.toLocaleString()}</span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-100">견적 {selectedLeadSummary.quoteRequested.toLocaleString()}</span>
                       </span>
                     ) : null}
-                    <button className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-600 hover:bg-slate-50" onClick={toggleAllVisibleLeads} type="button">
+                    <button className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={toggleAllVisibleLeads} type="button">
                       {allVisibleSelected ? "페이지 선택 해제" : "현재 페이지 선택"}
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-500">
+                    <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500">
                       보기
                       <select
-                        className="h-6 border-0 bg-transparent p-0 text-[11px] font-black text-slate-900 outline-none focus:ring-0"
+                        className="h-6 border-0 bg-transparent p-0 text-xs font-semibold text-slate-900 outline-none focus:ring-0"
                         onChange={(event) => setLeadPageSize(Number(event.target.value) as ListPageSize)}
                         value={leadPageSize}
                       >
@@ -2258,22 +2272,22 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                         ))}
                       </select>
                     </label>
-                    <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-black text-slate-500">
+                    <span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
                       {leadPageStart.toLocaleString()}-{leadPageEnd.toLocaleString()} / {sortedLeads.length.toLocaleString()}곳
                     </span>
                     <button
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={leadPage <= 1}
                       onClick={() => setLeadPage((page) => Math.max(1, page - 1))}
                       type="button"
                     >
                       이전
                     </button>
-                    <span className="text-[11px] font-black text-slate-400">
+                    <span className="text-xs font-semibold text-slate-400">
                       {leadPage.toLocaleString()} / {leadTotalPages.toLocaleString()}
                     </span>
                     <button
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={leadPage >= leadTotalPages}
                       onClick={() => setLeadPage((page) => Math.min(leadTotalPages, page + 1))}
                       type="button"
