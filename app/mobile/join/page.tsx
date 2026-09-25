@@ -17,10 +17,10 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
   const canContinue = !inviteCode || invitePreview?.status === "pending" || invitePreview?.status === "accepted";
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#101827] px-4 py-6 text-slate-950">
+    <main className="grid min-h-screen place-items-center bg-[#111827] px-4 py-6 text-slate-950">
       <section className="w-full max-w-[420px] rounded-[24px] border border-white/10 bg-white p-5 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
         <header className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#b9ed5c] text-sm font-black text-[#101827]">M</span>
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-600 text-sm font-semibold text-white">M</span>
           <div>
             <p className="text-xs font-medium text-slate-500">MAJU Intelligence</p>
             <h1 className="text-xl font-bold tracking-[-0.025em]">{joinMode === "company" ? "배송팀 합류" : "직원 로그인"}</h1>

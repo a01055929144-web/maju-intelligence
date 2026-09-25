@@ -79,12 +79,12 @@ export default function CustomerLoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#eef1f4] px-4 py-8 sm:px-6">
       <div className="grid min-w-0 w-[calc(100vw-2rem)] max-w-5xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,.12)] lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="relative hidden min-h-[660px] overflow-hidden bg-[#101827] p-10 text-white lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full border-[48px] border-[#b9ed5c]/10" />
-          <div className="absolute bottom-24 right-10 h-40 w-40 rounded-full bg-[#b9ed5c]/5 blur-2xl" />
+        <section className="relative hidden min-h-[660px] overflow-hidden bg-[#111827] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute -right-20 -top-16 h-64 w-64 rounded-full border-[48px] border-teal-400/10" />
+          <div className="absolute bottom-24 right-10 h-40 w-40 rounded-full bg-teal-400/5 blur-2xl" />
           <div className="relative">
             <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#b9ed5c] text-base font-black text-[#101827]">M</span>
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-600 text-base font-semibold text-white">M</span>
               <div>
                 <p className="text-base font-bold">MAJU Intelligence</p>
                 <p className="text-xs font-medium text-slate-400">Sales & delivery operations</p>
@@ -107,7 +107,7 @@ export default function CustomerLoginPage() {
               { icon: Truck, label: "완료 사진과 운행기록을 자동 보관" }
             ].map((item) => (
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3" key={item.label}>
-                <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#b9ed5c]/15 text-[#b9ed5c]">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-400/15 text-teal-300">
                   <item.icon className="h-4 w-4" />
                 </span>
                 <span className="text-sm font-semibold text-slate-200">{item.label}</span>
@@ -177,7 +177,7 @@ export default function CustomerLoginPage() {
                 <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
                 <span className="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:inline">개인 PC에서만</span>
               </label>
-              <Button aria-busy={loading} className="mt-1.5 h-12 w-full rounded-xl bg-[#101827] font-bold text-white hover:bg-[#1b2639]" disabled={loading}>
+              <Button aria-busy={loading} className="mt-1.5 h-12 w-full rounded-lg" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
                 {loading ? "계정과 작업공간 확인 중…" : "로그인"}
                 {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}

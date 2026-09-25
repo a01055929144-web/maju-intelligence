@@ -933,7 +933,7 @@ function DataRegistrationSidePanel({
         return (
           <button
             key={item.key}
-            className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition ${selected ? "bg-[#101827] text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
+            className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition ${selected ? "bg-teal-700 text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
             onClick={() => onSelect(item.key)}
             type="button"
           >

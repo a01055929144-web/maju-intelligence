@@ -57,13 +57,13 @@ export function CustomerWorkspaceTabs() {
             <Link
               className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-bold transition ${
                 selected
-                  ? "border-[#101827] bg-[#101827] text-white"
+                  ? "border-teal-700 bg-teal-700 text-white"
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
               }`}
               href={hrefWithCompany(tab.href)}
               key={tab.href}
             >
-              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-bold ${selected ? "bg-[#b9ed5c] text-[#101827]" : "bg-slate-100 text-slate-500"}`}>
+              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-semibold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
                 {index + 1}
               </span>
               <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />

@@ -43,7 +43,7 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#101827] px-4 py-10">
+    <main className="flex min-h-screen items-center justify-center bg-[#111827] px-4 py-10">
       <Card className="w-full max-w-md rounded-[24px] shadow-[0_24px_80px_rgba(0,0,0,.28)]">
         <CardHeader>
           <Badge className="mb-3 w-fit bg-lime-100 text-slate-950 ring-1 ring-inset ring-lime-200">

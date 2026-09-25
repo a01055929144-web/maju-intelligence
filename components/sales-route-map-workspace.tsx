@@ -1759,7 +1759,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <button
                 aria-pressed={leadRadiusOpen}
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
-                  leadRadiusOpen ? "bg-[#101827] text-white" : "text-slate-600 hover:bg-white"
+                  leadRadiusOpen ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white"
                 }`}
                 onClick={() => setLeadRadiusOpen((value) => !value)}
                 title="지도를 클릭해 원하는 지점 주변 반경 안의 신규·영업 리드를 찾습니다."
@@ -1771,7 +1771,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <button
                 aria-pressed={showAllLeadsOnMap}
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
-                  showAllLeadsOnMap ? "bg-[#101827] text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
+                  showAllLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
                 }`}
                 onClick={() =>
                   setShowAllLeadsOnMap((value) => {
@@ -1815,7 +1815,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               return (
                 <button
                   className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
-                    selected ? "bg-[#101827] text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
+                    selected ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
                   onClick={() => changeWorkspaceView(item.value)}
