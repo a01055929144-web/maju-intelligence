@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, Loader2, MapPin, Plus, Printer, Search } from "lucide-react";
+import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, Loader2, MapPin, Plus, Printer, RefreshCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -136,6 +136,8 @@ export default function CrmSummaryPage() {
   const [tablePageSize, setTablePageSize] = useState<ListPageSize>(30);
   const [exportMessage, setExportMessage] = useState("");
   const [isExportingImage, setIsExportingImage] = useState(false);
+  const [isBusinessStatusChecking, setIsBusinessStatusChecking] = useState(false);
+  const [businessStatusMessage, setBusinessStatusMessage] = useState("");
   const exportTableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -268,6 +270,7 @@ export default function CrmSummaryPage() {
   const realMemoCount = customers.reduce((sum, customer) => sum + (customer.id ? operationsSummary[customer.id]?.memoCount || 0 : 0), 0);
   const needsAttentionCount = customers.filter((customer) => customerOperationalIssueCount(customer) > 0).length;
   const readyCustomerCount = customers.length - needsAttentionCount;
+  const businessStatusCheckableCount = Math.max(0, customers.length - businessNumberMissingCount);
 
   const statusCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = { all: customers.length, 정상: 0, 휴업: 0, 폐업: 0, "확인 필요": 0 };
@@ -307,6 +310,42 @@ export default function CrmSummaryPage() {
   useEffect(() => {
     setTablePage(1);
   }, [statusFilter, tablePageSize, tableSearch]);
+
+  async function refreshAllBusinessStatuses() {
+    setIsBusinessStatusChecking(true);
+    setBusinessStatusMessage("");
+    try {
+      const response = await fetchWithTimeout(
+        "/api/customer/business-status",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl() })
+        },
+        25000
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "사업자 상태 일괄 조회에 실패했습니다.");
+      if (payload?.configured === false) {
+        setBusinessStatusMessage("사업자 상태 자동조회 API 키가 아직 설정되지 않았습니다.");
+        return;
+      }
+      const closedCount = Array.isArray(payload?.closed) ? payload.closed.length : 0;
+      const apiFailures = Number(payload?.apiFailures || 0);
+      setBusinessStatusMessage(
+        `${payload?.checked || 0}곳 조회 · ${payload?.updated || 0}곳 갱신${closedCount ? ` · 폐업 ${closedCount}곳` : ""}${
+          payload?.skippedNoBusinessNumber ? ` · 사업자번호 없음 ${payload.skippedNoBusinessNumber}곳 제외` : ""
+        }${apiFailures ? ` · 국세청 API 미응답 ${apiFailures}곳` : ""}`
+      );
+      const refreshed = await fetchWithTimeout(withCompanyQuery("/api/customers"), { cache: "no-store" }, 12000);
+      const refreshedPayload = await refreshed.json().catch(() => null);
+      if (Array.isArray(refreshedPayload?.customers)) setCustomers(refreshedPayload.customers);
+    } catch (error) {
+      setBusinessStatusMessage(error instanceof Error ? error.message : "사업자 상태 일괄 조회 중 오류가 발생했습니다.");
+    } finally {
+      setIsBusinessStatusChecking(false);
+    }
+  }
 
   async function downloadExcel() {
     setExportMessage("");
@@ -470,6 +509,15 @@ export default function CrmSummaryPage() {
               description="기본정보, 메모, 첨부자료를 한 표에서 봅니다."
             />
             <div className="no-print flex shrink-0 flex-wrap gap-1.5 p-3">
+              <button
+                className="maju-button-primary h-8 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isBusinessStatusChecking || businessStatusCheckableCount === 0}
+                onClick={() => void refreshAllBusinessStatuses()}
+                type="button"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isBusinessStatusChecking ? "animate-spin" : ""}`} />
+                {isBusinessStatusChecking ? "조회 중" : `전체 상태조회 ${businessStatusCheckableCount.toLocaleString()}곳`}
+              </button>
               <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadExcel()} type="button">
                 <FileSpreadsheet className="h-3.5 w-3.5" />
                 엑셀
@@ -484,6 +532,11 @@ export default function CrmSummaryPage() {
               </button>
             </div>
           </div>
+          {businessStatusMessage ? (
+            <p className={`no-print mx-3 mb-3 rounded-md px-3 py-2 text-xs font-bold ${businessStatusMessage.includes("실패") || businessStatusMessage.includes("미응답") || businessStatusMessage.includes("설정되지") ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
+              {businessStatusMessage}
+            </p>
+          ) : null}
           {exportMessage ? <p className="no-print mx-3 -mt-1 mb-2 rounded-md bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{exportMessage}</p> : null}
           <div className="no-print flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50/60 p-3 lg:flex-row lg:items-center lg:justify-between">
             <label className="maju-search-field lg:max-w-xs">

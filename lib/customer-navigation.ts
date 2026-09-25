@@ -94,10 +94,24 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       {
         active: "revenue",
-        description: "기회, 이탈, 업셀링 후보",
+        description: "견적, 후속 영업, 전환 파이프라인",
         href: "/revenue/pipeline",
         icon: BarChart3,
-        label: "기회 관리"
+        label: "영업 관리"
+      },
+      {
+        active: "dashboard",
+        description: "최근 개업·인허가 기반 신규 매장",
+        href: "/dashboard?view=leads&leadType=permit",
+        icon: Building2,
+        label: "신규 리드"
+      },
+      {
+        active: "dashboard",
+        description: "검색량·리뷰 기반 영업 후보",
+        href: "/dashboard?view=leads&leadType=keyword",
+        icon: Sparkles,
+        label: "영업 리드"
       },
       {
         active: "revenue-ledger",

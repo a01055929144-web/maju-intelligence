@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function RevenueTransactionsPage({
   searchParams
 }: {
-  searchParams?: Promise<{ companyId?: string; from?: string; to?: string }>;
+  searchParams?: Promise<{ companyId?: string; from?: string; section?: string; to?: string }>;
 }) {
   const resolvedSearchParams = await searchParams;
   const customerSession = await getCustomerSession();
@@ -26,6 +26,15 @@ export default async function RevenueTransactionsPage({
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const dateFrom = resolvedSearchParams?.from || "";
   const dateTo = resolvedSearchParams?.to || "";
+  const requestedSection = resolvedSearchParams?.section;
+  const section = requestedSection === "matching" || requestedSection === "analysis" || requestedSection === "table" ? requestedSection : "summary";
+  const sectionHref = (nextSection: string) => {
+    const params = new URLSearchParams({ section: nextSection });
+    if (companyId) params.set("companyId", companyId);
+    if (dateFrom) params.set("from", dateFrom);
+    if (dateTo) params.set("to", dateTo);
+    return `/revenue/transactions?${params.toString()}`;
+  };
   const sales = await getSalesTransactions(companyId, { from: dateFrom, to: dateTo });
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const hasSalesData = sales.transactionCount > 0;
@@ -77,16 +86,16 @@ export default async function RevenueTransactionsPage({
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <WorkspaceSectionNav
           items={[
-            { active: true, badge: hasSalesData ? "연결" : "필요", description: "매출액·행 수·거래처 수", href: "#ledger-summary", icon: ReceiptText, label: "현황" },
-            { description: "거래처 매칭 상태", href: "#ledger-basis", icon: Store, label: "매칭" },
-            { description: "거래처·품목 집중도", href: "#ledger-analysis", icon: BarChart3, label: "분석" },
-            { description: "최근 원장 행", href: "#ledger-table", icon: FileSpreadsheet, label: "테이블" }
+            { active: section === "summary", badge: hasSalesData ? "연결" : "필요", description: "매출액·행 수·거래처 수", href: sectionHref("summary"), icon: ReceiptText, label: "현황" },
+            { active: section === "matching", description: "거래처 매칭 상태", href: sectionHref("matching"), icon: Store, label: "매칭" },
+            { active: section === "analysis", description: "거래처·품목 집중도", href: sectionHref("analysis"), icon: BarChart3, label: "분석" },
+            { active: section === "table", description: "최근 원장 행", href: sectionHref("table"), icon: FileSpreadsheet, label: "테이블" }
           ]}
           title="매출 원장"
         />
 
         <div className="min-w-0 space-y-4">
-        <div className="maju-section-card scroll-mt-28" id="ledger-summary">
+        <div className={`${section === "summary" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="ledger-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="maju-section-title">매출 원장 현황</p>
@@ -139,7 +148,7 @@ export default async function RevenueTransactionsPage({
           ) : null}
         </div>
 
-        <div className="maju-section-card">
+        <div className={section === "summary" ? "maju-section-card" : "hidden"}>
           <div className="maju-card-header">
             <p className="maju-section-title">다음 액션 요약</p>
             <p className="mt-1 maju-muted-label">원장 적재 · 거래처 연결 · 품목 분석 준비 상태</p>
@@ -151,7 +160,7 @@ export default async function RevenueTransactionsPage({
           </div>
         </div>
 
-        <div className="scroll-mt-28" id="ledger-basis">
+        <div className={section === "matching" ? "scroll-mt-28" : "hidden"} id="ledger-basis">
           <RevenueDataBasisPanel
           customerCount={sales.customerCount}
           latestSalesDate={sales.latestSalesDate || "업로드 후 확인"}
@@ -161,9 +170,9 @@ export default async function RevenueTransactionsPage({
           />
         </div>
 
-        <SalesTransactionMatcher companyId={companyId} unmatchedGroups={sales.unmatchedGroups} />
+        {section === "matching" ? <SalesTransactionMatcher companyId={companyId} unmatchedGroups={sales.unmatchedGroups} /> : null}
 
-        <div className="grid scroll-mt-28 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]" id="ledger-analysis">
+        <div className={`${section === "analysis" ? "grid" : "hidden"} scroll-mt-28 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]`} id="ledger-analysis">
           <section className="maju-section-card">
             <div className="maju-card-header">
               <div className="flex items-start justify-between gap-3">
@@ -233,7 +242,7 @@ export default async function RevenueTransactionsPage({
           </div>
         </div>
 
-        <SalesTransactionTable companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} initialItems={sales.items} initialTruncated={sales.truncated} />
+        {section === "table" ? <SalesTransactionTable companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} initialItems={sales.items} initialTruncated={sales.truncated} /> : null}
         </div>
       </section>
     </CustomerAppShell>

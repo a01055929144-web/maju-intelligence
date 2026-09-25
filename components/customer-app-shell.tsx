@@ -36,6 +36,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
+  const [currentSearch, setCurrentSearch] = useState("");
   const pathname = usePathname();
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
@@ -57,6 +58,13 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
+
+  useEffect(() => {
+    const syncSearch = () => setCurrentSearch(window.location.search);
+    syncSearch();
+    window.addEventListener("popstate", syncSearch);
+    return () => window.removeEventListener("popstate", syncSearch);
+  }, [pathname]);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
@@ -151,7 +159,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       if (item.children && item.children.length) {
-                        const groupSelected = item.children.some((child) => isCurrentNavItem(pathname, child.href) || (!pathname && active === child.active));
+                        const groupSelected = item.children.some((child) => isCurrentNavItem(pathname, child.href, currentSearch) || (!pathname && active === child.active));
                         if (collapsed) {
                           const firstChild = item.children[0];
                           return (
@@ -174,7 +182,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                             </div>
                             <div className="ml-[26px] space-y-1 border-l border-white/10 pl-2.5">
                               {item.children.map((child) => {
-                                const childSelected = isCurrentNavItem(pathname, child.href) || (!pathname && active === child.active);
+                                const childSelected = isCurrentNavItem(pathname, child.href, currentSearch) || (!pathname && active === child.active);
                                 return (
                                   <Link
                                     key={`${group.label}-${item.label}-${child.label}`}
@@ -191,7 +199,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                         );
                       }
 
-                      const selected = isCurrentNavItem(pathname, item.href) || (!pathname && active === item.active);
+                      const selected = isCurrentNavItem(pathname, item.href, currentSearch) || (!pathname && active === item.active);
                       const itemHref = scopedHref(item.href);
                       return (
                         <Link
@@ -200,6 +208,16 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                             selected ? "maju-nav-item-active" : "maju-nav-item-idle"
                           }`}
                           href={itemHref}
+                          onClick={(event) => {
+                            setCurrentSearch(itemHref.includes("?") ? `?${itemHref.split("?")[1]}` : "");
+                            // 신규 리드와 영업 리드는 같은 지도 작업공간을 공유하지만 초기 데이터 정렬
+                            // 모드가 다릅니다. 동일 pathname의 client navigation은 하위 상태를 유지하므로,
+                            // 이 두 메뉴 사이에서는 명시적으로 새 문서를 열어 URL 기준 초기화를 보장합니다.
+                            if (itemHref.includes("leadType=")) {
+                              event.preventDefault();
+                              window.location.assign(itemHref);
+                            }
+                          }}
                           title={collapsed ? item.label : undefined}
                         >
                           <item.icon className={`h-4 w-4 ${selected ? "text-slate-950" : "text-slate-500"}`} />
@@ -221,7 +239,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                       <Building2 className="h-4 w-4" />
                     </Link>
                   ) : null}
-                  <Link aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
+                  <Link aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
                     <Settings className="h-4 w-4" />
                   </Link>
                 </>
@@ -241,7 +259,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                         <Building2 className="h-4 w-4" />
                       </Link>
                     ) : null}
-                    <Link aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
+                    <Link aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
                       <Settings className="h-4 w-4" />
                     </Link>
                   </div>
@@ -339,12 +357,19 @@ function CustomerAccountActions({ compact = false }: { readonly compact?: boolea
   );
 }
 
-function isCurrentNavItem(pathname: string | null, href: string) {
+function isCurrentNavItem(pathname: string | null, href: string, currentSearch = "") {
   if (!pathname) return false;
-  const hrefPath = href.split("?")[0] || "/";
+  const [hrefPath = "/", hrefQuery = ""] = href.split("?");
   if (hrefPath === "/") return pathname === "/";
-  if (hrefPath === "/dashboard") return pathname === "/dashboard";
-  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+  if (!(pathname === hrefPath || pathname.startsWith(`${hrefPath}/`))) return false;
+
+  const expected = new URLSearchParams(hrefQuery);
+  const current = new URLSearchParams(currentSearch);
+  if (expected.size) {
+    return Array.from(expected.entries()).every(([key, value]) => current.get(key) === value);
+  }
+  if (hrefPath === "/dashboard") return !current.has("view") || current.get("view") === "map";
+  return true;
 }
 
 function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {

@@ -20,7 +20,7 @@ const emptyPipeline: RevenuePipeline = {
   weightedRevenue: 0
 };
 
-export default async function RevenuePipelinePage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+export default async function RevenuePipelinePage({ searchParams }: { searchParams?: Promise<{ companyId?: string; section?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const customerSession = await getCustomerSession();
   const adminSession = await getAdminSession();
@@ -29,6 +29,9 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
+  const requestedSection = resolvedSearchParams?.section;
+  const section = requestedSection === "basis" || requestedSection === "status" || requestedSection === "candidates" ? requestedSection : "summary";
+  const sectionHref = (nextSection: string) => `/revenue/pipeline?section=${nextSection}${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}`;
   let pipeline = emptyPipeline;
   let pipelineError = "";
 
@@ -67,23 +70,23 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
       subtitle="견적 요청과 후속 영업 기회를 관리합니다."
-      title="기회 관리"
+      title="영업 관리"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
         <WorkspaceSectionNav
           items={[
-            { active: true, badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: "#pipeline-summary", icon: TrendingUp, label: "현황" },
-            { description: "방문·원장 연결", href: "#pipeline-basis", icon: FileText, label: "기준" },
-            { description: "견적·관심·보류", href: "#pipeline-status", icon: Percent, label: "상태" },
-            { description: "후속 영업 대상", href: "#pipeline-table", icon: ReceiptText, label: "후보" }
+            { active: section === "summary", badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: sectionHref("summary"), icon: TrendingUp, label: "현황" },
+            { active: section === "basis", description: "방문·원장 연결", href: sectionHref("basis"), icon: FileText, label: "기준" },
+            { active: section === "status", description: "견적·관심·보류", href: sectionHref("status"), icon: Percent, label: "상태" },
+            { active: section === "candidates", description: "후속 영업 대상", href: sectionHref("candidates"), icon: ReceiptText, label: "후보" }
           ]}
-          title="기회 관리"
+          title="영업 관리"
         />
 
         <div className="min-w-0 space-y-4">
-        <div className="maju-section-card scroll-mt-28" id="pipeline-summary">
+        <div className={`${section === "summary" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="pipeline-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="maju-section-title">기회 현황</p>
@@ -99,7 +102,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           </div>
         </div>
 
-        {pipelineError ? (
+        {section === "summary" && pipelineError ? (
           <div aria-live="polite" className="maju-filter-box flex flex-col gap-3 border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-bold">기회 현황을 불러오지 못했습니다.</p>
@@ -111,7 +114,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           </div>
         ) : null}
 
-        <div className="maju-section-card">
+        <div className={section === "summary" ? "maju-section-card" : "hidden"}>
           <div className="maju-card-header">
             <p className="maju-section-title">다음 액션 요약</p>
             <p className="mt-1 maju-muted-label">견적 · 관심 · 재관리 단계별 다음 할 일</p>
@@ -123,7 +126,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           </div>
         </div>
 
-        <div className="scroll-mt-28" id="pipeline-basis">
+        <div className={section === "basis" ? "scroll-mt-28" : "hidden"} id="pipeline-basis">
           <PipelineBasisPanel
           companyId={isAdminPreview ? companyId || "" : ""}
           conversionRate={pipeline.conversionRate}
@@ -134,8 +137,8 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           />
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <section className="maju-section-card scroll-mt-28" id="pipeline-status">
+        <div className="min-w-0">
+          <section className={section === "status" ? "maju-section-card scroll-mt-28" : "hidden"} id="pipeline-status">
             <div className="maju-card-header">
               <h2 className="text-lg font-black text-slate-950">상태 분포</h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">후속 작업 단계</p>
@@ -148,7 +151,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             </div>
           </section>
 
-          <PipelineCandidatesTable items={pipeline.items} weightedRevenue={pipeline.weightedRevenue} />
+          {section === "candidates" ? <PipelineCandidatesTable items={pipeline.items} weightedRevenue={pipeline.weightedRevenue} /> : null}
         </div>
         </div>
       </section>

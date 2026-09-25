@@ -387,13 +387,16 @@ export default function CrmTimelinePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBusinessStatusChecking, setIsBusinessStatusChecking] = useState(false);
   const [businessStatusMessage, setBusinessStatusMessage] = useState("");
-  const [isBulkBusinessStatusChecking, setIsBulkBusinessStatusChecking] = useState(false);
-  const [bulkBusinessStatusMessage, setBulkBusinessStatusMessage] = useState("");
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
-  const [detailTab, setDetailTab] = useState<CustomerDetailTab>("ledger");
+  const [workspaceSection] = useState<"list" | "ledger" | "history">(() => {
+    if (typeof window === "undefined") return "list";
+    const requested = new URLSearchParams(window.location.search).get("section");
+    return requested === "ledger" || requested === "history" ? requested : "list";
+  });
+  const [detailTab, setDetailTab] = useState<CustomerDetailTab>(() => (workspaceSection === "history" ? "history" : "ledger"));
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const businessNumberInputRef = useRef<HTMLInputElement | null>(null);
   const deliveryManagerInputRef = useRef<HTMLInputElement | null>(null);
@@ -415,8 +418,8 @@ export default function CrmTimelinePage() {
     setAddressQuery(selectedCustomer?.address || "");
     setAddressResults([]);
     setAddressSearchMessage("");
-    setDetailTab("ledger");
-  }, [operationFilter, selectedCustomer]);
+    setDetailTab(workspaceSection === "history" ? "history" : "ledger");
+  }, [operationFilter, selectedCustomer, workspaceSection]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -538,8 +541,6 @@ export default function CrmTimelinePage() {
   const addressMissingCount = customers.filter((customer) => !customer.address).length;
   const businessCheckCount = customers.filter((customer) => customer.businessStatus !== "정상").length;
   const businessNumberMissingCount = customers.filter((customer) => !customer.businessNumber).length;
-  const businessStatusCheckableCount = Math.max(0, customers.length - businessNumberMissingCount);
-  const businessStatusReadyCount = customers.filter((customer) => customer.businessStatus === "정상").length;
   const loadingMissingCount = customers.filter((customer) => !customer.loadingPosition).length;
   const contactMissingCount = customers.filter((customer) => !customer.phone || !customer.representativeName).length;
   const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
@@ -951,51 +952,6 @@ export default function CrmTimelinePage() {
     }
   }
 
-  async function refreshAllBusinessStatuses() {
-    setIsBulkBusinessStatusChecking(true);
-    setBulkBusinessStatusMessage("");
-
-    try {
-      const response = await fetchWithTimeout(
-        "/api/customer/business-status",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl() })
-        },
-        25000
-      );
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "사업자 상태 일괄 조회에 실패했습니다.");
-
-      if (payload?.configured === false) {
-        setBulkBusinessStatusMessage("사업자 상태 자동조회 API 키가 아직 설정되지 않았습니다.");
-        return;
-      }
-
-      const closedCount = Array.isArray(payload?.closed) ? payload.closed.length : 0;
-      // 2026-08-28 피드백 대응(국세청 API 장애가 "정상 조회됨"으로 보임): apiFailures가 있으면
-      // 장애로 조회를 못한 건수가 있다는 걸 명확히 알리고(해당 건은 기존 상태 그대로 유지됨),
-      // "N곳 갱신"이라는 성공 문구만 보고 전부 정상 처리된 것으로 착각하지 않게 합니다.
-      const apiFailures = Number(payload?.apiFailures || 0);
-      setBulkBusinessStatusMessage(
-        `${payload?.checked || 0}곳 조회, ${payload?.updated || 0}곳 갱신${closedCount ? ` · 폐업 확인 ${closedCount}곳` : ""}${
-          payload?.skippedNoBusinessNumber ? ` · 사업자번호 없음 ${payload.skippedNoBusinessNumber}곳 제외` : ""
-        }${apiFailures ? ` · ⚠ 국세청 API 장애로 ${apiFailures}곳은 조회하지 못해 기존 상태를 유지했습니다` : ""}`
-      );
-
-      const refreshed = await fetchWithTimeout(withCompanyQuery("/api/customers"), { cache: "no-store" }, 12000);
-      const refreshedPayload = await refreshed.json().catch(() => null);
-      if (Array.isArray(refreshedPayload?.customers)) {
-        setCustomers(refreshedPayload.customers);
-      }
-    } catch (error) {
-      setBulkBusinessStatusMessage(error instanceof Error ? error.message : "사업자 상태 일괄 조회 중 오류가 발생했습니다.");
-    } finally {
-      setIsBulkBusinessStatusChecking(false);
-    }
-  }
-
   async function saveNote() {
     if (!selectedCustomer?.id || !newMemo.trim()) return;
     setIsNoteSaving(true);
@@ -1162,15 +1118,15 @@ export default function CrmTimelinePage() {
       <section className="mx-auto max-w-[1560px]">
         <WorkspaceSectionNav
           items={[
-            { active: true, description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: "#customer-ledger-list", icon: Search, label: "목록" },
-            { description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: "#customer-ledger-detail", icon: Pencil, label: "원장" },
-            { description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: "#customer-ledger-history", icon: FileText, label: "기록" }
+            { active: workspaceSection === "list", description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: withCompanyQuery("/crm/timeline?section=list"), icon: Search, label: "목록" },
+            { active: workspaceSection === "ledger", description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: withCompanyQuery("/crm/timeline?section=ledger"), icon: Pencil, label: "원장" },
+            { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" }
           ]}
           title="거래처 관리"
         />
 
         <div className="min-w-0 space-y-4">
-        <div className="maju-section-card scroll-mt-28" id="customer-ledger-list">
+        <div className={`${workspaceSection === "list" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="customer-ledger-list">
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
@@ -1267,15 +1223,6 @@ export default function CrmTimelinePage() {
                     </div>
                   </details>
                 </div>
-                <BusinessStatusControlPanel
-                  checkableCount={businessStatusCheckableCount}
-                  isChecking={isBulkBusinessStatusChecking}
-                  message={bulkBusinessStatusMessage}
-                  missingNumberCount={businessNumberMissingCount}
-                  needsCheckCount={businessCheckCount}
-                  onRefresh={refreshAllBusinessStatuses}
-                  readyCount={businessStatusReadyCount}
-                />
               <CleanupWorkStatus
                 filterLabel={activeCleanupLabel}
                 filteredCount={filteredCustomers.length}
@@ -1491,7 +1438,7 @@ export default function CrmTimelinePage() {
         </div>
 
         <div className="min-w-0 space-y-4">
-            <div className="maju-section-card scroll-mt-28 p-4" id="customer-ledger-detail">
+            <div className={`${workspaceSection === "ledger" ? "maju-section-card" : "hidden"} scroll-mt-28 p-4`} id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <h2 className="truncate text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
@@ -1660,7 +1607,7 @@ export default function CrmTimelinePage() {
               </details>
             </div>
 
-            <div className="maju-section-card scroll-mt-28" id="customer-ledger-history">
+            <div className="hidden" id="customer-ledger-history">
               <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="maju-muted-label">선택 거래처 작업</p>
@@ -1691,7 +1638,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-3">
+            {workspaceSection === "ledger" && detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-3">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -2029,7 +1976,7 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-4">
+            {workspaceSection === "history" && detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-4">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -2259,84 +2206,6 @@ function CustomerFilterButton({
       <span className="truncate">{label}</span>
       <span className={`ml-2 rounded-full px-1.5 py-0.5 ${active ? "bg-white/30" : "bg-slate-100 text-slate-500"}`}>{count}</span>
     </button>
-  );
-}
-
-function BusinessStatusControlPanel({
-  checkableCount,
-  isChecking,
-  message,
-  missingNumberCount,
-  needsCheckCount,
-  onRefresh,
-  readyCount
-}: {
-  checkableCount: number;
-  isChecking: boolean;
-  message: string;
-  missingNumberCount: number;
-  needsCheckCount: number;
-  onRefresh: () => void;
-  readyCount: number;
-}) {
-  const hasIssue = needsCheckCount > 0 || missingNumberCount > 0;
-  const messageIsError = message.includes("실패") || message.includes("오류") || message.includes("설정되지");
-
-  return (
-    <div className={`mt-3 overflow-hidden rounded-lg border ${hasIssue ? "border-amber-200 bg-amber-50/70" : "border-emerald-100 bg-emerald-50/70"}`}>
-      <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,auto)] xl:items-center">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={hasIssue ? "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200" : "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-200"}>
-              국세청 상태조회
-            </Badge>
-            <span className="text-xs font-black text-slate-500">사업자번호가 있는 거래처만 조회됩니다.</span>
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <BusinessStatusMiniMetric label="정상" tone="emerald" value={`${readyCount.toLocaleString()}곳`} />
-            <BusinessStatusMiniMetric label="확인 필요" tone={needsCheckCount ? "amber" : "slate"} value={`${needsCheckCount.toLocaleString()}곳`} />
-            <BusinessStatusMiniMetric label="조회 대상" tone="blue" value={`${checkableCount.toLocaleString()}곳`} />
-          </div>
-          {missingNumberCount ? (
-            <p className="mt-2 text-[11px] font-bold leading-5 text-amber-800">
-              사업자번호 미등록 {missingNumberCount.toLocaleString()}곳은 자동조회에서 제외됩니다.
-            </p>
-          ) : null}
-        </div>
-        <button
-          className="maju-button-primary h-10 w-full shrink-0 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60 xl:w-auto"
-          disabled={isChecking || checkableCount === 0}
-          onClick={onRefresh}
-          type="button"
-        >
-          <RefreshCw className={`h-4 w-4 ${isChecking ? "animate-spin" : ""}`} />
-          {isChecking ? "조회 중" : "전체 사업자 상태 조회"}
-        </button>
-      </div>
-      {message ? (
-        <div className={`border-t px-3 py-2 text-xs font-bold ${messageIsError ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-white/70 text-emerald-700"}`}>
-          {message}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function BusinessStatusMiniMetric({ label, tone, value }: { label: string; tone: "amber" | "blue" | "emerald" | "slate"; value: string }) {
-  const className =
-    tone === "emerald"
-      ? "border-emerald-100 bg-white text-emerald-800"
-      : tone === "amber"
-        ? "border-amber-200 bg-white text-amber-900"
-        : tone === "blue"
-          ? "border-blue-100 bg-white text-blue-800"
-          : "border-slate-200 bg-white text-slate-700";
-
-  return (
-    <div className={`rounded-md border px-3 py-2 ${className}`}>
-      <p className="text-[10px] font-black uppercase tracking-wide opacity-60">{label}</p>
-      <p className="mt-1 text-sm font-black">{value}</p>
-    </div>
   );
 }
 

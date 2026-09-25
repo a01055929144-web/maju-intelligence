@@ -215,7 +215,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   // "신규 리드"(인허가 최신순, 기본) vs "영업리드"(키워드 검색량순) — 2026-08-20 피드백: "신규리드 >
   // 인허가데이터로 진행 / 영업리드 > 키워드 검색량 순으로 진행". 검색량 점수는 네이버 데이터랩으로
   // 조회해 DB(keyword_volume)에 캐시하고, 화면은 그 값으로 로컬 정렬만 다시 합니다.
-  const [leadQualityMode, setLeadQualityMode] = useState<"permit" | "keyword">("permit");
+  const [leadQualityMode, setLeadQualityMode] = useState<"permit" | "keyword">(() => {
+    if (typeof window === "undefined") return "permit";
+    return new URLSearchParams(window.location.search).get("leadType") === "keyword" ? "keyword" : "permit";
+  });
   const [keywordVolumeScores, setKeywordVolumeScores] = useState<Record<string, number>>({});
   const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
   const [keywordVolumeConfigured, setKeywordVolumeConfigured] = useState(true);

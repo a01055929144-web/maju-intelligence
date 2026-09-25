@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 export type WorkspaceSectionNavItem = {
@@ -20,7 +19,7 @@ type WorkspaceSectionNavProps = {
  * 작업 구분 내비게이션입니다. 왼쪽 세로 컬럼으로 두면 작업 공간이 좁아 답답하다는
  * 피드백에 따라 페이지 상단의 가로 행(탭 스트립)으로 배치합니다.
  */
-export function WorkspaceSectionNav({ eyebrow = "탭", items }: WorkspaceSectionNavProps) {
+export function WorkspaceSectionNav({ eyebrow = "페이지", items }: WorkspaceSectionNavProps) {
   return (
     <nav className="mb-3 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_4px_18px_rgba(15,23,42,0.035)] [scrollbar-width:thin]">
       <span className="hidden shrink-0 px-2 text-xs font-semibold text-slate-500 sm:inline">{eyebrow}</span>
@@ -29,7 +28,7 @@ export function WorkspaceSectionNav({ eyebrow = "탭", items }: WorkspaceSection
         const selected = Boolean(item.active);
 
         return (
-          <Link
+          <a
             className={`flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
               selected
                 ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
@@ -50,7 +49,7 @@ export function WorkspaceSectionNav({ eyebrow = "탭", items }: WorkspaceSection
                 {item.badge}
               </span>
             ) : null}
-          </Link>
+          </a>
         );
       })}
     </nav>
