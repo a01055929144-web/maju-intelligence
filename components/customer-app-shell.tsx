@@ -213,7 +213,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                       <Building2 className="h-4 w-4" />
                     </Link>
                   ) : null}
-                  <Link aria-label={settingsLabel} className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                  <Link aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
                     <Settings className="h-4 w-4" />
                   </Link>
                 </>
@@ -233,7 +233,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                         <Building2 className="h-4 w-4" />
                       </Link>
                     ) : null}
-                    <Link aria-label={settingsLabel} className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href={settingsHref} title={settingsLabel}>
+                    <Link aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
                       <Settings className="h-4 w-4" />
                     </Link>
                   </div>
@@ -335,6 +335,7 @@ function isCurrentNavItem(pathname: string | null, href: string) {
   if (!pathname) return false;
   const hrefPath = href.split("?")[0] || "/";
   if (hrefPath === "/") return pathname === "/";
+  if (hrefPath === "/dashboard") return pathname === "/dashboard";
   return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }
 

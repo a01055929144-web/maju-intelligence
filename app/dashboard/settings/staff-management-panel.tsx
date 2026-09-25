@@ -158,7 +158,7 @@ export function StaffManagementPanel({
     }
 
     const updated = payload.invitation as StaffInvitation;
-    setInvitations((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    setInvitations((current) => current.map((item) => (item.id === invitation.id ? updated : item)));
     setMessage(payload.persisted ? "직원 정보 저장이 완료되었습니다." : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
@@ -209,7 +209,7 @@ export function StaffManagementPanel({
     }
 
     const updated = payload.invitation as StaffInvitation;
-    setInvitations((current) => current.map((item) => (item.id === updated.id ? { ...updated, matchedCustomerCount: item.matchedCustomerCount } : item)));
+    setInvitations((current) => current.map((item) => (item.id === invitation.id ? { ...updated, matchedCustomerCount: item.matchedCustomerCount } : item)));
     setMessage(payload.persisted ? "배정 기준 저장이 완료되었습니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다." : "배정 기준이 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
@@ -429,8 +429,16 @@ export function StaffManagementPanel({
                             ) : null}
                           </td>
                           <td className="max-w-[220px] px-3 py-3">
-                            <p className="truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] font-bold text-slate-500">{invitation.inviteUrl}</p>
+                            {invitation.membershipOnly ? (
+                              <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-bold leading-4 text-amber-800">
+                                가입 계정은 확인됐지만 연결 이력이 없습니다. 배정 기준을 저장하면 자동 복구됩니다.
+                              </div>
+                            ) : (
+                              <p className="truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] font-bold text-slate-500">{invitation.inviteUrl}</p>
+                            )}
                             <div className="mt-1.5 flex flex-wrap gap-1">
+                              {!invitation.membershipOnly ? (
+                                <>
                               <button
                                 className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={!canManageMembers}
@@ -451,6 +459,8 @@ export function StaffManagementPanel({
                                 <Share2 className="h-3 w-3" />
                                 공유
                               </button>
+                                </>
+                              ) : null}
                               {invitation.acceptedBy ? (
                                 <button
                                   className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -466,7 +476,17 @@ export function StaffManagementPanel({
                             </div>
                           </td>
                           <td className="px-3 py-3">
-                            <div className="flex justify-end gap-1">
+                            {invitation.membershipOnly ? (
+                              <button
+                                className="inline-flex h-8 items-center rounded-md border border-teal-200 bg-teal-50 px-2.5 text-[11px] font-black text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!canManageMembers || savingId === invitation.id}
+                                onClick={() => setExpandedId(expanded ? "" : invitation.id)}
+                                type="button"
+                              >
+                                {expanded ? "연결 닫기" : "연결 복구"}
+                              </button>
+                            ) : (
+                              <div className="flex justify-end gap-1">
                               <button
                                 className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={!canManageMembers || savingId === invitation.id}
@@ -483,7 +503,8 @@ export function StaffManagementPanel({
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
-                            </div>
+                              </div>
+                            )}
                           </td>
                         </tr>
                         {expanded ? (

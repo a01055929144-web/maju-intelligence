@@ -435,6 +435,7 @@ export type CustomerLoginCredentials = AuthCredentials & {
 };
 export type StaffInvitation = {
   acceptedBy?: string;
+  membershipOnly?: boolean;
   // 관리자가 화면에서 수동으로 지정한 배정 기준(자동 이름 매칭이 실패할 때 쓰는 값).
   assignedManagerName?: string;
   assignedVehicle?: string;
@@ -2345,6 +2346,36 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   ));
 
   const invitations = rows.map(toStaffInvitation);
+  // 실제 회사 가입 계정(company_members)은 살아 있지만 과거 정리 과정에서 초대 행이 없어진
+  // 직원도 설정 화면에서 빠지지 않게 합칩니다. 배정 기준을 저장하면 updateStaffInvitation이
+  // 정상 accepted 초대 행으로 복구하므로 라이브 위치와 담당자 연결도 다시 관리할 수 있습니다.
+  const activeMembers = await supabaseRequest<
+    Array<{
+      created_at?: string | null;
+      role: string | null;
+      user_id: string;
+      app_users: { name: string | null; phone: string | null; status: string | null } | null;
+    }>
+  >(
+    `company_members?select=user_id,role,created_at,app_users(name,phone,status)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active&order=created_at.desc`
+  ).catch(() => []);
+  const invitedUserIds = new Set(invitations.map((invitation) => invitation.acceptedBy).filter(Boolean));
+  activeMembers.forEach((member) => {
+    if (!member.user_id || invitedUserIds.has(member.user_id) || member.app_users?.status === "inactive") return;
+    invitations.push({
+      acceptedBy: member.user_id,
+      membershipOnly: true,
+      id: `member:${member.user_id}`,
+      companyId,
+      employeeName: member.app_users?.name?.trim() || "이름 미등록 직원",
+      employeePhone: member.app_users?.phone?.trim() || "",
+      inviteCode: "",
+      inviteUrl: "",
+      role: member.role || "member",
+      status: "accepted",
+      createdAt: member.created_at ? new Date(member.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "가입 계정"
+    });
+  });
 
   // 가입 완료된 직원마다 "지금 이 배정 기준(이름/수동 지정값)으로 실제 몇 곳의 거래처가
   // 매칭되는지"를 미리 보여줘서, 관리자가 0곳인 직원만 골라 수동으로 연결할 수 있게 합니다.
@@ -2394,6 +2425,74 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
         createdAt: "서버 저장 미확인"
       }
     };
+  }
+
+  // 실제 가입 계정은 남아 있지만 초대 이력이 유실된 경우, 설정 화면의 복구용 행을
+  // 관리자가 처음 저장할 때 정상 accepted 초대 행으로 전환합니다.
+  if (input.invitationId.startsWith("member:")) {
+    const userId = input.invitationId.slice("member:".length);
+    const memberRows = await supabaseRequest<
+      Array<{
+        role: string | null;
+        user_id: string;
+        app_users: { name: string | null; phone: string | null; status: string | null } | null;
+      }>
+    >(
+      `company_members?select=user_id,role,app_users(name,phone,status)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&limit=1`
+    );
+    const member = memberRows[0];
+    if (!member || member.app_users?.status === "inactive") throw new Error("활성 가입 직원 계정을 찾을 수 없습니다.");
+
+    const recoveredRows = await staffStoreRequest(
+      supabaseRequest<
+        Array<{
+          accepted_by: string | null;
+          assigned_manager_name?: string | null;
+          assigned_vehicle?: string | null;
+          id: string;
+          company_id: string;
+          employee_name: string | null;
+          employee_phone: string | null;
+          invite_code: string;
+          role: StaffInvitation["role"];
+          status: StaffInvitation["status"];
+          expires_at: string | null;
+          created_at: string;
+        }>
+      >("staff_invitations", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify([
+          {
+            company_id: input.companyId,
+            employee_name: member.app_users?.name?.trim() || "이름 미등록 직원",
+            employee_phone: member.app_users?.phone?.trim() || null,
+            invite_code: createInviteCode(input.companyId),
+            role: input.role || member.role || "member",
+            status: "accepted",
+            expires_at: null,
+            accepted_by: userId,
+            accepted_at: new Date().toISOString(),
+            assigned_manager_name: input.assignedManagerName?.trim() || null,
+            assigned_vehicle: input.assignedVehicle?.trim() || null
+          }
+        ])
+      })
+    );
+    const recovered = toStaffInvitation(recoveredRows[0]);
+    await writeAdminAuditLog({
+      companyId: input.companyId,
+      action: "staff_invitation_recovered",
+      targetType: "staff_invitation",
+      targetId: recovered.id,
+      metadata: {
+        actorName: auditContext.actorName || "시스템",
+        actorRole: auditContext.actorRole || "unknown",
+        employeeName: recovered.employeeName,
+        userId
+      }
+    }).catch(() => null);
+    return { invitation: recovered, persisted: true };
   }
 
   const rows = await staffStoreRequest(supabaseRequest<

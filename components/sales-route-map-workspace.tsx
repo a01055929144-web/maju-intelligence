@@ -2630,7 +2630,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               스타일로 반영합니다. */}
           <div
             className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[300px]"
+              leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[380px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
