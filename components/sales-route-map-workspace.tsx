@@ -3208,6 +3208,7 @@ function DeliveryAssignmentPanel({
   const [connectionDrafts, setConnectionDrafts] = useState<Record<string, string>>({});
   const [connectingLiveId, setConnectingLiveId] = useState("");
   const [connectionError, setConnectionError] = useState("");
+  const [unassignedLiveOpen, setUnassignedLiveOpen] = useState(false);
   useEffect(() => setAssignmentRows(staffInvitations), [staffInvitations]);
   const normalizedLiveSearch = liveSearch.trim().toLowerCase();
   const findVehicleForLiveLocation = (location: StaffVehicleLocation) => {
@@ -3313,13 +3314,13 @@ function DeliveryAssignmentPanel({
 
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
-        <div>
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-3 py-2.5">
+        <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-bold text-slate-950">
             <Truck className="h-4 w-4 text-slate-500" />
             담당자 · 차량
           </p>
-          <p className="mt-1 text-xs font-bold text-slate-500">{vehicles.filter((vehicle) => !vehicle.isUnassigned).length}명 · 미배정 라이브 {unassignedLiveVehicles.length}건</p>
+          <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{vehicles.filter((vehicle) => !vehicle.isUnassigned).length}명 · 미배정 라이브 {unassignedLiveVehicles.length}건</p>
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
@@ -3330,23 +3331,24 @@ function DeliveryAssignmentPanel({
           <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
-      <div className="space-y-2 border-b border-slate-200 bg-slate-50/70 px-3 py-2.5">
+      <div className="space-y-2 border-b border-slate-200 bg-slate-50/70 px-3 py-2">
         {liveVehicleError ? (
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs font-medium leading-5 text-amber-800" role="status">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>라이브 연결 지연 · 마지막 정상 위치를 표시 중입니다. {liveVehicleError}</span>
           </div>
         ) : null}
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+        <div className="flex items-center gap-1.5">
+        <label className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
           <input
-            className="h-10 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm font-medium text-slate-800 outline-none focus:border-teal-300"
+            className="h-8 w-full rounded-md border border-slate-200 bg-white pl-8 pr-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-300"
             onChange={(event) => setLiveSearch(event.target.value)}
             placeholder="담당자·차량 검색"
             value={liveSearch}
           />
         </label>
-        <div className="grid grid-cols-4 gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {(["all", "active", "stale", "offline"] as const).map((status) => {
             const count = status === "all"
               ? vehicles.length
@@ -3359,17 +3361,19 @@ function DeliveryAssignmentPanel({
             const label = status === "all" ? "전체" : status === "active" ? "활성" : status === "stale" ? "지연" : "오프라인";
             return (
               <button
-                className={`rounded-md px-2 py-2 text-xs font-semibold ${liveStatusFilter === status ? "bg-teal-700 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200"}`}
+                aria-label={`${label} ${count}대`}
+                className={`h-8 min-w-8 rounded-md px-1.5 text-[11px] font-semibold ${liveStatusFilter === status ? "bg-teal-700 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200"}`}
                 key={status}
                 onClick={() => setLiveStatusFilter(status)}
                 type="button"
               >
-                {label} {count}
+                <span className="hidden 2xl:inline">{label} </span>{count}
               </button>
             );
           })}
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs" aria-label="오늘 배송 현황">
+        </div>
+        <div className="flex items-center gap-2 overflow-hidden rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px]" aria-label="오늘 배송 현황">
           <span className="font-medium text-slate-500">오늘 배송</span>
           <span className="font-semibold text-sky-800">예정 {deliverySummary.scheduled}</span>
           <span className="font-semibold text-emerald-700">완료 {deliverySummary.completed}</span>
@@ -3378,22 +3382,22 @@ function DeliveryAssignmentPanel({
         </div>
       </div>
       {liveVehicleDetails}
-      <div className="border-b border-slate-100 p-3">
+      <div className="border-b border-slate-100 px-3 py-2">
         <button
-          className={`w-full rounded-md border px-3 py-2.5 text-left transition ${
+          className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition ${
             selectedVehicleId === "all" ? "border-teal-300 bg-teal-50 ring-1 ring-teal-100" : "border-slate-200 bg-white hover:bg-slate-50"
           }`}
           onClick={() => onSelectVehicle("all")}
           type="button"
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold text-slate-950">전체 담당자</p>
-            <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">{totalStores}곳</span>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-950">전체 담당자</p>
+            <p className="truncate text-[11px] font-medium text-slate-500">담당자 필터 없이 전체 표시</p>
           </div>
-          <p className="mt-1 text-xs font-bold text-slate-500">담당자 필터 없이 모든 배송 거래처 표시</p>
+          <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">{totalStores}곳</span>
         </button>
       </div>
-      <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 divide-y divide-slate-100 overflow-auto xl:max-h-none">
+      <div className="max-h-[calc(100vh-240px)] min-h-[12rem] flex-1 divide-y divide-slate-100 overflow-auto overscroll-contain xl:max-h-none">
         {filteredVehicles.map((vehicle) => {
           const selected = vehicle.id === selectedVehicleId;
           const editing = editingVehicleId === vehicle.id;
@@ -3402,7 +3406,7 @@ function DeliveryAssignmentPanel({
           const pendingCount = Math.max(0, vehicle.stops.length - completedCount);
           return (
             <div
-              className={`w-full px-4 py-2.5 text-left transition ${
+              className={`w-full px-3 py-2 text-left transition ${
                 selected ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : "bg-white hover:bg-slate-50"
               }`}
               key={vehicle.id}
@@ -3501,7 +3505,7 @@ function DeliveryAssignmentPanel({
                       </div>
                     )}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
+                  <div className="mt-1.5 flex flex-wrap gap-1" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
                     {vehicle.stops.length ? (
                       <>
                         <span className="rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">예정 {vehicle.stops.length}</span>
@@ -3523,10 +3527,15 @@ function DeliveryAssignmentPanel({
         {!filteredVehicles.length ? <p className="p-4 text-center text-xs font-bold text-slate-500">조건에 맞는 담당자·차량이 없습니다.</p> : null}
       </div>
       {unassignedLiveVehicles.length ? (
-        <div className="shrink-0 border-t border-amber-200 bg-amber-50/70 p-3">
-          <p className="text-xs font-semibold text-amber-900">연결 필요한 라이브 운행 · {unassignedLiveVehicles.length}건</p>
-          <p className="mt-1 text-xs font-medium leading-5 text-amber-800">담당자 또는 차량을 선택해 연결하세요.</p>
-          <div className="mt-2 max-h-48 space-y-2 overflow-auto">
+        <div className="shrink-0 border-t border-amber-200 bg-amber-50/70">
+          <button aria-expanded={unassignedLiveOpen} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left" onClick={() => setUnassignedLiveOpen((value) => !value)} type="button">
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-amber-900">연결 필요한 라이브 운행 · {unassignedLiveVehicles.length}건</span>
+              <span className="block truncate text-[11px] font-medium text-amber-700">담당자 또는 차량을 연결하세요.</span>
+            </span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-amber-700 transition ${unassignedLiveOpen ? "rotate-180" : ""}`} />
+          </button>
+          {unassignedLiveOpen ? <div className="max-h-52 space-y-2 overflow-auto border-t border-amber-200 px-3 py-2">
             {unassignedLiveVehicles.map((location) => {
               const invitation = assignmentRows.find((item) => item.acceptedBy === location.userId);
               return (
@@ -3562,8 +3571,8 @@ function DeliveryAssignmentPanel({
                 </div>
               );
             })}
-          </div>
-          {connectionError ? <p className="mt-2 text-[11px] font-bold text-rose-700">{connectionError}</p> : null}
+          </div> : null}
+          {connectionError ? <p className="px-3 pb-2 text-[11px] font-bold text-rose-700">{connectionError}</p> : null}
         </div>
       ) : null}
       <VehicleMasterManager
@@ -3572,7 +3581,7 @@ function DeliveryAssignmentPanel({
         onChange={onVehicleMasterChange}
         vehicles={vehicleMasterVehicles}
       />
-      <div className="shrink-0 border-t border-slate-200/80 p-3">
+      <div className="shrink-0 border-t border-slate-200/80 p-2">
         {isAdding ? (
           <AddDriverForm
             onCancel={() => setIsAdding(false)}
@@ -3583,7 +3592,7 @@ function DeliveryAssignmentPanel({
             }}
           />
         ) : (
-          <button className="maju-button-secondary flex h-9 w-full items-center justify-center gap-1.5 text-xs" onClick={() => setIsAdding(true)} type="button">
+          <button className="maju-button-secondary flex h-8 w-full items-center justify-center gap-1.5 text-xs" onClick={() => setIsAdding(true)} type="button">
             <Plus className="h-3.5 w-3.5" />
             새 담당자·배송차 추가
           </button>

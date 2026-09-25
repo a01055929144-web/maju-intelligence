@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { Bell, Building2, ClipboardCheck, Database, FileSpreadsheet, Loader2, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { MessageTemplateManager } from "@/components/message-template-manager";
 import { CompanySettings } from "@/lib/store";
+
+type SettingsSection = "company" | "messaging" | "telegram";
+type SectionSaveState = { status: "idle" | "saving" | "saved" | "error"; message: string };
+
+const SECTION_LABELS: Record<SettingsSection, string> = {
+  company: "회사 기준정보",
+  messaging: "문자 발송 설정",
+  telegram: "텔레그램 알림 설정"
+};
 
 export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [form, setForm] = useState({
@@ -24,35 +33,64 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     smsSenderPhone: initial.smsSenderPhone || "",
     telegramChatId: initial.telegramChatId || ""
   });
-  const [message, setMessage] = useState("");
-  const [messageOk, setMessageOk] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [savedForm, setSavedForm] = useState(form);
+  const [saveStates, setSaveStates] = useState<Record<SettingsSection, SectionSaveState>>({
+    company: { status: "idle", message: "" },
+    messaging: { status: "idle", message: "" },
+    telegram: { status: "idle", message: "" }
+  });
   const [telegramTestMessage, setTelegramTestMessage] = useState("");
   const [telegramTesting, setTelegramTesting] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
   const hasCompanyName = Boolean(form.name.trim());
   const hasNotificationPhone = Boolean(form.notificationPhone.trim());
   const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim()), hasNotificationPhone].filter(Boolean).length;
+  const anySectionSaving = Object.values(saveStates).some((state) => state.status === "saving");
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLoading(true);
-    setMessage("");
+  function updateSection(section: SettingsSection, patch: Partial<typeof form>) {
+    setForm((current) => ({ ...current, ...patch }));
+    setSaveStates((current) => ({ ...current, [section]: { status: "idle", message: "변경사항이 아직 저장되지 않았습니다." } }));
+  }
+
+  async function saveSection(section: SettingsSection) {
+    setSaveStates((current) => ({ ...current, [section]: { status: "saving", message: "저장 중입니다." } }));
+
+    // API 계약은 전체 회사 설정 payload를 유지하되, 다른 카드에서 아직 저장하지 않은 입력값까지
+    // 함께 반영되지 않도록 마지막 저장본에 현재 카드 필드만 합칩니다.
+    const payloadForm = section === "company"
+      ? { ...savedForm, businessType: form.businessType, name: form.name, originAddress: form.originAddress, ownerName: form.ownerName }
+      : section === "messaging"
+        ? {
+            ...savedForm,
+            deliveryCompleteMessage: form.deliveryCompleteMessage,
+            deliveryIssueMessage: form.deliveryIssueMessage,
+            deliveryPartialMessage: form.deliveryPartialMessage,
+            notificationPhone: form.notificationPhone,
+            notificationSenderName: form.notificationSenderName,
+            smsSenderPhone: form.smsSenderPhone
+          }
+        : { ...savedForm, telegramChatId: form.telegramChatId };
 
     const response = await fetchWithTimeout(
       "/api/customer/settings",
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
+        body: JSON.stringify(payloadForm)
       },
       12000
     ).catch(() => null);
     const payload = await response?.json().catch(() => null);
 
-    setLoading(false);
-    setMessageOk(Boolean(response?.ok));
-    setMessage(response?.ok ? "회사 설정이 저장됐습니다." : payload?.error || "저장에 실패했습니다. 값을 다시 확인해주세요.");
+    const ok = Boolean(response?.ok);
+    if (ok) setSavedForm(payloadForm);
+    setSaveStates((current) => ({
+      ...current,
+      [section]: {
+        status: ok ? "saved" : "error",
+        message: ok ? `${SECTION_LABELS[section]} 저장이 완료됐습니다.` : payload?.error || "저장에 실패했습니다. 값을 다시 확인해주세요."
+      }
+    }));
   }
 
   async function handleTelegramTest() {
@@ -67,7 +105,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   }
 
   return (
-    <form aria-busy={loading} className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={handleSubmit}>
+    <form className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={(event) => event.preventDefault()}>
       <div className="space-y-5">
         <section className="maju-section-card">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
@@ -148,7 +186,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <input
                 className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                onChange={(event) => updateSection("company", { name: event.target.value })}
                 required
               />
             </label>
@@ -158,7 +196,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.ownerName}
-                  onChange={(event) => setForm({ ...form, ownerName: event.target.value })}
+                  onChange={(event) => updateSection("company", { ownerName: event.target.value })}
                   placeholder="라이브 차량과 모바일 화면에 표시할 이름"
                 />
                 <span className="block text-[11px] font-semibold text-slate-400">개인·오너 계정의 라이브 차량 및 현장 화면 이름으로 사용됩니다.</span>
@@ -168,7 +206,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.businessType}
-                  onChange={(event) => setForm({ ...form, businessType: event.target.value })}
+                  onChange={(event) => updateSection("company", { businessType: event.target.value })}
                 />
               </label>
             </div>
@@ -177,11 +215,17 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <input
                 className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 value={form.originAddress}
-                onChange={(event) => setForm({ ...form, originAddress: event.target.value })}
+                onChange={(event) => updateSection("company", { originAddress: event.target.value })}
                 placeholder="예: 경기도 하남시 초이로 133 1층"
               />
             </label>
           </div>
+          <SectionSaveFooter
+            disabled={anySectionSaving}
+            label="회사 기준정보 저장"
+            onSave={() => void saveSection("company")}
+            state={saveStates.company}
+          />
         </section>
 
         <section className="maju-section-card">
@@ -200,7 +244,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   inputMode="tel"
-                  onChange={(event) => setForm({ ...form, notificationPhone: event.target.value })}
+                  onChange={(event) => updateSection("messaging", { notificationPhone: event.target.value })}
                   placeholder="예: 010-0000-0000"
                   value={form.notificationPhone}
                 />
@@ -209,7 +253,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 <span className="text-xs font-bold text-muted-foreground">문자 표시명</span>
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setForm({ ...form, notificationSenderName: event.target.value })}
+                  onChange={(event) => updateSection("messaging", { notificationSenderName: event.target.value })}
                   placeholder={form.name || "회사명"}
                   value={form.notificationSenderName}
                 />
@@ -220,7 +264,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <input
                 className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                 inputMode="tel"
-                onChange={(event) => setForm({ ...form, smsSenderPhone: event.target.value })}
+                onChange={(event) => updateSection("messaging", { smsSenderPhone: event.target.value })}
                 placeholder="실제 발신은 Vercel SOLAPI_SENDER_PHONE 기준"
                 value={form.smsSenderPhone}
               />
@@ -237,23 +281,29 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <div className="grid gap-3 md:grid-cols-3">
                 <MessageTemplateField
                   label="도착완료"
-                  onChange={(value) => setForm({ ...form, deliveryCompleteMessage: value })}
+                  onChange={(value) => updateSection("messaging", { deliveryCompleteMessage: value })}
                   value={form.deliveryCompleteMessage}
                 />
                 <MessageTemplateField
                   label="부분배송"
-                  onChange={(value) => setForm({ ...form, deliveryPartialMessage: value })}
+                  onChange={(value) => updateSection("messaging", { deliveryPartialMessage: value })}
                   value={form.deliveryPartialMessage}
                 />
                 <MessageTemplateField
                   label="이슈발생"
-                  onChange={(value) => setForm({ ...form, deliveryIssueMessage: value })}
+                  onChange={(value) => updateSection("messaging", { deliveryIssueMessage: value })}
                   value={form.deliveryIssueMessage}
                 />
               </div>
             </div>
             <MessageTemplateManager mode="company" />
           </div>
+          <SectionSaveFooter
+            disabled={anySectionSaving}
+            label="문자 설정 저장"
+            onSave={() => void saveSection("messaging")}
+            state={saveStates.messaging}
+          />
         </section>
 
         <section className="maju-section-card">
@@ -272,7 +322,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.telegramChatId}
-                  onChange={(event) => setForm({ ...form, telegramChatId: event.target.value })}
+                  onChange={(event) => updateSection("telegram", { telegramChatId: event.target.value })}
                   placeholder="예: -1001234567890"
                 />
                 <Button
@@ -308,18 +358,13 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               </p>
             ) : null}
           </div>
+          <SectionSaveFooter
+            disabled={anySectionSaving}
+            label="텔레그램 설정 저장"
+            onSave={() => void saveSection("telegram")}
+            state={saveStates.telegram}
+          />
         </section>
-
-        {message ? (
-          <p aria-live="polite" className={`rounded-md border px-3 py-2.5 text-sm font-medium ${messageOk ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-rose-100 bg-rose-50 text-rose-700"}`}>{message}</p>
-        ) : null}
-        <div className="sticky bottom-2 z-10 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:static sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:bg-slate-50 sm:shadow-none">
-          <p className="text-sm font-medium leading-5 text-slate-500">저장한 출발지는 지도와 거래처 거리 계산에 함께 적용됩니다.</p>
-          <Button className="w-full min-w-32 shrink-0 sm:w-auto" disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {loading ? "저장하는 중..." : "설정 저장"}
-          </Button>
-        </div>
       </div>
 
       <aside className="h-fit maju-section-card">
@@ -377,6 +422,28 @@ function BasisCard({ icon, title, description }: { icon: ReactNode; title: strin
         {title}
       </div>
       <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{description}</p>
+    </div>
+  );
+}
+
+function SectionSaveFooter({ disabled, label, onSave, state }: { disabled: boolean; label: string; onSave: () => void; state: SectionSaveState }) {
+  const saving = state.status === "saving";
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div aria-live="polite" className="min-h-5 text-xs font-bold">
+        {state.message ? (
+          <span className={state.status === "error" ? "text-rose-700" : state.status === "saved" ? "text-emerald-700" : "text-slate-500"}>
+            {state.message}
+          </span>
+        ) : (
+          <span className="text-slate-400">이 카드의 변경사항만 확인하고 저장하세요.</span>
+        )}
+      </div>
+      <Button className="w-full shrink-0 sm:w-auto" disabled={disabled} onClick={onSave} type="button">
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {saving ? "저장 중..." : label}
+      </Button>
     </div>
   );
 }

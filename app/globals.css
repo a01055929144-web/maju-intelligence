@@ -204,15 +204,15 @@ select {
   }
 
   .maju-section-card {
-    @apply overflow-hidden rounded-[10px] border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.035),0_6px_18px_rgba(15,23,42,0.025)];
+    @apply w-full min-w-0 overflow-hidden rounded-[10px] border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.035),0_6px_18px_rgba(15,23,42,0.025)];
   }
 
   .maju-card-header {
-    @apply border-b border-slate-200/80 bg-white px-4 py-3.5;
+    @apply border-b border-slate-200/80 bg-white px-4 py-3.5 sm:px-5;
   }
 
   .maju-stat-card {
-    @apply rounded-[10px] border border-slate-200/90 bg-white p-3.5 shadow-none;
+    @apply min-w-0 rounded-[10px] border border-slate-200/90 bg-white p-3.5 shadow-none;
   }
 
   .maju-filter-box {

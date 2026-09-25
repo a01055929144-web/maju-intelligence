@@ -136,10 +136,18 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               )}
             </div>
 
-            <nav className={`${mobileMenuOpen ? "block" : "hidden"} flex-1 space-y-4 overflow-auto p-3 lg:block`}>
-              {visibleNavigationGroups.map((group) => (
-                <div key={group.label}>
-                  {!collapsed ? <p className="mb-2 px-2 text-xs font-medium text-slate-400">{group.label}</p> : null}
+            <nav className={`${mobileMenuOpen ? "block" : "hidden"} flex-1 overflow-auto px-3 py-2 lg:block`}>
+              {visibleNavigationGroups.map((group, groupIndex) => (
+                <div
+                  className={`${groupIndex === 0 ? "pb-3" : "border-t border-white/10 py-3"}`}
+                  key={group.label}
+                >
+                  {!collapsed ? (
+                    <div className="mb-1.5 flex items-center gap-2 px-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{group.label}</p>
+                      <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-white/[0.06]" />
+                    </div>
+                  ) : null}
                   <div className="space-y-1">
                     {group.items.map((item) => {
                       if (item.children && item.children.length) {
@@ -305,7 +313,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             </div>
           ) : null}
 
-          <div className={fullBleed ? "flex flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "px-4 py-4 sm:px-4"}>{children}</div>
+          <div className={fullBleed ? "flex w-full flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "w-full px-4 py-4 sm:px-5 lg:px-6 lg:py-5 2xl:px-7"}>{children}</div>
         </section>
       </div>
     </main>
