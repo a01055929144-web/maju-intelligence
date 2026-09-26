@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -30,9 +30,19 @@ export function SalesTransactionTable({
   const [loadMoreError, setLoadMoreError] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
+  const [query, setQuery] = useState("");
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("ko");
+    if (!normalizedQuery) return items;
+    return items.filter((item) =>
+      [item.customerName, item.productName, item.businessRegistrationNumber, item.salesDate]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase("ko").includes(normalizedQuery))
+    );
+  }, [items, query]);
   // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
   type TransactionSortKey = "businessRegistrationNumber" | "createdAt" | "customerName" | "productName" | "quantity" | "salesAmount" | "salesDate";
-  const { sortDirection, sortKey, sortedRows: sortedItems, toggleSort } = useTableSort<SalesTransactionItem, TransactionSortKey>(items, {
+  const { sortDirection, sortKey, sortedRows: sortedItems, toggleSort } = useTableSort<SalesTransactionItem, TransactionSortKey>(filteredItems, {
     businessRegistrationNumber: (a, b) => (a.businessRegistrationNumber || "").localeCompare(b.businessRegistrationNumber || ""),
     createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
     customerName: (a, b) => a.customerName.localeCompare(b.customerName, "ko"),
@@ -49,6 +59,10 @@ export function SalesTransactionTable({
   }, [currentPage, sortedItems, pageSize]);
   const pageStart = sortedItems.length ? (currentPage - 1) * pageSize + 1 : 0;
   const pageEnd = Math.min(sortedItems.length, currentPage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
 
   async function loadMore() {
     if (isLoadingMore || !truncated) return;
@@ -80,10 +94,22 @@ export function SalesTransactionTable({
           <h2 className="text-lg font-semibold text-slate-950">원장 테이블</h2>
           <p className="mt-1 text-sm text-slate-500">최근 업로드 행</p>
         </div>
-        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{items.length.toLocaleString()}행 표시</Badge>
+        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
+          {query ? `${filteredItems.length.toLocaleString()} / ${items.length.toLocaleString()}행` : `${items.length.toLocaleString()}행 표시`}
+        </Badge>
       </div>
       <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-3 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <label className="relative min-w-[220px] flex-1 sm:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="거래처·사업자번호·품목·매출일 검색"
+              type="search"
+              value={query}
+            />
+          </label>
           <label className="flex h-10 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500">
             보기
             <select
@@ -102,7 +128,7 @@ export function SalesTransactionTable({
             </select>
           </label>
           <span className="rounded-full bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">
-            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {items.length.toLocaleString()}행
+            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredItems.length.toLocaleString()}행
           </span>
         </div>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:gap-1">
@@ -173,10 +199,10 @@ export function SalesTransactionTable({
                 <td className="border-b border-slate-100 px-3 py-3 text-xs text-slate-500">{item.createdAt}</td>
               </tr>
             ))}
-            {!items.length ? (
+            {!filteredItems.length ? (
               <tr>
                 <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
-                  아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다.
+                  {items.length ? "검색 조건과 일치하는 거래내역이 없습니다." : "아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다."}
                 </td>
               </tr>
             ) : null}

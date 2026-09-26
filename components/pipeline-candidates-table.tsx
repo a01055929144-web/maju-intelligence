@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import type { RevenuePipeline } from "@/lib/store";
@@ -20,8 +22,18 @@ type PipelineItem = RevenuePipeline["items"][number];
 // 배포 장애의 원인이 바로 이 서버/클라이언트 경계를 잘못 다룬 것이었어서, 이번엔 처음부터 별도
 // "use client" 파일로 뽑았습니다).
 export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly items: PipelineItem[]; readonly weightedRevenue: number }) {
+  const [query, setQuery] = useState("");
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("ko");
+    if (!normalizedQuery) return items;
+    return items.filter((item) =>
+      [item.leadName, item.memo, item.region, resultLabels[item.result] || item.result]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase("ko").includes(normalizedQuery))
+    );
+  }, [items, query]);
   type PipelineSortKey = "leadName" | "probability" | "region" | "result" | "weightedRevenue";
-  const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<PipelineItem, PipelineSortKey>(items, {
+  const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<PipelineItem, PipelineSortKey>(filteredItems, {
     leadName: (a, b) => a.leadName.localeCompare(b.leadName, "ko"),
     probability: (a, b) => a.probability - b.probability,
     region: (a, b) => a.region.localeCompare(b.region, "ko"),
@@ -37,6 +49,19 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
           <p className="mt-1 text-sm text-slate-500">견적·관심 거래처 우선순위</p>
         </div>
         <Badge className="bg-teal-700 text-white">가중 {weightedRevenue.toLocaleString()}만원</Badge>
+      </div>
+      <div className="border-b border-slate-200/80 bg-slate-50/70 px-3 py-3">
+        <label className="relative block max-w-xl">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="거래처 후보·지역·상태·메모 검색"
+            type="search"
+            value={query}
+          />
+        </label>
+        {query ? <p className="mt-2 text-xs font-semibold text-slate-500">검색 결과 {filteredItems.length.toLocaleString()}건</p> : null}
       </div>
       <p className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 sm:hidden">표를 좌우로 밀어 전체 항목을 확인하세요.</p>
       <div className="overflow-x-auto overscroll-x-contain">
@@ -80,10 +105,10 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
                 <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black text-teal-700">{item.weightedRevenue.toLocaleString()}만원</td>
               </tr>
             ))}
-            {!items.length ? (
+            {!filteredItems.length ? (
               <tr>
                 <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={5}>
-                  아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다.
+                  {items.length ? "검색 조건과 일치하는 매출 후보가 없습니다." : "아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다."}
                 </td>
               </tr>
             ) : null}

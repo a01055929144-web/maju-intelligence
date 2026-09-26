@@ -54,7 +54,6 @@ import {
   PERMIT_ACTION_OPTIONS,
   PERMIT_LEAD_TYPE_DESCRIPTION,
   PERMIT_LEAD_TYPE_LABEL,
-  PERMIT_LEAD_TYPE_OPTIONS,
   PERMIT_PERIOD_BADGE_LABEL,
   PERMIT_PERIOD_OPTIONS,
   PermitLeadActionIntent,
@@ -134,7 +133,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   // 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응입니다.
   // period(오늘/이번주/이번달/최근 90일)와는 다른 축입니다 — leadTypeFilter는 "개업일이 확인된
   // 신규리드인지, 날짜 없이 검색량으로 타겟팅하는 영업리드인지"만 가릅니다.
-  const [leadTypeFilter, setLeadTypeFilter] = useState<"all" | PermitLeadType>("all");
+  const [leadTypeFilter, setLeadTypeFilter] = useState<"all" | PermitLeadType>(() => {
+    if (typeof window === "undefined") return "new";
+    return new URLSearchParams(window.location.search).get("leadType") === "keyword" ? "sales" : "new";
+  });
   const [openDateFilterMode, setOpenDateFilterMode] = useState<LeadOpenDateFilterMode>("all");
   const [openDateYear, setOpenDateYear] = useState("");
   const [openDateMonth, setOpenDateMonth] = useState("");
@@ -215,7 +217,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   // "신규 리드"(인허가 최신순, 기본) vs "영업리드"(키워드 검색량순) — 2026-08-20 피드백: "신규리드 >
   // 인허가데이터로 진행 / 영업리드 > 키워드 검색량 순으로 진행". 검색량 점수는 네이버 데이터랩으로
   // 조회해 DB(keyword_volume)에 캐시하고, 화면은 그 값으로 로컬 정렬만 다시 합니다.
-  const [leadQualityMode, setLeadQualityMode] = useState<"permit" | "keyword">(() => {
+  const [leadQualityMode] = useState<"permit" | "keyword">(() => {
     if (typeof window === "undefined") return "permit";
     return new URLSearchParams(window.location.search).get("leadType") === "keyword" ? "keyword" : "permit";
   });
@@ -634,7 +636,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   function clearLeadFilters() {
     setPeriodFilter("all");
-    setLeadTypeFilter("all");
+    setLeadTypeFilter(leadQualityMode === "keyword" ? "sales" : "new");
     setOpenDateFilterMode("all");
     setOpenDateYear("");
     setOpenDateMonth("");
@@ -845,9 +847,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   // 2026-09-01 피드백: "해당 카드를 누르면, 아래 거래처들이 필터가 되면 좋을 것 같아" — 맨 위 KPI
   // 카드(신규 리드/오늘 신규/A등급/전화 가능)도 카드 아래 큐 카드들과 같은 방식으로 목록을 필터합니다.
-  function focusAllLeads() {
-    clearLeadFilters();
-  }
   function focusTodayNewLeads() {
     setShowNearbyOnly(false);
     setTableSearch("");
@@ -1368,36 +1367,19 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-4 sm:pb-6">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-8">
         <DirectoryStat
-          active={!hasActiveLeadFilters}
-          // 2026-09-07 수정: 이 카드는 leads 전체(신규+영업 모두 포함, summary.active)를 보여주는데
-          // "신규 리드"라고만 이름 붙어 있어, 방금 추가한 진짜 "신규리드" 카드와 헷갈릴 수 있었습니다.
-          // "전체 리드"로 이름을 고쳐 둘을 명확히 구분합니다.
-          label="전체 리드"
-          onClick={focusAllLeads}
-          title="전체 활성 리드를 봅니다(신규리드 + 영업리드)."
-          value={summary ? `${summary.active.toLocaleString()}곳` : "—"}
+          active
+          label={leadQualityMode === "keyword" ? PERMIT_LEAD_TYPE_LABEL.sales : PERMIT_LEAD_TYPE_LABEL.new}
+          onClick={leadQualityMode === "keyword" ? focusSalesLeads : focusNewLeads}
+          title={leadQualityMode === "keyword" ? PERMIT_LEAD_TYPE_DESCRIPTION.sales : PERMIT_LEAD_TYPE_DESCRIPTION.new}
+          value={summary ? `${(leadQualityMode === "keyword" ? summary.salesLeadCount : summary.newLeadCount).toLocaleString()}곳` : "—"}
         />
-        <DirectoryStat
-          active={leadTypeFilter === "new"}
-          label={PERMIT_LEAD_TYPE_LABEL.new}
-          onClick={focusNewLeads}
-          title={PERMIT_LEAD_TYPE_DESCRIPTION.new}
-          value={summary ? `${summary.newLeadCount.toLocaleString()}곳` : "—"}
-        />
-        <DirectoryStat
-          active={leadTypeFilter === "sales"}
-          label={PERMIT_LEAD_TYPE_LABEL.sales}
-          onClick={focusSalesLeads}
-          title={PERMIT_LEAD_TYPE_DESCRIPTION.sales}
-          value={summary ? `${summary.salesLeadCount.toLocaleString()}곳` : "—"}
-        />
-        <DirectoryStat
+        {leadQualityMode === "permit" ? <DirectoryStat
           active={periodFilter === "today"}
           label="오늘 신규"
           onClick={focusTodayNewLeads}
           title="오늘 개시된 신규 리드만 봅니다."
           value={summary ? `${summary.todayNew.toLocaleString()}곳` : "—"}
-        />
+        /> : null}
         <DirectoryStat
           active={gradeFilter === "A"}
           label="A등급"
@@ -1412,23 +1394,23 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           title="전화번호가 확인된 리드만 봅니다."
           value={summary ? `${summary.hasPhone.toLocaleString()}곳` : "—"}
         />
-        <DirectoryStat
+        {leadQualityMode === "keyword" ? <DirectoryStat
           active={statusFilter === "견적 요청"}
           label="견적 요청"
           onClick={() => focusLeadStatus("견적 요청", queues?.quoteRequests || [])}
           title="견적 요청 상태인 리드만 봅니다."
           value={summary ? `${summary.quoteRequests.toLocaleString()}곳` : "—"}
-        />
-        <DirectoryStat
+        /> : null}
+        {leadQualityMode === "keyword" ? <DirectoryStat
           active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER}
           label="견적 후속"
           onClick={() => focusQuoteFollowUps(queues?.quoteFollowUps || [])}
           title="견적 발송 후 후속 연락이 필요한 리드만 봅니다."
           value={summary ? `${summary.quoteFollowUps.toLocaleString()}곳` : "—"}
-        />
+        /> : null}
       </div>
 
-      <details className="maju-section-card group" open>
+      {leadQualityMode === "keyword" ? <details className="maju-section-card group" open>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-slate-950">오늘 할 일</p>
@@ -1495,9 +1477,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           title="견적 후속"
         />
         </div>
-      </details>
+      </details> : null}
 
-      <div className="maju-section-card p-3">
+      {leadQualityMode === "keyword" ? <div className="maju-section-card p-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-950">
@@ -1561,9 +1543,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             ))}
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
-      <div className="maju-section-card">
+      {leadQualityMode === "permit" ? <div className="maju-section-card">
         {/* 2026-09-01 피드백: "리드 공급원은 굳이 안보여줘도돼" — 항상 보이던 리드 공급원 카드를
             이 접힌 상세 섹션 안으로 옮겨, 기본 화면에서는 숨기고 필요할 때만 펼쳐 보게 합니다. */}
         <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setUploadOpen((value) => !value)} type="button">
@@ -1744,7 +1726,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             ) : null}
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       <div className="maju-section-card">
         <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setNearbyOpen((value) => !value)} type="button">
@@ -1863,24 +1845,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               </button>
             ))}
           </div>
-          <div className="flex h-8 items-center rounded-md border border-slate-200 bg-white p-0.5" title="신규 리드는 인허가 최신순, 영업리드는 네이버 검색어 트렌드 기반 키워드 검색량순으로 정렬합니다.">
-            {(
-              [
-                { value: "permit" as const, label: "신규 리드" },
-                { value: "keyword" as const, label: "영업리드" }
-              ]
-            ).map((item) => (
-              <button
-                className={`rounded px-2.5 py-1 text-xs font-black transition ${
-                  leadQualityMode === item.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"
-                }`}
-                key={item.value}
-                onClick={() => setLeadQualityMode(item.value)}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="flex h-8 items-center rounded-md border border-slate-200 bg-white p-0.5" title="두 리드 화면은 목적과 도구가 분리되어 있습니다.">
+            <a className={`rounded px-2.5 py-1 text-xs font-black transition ${leadQualityMode === "permit" ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`} href="/dashboard?view=leads&leadType=permit">
+              신규 리드
+            </a>
+            <a className={`rounded px-2.5 py-1 text-xs font-black transition ${leadQualityMode === "keyword" ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`} href="/dashboard?view=leads&leadType=keyword">
+              영업 리드
+            </a>
           </div>
           <div className="flex w-full items-center gap-1.5 sm:w-auto">
             <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadPermitLeadsExcel()} type="button">
@@ -1912,7 +1883,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 value={tableSearch}
               />
             </label>
-            <select
+            {leadQualityMode === "permit" ? <select
               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => {
                 setPeriodFilter(event.target.value as "all" | PermitLeadPeriod);
@@ -1925,22 +1896,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                   {option.label}
                 </option>
               ))}
-            </select>
-            {/* 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응
-                필터입니다. 위 기간(오늘/이번주/이번달) 필터와는 별개 축으로, 개업일 확인 여부로만 가릅니다. */}
-            <select
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => setLeadTypeFilter(event.target.value as "all" | PermitLeadType)}
-              title="신규리드(개업일 확인됨) / 영업리드(개업일 미확인, 검색량 기반 타겟팅)를 구분해서 봅니다."
-              value={leadTypeFilter}
-            >
-              {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.value === "all" ? "리드 유형 전체" : PERMIT_LEAD_TYPE_LABEL[option.value]}
-                </option>
-              ))}
-            </select>
-            <select
+            </select> : null}
+            {leadQualityMode === "permit" ? <select
               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => {
                 const mode = event.target.value as LeadOpenDateFilterMode;
@@ -1955,7 +1912,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               <option value="month">월별</option>
               <option value="custom">직접 기간</option>
               <option value="missing">개시일 미확인</option>
-            </select>
+            </select> : null}
             {openDateFilterMode === "year" ? (
               <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setOpenDateYear(event.target.value)} value={openDateYear}>
                 <option value="">연도 선택</option>
