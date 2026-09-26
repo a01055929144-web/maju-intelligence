@@ -87,7 +87,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
-              <Link className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
+              <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
             </div>
           </div>
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
@@ -114,7 +114,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                   <p className="text-sm font-bold">{pendingCount ? `남은 배송 ${pendingCount}곳` : "오늘 배송을 모두 완료했습니다"}</p>
                   <p className="mt-0.5 text-xs font-semibold text-slate-400">완료 {completedCount}곳 · 전체 {todayStops.length}곳</p>
                 </div>
-                {pendingCount ? <a className="inline-flex min-h-10 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-bold text-slate-950" href="#selected-customer">바로 처리</a> : null}
+                {pendingCount ? <a className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-bold text-slate-950" href="#selected-customer">바로 처리</a> : null}
               </div>
             </section>
           ) : null}
@@ -203,7 +203,7 @@ function MobileOperationalEmptyState() {
         <div className="min-w-0">
           <p className="font-semibold text-slate-950">매장 등록 필요</p>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">관리자가 매장과 코스를 배정하면 표시됩니다.</p>
-          <Link className="mt-3 inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-xs font-semibold text-white shadow-sm" href="/?type=customer-master">
+          <Link className="mt-3 inline-flex min-h-11 items-center justify-center rounded-md bg-teal-700 px-4 text-xs font-semibold text-white shadow-sm" href="/?type=customer-master">
             등록 화면
           </Link>
         </div>

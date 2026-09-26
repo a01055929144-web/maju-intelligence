@@ -266,7 +266,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         <span className="min-w-0 flex-1 truncate">{currentCustomerName ? `${label} · ${currentCustomerName}` : label}</span>
         {needsAction ? (
           <button
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200"
             onClick={() => { if (isOnline) requestCurrentPosition(true); }}
             type="button"
           >

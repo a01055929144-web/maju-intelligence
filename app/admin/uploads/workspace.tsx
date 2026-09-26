@@ -192,7 +192,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             </button>
           ))}
         </div>
-        <Button className="h-10 gap-2" onClick={downloadCsv} type="button" variant="outline">
+        <Button className="h-10 gap-2" disabled={!filteredUploads.length} onClick={downloadCsv} type="button" variant="outline">
           <Download className="h-4 w-4" />
           CSV 다운로드
         </Button>
@@ -284,6 +284,21 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
           <p className="font-black">조건에 맞는 업로드 이력이 없습니다.</p>
           <p className="mt-2 text-sm text-muted-foreground">검색어 또는 상태 필터를 조정해보세요.</p>
+          {(query || status !== "all" || companyId !== "all") ? (
+            <Button
+              className="mt-4"
+              onClick={() => {
+                setQuery("");
+                setStatus("all");
+                setCompanyId("all");
+                setPage(1);
+              }}
+              type="button"
+              variant="outline"
+            >
+              검색 조건 초기화
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

@@ -93,6 +93,8 @@ import {
   withPermitLeadCompanyQuery
 } from "@/components/sales-route-map-workspace";
 
+const PERMIT_GRADE_SORT_WEIGHT: Record<string, number> = { A: 3, B: 2, C: 1 };
+
 function getPermitLeadRecommendationTags(lead: PermitLeadItem, topIndustries: readonly string[] = []): string[] {
   const tags: string[] = [];
   if (lead.leadPeriod === "today" || lead.leadPeriod === "week") tags.push("개업 임박");
@@ -238,6 +240,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
+  // quoteDraftRevision은 localStorage 변경 이벤트를 React 메모 갱신으로 연결하는 의도적인 트리거입니다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const quoteDrafts = useMemo(() => readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {}), [quoteDraftRevision]);
 
   useEffect(() => {
@@ -510,7 +514,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   // 2026-09-01 피드백: "거래처 업종 등급 안정도 인스타 전화 리뷰 다음 액션 상태의 헤더들을 누르면
   // 내림차순,오름차순으로 표시하도록해" — 표 헤더를 눌러 직접 정렬할 수 있게 합니다. 사용자가 헤더를
   // 누르면(tableSortKey가 채워지면) 그 정렬이 "영업리드(검색량순)" 기본 정렬보다 우선합니다.
-  const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
   const tableSortedLeads = useMemo(() => {
     if (!tableSortKey) return null;
     const decorated = filteredLeads.map((lead) => ({ lead }));
@@ -518,7 +521,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       let diff = 0;
       if (tableSortKey === "businessName") diff = a.lead.businessName.localeCompare(b.lead.businessName, "ko");
       else if (tableSortKey === "industryPrimary") diff = (a.lead.industryPrimary || "").localeCompare(b.lead.industryPrimary || "", "ko");
-      else if (tableSortKey === "grade") diff = (gradeSortWeight[a.lead.grade || ""] || 0) - (gradeSortWeight[b.lead.grade || ""] || 0);
+      else if (tableSortKey === "grade") diff = (PERMIT_GRADE_SORT_WEIGHT[a.lead.grade || ""] || 0) - (PERMIT_GRADE_SORT_WEIGHT[b.lead.grade || ""] || 0);
       else if (tableSortKey === "priority") diff = (a.lead.scoreTotal || 0) - (b.lead.scoreTotal || 0);
       else if (tableSortKey === "instagram") diff = (getLeadInstagramHandle(a.lead) ? 1 : 0) - (getLeadInstagramHandle(b.lead) ? 1 : 0);
       else if (tableSortKey === "phone") diff = (a.lead.phone ? 1 : 0) - (b.lead.phone ? 1 : 0);

@@ -5,34 +5,47 @@ import Link from "next/link";
 import { Eye, EyeOff, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AuthCredentials } from "@/lib/store";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 export function AdminAccountsForm({ initialCredentials }: { initialCredentials: AuthCredentials }) {
   const [form, setForm] = useState(initialCredentials);
+  const [baseline, setBaseline] = useState(initialCredentials);
   const [showPasswords, setShowPasswords] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"error" | "success" | "">("");
   const [saving, setSaving] = useState(false);
+  useUnsavedChangesWarning(JSON.stringify(form) !== JSON.stringify(baseline));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setMessage("");
+    setMessageTone("");
 
-    const response = await fetch("/api/admin/accounts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
+    try {
+      const response = await fetch("/api/admin/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const payload = await response.json().catch(() => null);
 
-    const payload = await response.json().catch(() => null);
-    setSaving(false);
+      if (!response.ok || !payload?.credentials) {
+        setMessageTone("error");
+        setMessage(payload?.message || "계정 저장에 실패했습니다.");
+        return;
+      }
 
-    if (!response.ok) {
-      setMessage(payload?.message || "계정 저장에 실패했습니다.");
-      return;
+      setForm(payload.credentials);
+      setBaseline(payload.credentials);
+      setMessageTone("success");
+      setMessage(payload.persisted ? "계정 정보 저장이 완료되었습니다." : "계정 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+    } catch {
+      setMessageTone("error");
+      setMessage("서버에 연결하지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.");
+    } finally {
+      setSaving(false);
     }
-
-    setForm(payload.credentials);
-    setMessage(payload.persisted ? "계정 정보 저장이 완료되었습니다." : "계정 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   function update<K extends keyof AuthCredentials>(key: K, value: AuthCredentials[K]) {
@@ -74,13 +87,13 @@ export function AdminAccountsForm({ initialCredentials }: { initialCredentials: 
       </label>
 
       {message ? (
-        <p className={message.includes("실패") ? "rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" : "rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary"}>
+        <p aria-live="polite" className={messageTone === "error" ? "rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" : "rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary"}>
           {message}
         </p>
       ) : null}
 
       <div className="flex flex-wrap gap-3">
-        <Button disabled={saving}>
+        <Button disabled={saving} aria-busy={saving}>
           <Save className="h-4 w-4" />
           {saving ? "저장 중" : "변경 저장"}
         </Button>

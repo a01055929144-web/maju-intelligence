@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/auth";
 
 // 임시 진단용 엔드포인트입니다 — NCP 데이터랩(Search Trend) 전환 후에도 scores가 빈 값으로
@@ -8,7 +8,7 @@ import { requireAdminSession } from "@/lib/auth";
 // 요구합니다(기존 시크릿은 코드에 그대로 노출돼 있어 사실상 보호 기능이 없었음).
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const session = await requireAdminSession();
   if (!session) {
     return NextResponse.json({ message: "Not found" }, { status: 404 });
