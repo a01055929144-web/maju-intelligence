@@ -46,6 +46,17 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const hasNotificationPhone = Boolean(form.notificationPhone.trim());
   const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim()), hasNotificationPhone].filter(Boolean).length;
   const anySectionSaving = Object.values(saveStates).some((state) => state.status === "saving");
+  const sectionDirty: Record<SettingsSection, boolean> = {
+    company: form.businessType !== savedForm.businessType || form.name !== savedForm.name || form.originAddress !== savedForm.originAddress || form.ownerName !== savedForm.ownerName,
+    messaging:
+      form.deliveryCompleteMessage !== savedForm.deliveryCompleteMessage ||
+      form.deliveryIssueMessage !== savedForm.deliveryIssueMessage ||
+      form.deliveryPartialMessage !== savedForm.deliveryPartialMessage ||
+      form.notificationPhone !== savedForm.notificationPhone ||
+      form.notificationSenderName !== savedForm.notificationSenderName ||
+      form.smsSenderPhone !== savedForm.smsSenderPhone,
+    telegram: form.telegramChatId !== savedForm.telegramChatId
+  };
 
   function updateSection(section: SettingsSection, patch: Partial<typeof form>) {
     setForm((current) => ({ ...current, ...patch }));
@@ -221,7 +232,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             </label>
           </div>
           <SectionSaveFooter
-            disabled={anySectionSaving}
+            disabled={anySectionSaving || !sectionDirty.company}
             label="회사 기준정보 저장"
             onSave={() => void saveSection("company")}
             state={saveStates.company}
@@ -299,7 +310,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <MessageTemplateManager mode="company" />
           </div>
           <SectionSaveFooter
-            disabled={anySectionSaving}
+            disabled={anySectionSaving || !sectionDirty.messaging}
             label="문자 설정 저장"
             onSave={() => void saveSection("messaging")}
             state={saveStates.messaging}
@@ -359,7 +370,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             ) : null}
           </div>
           <SectionSaveFooter
-            disabled={anySectionSaving}
+            disabled={anySectionSaving || !sectionDirty.telegram}
             label="텔레그램 설정 저장"
             onSave={() => void saveSection("telegram")}
             state={saveStates.telegram}
@@ -436,8 +447,10 @@ function SectionSaveFooter({ disabled, label, onSave, state }: { disabled: boole
           <span className={state.status === "error" ? "text-rose-700" : state.status === "saved" ? "text-emerald-700" : "text-slate-500"}>
             {state.message}
           </span>
+        ) : disabled && !saving ? (
+          <span className="text-emerald-700">저장된 최신 상태입니다.</span>
         ) : (
-          <span className="text-slate-400">이 카드의 변경사항만 확인하고 저장하세요.</span>
+          <span className="text-slate-500">이 카드에 저장하지 않은 변경사항이 있습니다.</span>
         )}
       </div>
       <Button className="w-full shrink-0 sm:w-auto" disabled={disabled} onClick={onSave} type="button">

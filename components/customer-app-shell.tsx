@@ -144,16 +144,19 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
               )}
             </div>
 
-            <nav className={`${mobileMenuOpen ? "block" : "hidden"} flex-1 overflow-auto px-3 py-2 lg:block`}>
+            <nav
+              aria-label="주요 작업공간"
+              className={`${mobileMenuOpen ? "block" : "hidden"} flex-1 overflow-auto px-3 py-3 lg:block`}
+            >
               {visibleNavigationGroups.map((group, groupIndex) => (
                 <div
-                  className={`${groupIndex === 0 ? "pb-3" : "border-t border-white/10 py-3"}`}
+                  className={`${groupIndex === 0 ? "pb-4" : "border-t border-white/10 py-4"}`}
                   key={group.label}
                 >
                   {!collapsed ? (
-                    <div className="mb-1.5 flex items-center gap-2 px-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{group.label}</p>
-                      <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-white/[0.06]" />
+                    <div className="mb-2 flex items-center gap-2.5 px-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{group.label}</p>
+                      <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-white/10" />
                     </div>
                   ) : null}
                   <div className="space-y-1">
@@ -167,10 +170,11 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                               key={`${group.label}-${item.label}`}
                               className={`maju-nav-item relative justify-center ${groupSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
                               href={scopedHref(firstChild.href)}
+                              aria-current={groupSelected ? "page" : undefined}
                               title={item.label}
                             >
                               {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-slate-950" : "text-slate-500"}`} />
+                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-white" : "text-slate-400"}`} />
                             </Link>
                           );
                         }
@@ -188,6 +192,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                                     key={`${group.label}-${item.label}-${child.label}`}
                                     className={`maju-nav-item relative py-1.5 text-[13px] ${childSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
                                     href={scopedHref(child.href)}
+                                    aria-current={childSelected ? "page" : undefined}
                                   >
                                     {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-white/80" /> : null}
                                     <span className="min-w-0 flex-1 truncate">{child.label}</span>
@@ -208,6 +213,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                             selected ? "maju-nav-item-active" : "maju-nav-item-idle"
                           }`}
                           href={itemHref}
+                          aria-current={selected ? "page" : undefined}
                           onClick={(event) => {
                             setCurrentSearch(itemHref.includes("?") ? `?${itemHref.split("?")[1]}` : "");
                             // 신규 리드와 영업 리드는 같은 지도 작업공간을 공유하지만 초기 데이터 정렬
@@ -220,7 +226,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                           }}
                           title={collapsed ? item.label : undefined}
                         >
-                          <item.icon className={`h-4 w-4 ${selected ? "text-slate-950" : "text-slate-500"}`} />
+                          <item.icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
                           {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
                           {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-xs text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
                         </Link>
@@ -239,7 +245,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                       <Building2 className="h-4 w-4" />
                     </Link>
                   ) : null}
-                  <Link aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
+                  <Link aria-current={isCurrentNavItem(pathname, settingsHref, currentSearch) ? "page" : undefined} aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`} href={settingsHref} title={settingsLabel}>
                     <Settings className="h-4 w-4" />
                   </Link>
                 </>
@@ -259,7 +265,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                         <Building2 className="h-4 w-4" />
                       </Link>
                     ) : null}
-                    <Link aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`} href={settingsHref} title={settingsLabel}>
+                    <Link aria-current={isCurrentNavItem(pathname, settingsHref, currentSearch) ? "page" : undefined} aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`} href={settingsHref} title={settingsLabel}>
                       <Settings className="h-4 w-4" />
                     </Link>
                   </div>
@@ -361,6 +367,9 @@ function isCurrentNavItem(pathname: string | null, href: string, currentSearch =
   if (!pathname) return false;
   const [hrefPath = "/", hrefQuery = ""] = href.split("?");
   if (hrefPath === "/") return pathname === "/";
+  // 지도 홈은 회사 설정을 포함한 /dashboard 하위 화면의 상위 경로이기도 합니다.
+  // 이 항목만큼은 정확한 경로에서만 활성화해야 설정 화면과 동시에 강조되지 않습니다.
+  if (hrefPath === "/dashboard" && pathname !== hrefPath) return false;
   if (!(pathname === hrefPath || pathname.startsWith(`${hrefPath}/`))) return false;
 
   const expected = new URLSearchParams(hrefQuery);

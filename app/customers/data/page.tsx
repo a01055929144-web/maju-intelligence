@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Loader2, RefreshCw, Save } from "lucide-react";
+import { FileSpreadsheet, Loader2, RefreshCw, Save, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
@@ -87,6 +87,7 @@ export default function CustomerDataManagementPage() {
   const [pageSize, setPageSize] = useState<HistoryPageSize>(10);
   const [hasMore, setHasMore] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -123,10 +124,18 @@ export default function CustomerDataManagementPage() {
   const completedCount = uploads.filter((upload) => upload.status === "completed").length;
   const failedCount = uploads.filter((upload) => upload.status === "failed").length;
   const duplicateCount = uploads.reduce((sum, upload) => sum + upload.duplicateCount, 0);
+  const filteredUploads = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("ko");
+    if (!normalizedQuery) return uploads;
+    return uploads.filter((upload) =>
+      [upload.filename, getUploadStatusLabel(upload.status), upload.createdAt]
+        .some((value) => value.toLocaleLowerCase("ko").includes(normalizedQuery))
+    );
+  }, [query, uploads]);
 
   // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
   type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
-  const { sortDirection, sortKey, sortedRows: sortedUploads, toggleSort } = useTableSort<UploadHistoryItem, UploadSortKey>(uploads, {
+  const { sortDirection, sortKey, sortedRows: sortedUploads, toggleSort } = useTableSort<UploadHistoryItem, UploadSortKey>(filteredUploads, {
     createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
     duplicateCount: (a, b) => a.duplicateCount - b.duplicateCount,
     filename: (a, b) => (a.filename || "").localeCompare(b.filename || "", "ko"),
@@ -190,6 +199,19 @@ export default function CustomerDataManagementPage() {
               <button className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 disabled:opacity-40" disabled={!hasMore || !uploadsLoaded} onClick={() => setPage((value) => value + 1)} type="button">다음</button>
             </div>
           </div>
+          <div className="border-b border-slate-200/80 bg-slate-50/70 px-4 py-3">
+            <label className="relative block max-w-xl">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="현재 페이지의 파일명·처리상태·등록일 검색"
+                type="search"
+                value={query}
+              />
+            </label>
+            {query ? <p className="mt-2 text-xs font-semibold text-slate-500">검색 결과 {filteredUploads.length.toLocaleString()}건</p> : null}
+          </div>
           <div>
             {!uploadsLoaded ? (
               <div className="flex min-h-40 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -222,6 +244,14 @@ export default function CustomerDataManagementPage() {
                 <Link className="mt-4 inline-flex h-9 items-center rounded-md bg-teal-700 px-3 text-xs font-bold text-white transition hover:bg-teal-800" href={dataRegistrationHref}>
                   데이터 등록하기
                 </Link>
+              </div>
+            ) : filteredUploads.length === 0 ? (
+              <div className="flex min-h-40 flex-col items-center justify-center p-6 text-center">
+                <Search className="h-5 w-5 text-slate-400" />
+                <p className="mt-3 text-sm font-bold text-slate-800">검색 조건과 일치하는 이력이 없습니다</p>
+                <button className="mt-3 h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => setQuery("")} type="button">
+                  검색 초기화
+                </button>
               </div>
             ) : (
               <>

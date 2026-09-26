@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Plus, Send, Share2, ShieldCheck, Smartphone, Trash2, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
@@ -13,6 +13,7 @@ import type { StaffInvitation } from "@/lib/store";
 
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
+type StaffListFilter = "all" | "accepted" | "needs-link" | "pending";
 
 function isErrorMessage(message: string) {
   return ["실패", "오류", "않", "필요", "맞지", "준비"].some((keyword) => message.includes(keyword));
@@ -78,16 +79,37 @@ export function StaffManagementPanel({
   const [creating, setCreating] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [listFilter, setListFilter] = useState<StaffListFilter>("all");
   const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length;
   const acceptedCount = invitations.filter((invitation) => invitation.status === "accepted").length;
   const linkedCount = invitations.filter((invitation) => Boolean(invitation.acceptedBy)).length;
   const acceptedWithoutIdentityCount = invitations.filter((invitation) => invitation.status === "accepted" && !invitation.acceptedBy).length;
   const unmatchedAcceptedCount = invitations.filter((invitation) => invitation.status === "accepted" && invitation.matchedCustomerCount === 0).length;
-  const totalPages = Math.max(1, Math.ceil(invitations.length / pageSize));
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("ko");
+  const filteredInvitations = invitations.filter((invitation) => {
+    const matchesFilter =
+      listFilter === "all" ||
+      (listFilter === "accepted" && invitation.status === "accepted") ||
+      (listFilter === "pending" && invitation.status === "pending") ||
+      (listFilter === "needs-link" && (invitation.membershipOnly || (invitation.status === "accepted" && (!invitation.acceptedBy || invitation.matchedCustomerCount === 0))));
+    if (!matchesFilter) return false;
+    if (!normalizedSearchQuery) return true;
+
+    return [
+      invitation.employeeName,
+      invitation.employeePhone,
+      invitation.role,
+      invitation.acceptedBy,
+      invitation.assignedManagerName,
+      invitation.assignedVehicle
+    ].some((value) => value?.toLocaleLowerCase("ko").includes(normalizedSearchQuery));
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredInvitations.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const pageStart = invitations.length ? (currentPage - 1) * pageSize + 1 : 0;
-  const pageEnd = Math.min(invitations.length, currentPage * pageSize);
-  const pagedInvitations = invitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageStart = filteredInvitations.length ? (currentPage - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(filteredInvitations.length, currentPage * pageSize);
+  const pagedInvitations = filteredInvitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   function addInviteRow() {
     setInviteRows((current) => [...current, makeEmptyInviteRow()]);
@@ -317,7 +339,48 @@ export function StaffManagementPanel({
           </div>
 
           {invitations.length ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
+              <label className="relative block">
+                <span className="sr-only">직원 검색</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-9 text-sm font-semibold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="이름, 연락처, 카카오/소셜 ID, 담당자·차량 검색"
+                  value={searchQuery}
+                />
+                {searchQuery ? (
+                  <button
+                    aria-label="검색어 지우기"
+                    className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setPage(1);
+                    }}
+                    type="button"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="직원 연결 상태 필터"
+                  className="h-10 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => {
+                    setListFilter(event.target.value as StaffListFilter);
+                    setPage(1);
+                  }}
+                  value={listFilter}
+                >
+                  <option value="all">전체 상태</option>
+                  <option value="accepted">가입 완료</option>
+                  <option value="needs-link">연결 확인 필요</option>
+                  <option value="pending">초대 대기</option>
+                </select>
               <label className="flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
                 보기
                 <select
@@ -336,7 +399,7 @@ export function StaffManagementPanel({
                 </select>
               </label>
               <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500">
-                {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {invitations.length.toLocaleString()}명
+                {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredInvitations.length.toLocaleString()}명
               </span>
               <button
                 className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -357,6 +420,7 @@ export function StaffManagementPanel({
               >
                 다음
               </button>
+              </div>
             </div>
           ) : null}
 
@@ -536,6 +600,22 @@ export function StaffManagementPanel({
                   })}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+          {invitations.length && !filteredInvitations.length ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
+              <p className="text-sm font-black text-slate-700">조건에 맞는 직원이 없습니다.</p>
+              <button
+                className="mt-2 text-xs font-bold text-teal-700 hover:text-teal-900"
+                onClick={() => {
+                  setSearchQuery("");
+                  setListFilter("all");
+                  setPage(1);
+                }}
+                type="button"
+              >
+                검색·필터 초기화
+              </button>
             </div>
           ) : null}
           {!invitations.length ? (
