@@ -87,22 +87,22 @@ function describeOAuthError(errorCode: string): string {
   if (!errorCode) return "";
 
   const knownCodes: Record<string, string> = {
-    invalid_oauth_state: "로그인 요청이 만료되었거나 유효하지 않습니다. 처음부터 다시 시도해주세요.",
-    kakao_callback_failed: "카카오 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-    kakao_token_failed: "카카오 인증 토큰 발급에 실패했습니다. 카카오 디벨로퍼스에 등록한 Redirect URI가 정확한지 확인해주세요.",
-    kakao_user_failed: "카카오 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
-    missing_kakao_code: "카카오 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
-    missing_kakao_env: "서버에 카카오 로그인 환경변수가 아직 설정되지 않았습니다.",
-    naver_callback_failed: "네이버 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-    naver_token_failed: "네이버 인증 토큰 발급에 실패했습니다. 네이버 디벨로퍼스에 등록한 Callback URL이 정확한지 확인해주세요.",
-    naver_user_failed: "네이버 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
-    missing_naver_code: "네이버 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
-    missing_naver_env: "서버에 네이버 로그인 환경변수가 아직 설정되지 않았습니다.",
-    google_callback_failed: "구글 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-    google_token_failed: "구글 인증 토큰 발급에 실패했습니다. Google Cloud Console에 등록한 리디렉션 URI가 정확한지 확인해주세요.",
-    google_user_failed: "구글 사용자 정보를 가져오지 못했습니다. 다시 시도해주세요.",
-    missing_google_code: "구글 인증 코드를 받지 못했습니다. 링크를 다시 눌러 처음부터 진행해주세요.",
-    missing_google_env: "서버에 구글 로그인 환경변수가 아직 설정되지 않았습니다."
+    invalid_oauth_state: "로그인 시간이 만료되었습니다. 다시 시도해주세요.",
+    kakao_callback_failed: "카카오 로그인을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    kakao_token_failed: "카카오 인증을 완료하지 못했습니다. 관리자에게 문의해주세요.",
+    kakao_user_failed: "카카오 계정 정보를 확인하지 못했습니다. 다시 시도해주세요.",
+    missing_kakao_code: "카카오 인증이 취소되었습니다. 다시 시도해주세요.",
+    missing_kakao_env: "카카오 로그인을 사용할 수 없습니다. 관리자에게 문의해주세요.",
+    naver_callback_failed: "로그인을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    naver_token_failed: "인증을 완료하지 못했습니다. 관리자에게 문의해주세요.",
+    naver_user_failed: "계정 정보를 확인하지 못했습니다. 다시 시도해주세요.",
+    missing_naver_code: "인증이 취소되었습니다. 다시 시도해주세요.",
+    missing_naver_env: "현재 로그인을 사용할 수 없습니다. 관리자에게 문의해주세요.",
+    google_callback_failed: "로그인을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    google_token_failed: "인증을 완료하지 못했습니다. 관리자에게 문의해주세요.",
+    google_user_failed: "계정 정보를 확인하지 못했습니다. 다시 시도해주세요.",
+    missing_google_code: "인증이 취소되었습니다. 다시 시도해주세요.",
+    missing_google_env: "현재 로그인을 사용할 수 없습니다. 관리자에게 문의해주세요."
   };
 
   return knownCodes[errorCode] || "로그인 요청을 처리하지 못했습니다. 초대 링크에서 다시 시작해주세요.";

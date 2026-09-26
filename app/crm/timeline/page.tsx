@@ -419,7 +419,7 @@ export default function CrmTimelinePage() {
     setAddressResults([]);
     setAddressSearchMessage("");
     setDetailTab(workspaceSection === "history" ? "history" : "ledger");
-  }, [operationFilter, selectedCustomer, workspaceSection]);
+  }, [hasCustomers, operationFilter, selectedCustomer, workspaceSection]);
 
   useEffect(() => {
     if (!isEditing) return;

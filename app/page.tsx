@@ -8,10 +8,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Banknote,
-  BarChart3,
   Building2,
   Check,
-  CheckCircle2,
   ClipboardList,
   Clock,
   Database,
@@ -21,7 +19,6 @@ import {
   Info,
   LucideIcon,
   Save,
-  Route,
   Sparkles,
   Upload
 } from "lucide-react";
@@ -181,6 +178,9 @@ export default function Home() {
     setUploadType(requestedUploadType);
     setFieldMap(autoMapHeaders(headers, uploadTemplates[requestedUploadType].fields));
     setScreen("onboarding");
+    // URL의 최초 등록 유형만 반영합니다. 업로드 후 headers 변경 때 다시 실행하면 사용자가
+    // 직접 수정한 필드 매핑을 덮어쓰므로 의도적으로 마운트 시 한 번만 실행합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function downloadTemplate(type: UploadTemplateType) {

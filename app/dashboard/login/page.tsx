@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Building2, Check, Clock3, Loader2, LogIn, MapPinned, Route, Smartphone, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,12 @@ export default function CustomerLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [recentLoginEmail, setRecentLoginEmail] = useState(readRecentLoginEmail);
+  const [recentLoginEmail, setRecentLoginEmail] = useState("");
   const [remember, setRemember] = useState(false);
+
+  useEffect(() => {
+    setRecentLoginEmail(readRecentLoginEmail());
+  }, []);
 
   async function login(nextEmail = email, nextPassword = password) {
     setLoading(true);
