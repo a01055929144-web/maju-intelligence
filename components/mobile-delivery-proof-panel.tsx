@@ -328,7 +328,7 @@ export function MobileDeliveryProofPanel({
   }, [customerId]);
 
   return (
-    <section className={`mobile-card rounded-2xl border p-4 ${files.length ? "has-files" : ""}`} id="delivery-proof">
+    <section aria-busy={saving} className={`mobile-card rounded-2xl border p-4 ${files.length ? "has-files" : ""}`} id="delivery-proof">
       <div className="proof-heading flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-400/15 text-amber-400">
@@ -361,6 +361,13 @@ export function MobileDeliveryProofPanel({
       </label>
       {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="relative rounded-lg bg-[#111827] p-2 ring-1 ring-inset ring-slate-700" key={fileKey(file)}><ImageIcon className="h-8 w-8 text-teal-400" /><p className="mt-1 truncate text-[10px] font-bold text-slate-300">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950" onClick={() => removeFile(index)} type="button"><X className="h-3.5 w-3.5" /></button></div>)}</div> : null}
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
+
+      {files.length ? (
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-teal-500/20 bg-teal-500/10 px-3 py-2 text-xs font-bold text-teal-200">
+          <span>사진 {files.length}장 준비됨</span>
+          <span>메시지 확인 후 저장</span>
+        </div>
+      ) : null}
 
       <details className="mobile-card-raised group mt-3 rounded-xl border" open={files.length > 0}>
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black">
@@ -458,10 +465,13 @@ export function MobileDeliveryProofPanel({
         ) : null}
       </p>
 
-      <Button className="mt-3 h-14 w-full bg-[#FEE500] font-black text-slate-950 hover:bg-[#f5dc00]" disabled={saving || status === "saved"} onClick={submit}>
+      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-2 mt-3 rounded-2xl border border-slate-700 bg-[#111827]/95 p-2 shadow-[0_-8px_28px_rgba(0,0,0,.35)] backdrop-blur">
+      <Button className="h-14 w-full bg-[#FEE500] font-black text-slate-950 hover:bg-[#f5dc00]" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
         {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "3. 사진 + 메시지 카카오로 공유"}
       </Button>
+      {saving ? <p aria-live="polite" className="mt-2 text-center text-[11px] font-bold text-slate-300">화면을 닫지 마세요 · {progressLabel || "처리 중"}</p> : null}
+      </div>
 
       {status === "idle" && files.length ? (
         <p className="mt-2 text-center text-[11px] font-bold text-slate-400">

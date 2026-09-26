@@ -39,16 +39,16 @@ export function ReportActions({ companyName }: { readonly companyName: string })
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button className="maju-button-secondary h-10 px-4 text-sm" onClick={saveAsPdf} type="button">
+    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+      <button className="maju-button-secondary h-10 justify-center px-4 text-sm" onClick={saveAsPdf} type="button">
         <Download className="h-4 w-4" />
         PDF 저장
       </button>
-      <button className="maju-button-secondary h-10 px-4 text-sm disabled:cursor-wait disabled:opacity-60" disabled={isSharing} onClick={() => void shareReport()} type="button">
+      <button className="maju-button-secondary h-10 justify-center px-4 text-sm disabled:cursor-wait disabled:opacity-60" disabled={isSharing} onClick={() => void shareReport()} type="button">
         {isSharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
         {isSharing ? "공유 준비 중" : "공유"}
       </button>
-      {message ? <span className="w-full text-xs font-medium text-slate-500 sm:w-auto" role="status">{message}</span> : null}
+      {message ? <span className="col-span-2 w-full text-xs font-medium text-slate-500 sm:w-auto" role="status">{message}</span> : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowLeft, RotateCcw } from "lucide-react";
 
 export default function SalesAssistantError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
@@ -12,10 +13,10 @@ export default function SalesAssistantError({ reset }: { error: Error & { digest
           </span>
           <h1 className="text-lg font-bold text-slate-950">영업 초안을 불러오지 못했습니다</h1>
           <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">저장된 내용은 유지됩니다. 잠시 후 다시 시도해 주세요.</p>
-          <button className="maju-button-primary mt-6" onClick={reset} type="button">
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            다시 시도
-          </button>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+            <button className="maju-button-primary justify-center" onClick={reset} type="button"><RotateCcw className="h-4 w-4" aria-hidden="true" />다시 시도</button>
+            <Link className="maju-button-secondary justify-center" href="/dashboard"><ArrowLeft className="h-4 w-4" aria-hidden="true" />지도 홈</Link>
+          </div>
         </div>
       </section>
     </main>

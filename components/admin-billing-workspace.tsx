@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { Loader2, Search, Save, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import { useTableSort } from "@/lib/use-table-sort";
@@ -39,13 +39,31 @@ const statusTone: Record<AdminSubscriptionRow["status"], string> = {
 
 type SortKey = "companyName" | "lastPaymentStatus" | "nextBillingDate" | "planAmountWon" | "status";
 
-export function AdminBillingWorkspace({ initialSubscriptions }: { readonly initialSubscriptions: AdminSubscriptionRow[] }) {
+export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: { readonly initialSubscriptions: AdminSubscriptionRow[]; readonly loadError?: string }) {
   const [rows, setRows] = useState(initialSubscriptions);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingCompanyId, setSavingCompanyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | AdminSubscriptionRow["status"]>("all");
 
-  const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<AdminSubscriptionRow, SortKey>(rows, {
+  const filteredRows = useMemo(() => {
+    const keyword = query.trim().toLocaleLowerCase("ko");
+    return rows.filter((row) => {
+      const matchesStatus = statusFilter === "all" || row.status === statusFilter;
+      const matchesQuery = !keyword || [row.companyName, row.cardNumberMasked || "", row.lastPaymentStatus || ""].some((value) => value.toLocaleLowerCase("ko").includes(keyword));
+      return matchesStatus && matchesQuery;
+    });
+  }, [query, rows, statusFilter]);
+
+  const statusCounts = useMemo(() => ({
+    active: rows.filter((row) => row.status === "active").length,
+    pending_card: rows.filter((row) => row.status === "pending_card").length,
+    paused: rows.filter((row) => row.status === "paused").length,
+    canceled: rows.filter((row) => row.status === "canceled").length
+  }), [rows]);
+
+  const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<AdminSubscriptionRow, SortKey>(filteredRows, {
     companyName: (a, b) => a.companyName.localeCompare(b.companyName, "ko"),
     lastPaymentStatus: (a, b) => (a.lastPaymentStatus || "").localeCompare(b.lastPaymentStatus || ""),
     nextBillingDate: (a, b) => (a.nextBillingDate || "").localeCompare(b.nextBillingDate || ""),
@@ -85,7 +103,15 @@ export function AdminBillingWorkspace({ initialSubscriptions }: { readonly initi
 
   return (
     <div className="space-y-4">
-      {error ? <div className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{error}</div> : null}
+      {loadError ? <div role="alert" className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{loadError}</div> : null}
+      {error ? <div aria-live="assertive" className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{error}</div> : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <BillingMetric label="정상 청구중" value={statusCounts.active} tone="success" />
+        <BillingMetric label="카드 미등록" value={statusCounts.pending_card} tone="warning" />
+        <BillingMetric label="일시중지" value={statusCounts.paused} />
+        <BillingMetric label="해지됨" value={statusCounts.canceled} tone="danger" />
+      </div>
 
       <section className="maju-section-card">
         <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
@@ -95,7 +121,32 @@ export function AdminBillingWorkspace({ initialSubscriptions }: { readonly initi
           </div>
           <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{rows.length.toLocaleString()}개 고객사</Badge>
         </div>
-        <div className="overflow-x-auto">
+
+        <div className="grid gap-3 border-b border-slate-200 bg-slate-50/60 p-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-center">
+          <label className="flex h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+            <Search className="h-4 w-4 text-slate-400" />
+            <span className="sr-only">고객사 또는 카드번호 검색</span>
+            <input className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" onChange={(event) => setQuery(event.target.value)} placeholder="고객사, 카드번호, 결제 상태 검색..." value={query} />
+            {query ? <button aria-label="검색어 지우기" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setQuery("")} type="button"><X className="h-4 w-4" /></button> : null}
+          </label>
+          <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-500" onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} value={statusFilter}>
+            <option value="all">전체 결제 상태</option>
+            {(Object.keys(statusLabels) as AdminSubscriptionRow["status"][]).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+          </select>
+          <div className="text-sm font-bold text-slate-500">검색 결과 <strong className="text-slate-950">{filteredRows.length.toLocaleString()}개</strong></div>
+        </div>
+
+        <div className="grid gap-3 p-4 md:hidden">
+          {sortedRows.map((row) => <BillingMobileCard drafts={drafts} key={row.id} row={row} saving={savingCompanyId === row.companyId} setDrafts={setDrafts} onSave={savePlanAmount} />)}
+          {!sortedRows.length ? (
+            <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
+              <p className="font-black text-slate-800">{rows.length ? "검색 조건에 맞는 고객사가 없습니다." : "아직 결제 관리 대상 고객사가 없습니다."}</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{rows.length ? "검색어 또는 결제 상태를 변경해보세요." : "고객사가 결제 관리 화면을 한 번 열면 여기에 표시됩니다."}</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[960px] border-separate border-spacing-0 text-sm">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="text-left text-xs font-black text-slate-500">
@@ -160,10 +211,10 @@ export function AdminBillingWorkspace({ initialSubscriptions }: { readonly initi
                   </td>
                 </tr>
               ))}
-              {!rows.length ? (
+              {!sortedRows.length ? (
                 <tr>
                   <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={6}>
-                    아직 결제 관리 대상 고객사가 없습니다. 고객사가 결제 관리 화면을 한 번 열면 여기에 표시됩니다.
+                    {rows.length ? "검색 조건에 맞는 고객사가 없습니다. 검색어 또는 결제 상태를 변경해보세요." : "아직 결제 관리 대상 고객사가 없습니다. 고객사가 결제 관리 화면을 한 번 열면 여기에 표시됩니다."}
                   </td>
                 </tr>
               ) : null}
@@ -173,4 +224,17 @@ export function AdminBillingWorkspace({ initialSubscriptions }: { readonly initi
       </section>
     </div>
   );
+}
+
+function BillingMetric({ label, tone = "default", value }: { label: string; tone?: "danger" | "default" | "success" | "warning"; value: number }) {
+  const toneClass = tone === "success" ? "border-emerald-200 bg-emerald-50" : tone === "warning" ? "border-amber-200 bg-amber-50" : tone === "danger" ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-white";
+  return <div className={`rounded-lg border p-4 ${toneClass}`}><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}<span className="ml-1 text-sm text-slate-500">곳</span></p></div>;
+}
+
+function BillingMobileCard({ drafts, onSave, row, saving, setDrafts }: { drafts: Record<string, string>; onSave: (companyId: string) => void; row: AdminSubscriptionRow; saving: boolean; setDrafts: Dispatch<SetStateAction<Record<string, string>>> }) {
+  return <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-black text-slate-950">{row.companyName}</p><p className="mt-1 text-xs font-semibold text-slate-500">{row.cardNumberMasked || "등록된 카드 없음"}</p></div><Badge className={statusTone[row.status]}>{statusLabels[row.status]}</Badge></div>
+    <div className="mt-4 grid grid-cols-2 gap-2 text-sm"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">다음 청구일</p><p className="mt-1 font-black">{row.nextBillingDate || "미정"}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">최근 결제</p><p className="mt-1 font-black">{row.lastPaymentStatus === "succeeded" ? "성공" : row.lastPaymentStatus ? "실패" : "내역 없음"}</p></div></div>
+    <label className="mt-4 block text-xs font-bold text-slate-500">월 이용료</label><div className="mt-1 flex gap-2"><input className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 px-3 text-right font-bold outline-none focus:border-teal-500" inputMode="numeric" min={0} onChange={(event) => setDrafts((current) => ({ ...current, [row.companyId]: event.target.value }))} type="number" value={drafts[row.companyId] ?? row.planAmountWon} /><button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:opacity-60" disabled={saving} onClick={() => onSave(row.companyId)} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}저장</button></div>
+  </article>;
 }

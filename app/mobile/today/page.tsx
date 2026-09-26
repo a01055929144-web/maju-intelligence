@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, History, MessageSquareText, Route, Store } from "lucide-react";
+import { Building2, CheckCircle2, History, MessageSquareText, PackageCheck, Route, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
@@ -70,6 +70,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         .find((stop) => !completedCustomerIds.has(stop.id))
     : undefined;
   const selectedStopCompleted = selectedStop ? completedCustomerIds.has(selectedStop.id) : false;
+  const completedCount = todayStops.filter((stop) => completedCustomerIds.has(stop.id)).length;
+  const pendingCount = Math.max(0, todayStops.length - completedCount);
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
 
@@ -102,6 +104,21 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </p>
           ) : null}
 
+          {sourceReady && isPersonalized ? (
+            <section className={`rounded-xl border px-4 py-3 ${pendingCount ? "border-blue-400/20 bg-blue-400/10" : "border-teal-400/20 bg-teal-400/10"}`} aria-label="오늘 배송 현황">
+              <div className="flex items-center gap-3">
+                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${pendingCount ? "bg-blue-400/15 text-blue-300" : "bg-teal-400/15 text-teal-300"}`}>
+                  {pendingCount ? <PackageCheck className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold">{pendingCount ? `남은 배송 ${pendingCount}곳` : "오늘 배송을 모두 완료했습니다"}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-400">완료 {completedCount}곳 · 전체 {todayStops.length}곳</p>
+                </div>
+                {pendingCount ? <a className="inline-flex min-h-10 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-bold text-slate-950" href="#selected-customer">바로 처리</a> : null}
+              </div>
+            </section>
+          ) : null}
+
           <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
@@ -110,7 +127,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
             <p className={`text-xs font-semibold ${selectedStopCompleted ? "text-teal-400" : "mobile-warning"}`}>
-              {selectedStopCompleted ? "배송완료" : "진행 중"}
+              {selectedStopCompleted ? "배송완료 · 기록 확인 가능" : "다음 배송 · 처리 대기"}
             </p>
                     <h2 className="mt-1 truncate text-xl font-bold">{selectedStop.name}</h2>
                     <p className="mobile-muted mt-1 truncate text-xs font-bold">{selectedStop.address || selectedStop.region} · {selectedStop.distanceKm || 0}km</p>
@@ -129,7 +146,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 />
               </div>
             </section>
-          ) : <MobileOperationalEmptyState />}
+          ) : null}
 
           {selectedStop ? (
             <>
@@ -159,7 +176,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 <MobileVisitNoteForm customerId={selectedStop.id} customerName={selectedStop.name} />
               </details>
             </>
-          ) : <MobileOperationalEmptyState />}
+          ) : null}
         </div>
 
         <footer aria-label="모바일 보조 메뉴" className="mobile-bottom-nav sticky bottom-0 z-20 grid grid-cols-4 border-t px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5">
