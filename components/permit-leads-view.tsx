@@ -1340,6 +1340,35 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     keywordVolumeSourceConfigured ? "검색량 연결" : "검색량 설정 필요",
     googleReviewsSourceConfigured ? "리뷰 연결" : "리뷰 설정 필요"
   ].join(" · ");
+  const isSalesLeadPage = leadQualityMode === "keyword";
+  const activeFilterCount = [
+    periodFilter !== "all",
+    openDateFilterMode !== "all",
+    Boolean(industryFilter),
+    Boolean(actionFilter),
+    Boolean(statusFilter),
+    Boolean(gradeFilter),
+    hasPhoneOnly,
+    hasInstagramOnly,
+    !excludeExcluded,
+    showNearbyOnly,
+    Boolean(tableSearch)
+  ].filter(Boolean).length;
+  const leadPageCopy = isSalesLeadPage
+    ? {
+        eyebrow: "SALES PIPELINE",
+        title: "영업 리드",
+        description: "검색 수요와 리뷰 신호가 높은 운영 매장을 골라 연락·방문·견적 후속까지 이어갑니다.",
+        resultLabel: "영업 후보",
+        searchPlaceholder: "상호명·지역·전화·인스타 ID로 영업 후보 검색"
+      }
+    : {
+        eyebrow: "NEW OPENING SIGNALS",
+        title: "신규 리드",
+        description: "공공 인허가의 최신 개업 신호를 빠르게 확인하고, 선점할 매장을 골라 영업 후보로 준비합니다.",
+        resultLabel: "신규 개업 후보",
+        searchPlaceholder: "상호명·주소·전화로 신규 개업 후보 검색"
+      };
 
   function LeadSortableHeader({
     className = "",
@@ -1365,15 +1394,35 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
   return (
     <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-4 sm:pb-6">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-8">
+      <div className={`overflow-hidden rounded-2xl border p-4 shadow-sm sm:p-5 ${isSalesLeadPage ? "border-violet-100 bg-gradient-to-br from-white via-white to-violet-50" : "border-teal-100 bg-gradient-to-br from-white via-white to-teal-50"}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <p className={`text-[10px] font-black tracking-[0.18em] ${isSalesLeadPage ? "text-violet-600" : "text-teal-600"}`}>{leadPageCopy.eyebrow}</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">{leadPageCopy.title}</h2>
+            <p className="mt-1.5 text-xs font-semibold leading-5 text-slate-600 sm:text-sm">{leadPageCopy.description}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            <a className={`rounded-xl border px-3 py-2.5 text-left transition ${!isSalesLeadPage ? "border-teal-600 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200"}`} href="/dashboard?view=leads&leadType=permit">
+              <span className="block text-xs font-black">신규 리드</span>
+              <span className={`mt-0.5 block text-[10px] font-semibold ${!isSalesLeadPage ? "text-teal-100" : "text-slate-400"}`}>인허가 · 개업일 기준</span>
+            </a>
+            <a className={`rounded-xl border px-3 py-2.5 text-left transition ${isSalesLeadPage ? "border-violet-600 bg-violet-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200"}`} href="/dashboard?view=leads&leadType=keyword">
+              <span className="block text-xs font-black">영업 리드</span>
+              <span className={`mt-0.5 block text-[10px] font-semibold ${isSalesLeadPage ? "text-violet-100" : "text-slate-400"}`}>검색량 · 실행 기준</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div className={`grid gap-2 sm:grid-cols-2 ${isSalesLeadPage ? "xl:grid-cols-6" : "xl:grid-cols-4"}`}>
         <DirectoryStat
           active
-          label={leadQualityMode === "keyword" ? PERMIT_LEAD_TYPE_LABEL.sales : PERMIT_LEAD_TYPE_LABEL.new}
+          label={isSalesLeadPage ? "전체 영업 후보" : "전체 신규 개업"}
           onClick={leadQualityMode === "keyword" ? focusSalesLeads : focusNewLeads}
-          title={leadQualityMode === "keyword" ? PERMIT_LEAD_TYPE_DESCRIPTION.sales : PERMIT_LEAD_TYPE_DESCRIPTION.new}
+          title={isSalesLeadPage ? PERMIT_LEAD_TYPE_DESCRIPTION.sales : PERMIT_LEAD_TYPE_DESCRIPTION.new}
           value={summary ? `${(leadQualityMode === "keyword" ? summary.salesLeadCount : summary.newLeadCount).toLocaleString()}곳` : "—"}
         />
-        {leadQualityMode === "permit" ? <DirectoryStat
+        {!isSalesLeadPage ? <DirectoryStat
           active={periodFilter === "today"}
           label="오늘 신규"
           onClick={focusTodayNewLeads}
@@ -1394,14 +1443,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           title="전화번호가 확인된 리드만 봅니다."
           value={summary ? `${summary.hasPhone.toLocaleString()}곳` : "—"}
         />
-        {leadQualityMode === "keyword" ? <DirectoryStat
+        {isSalesLeadPage ? <DirectoryStat
           active={statusFilter === "견적 요청"}
           label="견적 요청"
           onClick={() => focusLeadStatus("견적 요청", queues?.quoteRequests || [])}
           title="견적 요청 상태인 리드만 봅니다."
           value={summary ? `${summary.quoteRequests.toLocaleString()}곳` : "—"}
         /> : null}
-        {leadQualityMode === "keyword" ? <DirectoryStat
+        {isSalesLeadPage ? <DirectoryStat
           active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER}
           label="견적 후속"
           onClick={() => focusQuoteFollowUps(queues?.quoteFollowUps || [])}
@@ -1831,6 +1880,18 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
 
       <div className="maju-section-card !overflow-visible">
         <div className="flex flex-col gap-2 border-b border-slate-200 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-slate-950">{leadPageCopy.resultLabel}</p>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isSalesLeadPage ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>
+                {filteredLeads.length.toLocaleString()}곳
+              </span>
+              {activeFilterCount ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">필터 {activeFilterCount}개 적용</span> : null}
+            </div>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+              {isSalesLeadPage ? "우선순위를 검토하고 바로 연락하거나 후속 일정을 관리하세요." : "개업 시점과 업종을 좁혀 먼저 확인할 매장을 선별하세요."}
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {(["table", "map"] as const).map((mode) => (
               <button
@@ -1844,14 +1905,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 {mode === "table" ? "표" : "지도"}
               </button>
             ))}
-          </div>
-          <div className="flex h-8 items-center rounded-md border border-slate-200 bg-white p-0.5" title="두 리드 화면은 목적과 도구가 분리되어 있습니다.">
-            <a className={`rounded px-2.5 py-1 text-xs font-black transition ${leadQualityMode === "permit" ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`} href="/dashboard?view=leads&leadType=permit">
-              신규 리드
-            </a>
-            <a className={`rounded px-2.5 py-1 text-xs font-black transition ${leadQualityMode === "keyword" ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`} href="/dashboard?view=leads&leadType=keyword">
-              영업 리드
-            </a>
           </div>
           <div className="flex w-full items-center gap-1.5 sm:w-auto">
             <button className="maju-button-secondary h-8 text-xs" onClick={() => void downloadPermitLeadsExcel()} type="button">
@@ -1879,7 +1932,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               <input
                 className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-xs font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
                 onChange={(event) => setTableSearch(event.target.value)}
-                placeholder="상호명·주소·전화·인스타 ID 검색"
+                placeholder={leadPageCopy.searchPlaceholder}
                 value={tableSearch}
               />
             </label>
@@ -1933,7 +1986,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 ))}
               </select>
             ) : null}
-            <select
+            {isSalesLeadPage ? <select
               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => {
                 setStatusFilter(event.target.value);
@@ -1951,14 +2004,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               <option value="DM 발송">DM 발송</option>
               <option value="방문 대상">방문 대상</option>
               <option value="검토 필요">검토 필요</option>
-            </select>
+            </select> : null}
             <button
               className="flex items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-100"
               onClick={() => setShowAdvancedFilters((value) => !value)}
               type="button"
             >
               <ListFilter className="h-3.5 w-3.5" />
-              고급 필터
+              상세 필터{activeFilterCount ? ` · ${activeFilterCount}` : ""}
               <ChevronDown className={`h-3.5 w-3.5 transition ${showAdvancedFilters ? "rotate-180" : ""}`} />
             </button>
           </div>

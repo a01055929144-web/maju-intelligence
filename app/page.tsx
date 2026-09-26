@@ -553,7 +553,7 @@ export default function Home() {
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
       subtitle="아직 없는 거래처 또는 매출 데이터를 새로 등록합니다."
-      title="거래처 관리 · 등록"
+      title="데이터 등록"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
       workspaceRole={isAdminPreview ? undefined : sessionWorkspaceRole || undefined}
     >
@@ -683,7 +683,7 @@ function WorkspaceModeTabs({
         <p className="truncate text-sm font-black text-slate-950">{copy[0]}</p>
         <InfoTooltip text={copy[1]} />
       </div>
-      <div className="grid w-full gap-1 rounded-md border border-slate-200 bg-slate-50 p-1 sm:w-auto sm:grid-cols-3">
+      <div aria-label="데이터 등록 작업 단계" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 sm:w-auto" role="tablist">
         {tabs.map(([key, label]) => {
           const disabled = key === "report" && !hasReport;
           return (
@@ -697,7 +697,9 @@ function WorkspaceModeTabs({
                   : "bg-transparent text-slate-600 hover:bg-white hover:text-slate-950"
             }`}
             disabled={disabled}
+            aria-selected={active === key}
             onClick={() => onMove(key)}
+            role="tab"
             type="button"
             title={disabled ? "거래처 또는 매출 데이터를 저장한 뒤 리포트를 확인할 수 있습니다." : undefined}
           >
@@ -923,8 +925,8 @@ function DataRegistrationSidePanel({
   ];
 
   return (
-    <nav className="maju-section-card h-fit space-y-1 p-2 lg:sticky lg:top-20 lg:self-start">
-      <div className="px-2 pb-2 pt-1">
+    <nav aria-label="등록 데이터 유형" className="maju-section-card grid h-fit grid-cols-3 gap-1 p-2 lg:sticky lg:top-20 lg:block lg:space-y-1 lg:self-start">
+      <div className="col-span-3 px-2 pb-2 pt-1">
         <p className="text-xs font-semibold text-slate-500">데이터 등록</p>
         <p className="mt-1 text-xs font-medium leading-5 text-slate-500">유형을 선택해 바로 시작하세요.</p>
       </div>
@@ -933,22 +935,23 @@ function DataRegistrationSidePanel({
         return (
           <button
             key={item.key}
-            className={`flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition ${selected ? "bg-teal-700 text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
+            aria-current={selected ? "step" : undefined}
+            className={`flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-lg px-2 text-center text-sm transition lg:min-h-12 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-left ${selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
             onClick={() => onSelect(item.key)}
             type="button"
           >
             <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-semibold ${selected ? "bg-white/10 text-white ring-1 ring-inset ring-white/20" : "bg-slate-100 text-slate-500"}`}>
               {item.step}
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <item.icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+            <span className="min-w-0 lg:flex-1">
+              <span className="flex min-w-0 items-center justify-center gap-1.5 lg:justify-start">
+                <item.icon className={`hidden h-3.5 w-3.5 shrink-0 lg:block ${selected ? "text-white" : "text-slate-400"}`} />
                 <span className="block truncate text-sm font-semibold">{item.label}</span>
               </span>
-              <span className={`block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{item.description}</span>
+              <span className={`hidden truncate text-xs font-medium lg:block ${selected ? "text-white/80" : "text-slate-500"}`}>{item.description}</span>
             </span>
             {item.badge ? (
-              <Badge className={selected ? "shrink-0 bg-white px-2 py-0.5 text-xs text-slate-950 ring-1 ring-inset ring-white/70" : "shrink-0 bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"}>
+              <Badge className={selected ? "hidden shrink-0 bg-white px-2 py-0.5 text-xs text-slate-950 ring-1 ring-inset ring-white/70 lg:inline-flex" : "hidden shrink-0 bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200 lg:inline-flex"}>
                 {item.badge}
               </Badge>
             ) : null}

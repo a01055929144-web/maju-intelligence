@@ -538,39 +538,60 @@ export default function CrmSummaryPage() {
             </p>
           ) : null}
           {exportMessage ? <p className="no-print mx-3 -mt-1 mb-2 rounded-md bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{exportMessage}</p> : null}
-          <div className="no-print flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50/60 p-3 lg:flex-row lg:items-center lg:justify-between">
-            <label className="maju-search-field lg:max-w-xs">
-              <Search className="h-4 w-4 text-slate-400" />
-              <input
-                aria-label="거래처 검색"
-                className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
-                onChange={(event) => {
-                  setTableSearch(event.target.value);
-                  setTablePage(1);
-                }}
-                placeholder="상호명, 대표자, 연락처, 사업자번호 검색"
-                value={tableSearch}
-              />
-            </label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(["all", "정상", "휴업", "폐업", "확인 필요"] as const).map((status) => (
-                <button
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-black transition ${
-                    statusFilter === status
-                      ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
-                      : "border-transparent bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-                  }`}
-                  key={status}
-                  onClick={() => {
-                    setStatusFilter(status);
+          <div className="no-print space-y-3 border-b border-slate-200/80 bg-slate-50/60 p-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <label className="maju-search-field w-full lg:max-w-md">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  aria-label="거래처 검색"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
+                  onChange={(event) => {
+                    setTableSearch(event.target.value);
                     setTablePage(1);
                   }}
-                  type="button"
-                >
-                  {status === "all" ? "전체" : status} {statusCounts[status].toLocaleString()}
-                </button>
-              ))}
-              <label className="ml-1 flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
+                  placeholder="상호명, 대표자, 연락처, 사업자번호 검색"
+                  value={tableSearch}
+                />
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="사업자 상태 필터">
+                {(["all", "정상", "휴업", "폐업", "확인 필요"] as const).map((status) => (
+                  <button
+                    className={`rounded-md border px-2.5 py-1.5 text-xs font-black transition ${
+                      statusFilter === status
+                        ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                        : "border-transparent bg-white text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                    }`}
+                    key={status}
+                    onClick={() => {
+                      setStatusFilter(status);
+                      setTablePage(1);
+                    }}
+                    type="button"
+                  >
+                    {status === "all" ? "전체" : status} {statusCounts[status].toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-xs font-black text-slate-700">검색 결과 {filteredRows.length.toLocaleString()}곳</span>
+                {tableSearch.trim() || statusFilter !== "all" ? (
+                  <button
+                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-black text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                    onClick={() => {
+                      setTableSearch("");
+                      setStatusFilter("all");
+                      setTablePage(1);
+                    }}
+                    type="button"
+                  >
+                    검색·필터 초기화
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
                 보기
                 <select
                   className="h-6 border-0 bg-transparent p-0 text-xs font-black text-slate-900 outline-none focus:ring-0"
@@ -586,8 +607,8 @@ export default function CrmSummaryPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500">
+                </label>
+              <span className="rounded-md bg-white px-2 py-1.5 text-xs font-black text-slate-500">
                 {tablePageStart.toLocaleString()}-{tablePageEnd.toLocaleString()} / {filteredRows.length.toLocaleString()}곳
               </span>
               <button
@@ -609,6 +630,7 @@ export default function CrmSummaryPage() {
               >
                 다음
               </button>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto bg-white" id="crm-summary-print-target" ref={exportTableRef}>

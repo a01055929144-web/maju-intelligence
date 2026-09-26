@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import type { RevenuePipeline } from "@/lib/store";
@@ -23,15 +23,18 @@ type PipelineItem = RevenuePipeline["items"][number];
 // "use client" 파일로 뽑았습니다).
 export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly items: PipelineItem[]; readonly weightedRevenue: number }) {
   const [query, setQuery] = useState("");
+  const [resultFilter, setResultFilter] = useState("all");
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko");
-    if (!normalizedQuery) return items;
-    return items.filter((item) =>
-      [item.leadName, item.memo, item.region, resultLabels[item.result] || item.result]
+    return items.filter((item) => {
+      if (resultFilter !== "all" && item.result !== resultFilter) return false;
+      if (!normalizedQuery) return true;
+      return [item.leadName, item.memo, item.region, resultLabels[item.result] || item.result]
         .filter(Boolean)
-        .some((value) => String(value).toLocaleLowerCase("ko").includes(normalizedQuery))
-    );
-  }, [items, query]);
+        .some((value) => String(value).toLocaleLowerCase("ko").includes(normalizedQuery));
+    });
+  }, [items, query, resultFilter]);
+  const hasActiveFilters = Boolean(query.trim()) || resultFilter !== "all";
   type PipelineSortKey = "leadName" | "probability" | "region" | "result" | "weightedRevenue";
   const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<PipelineItem, PipelineSortKey>(filteredItems, {
     leadName: (a, b) => a.leadName.localeCompare(b.leadName, "ko"),
@@ -50,8 +53,8 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
         </div>
         <Badge className="bg-teal-700 text-white">가중 {weightedRevenue.toLocaleString()}만원</Badge>
       </div>
-      <div className="border-b border-slate-200/80 bg-slate-50/70 px-3 py-3">
-        <label className="relative block max-w-xl">
+      <div className="flex flex-col gap-3 border-b border-slate-200/80 bg-slate-50/70 p-3 sm:flex-row sm:items-center">
+        <label className="relative min-w-0 flex-1 sm:max-w-xl">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
@@ -61,12 +64,27 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
             value={query}
           />
         </label>
-        {query ? <p className="mt-2 text-xs font-semibold text-slate-500">검색 결과 {filteredItems.length.toLocaleString()}건</p> : null}
+        <label className="sr-only" htmlFor="pipeline-result-filter">영업 상태</label>
+        <select
+          className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+          id="pipeline-result-filter"
+          onChange={(event) => setResultFilter(event.target.value)}
+          value={resultFilter}
+        >
+          <option value="all">전체 상태</option>
+          {Object.entries(resultLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {hasActiveFilters ? (
+          <button className="maju-button-secondary min-h-11 justify-center" onClick={() => { setQuery(""); setResultFilter("all"); }} type="button">
+            <X className="h-4 w-4" /> 초기화
+          </button>
+        ) : null}
+        <p aria-live="polite" className="shrink-0 text-xs font-semibold text-slate-500">{filteredItems.length.toLocaleString()} / {items.length.toLocaleString()}건</p>
       </div>
       <p className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 sm:hidden">표를 좌우로 밀어 전체 항목을 확인하세요.</p>
-      <div className="overflow-x-auto overscroll-x-contain">
+      <div className="max-h-[calc(100dvh-330px)] min-h-[320px] overflow-auto overscroll-contain">
         <table className="w-full min-w-[880px] border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-white">
+          <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_#e2e8f0]">
             <tr className="text-left text-xs font-black text-slate-500">
               <th className="border-b border-slate-200 px-4 py-3 text-center">No</th>
               <SortableTh active={sortKey === "leadName"} className="border-b border-slate-200 px-4 py-3" direction={sortDirection} label="거래처 후보" onClick={() => toggleSort("leadName")} />
@@ -108,7 +126,7 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
             {!filteredItems.length ? (
               <tr>
                 <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={5}>
-                  {items.length ? "검색 조건과 일치하는 매출 후보가 없습니다." : "아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다."}
+                  {items.length ? "검색·상태 조건과 일치하는 매출 후보가 없습니다. 필터를 초기화해 다시 확인하세요." : "아직 관리 중인 매출 후보가 없습니다. 거래처 방문 기록과 견적 요청을 등록하면 이곳에 표시됩니다."}
                 </td>
               </tr>
             ) : null}

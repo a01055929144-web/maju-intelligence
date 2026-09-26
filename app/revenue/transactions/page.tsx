@@ -7,9 +7,26 @@ import { SalesTransactionMatcher } from "@/components/sales-transaction-matcher"
 import { SalesTransactionTable } from "@/components/sales-transaction-table";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
-import { getSalesTransactions } from "@/lib/store";
+import { getSalesTransactions, type SalesTransactionSummary } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
+
+const emptySales: SalesTransactionSummary = {
+  averageOrderAmount: 0,
+  customerCount: 0,
+  items: [],
+  matchRate: 0,
+  matchedAmount: 0,
+  matchedCustomerCount: 0,
+  topCustomers: [],
+  topProducts: [],
+  totalAmount: 0,
+  transactionCount: 0,
+  truncated: false,
+  unmatchedAmount: 0,
+  unmatchedCustomerCount: 0,
+  unmatchedGroups: []
+};
 
 export default async function RevenueTransactionsPage({
   searchParams
@@ -35,7 +52,13 @@ export default async function RevenueTransactionsPage({
     if (dateTo) params.set("to", dateTo);
     return `/revenue/transactions?${params.toString()}`;
   };
-  const sales = await getSalesTransactions(companyId, { from: dateFrom, to: dateTo });
+  let sales = emptySales;
+  let salesError = "";
+  try {
+    sales = await getSalesTransactions(companyId, { from: dateFrom, to: dateTo });
+  } catch (error) {
+    salesError = error instanceof Error ? error.message : "매출 원장을 불러오지 못했습니다.";
+  }
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const hasSalesData = sales.transactionCount > 0;
   const salesSignals = [
@@ -95,6 +118,15 @@ export default async function RevenueTransactionsPage({
         />
 
         <div className="min-w-0 space-y-4">
+        {salesError ? (
+          <div className="maju-filter-box flex flex-col gap-3 border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 sm:flex-row sm:items-center sm:justify-between" role="alert">
+            <div>
+              <p className="font-bold">매출 원장을 불러오지 못했습니다.</p>
+              <p className="mt-1 font-medium text-rose-700">{salesError}</p>
+            </div>
+            <Link className="maju-button-secondary min-h-11 shrink-0 justify-center bg-white" href={sectionHref(section)}>다시 불러오기</Link>
+          </div>
+        ) : null}
         <div className={`${section === "summary" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="ledger-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -107,6 +139,7 @@ export default async function RevenueTransactionsPage({
           </div>
           <form className="grid gap-3 border-b border-slate-100 px-4 py-4 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end" method="GET">
             {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
+            <input name="section" type="hidden" value={section} />
             <label className="min-w-0 space-y-1">
               <span className="block text-xs font-medium text-slate-500">시작일</span>
               <input

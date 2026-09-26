@@ -31,6 +31,7 @@ export function SalesTransactionMatcher({
   const router = useRouter();
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [customerLoadError, setCustomerLoadError] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export function SalesTransactionMatcher({
   useEffect(() => {
     let cancelled = false;
     setLoadingCustomers(true);
+    setCustomerLoadError("");
     fetchWithTimeout(endpoint, { cache: "no-store" }, 10000)
       .then((res) => (res.ok ? res.json() : { customers: [] }))
       .then((data) => {
@@ -56,7 +58,10 @@ export function SalesTransactionMatcher({
         );
       })
       .catch(() => {
-        if (!cancelled) setCustomers([]);
+        if (!cancelled) {
+          setCustomers([]);
+          setCustomerLoadError("거래처 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingCustomers(false);
@@ -159,6 +164,8 @@ export function SalesTransactionMatcher({
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                       거래처 목록을 불러오는 중입니다.
                     </p>
+                  ) : customerLoadError ? (
+                    <p className="rounded-md bg-rose-50 px-3 py-3 text-xs font-bold text-rose-700" role="alert">{customerLoadError}</p>
                   ) : filteredCustomers.length ? (
                     filteredCustomers.map((customer) => (
                       <button

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -64,6 +64,13 @@ export function SalesTransactionTable({
     setPage(1);
   }, [query]);
 
+  useEffect(() => {
+    setItems(initialItems);
+    setTruncated(initialTruncated);
+    setPage(1);
+    setLoadMoreError("");
+  }, [initialItems, initialTruncated]);
+
   async function loadMore() {
     if (isLoadingMore || !truncated) return;
     setIsLoadingMore(true);
@@ -110,6 +117,11 @@ export function SalesTransactionTable({
               value={query}
             />
           </label>
+          {query ? (
+            <button className="maju-button-secondary min-h-10 justify-center" onClick={() => setQuery("")} type="button">
+              <X className="h-3.5 w-3.5" /> 검색 초기화
+            </button>
+          ) : null}
           <label className="flex h-10 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500">
             보기
             <select
@@ -188,21 +200,21 @@ export function SalesTransactionTable({
           </thead>
           <tbody>
             {pagedItems.map((item, index) => (
-              <tr key={item.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
-                <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-400">{(currentPage - 1) * pageSize + index + 1}</td>
-                <td className="border-b border-slate-100 px-3 py-3">{item.salesDate || "-"}</td>
-                <td className="border-b border-slate-100 px-3 py-3">{item.customerName}</td>
-                <td className="border-b border-slate-100 px-3 py-3">{item.businessRegistrationNumber || "-"}</td>
-                <td className="border-b border-slate-100 px-3 py-3">{item.productName || "-"}</td>
-                <td className="border-b border-slate-100 px-3 py-3 text-right">{item.quantity.toLocaleString()}</td>
-                <td className="border-b border-slate-100 px-3 py-3 text-right text-primary">{Math.round(item.salesAmount).toLocaleString()}원</td>
-                <td className="border-b border-slate-100 px-3 py-3 text-xs text-slate-500">{item.createdAt}</td>
+              <tr key={item.id} className="font-semibold text-slate-700 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
+                <td className="border-b border-slate-100 px-3 py-2.5 text-center text-xs text-slate-400">{(currentPage - 1) * pageSize + index + 1}</td>
+                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{item.salesDate || "-"}</td>
+                <td className="max-w-[220px] truncate border-b border-slate-100 px-3 py-2.5 font-bold text-slate-900" title={item.customerName}>{item.customerName}</td>
+                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{item.businessRegistrationNumber || "-"}</td>
+                <td className="max-w-[220px] truncate border-b border-slate-100 px-3 py-2.5" title={item.productName}>{item.productName || "-"}</td>
+                <td className="border-b border-slate-100 px-3 py-2.5 text-right tabular-nums">{item.quantity.toLocaleString()}</td>
+                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5 text-right font-bold tabular-nums text-primary">{Math.round(item.salesAmount).toLocaleString()}원</td>
+                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5 text-xs text-slate-500">{item.createdAt}</td>
               </tr>
             ))}
             {!filteredItems.length ? (
               <tr>
                 <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
-                  {items.length ? "검색 조건과 일치하는 거래내역이 없습니다." : "아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다."}
+                  {items.length ? "검색 조건과 일치하는 거래내역이 없습니다. 검색어를 초기화해 다시 확인하세요." : "아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다."}
                 </td>
               </tr>
             ) : null}

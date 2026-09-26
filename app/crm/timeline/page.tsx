@@ -1178,11 +1178,22 @@ export default function CrmTimelinePage() {
                 <label className="maju-search-field">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
+                    aria-label="거래처 검색"
                     className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
                     onChange={(event) => setCustomerSearch(event.target.value)}
                     placeholder="상호명, 주소, 사업자번호 검색"
                     value={customerSearch}
                   />
+                  {customerSearch ? (
+                    <button
+                      aria-label="거래처 검색어 지우기"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                      onClick={() => setCustomerSearch("")}
+                      type="button"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
                 </label>
                 <div className="mt-3 border-t border-slate-200/80 pt-3">
                   <p className="maju-muted-label px-0.5 pb-1.5">빠른 필터</p>
@@ -1416,6 +1427,19 @@ export default function CrmTimelinePage() {
                         ? "검색어, 등급 또는 운영 필터를 바꿔보세요."
                         : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
                   </p>
+                  {hasCustomers && customerSource !== "error" ? (
+                    <button
+                      className="maju-button-secondary mt-3 min-h-10 text-xs"
+                      onClick={() => {
+                        setCustomerSearch("");
+                        setGradeFilter("all");
+                        clearOperationFilter();
+                      }}
+                      type="button"
+                    >
+                      검색·필터 초기화
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               {customersTruncated ? (
@@ -1441,6 +1465,7 @@ export default function CrmTimelinePage() {
             <div className={`${workspaceSection === "ledger" ? "maju-section-card" : "hidden"} scroll-mt-28 p-4`} id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
+                  <p className="mb-1 text-xs font-black uppercase tracking-wide text-teal-700">거래처 원장</p>
                   <h2 className="truncate text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
