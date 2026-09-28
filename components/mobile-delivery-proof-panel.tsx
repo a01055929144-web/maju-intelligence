@@ -335,8 +335,8 @@ export function MobileDeliveryProofPanel({
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <span className="mb-2 inline-flex rounded-full bg-amber-400/10 px-2 py-1 text-[11px] font-black text-amber-400">사진 · 메시지</span>
-            <p className="truncate font-black">{customerName}</p>
+            <span className="mb-1 inline-flex rounded-full bg-amber-400/10 px-2 py-1 text-[11px] font-black text-amber-400">방문 완료</span>
+            <p className="truncate font-black">사진을 찍고 완료하세요</p>
             <p className="mobile-muted mt-1 text-xs font-bold">적재 위치: {loadingPosition || "점주 요청 위치"}</p>
           </div>
         </div>
@@ -357,7 +357,7 @@ export function MobileDeliveryProofPanel({
           type="file"
         />
         <Plus className="h-4 w-4" />
-        {files.length ? `사진 추가 (${files.length}/5)` : "1. 적재 위치와 상품 사진 촬영"}
+        {files.length ? `사진 추가 (${files.length}/5)` : "1. 완료 사진 촬영"}
       </label>
       {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="relative rounded-lg bg-[#111827] p-2 ring-1 ring-inset ring-slate-700" key={fileKey(file)}><ImageIcon className="h-8 w-8 text-teal-400" /><p className="mt-1 truncate pr-7 text-[10px] font-bold text-slate-300">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full text-white" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
@@ -365,13 +365,13 @@ export function MobileDeliveryProofPanel({
       {files.length ? (
         <div className="mt-3 flex items-center justify-between rounded-xl border border-teal-500/20 bg-teal-500/10 px-3 py-2 text-xs font-bold text-teal-200">
           <span>사진 {files.length}장 준비됨</span>
-          <span>메시지 확인 후 저장</span>
+          <span>아래 버튼으로 완료</span>
         </div>
       ) : null}
 
       <details className="mobile-card-raised group mt-3 rounded-xl border" open={files.length > 0}>
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black">
-          2. 메시지 확인
+          2. 상태 · 메시지 (선택)
           <span className="text-blue-700 group-open:hidden">열기</span>
           <span className="hidden text-blue-700 group-open:inline">닫기</span>
         </summary>
@@ -468,7 +468,7 @@ export function MobileDeliveryProofPanel({
       <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-2 mt-3 rounded-2xl border border-slate-700 bg-[#111827]/95 p-2 shadow-[0_-8px_28px_rgba(0,0,0,.35)] backdrop-blur">
       <Button className="h-14 w-full bg-[#FEE500] font-black text-slate-950 hover:bg-[#f5dc00]" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
-        {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "3. 사진 + 메시지 카카오로 공유"}
+        {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "배송 완료 저장"}
       </Button>
       {saving ? <p aria-live="polite" className="mt-2 text-center text-[11px] font-bold text-slate-300">화면을 닫지 마세요 · {progressLabel || "처리 중"}</p> : null}
       </div>

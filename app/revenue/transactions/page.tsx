@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store, TrendingUp, UploadCloud } from "lucide-react";
+import { ArrowRight, Banknote, BarChart3, CalendarDays, FileSpreadsheet, ReceiptText, Store, TrendingUp, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesTransactionMatcher } from "@/components/sales-transaction-matcher";
@@ -127,6 +127,38 @@ export default async function RevenueTransactionsPage({
             <Link className="maju-button-secondary min-h-11 shrink-0 justify-center bg-white" href={sectionHref(section)}>다시 불러오기</Link>
           </div>
         ) : null}
+        <form className="maju-filter-box flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-end" method="GET">
+          {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
+          <input name="section" type="hidden" value={section} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-slate-900">조회 기간</p>
+            <p className="mt-0.5 text-xs font-medium text-slate-500">현황과 원장 테이블에 같은 기간을 적용합니다.</p>
+          </div>
+          <label className="min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-500">시작일</span>
+            <input
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400 sm:w-auto"
+              defaultValue={dateFrom}
+              name="from"
+              type="date"
+            />
+          </label>
+          <label className="min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-500">종료일</span>
+            <input
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400 sm:w-auto"
+              defaultValue={dateTo}
+              name="to"
+              type="date"
+            />
+          </label>
+          <button className="maju-button-primary min-h-10 w-full justify-center sm:w-auto" type="submit">기간 적용</button>
+          {dateFrom || dateTo ? (
+            <Link className="maju-button-secondary min-h-10 w-full justify-center sm:w-auto" href={companyId ? `/revenue/transactions?section=${section}&companyId=${encodeURIComponent(companyId)}` : `/revenue/transactions?section=${section}`}>
+              초기화
+            </Link>
+          ) : null}
+        </form>
         <div className={`${section === "summary" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="ledger-summary">
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -137,37 +169,6 @@ export default async function RevenueTransactionsPage({
               {hasSalesData ? "원장 적재 완료" : "매출 원장 필요"}
             </Badge>
           </div>
-          <form className="grid gap-3 border-b border-slate-100 px-4 py-4 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end" method="GET">
-            {companyId ? <input name="companyId" type="hidden" value={companyId} /> : null}
-            <input name="section" type="hidden" value={section} />
-            <label className="min-w-0 space-y-1">
-              <span className="block text-xs font-medium text-slate-500">시작일</span>
-              <input
-                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400 lg:w-auto"
-                defaultValue={dateFrom}
-                name="from"
-                type="date"
-              />
-            </label>
-            <label className="min-w-0 space-y-1">
-              <span className="block text-xs font-medium text-slate-500">종료일</span>
-              <input
-                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium outline-none focus:border-teal-400 lg:w-auto"
-                defaultValue={dateTo}
-                name="to"
-                type="date"
-              />
-            </label>
-            <button className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" type="submit">
-              기간 적용
-            </button>
-            {dateFrom || dateTo ? (
-              <Link className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
-                기간 초기화
-              </Link>
-            ) : null}
-            {dateFrom || dateTo ? <span className="self-center rounded-full bg-teal-50 px-3 py-2 text-center text-xs font-semibold text-teal-700 sm:col-span-2 lg:col-span-1">{dateFrom || "처음"} ~ {dateTo || "현재"} 기간 적용 중</span> : null}
-          </form>
           <div className="grid grid-cols-2 md:grid-cols-4">
             <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
             <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
@@ -186,7 +187,7 @@ export default async function RevenueTransactionsPage({
             <p className="maju-section-title">다음 액션 요약</p>
             <p className="mt-1 maju-muted-label">원장 적재 · 거래처 연결 · 품목 분석 준비 상태</p>
           </div>
-          <div className="grid lg:grid-cols-3">
+          <div className="divide-y divide-slate-100">
             {salesSignals.map((signal) => (
               <SalesSignalCard key={signal.label} {...signal} />
             ))}
@@ -378,19 +379,20 @@ function SalesSignalCard({
   value: string;
 }) {
   return (
-    <div className={`border-b border-slate-200/80 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${ready ? "bg-emerald-50/40" : "bg-amber-50/60"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="maju-muted-label">{label}</p>
-          <p className="mt-1 truncate text-xl font-semibold text-slate-950">{value}</p>
-        </div>
-        <Badge className={ready ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-white text-amber-800 ring-1 ring-inset ring-amber-100"}>
+    <div className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.8fr)_auto] sm:items-center">
+      <div className="flex min-w-0 items-center gap-2">
+        <Badge className={ready ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-100" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"}>
           {ready ? "준비" : "확인"}
         </Badge>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-500">{label}</p>
+          <p className="truncate text-sm font-bold text-slate-950">{value}</p>
+        </div>
       </div>
-      <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <Link className="maju-button-secondary mt-4 w-full justify-center sm:w-auto" href={actionHref}>
+      <p className="text-sm font-medium leading-5 text-slate-600">{description}</p>
+      <Link className="maju-button-secondary w-full justify-center sm:w-auto" href={actionHref}>
         {actionLabel}
+        <ArrowRight className="h-3.5 w-3.5" />
       </Link>
     </div>
   );

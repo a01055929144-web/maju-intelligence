@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, ArrowRight, Building2, CheckCircle2, ClipboardList, Database, FileSpreadsheet, Gauge, Inbox, Settings, ShieldCheck, Target, UploadCloud, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, Database, FileSpreadsheet, Gauge, Inbox, Settings, ShieldCheck, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -43,12 +43,70 @@ export default async function AdminPage() {
       value: dashboard.source === "supabase" ? "연결됨" : "확인 필요"
     }
   ];
+  const uploadIssues = dashboard.uploadHistory.filter(
+    (item) => item.status === "failed" || item.qualityScore < 80 || item.duplicateCount > 0 || !item.reportId
+  );
+  const activeJobs = dashboard.jobs.filter((job) => job.status !== "completed");
+  const operations = [
+    {
+      count: uploadIssues.length,
+      description: uploadIssues.length ? "실패·품질 저하·중복·리포트 미생성 건을 확인하세요." : "보완이 필요한 업로드가 없습니다.",
+      href: "/admin/uploads",
+      label: "업로드 보완",
+      tone: uploadIssues.length ? "warning" : "normal"
+    },
+    {
+      count: activeJobs.length,
+      description: activeJobs.length ? "처리 중인 분석의 완료 여부와 품질 점수를 확인하세요." : "대기 중인 분석 작업이 없습니다.",
+      href: "/admin/uploads",
+      label: "분석 진행",
+      tone: activeJobs.length ? "info" : "normal"
+    },
+    {
+      count: dashboard.leadQueue.length,
+      description: dashboard.leadQueue.length ? "점수가 높은 추천 리드부터 담당 상태를 정리하세요." : "분석 완료 후 추천 리드가 생성됩니다.",
+      href: "#lead-queue",
+      label: "리드 후속 조치",
+      tone: dashboard.leadQueue.length ? "info" : "normal"
+    }
+  ] as const;
 
   return (
     <main className="min-h-screen maju-app-bg">
       <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
+      <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-4">
+        <Card className="overflow-hidden border-slate-200 shadow-none">
+          <CardHeader className="border-b border-slate-200 bg-slate-50/70 pb-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-primary">오늘의 운영 큐</p>
+                <CardTitle className="mt-1 text-xl">이상 상태부터 처리하세요</CardTitle>
+              </div>
+              <Badge className={uploadIssues.length || activeJobs.length ? "w-fit bg-amber-100 text-amber-800" : "w-fit bg-emerald-100 text-emerald-800"}>
+                {uploadIssues.length || activeJobs.length ? `${uploadIssues.length + activeJobs.length}건 확인 필요` : "운영 정상"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-0 p-0 lg:grid-cols-3">
+            {operations.map((item) => (
+              <Link key={item.label} className="group flex min-h-32 items-start gap-3 border-b border-slate-200 p-4 last:border-b-0 hover:bg-slate-50 lg:border-b-0 lg:border-r lg:last:border-r-0" href={item.href}>
+                <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${item.tone === "warning" ? "bg-amber-100 text-amber-800" : item.tone === "info" ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}>
+                  {item.tone === "warning" ? <AlertTriangle className="h-4 w-4" /> : item.tone === "normal" ? <CheckCircle2 className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-black text-slate-950">{item.label}</span>
+                    <span className="text-lg font-black text-slate-950">{item.count}건</span>
+                  </span>
+                  <span className="mt-2 block text-sm font-medium leading-5 text-muted-foreground">{item.description}</span>
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-black text-primary">바로 확인 <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" /></span>
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 md:grid-cols-4">
           {overview.map(([label, value, Icon]) => (
             <Card key={label as string} className="shadow-none">
@@ -73,47 +131,6 @@ export default async function AdminPage() {
             {adminSignals.map((signal) => (
               <AdminSignalRow key={signal.label} {...signal} />
             ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-none">
-          <CardHeader>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-primary" />
-                  운영 시작 작업
-                </CardTitle>
-                <p className="mt-2 text-sm text-muted-foreground">고객사 생성부터 데이터 확인까지 순서대로 진행하세요.</p>
-              </div>
-              <Badge className="w-fit bg-slate-100 text-slate-700">권장 순서</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-4">
-            <AdminActionCard
-              description="회사 정보와 고객사 로그인 계정을 만들고, 선택 고객사 대시보드로 진입합니다."
-              href="/admin/companies"
-              icon={Users}
-              label="1. 고객사 관리"
-            />
-            <AdminActionCard
-              description="거래처 마스터와 매출 거래원장이 실서버에 쌓였는지 확인합니다."
-              href="/admin/uploads"
-              icon={UploadCloud}
-              label="2. 업로드 이력 확인"
-            />
-            <AdminActionCard
-              description="관리자 기본 계정과 기본 고객사 계정 설정을 점검합니다."
-              href="/admin/accounts"
-              icon={ShieldCheck}
-              label="3. 계정 설정"
-            />
-            <AdminActionCard
-              description="Supabase, 지도 API, 인증 환경변수와 테이블 상태를 확인합니다."
-              href="/admin/system"
-              icon={Settings}
-              label="4. 시스템 점검"
-            />
           </CardContent>
         </Card>
 
@@ -193,7 +210,7 @@ export default async function AdminPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="lead-queue">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
@@ -268,44 +285,8 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-primary" />
-              운영 기준 API
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm md:grid-cols-4">
-            {[
-              ["고객사/계정", "/api/admin/companies"],
-              ["거래처 관리", "/api/customers"],
-              ["매출 원장", "/api/revenue/transactions"],
-              ["배송 코스", "/api/routes/today"]
-            ].map(([label, endpoint]) => (
-              <div key={endpoint} className="rounded-md border border-border bg-muted px-3 py-2">
-                <p className="text-xs font-black text-muted-foreground">{label}</p>
-                <code className="mt-1 block font-bold">{endpoint}</code>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
       </section>
     </main>
-  );
-}
-
-function AdminActionCard({ description, href, icon: Icon, label }: { description: string; href: string; icon: typeof Users; label: string }) {
-  return (
-    <Link className="group rounded-md border border-border bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50" href={href}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
-        <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5" />
-      </div>
-      <p className="mt-4 text-sm font-black text-slate-950">{label}</p>
-      <p className="mt-2 text-xs font-semibold leading-5 text-muted-foreground">{description}</p>
-    </Link>
   );
 }
 

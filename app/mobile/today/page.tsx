@@ -111,10 +111,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                   {pendingCount ? <PackageCheck className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold">{pendingCount ? `남은 배송 ${pendingCount}곳` : "오늘 배송을 모두 완료했습니다"}</p>
+                  <p className="text-sm font-bold">{pendingCount ? `다음 매장부터 ${pendingCount}곳 남음` : "오늘 배송을 모두 완료했습니다"}</p>
                   <p className="mt-0.5 text-xs font-semibold text-slate-400">완료 {completedCount}곳 · 전체 {todayStops.length}곳</p>
                 </div>
-                {pendingCount ? <a className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-bold text-slate-950" href="#selected-customer">바로 처리</a> : null}
+                {pendingCount ? <a className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-bold text-slate-950" href="#selected-customer">다음 매장</a> : null}
               </div>
             </section>
           ) : null}
@@ -136,6 +136,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 </div>
               </div>
               <div className="p-3">
+                {!selectedStopCompleted ? <p className="mb-2 text-xs font-bold text-slate-400">먼저 지도나 전화로 방문을 시작하세요.</p> : null}
                 <MobileRouteActionPanel
                   address={selectedStop.address || selectedStop.region || selectedStop.name}
                   customerId={selectedStop.id}

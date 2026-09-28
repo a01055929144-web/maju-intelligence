@@ -25,7 +25,7 @@ export default async function MobileRegisterPage() {
           </Link>
         </header>
 
-        <div className="flex-1 space-y-4 px-5 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-5">
+        <div className="flex-1 space-y-3 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4">
           <MobileRegisterWorkspace />
         </div>
 

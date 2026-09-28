@@ -29,25 +29,25 @@ export function MobileRouteActionPanel({
 
   return (
     <section id="contact-actions">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <a
-          className="mobile-card-raised flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold"
+          className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-bold text-white shadow-sm"
           href={mapUrl}
           rel="noreferrer"
           target="_blank"
         >
           <MapPinned className="h-4 w-4" />
-          지도
+          지도 열기
         </a>
         <a
-          className={`mobile-card-raised flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold ${phone ? "" : "pointer-events-none opacity-45"}`}
+          className={`flex min-h-14 items-center justify-center gap-2 rounded-xl bg-teal-600 px-3 text-sm font-bold text-white shadow-sm ${phone ? "" : "pointer-events-none opacity-45"}`}
           href={phone ? `tel:${phone}` : "#"}
         >
           <Phone className="h-4 w-4" />
-          전화
+          전화하기
         </a>
         <button
-          className="mobile-card-raised flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-sm font-semibold"
+          className="mobile-card-raised col-span-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold"
           onClick={copyAddress}
           type="button"
         >
