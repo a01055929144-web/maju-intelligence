@@ -146,7 +146,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             <nav
               aria-label="주요 작업공간"
-              className={`${mobileMenuOpen ? "block" : "hidden"} flex-1 overflow-auto px-3 py-3 lg:block`}
+              className={`${mobileMenuOpen ? "block" : "hidden"} maju-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 lg:block`}
             >
               {visibleNavigationGroups.map((group, groupIndex) => (
                 <div

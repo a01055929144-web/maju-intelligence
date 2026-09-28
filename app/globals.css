@@ -87,6 +87,45 @@ html {
   --maju-surface-border: #e2e8f0;
 }
 
+/* 플랫폼 내비게이션은 콘텐츠보다 먼저 눈에 띄지 않아야 합니다. Windows 기본
+   스크롤바 대신 좁고 투명한 레일을 사용하고, 포인터가 메뉴 안에 있을 때만 손잡이의
+   대비를 높입니다. 스크롤 기능과 키보드 접근성은 그대로 유지합니다. */
+.maju-sidebar-scroll {
+  scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
+  scrollbar-width: thin;
+  scroll-behavior: smooth;
+}
+
+.maju-sidebar-scroll:hover {
+  scrollbar-color: rgba(148, 163, 184, 0.64) transparent;
+}
+
+.maju-sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.maju-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.maju-sidebar-scroll::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.34);
+  background-clip: padding-box;
+}
+
+.maju-sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.64);
+  background-clip: padding-box;
+}
+
+.maju-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(203, 213, 225, 0.82);
+  background-clip: padding-box;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -251,7 +290,7 @@ select {
   }
 
   .maju-nav-item-active {
-    @apply bg-teal-600 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)];
+    @apply bg-white/[0.09] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)];
   }
 
   .maju-nav-item-idle {
@@ -265,4 +304,20 @@ select {
   .maju-muted-label {
     @apply text-xs font-medium text-slate-500;
   }
+}
+
+.maju-nav-item-active {
+  position: relative;
+}
+
+.maju-nav-item-active::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 999px 999px 0;
+  background: #2dd4bf;
+  content: "";
+  transform: translateY(-50%);
 }
