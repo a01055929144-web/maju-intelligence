@@ -45,18 +45,21 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   const pipelineActions = [
     {
       description: "단가표와 방문일 확정",
+      href: sectionHref("candidates"),
       label: "견적 요청",
       tone: "teal" as const,
       value: `${pipeline.quoteRequests}건`
     },
     {
       description: "품목 제안, 샘플 확인",
+      href: sectionHref("candidates"),
       label: "관심 있음",
       tone: "emerald" as const,
       value: `${pipeline.interested}건`
     },
     {
       description: "메모 후 재연락",
+      href: sectionHref("status"),
       label: "재관리",
       tone: "slate" as const,
       value: `${pipeline.pending + pipeline.failed}건`
@@ -251,11 +254,13 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Banknote; label: st
 
 function PipelineActionCard({
   description,
+  href,
   label,
   tone,
   value
 }: {
   description: string;
+  href: string;
   label: string;
   tone: "emerald" | "slate" | "teal";
   value: string;
@@ -267,16 +272,19 @@ function PipelineActionCard({
   }[tone];
 
   return (
-    <div className={`border-b border-slate-200 p-4 lg:border-b-0 lg:border-r last:lg:border-r-0 ${toneClassName}`}>
+    <Link className={`group block border-b border-slate-200 p-4 transition hover:brightness-[0.98] lg:border-b-0 lg:border-r last:lg:border-r-0 ${toneClassName}`} href={href}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold opacity-70">{label}</p>
           <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
         </div>
-        <Badge className="bg-white/80 text-slate-700">다음 액션</Badge>
+        <Badge className="inline-flex items-center gap-1 bg-white/80 text-slate-700">
+          작업 열기
+          <ArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" />
+        </Badge>
       </div>
       <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-    </div>
+    </Link>
   );
 }
 

@@ -461,13 +461,19 @@ export default function CrmSummaryPage() {
               {addressMissingCount + businessNumberMissingCount + managerMissingCount > 0 ? (
                 <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
                   {[
-                    { label: "주소 미등록", value: addressMissingCount },
-                    { label: "사업자번호 미등록", value: businessNumberMissingCount },
-                    { label: "담당자 미지정", value: managerMissingCount }
+                    { filter: "address-missing", label: "주소 미등록", value: addressMissingCount },
+                    { filter: "business-number-missing", label: "사업자번호 미등록", value: businessNumberMissingCount },
+                    { filter: "manager-missing", label: "담당자 미지정", value: managerMissingCount }
                   ].map((item) => (
-                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-amber-900" key={item.label}>
+                    <Link
+                      className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-100 transition hover:bg-amber-50 hover:ring-amber-200"
+                      href={withCompanyQuery(`/crm/timeline?section=list&operationFilter=${item.filter}`)}
+                      key={item.label}
+                      title={`${item.label} 거래처만 열기`}
+                    >
                       {item.label} {item.value.toLocaleString()}건
-                    </span>
+                      <span aria-hidden="true">→</span>
+                    </Link>
                   ))}
                 </div>
               ) : (
