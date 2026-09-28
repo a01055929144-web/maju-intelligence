@@ -1350,7 +1350,7 @@ export default function CrmTimelinePage() {
               </div>
             ) : null}
             {filteredCustomers.length ? (
-              <div className="grid grid-cols-[20px_minmax(0,1fr)_48px_68px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500">
+              <div className="grid grid-cols-[20px_minmax(0,1fr)_48px_88px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500">
                 <input
                   aria-label="현재 페이지 전체 선택"
                   checked={pagedCustomers.some(({ customer }) => Boolean(customer.id)) && pagedCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
@@ -1378,7 +1378,7 @@ export default function CrmTimelinePage() {
                 return (
                   <div
                     key={`${customer.customerName}-${customer.address}`}
-                    className={`grid grid-cols-[20px_minmax(0,1fr)_44px_64px] items-center gap-2 px-3 py-2 transition ${
+                    className={`grid grid-cols-[20px_minmax(0,1fr)_44px_88px] items-center gap-2 px-3 py-2 transition ${
                       selected ? "bg-slate-50" : "bg-white hover:bg-slate-50"
                     }`}
                   >
@@ -1406,7 +1406,7 @@ export default function CrmTimelinePage() {
                     </button>
                     <Badge className={`justify-self-center px-2 py-0.5 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
                     <Badge className={`justify-self-end px-2 py-0.5 text-xs ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
-                      {issues.length ? "보완" : "가능"}
+                      {issues.length ? issues[0] : "준비됨"}
                     </Badge>
                   </div>
                 );

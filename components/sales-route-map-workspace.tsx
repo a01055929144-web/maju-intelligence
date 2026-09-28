@@ -1856,6 +1856,26 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <span className="whitespace-nowrap">라이브차 {liveVehicleSummary.active}대</span>
             {liveVehicleSummary.stale ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
+          {activeView === "map" ? (
+            <button
+              aria-pressed={leftCollapsed && rightCollapsed}
+              className={`flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition ${
+                leftCollapsed && rightCollapsed
+                  ? "border-teal-200 bg-teal-50 text-teal-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+              onClick={() => {
+                const showPanels = leftCollapsed && rightCollapsed;
+                setLeftCollapsed(!showPanels);
+                setRightCollapsed(!showPanels);
+              }}
+              title={leftCollapsed && rightCollapsed ? "담당자와 거래처 패널을 다시 엽니다." : "좌우 패널을 접어 지도를 넓게 봅니다."}
+              type="button"
+            >
+              {leftCollapsed && rightCollapsed ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              <span className="hidden 2xl:inline">{leftCollapsed && rightCollapsed ? "패널 복원" : "지도 넓게"}</span>
+            </button>
+          ) : null}
           <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-50 p-1">
             <button
               aria-expanded={statsExpanded}
