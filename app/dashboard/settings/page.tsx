@@ -54,17 +54,31 @@ export default async function CompanySettingsPage() {
       workspaceRole={session.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-3 py-3 sm:px-4 sm:py-4">
+        <nav aria-label="회사 설정 바로가기" className="maju-toolbar-scroll mb-4 flex items-center gap-1 overflow-x-auto border-b border-slate-200">
+          {[
+            ["#company-settings", "회사·출발지"],
+            ["#staff-settings", "직원·권한"],
+            ["#business-number-settings", "사업자번호 예외"],
+            ...(session.workspaceRole === "owner" ? [["#company-closure", "회사 이용 종료"]] : [])
+          ].map(([href, label]) => (
+            <a className="flex h-11 shrink-0 items-center px-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100/70 hover:text-slate-950" href={href} key={href}>
+              {label}
+            </a>
+          ))}
+        </nav>
         <div className="space-y-5">
-          <CompanySettingsForm initial={company} />
-          <StaffManagementPanel
-            canManageMembers={customerHasCapability(session, "manage_members")}
-            initialInvitations={staff.invitations}
-            initialJobTitles={jobTitles.jobTitles}
-            managerOptions={managerOptions}
-            vehicleOptions={vehicleOptions}
-          />
-          <BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} />
-          {session.workspaceRole === "owner" ? <CompanyClosurePanel companyName={company.name} /> : null}
+          <div className="scroll-mt-24" id="company-settings"><CompanySettingsForm initial={company} /></div>
+          <div className="scroll-mt-24" id="staff-settings">
+            <StaffManagementPanel
+              canManageMembers={customerHasCapability(session, "manage_members")}
+              initialInvitations={staff.invitations}
+              initialJobTitles={jobTitles.jobTitles}
+              managerOptions={managerOptions}
+              vehicleOptions={vehicleOptions}
+            />
+          </div>
+          <div className="scroll-mt-24" id="business-number-settings"><BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} /></div>
+          {session.workspaceRole === "owner" ? <div className="scroll-mt-24" id="company-closure"><CompanyClosurePanel companyName={company.name} /></div> : null}
         </div>
       </section>
     </CustomerAppShell>

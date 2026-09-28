@@ -1361,16 +1361,26 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     ? {
         eyebrow: "SALES PIPELINE",
         title: "영업 리드",
-        description: "검색 수요와 리뷰 신호가 높은 운영 매장을 골라 연락·방문·견적 후속까지 이어갑니다.",
+        description: "운영 중인 매장의 수요 신호를 비교하고, 가능성 높은 곳부터 영업을 실행합니다.",
         resultLabel: "영업 후보",
-        searchPlaceholder: "상호명·지역·전화·인스타 ID로 영업 후보 검색"
+        searchPlaceholder: "상호명·지역·전화·인스타 ID로 영업 후보 검색",
+        workflow: [
+          { detail: "검색량·리뷰·업종 적합도", icon: Radar, label: "후보 발굴" },
+          { detail: "전화·DM 또는 방문", icon: Phone, label: "접촉 실행" },
+          { detail: "견적·재연락 일정", icon: FileImage, label: "후속 관리" }
+        ]
       }
     : {
         eyebrow: "NEW OPENING SIGNALS",
         title: "신규 리드",
-        description: "공공 인허가의 최신 개업 신호를 빠르게 확인하고, 선점할 매장을 골라 영업 후보로 준비합니다.",
+        description: "새로 문을 여는 매장을 빠르게 발견하고, 연락 가능한 후보를 먼저 선점합니다.",
         resultLabel: "신규 개업 후보",
-        searchPlaceholder: "상호명·주소·전화로 신규 개업 후보 검색"
+        searchPlaceholder: "상호명·주소·전화로 신규 개업 후보 검색",
+        workflow: [
+          { detail: "개업일·업종·지역", icon: Search, label: "신호 확인" },
+          { detail: "연락처·플레이스 검증", icon: UserCheck, label: "후보 선별" },
+          { detail: "전화 또는 방문 준비", icon: MapPin, label: "첫 접촉" }
+        ]
       };
 
   function LeadSortableHeader({
@@ -1398,7 +1408,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   return (
     <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-4 sm:pb-6">
       <div className={`overflow-hidden rounded-2xl border p-4 shadow-sm sm:p-5 ${isSalesLeadPage ? "border-violet-100 bg-gradient-to-br from-white via-white to-violet-50" : "border-teal-100 bg-gradient-to-br from-white via-white to-teal-50"}`}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
             <p className={`text-[10px] font-black tracking-[0.18em] ${isSalesLeadPage ? "text-violet-600" : "text-teal-600"}`}>{leadPageCopy.eyebrow}</p>
             <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">{leadPageCopy.title}</h2>
@@ -1406,14 +1416,31 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <a className={`rounded-xl border px-3 py-2.5 text-left transition ${!isSalesLeadPage ? "border-teal-600 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200"}`} href="/dashboard?view=leads&leadType=permit">
-              <span className="block text-xs font-black">신규 리드</span>
-              <span className={`mt-0.5 block text-[10px] font-semibold ${!isSalesLeadPage ? "text-teal-100" : "text-slate-400"}`}>인허가 · 개업일 기준</span>
+              <span className="block text-xs font-black">신규 개업 탐색</span>
+              <span className={`mt-0.5 block text-[10px] font-semibold ${!isSalesLeadPage ? "text-teal-100" : "text-slate-400"}`}>인허가 신호로 먼저 발견</span>
             </a>
             <a className={`rounded-xl border px-3 py-2.5 text-left transition ${isSalesLeadPage ? "border-violet-600 bg-violet-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200"}`} href="/dashboard?view=leads&leadType=keyword">
-              <span className="block text-xs font-black">영업 리드</span>
-              <span className={`mt-0.5 block text-[10px] font-semibold ${isSalesLeadPage ? "text-violet-100" : "text-slate-400"}`}>검색량 · 실행 기준</span>
+              <span className="block text-xs font-black">운영 매장 영업</span>
+              <span className={`mt-0.5 block text-[10px] font-semibold ${isSalesLeadPage ? "text-violet-100" : "text-slate-400"}`}>수요 신호로 우선 접촉</span>
             </a>
           </div>
+        </div>
+        <div className="mt-4 grid gap-2 border-t border-slate-200/70 pt-4 sm:grid-cols-3">
+          {leadPageCopy.workflow.map((step, index) => {
+            const StepIcon = step.icon;
+            return (
+              <div className="flex items-center gap-3 rounded-xl border border-white/80 bg-white/75 px-3 py-2.5 shadow-sm" key={step.label}>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isSalesLeadPage ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"}`}>
+                  <StepIcon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">STEP {index + 1}</span>
+                  <span className="block text-xs font-black text-slate-900">{step.label}</span>
+                  <span className="block truncate text-[10px] font-semibold text-slate-500">{step.detail}</span>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1784,9 +1811,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         <button className="flex w-full items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-left" onClick={() => setNearbyOpen((value) => !value)} type="button">
           <span className="flex items-center gap-2">
             <Crosshair className="h-4 w-4 text-teal-600" />
-            <span className="text-sm font-black text-slate-950">리드 탐색 · AI 영업 세일즈</span>
+            <span className="text-sm font-black text-slate-950">거래처 권역에서 후보 찾기</span>
             <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">
-              기존 거래처 반경 안 신규 인허가
+              {isSalesLeadPage ? "방문 동선과 가까운 영업 후보" : "기존 거래처 반경 안 신규 개업"}
             </span>
           </span>
           <ChevronDown className={`h-4 w-4 text-slate-400 transition ${nearbyOpen ? "rotate-180" : ""}`} />
@@ -1794,8 +1821,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         {nearbyOpen ? (
           <div className="space-y-3 p-3">
             <p className="text-xs font-semibold leading-5 text-slate-500">
-              기존 거래처 1곳 또는 전체 거래처를 기준으로, 지정한 반경 안에 새로 인허가된 사업장이 있는지 찾습니다. 결과는 아래 표에서 거리순으로
-              바로 확인할 수 있습니다.
+              {isSalesLeadPage
+                ? "기존 거래처 1곳 또는 전체 권역을 기준으로 가까운 영업 후보를 찾습니다. 방문 동선에 넣기 좋은 후보를 아래 목록에서 거리순으로 확인할 수 있습니다."
+                : "기존 거래처 1곳 또는 전체 권역을 기준으로 반경 안의 신규 개업 후보를 찾습니다. 선점할 매장을 아래 목록에서 거리순으로 확인할 수 있습니다."}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 p-1">

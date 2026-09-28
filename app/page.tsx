@@ -1131,7 +1131,6 @@ function Onboarding({
   );
   const hasDataRows = rawRows.length > 0;
   const hasBlockingQualityIssues = dataQuality.issueRows.length > 0 || dataQuality.invalidBusinessNumbers.length > 0;
-  const latestUpload = uploadHistory[0];
   const saveReadinessItems = [
     {
       detail: hasDataRows ? `${rawRows.length.toLocaleString()}행 등록 대기` : "엑셀 업로드 또는 수기 입력이 필요합니다.",
@@ -1154,8 +1153,6 @@ function Onboarding({
       ok: pipelineMeta.persisted
     }
   ];
-  const readyCheckCount = saveReadinessItems.filter((item) => item.ok).length;
-  const readinessPercent = Math.round((readyCheckCount / saveReadinessItems.length) * 100);
   const flowSteps = [
     {
       description: isMaster ? "거래처 정보는 히스토리와 배송 코스의 기준값입니다." : "매출 원장은 등급, 이탈, 리포트의 기준값입니다.",
@@ -1433,8 +1430,6 @@ function Onboarding({
     ]);
   }
 
-  const showOperationalReview = sidebarSection === "history" || pipelineMeta.persisted;
-
   return (
     <div className="grid gap-3 lg:grid-cols-[200px_minmax(0,1fr)]">
       <DataRegistrationSidePanel
@@ -1463,59 +1458,48 @@ function Onboarding({
             rows={rawRows.length}
             typeLabel={template.label}
           />
-          <details className="maju-section-card overflow-hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
-              <span>
-              <span className="block text-sm font-black text-slate-950">검수·저장 상태</span>
-              <span className="mt-0.5 block text-xs font-bold text-slate-500">저장 가능 여부, 누락값, 확인 경로를 봅니다.</span>
-              </span>
-              <Badge className={canAnalyze ? "bg-teal-700 text-white" : pipelineMeta.persisted ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}>
-                {pipelineMeta.persisted ? "저장 완료" : canAnalyze ? "저장 가능" : "확인 필요"}
-              </Badge>
-            </summary>
-            <div className="border-t border-slate-200 bg-slate-50/60 p-3">
-              <RegistrationLiveStatusBoard
-                canAnalyze={canAnalyze}
-                dashboardHref={dashboardHref}
-                entryMode={entryMode}
-                filename={uploadedFilename}
-                latestUpload={latestUpload}
-                ledgerHref={currentLedgerHref}
-                ledgerLabel={currentLedgerLabel}
-                onOpenReviewTab={setReviewTab}
-                persisted={pipelineMeta.persisted}
-                readinessItems={saveReadinessItems}
-                readinessPercent={readinessPercent}
-                registrationStatus={registrationStatus}
-                routeHref={routeHref}
-                rows={rawRows.length}
-                typeLabel={template.label}
-              />
+          <div className="maju-section-card overflow-hidden">
+            <div className="grid divide-y divide-slate-200 md:grid-cols-4 md:divide-x md:divide-y-0">
+              {flowSteps.map((step, index) => {
+                const active = !step.done && flowSteps.slice(0, index).every((item) => item.done);
+                return (
+                  <div className={`px-4 py-3 ${active ? "bg-teal-50" : "bg-white"}`} key={step.label}>
+                    <div className="flex items-center gap-2">
+                      <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-black ${step.done ? "bg-emerald-600 text-white" : active ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
+                        {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                      </span>
+                      <span className={`text-xs font-black ${active ? "text-teal-800" : "text-slate-700"}`}>{step.label}</span>
+                    </div>
+                    <p className="mt-1.5 truncate text-sm font-bold text-slate-950">{step.value}</p>
+                  </div>
+                );
+              })}
             </div>
-          </details>
-          <details className="maju-section-card overflow-hidden" open={showOperationalReview}>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
-              <span>
-                <span className="block text-sm font-black text-slate-950">반영 화면 확인</span>
-                <span className="mt-0.5 block text-xs font-bold text-slate-500">원장, 대시보드, 지도에 같은 데이터가 보이는지 확인합니다.</span>
-              </span>
-              <Badge className={readinessPercent >= 80 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-                준비율 {readinessPercent}%
-              </Badge>
-            </summary>
-            <div className="grid gap-3 border-t border-slate-200 bg-slate-50/60 p-3 xl:grid-cols-2">
-              <DeploymentReadinessChecklist
-                canAnalyze={canAnalyze}
-                dashboardHref={dashboardHref}
-                hasRecentUpload={Boolean(latestUpload)}
-                hasRows={rawRows.length > 0}
-                ledgerHref={currentLedgerHref}
-                persisted={pipelineMeta.persisted}
-                routeHref={routeHref}
-              />
-              <DataRegistrationFlowCard steps={flowSteps} />
+            <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-black text-slate-500">지금 할 일</p>
+                <p className="mt-0.5 text-sm font-bold text-slate-900">{registrationStatus.nextAction}</p>
+              </div>
+              {pipelineMeta.persisted ? (
+                <Link className="maju-button-secondary inline-flex h-9 items-center justify-center gap-2 px-3 text-sm" href={currentLedgerHref}>
+                  {currentLedgerLabel}<ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : rawRows.length ? (
+                <Button
+                  className="h-9"
+                  onClick={() => {
+                    const nextTab = complete ? "quality" : "mapping";
+                    setReviewTab(nextTab);
+                    window.setTimeout(() => document.getElementById(`${nextTab}-panel`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  {complete ? "오류 확인하기" : "헤더 매칭하기"}<ArrowRight className="h-4 w-4" />
+                </Button>
+              ) : null}
             </div>
-          </details>
+          </div>
 
         <div className="maju-section-card scroll-mt-4 border-l-4 border-l-teal-700 p-4" id="entry-panel">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -2116,6 +2100,8 @@ function DataRegistrationQuickPanel({
   );
 }
 
+// 이전 상세 진단 UI는 간소화된 작업 흐름의 롤백 안전망으로 당분간 보존합니다.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RegistrationLiveStatusBoard({
   canAnalyze,
   dashboardHref,
@@ -2383,6 +2369,7 @@ function getRegistrationDiagnosticLinks(status: RegistrationStatus["status"], ca
   return [];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DeploymentReadinessChecklist({
   canAnalyze,
   dashboardHref,
@@ -2476,6 +2463,7 @@ function DeploymentReadinessChecklist({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DataRegistrationFlowCard({
   steps
 }: {

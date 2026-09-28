@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Loader2, RefreshCw, Save, Search } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, FileSpreadsheet, Loader2, RefreshCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
@@ -121,6 +121,7 @@ export default function CustomerDataManagementPage() {
   }, [adminCompanyId]);
 
   const dataRegistrationHref = adminCompanyId ? `/?companyId=${encodeURIComponent(adminCompanyId)}` : "/";
+  const customerLedgerHref = adminCompanyId ? `/crm/timeline?companyId=${encodeURIComponent(adminCompanyId)}` : "/crm/timeline";
   const completedCount = uploads.filter((upload) => upload.status === "completed").length;
   const failedCount = uploads.filter((upload) => upload.status === "failed").length;
   const duplicateCount = uploads.reduce((sum, upload) => sum + upload.duplicateCount, 0);
@@ -157,16 +158,40 @@ export default function CustomerDataManagementPage() {
       <div className="mx-auto max-w-[1560px] space-y-4">
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="maju-section-card overflow-hidden">
+          <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-black text-teal-700">데이터 등록 결과</p>
+              <h2 className="mt-1 text-lg font-black text-slate-950">
+                {failedCount ? `${failedCount.toLocaleString()}건의 실패 작업을 다시 처리하세요` : uploads.length ? "최근 등록 결과를 확인하세요" : "첫 데이터를 등록하세요"}
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">
+                {failedCount ? "실패한 파일은 행의 다시 업로드에서 이어서 처리할 수 있습니다." : "완료된 데이터는 거래처 원장에서 실제 반영 결과를 확인할 수 있습니다."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {completedCount ? (
+                <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" href={customerLedgerHref}>
+                  거래처 원장 확인
+                </Link>
+              ) : null}
+              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white hover:bg-teal-800" href={dataRegistrationHref}>
+                새 데이터 등록 <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: "현재 페이지", value: `${uploads.length.toLocaleString()}건`, tone: "border-slate-200 bg-white text-slate-900" },
-            { label: "완료", value: `${completedCount.toLocaleString()}건`, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
-            { label: "중복 후보", value: `${duplicateCount.toLocaleString()}건`, tone: "border-amber-200 bg-amber-50 text-amber-900" },
-            { label: "실패·재시도 필요", value: `${failedCount.toLocaleString()}건`, tone: "border-rose-200 bg-rose-50 text-rose-900" }
+            { label: "조회 작업", value: `${uploads.length.toLocaleString()}건`, tone: "text-slate-900" },
+            { label: "저장 완료", value: `${completedCount.toLocaleString()}건`, tone: "text-emerald-700" },
+            { label: "중복 후보", value: `${duplicateCount.toLocaleString()}건`, tone: "text-amber-700" },
+            { label: "재시도 필요", value: `${failedCount.toLocaleString()}건`, tone: "text-rose-700" }
           ].map((item) => (
-            <div className={`rounded-lg border p-4 ${item.tone}`} key={item.label}>
-              <p className="text-xs font-semibold opacity-70">{item.label}</p>
-              <p className="mt-1 text-2xl font-bold">{item.value}</p>
+            <div className="border-b border-slate-100 p-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0" key={item.label}>
+              <p className="text-xs font-semibold text-slate-500">{item.label}</p>
+              <p className={`mt-1 text-xl font-black ${item.tone}`}>{item.value}</p>
             </div>
           ))}
         </div>
@@ -175,10 +200,10 @@ export default function CustomerDataManagementPage() {
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 p-4">
             <div>
               <h2 className="flex items-center gap-2 text-base font-bold text-slate-950">
-                <Save className="h-4 w-4 text-teal-700" />
-                업로드 이력
+                <FileSpreadsheet className="h-4 w-4 text-teal-700" />
+                등록 작업
               </h2>
-              <p className="mt-1 text-xs font-bold text-slate-500">과거 데이터 업로드 작업의 파일명, 처리 건수, 시각, 처리 결과입니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">상태를 확인하고 실패 작업은 다시 등록하세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-1">
               <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
@@ -278,6 +303,16 @@ export default function CustomerDataManagementPage() {
                         다시 업로드
                       </Link>
                     )}
+                    {upload.status === "completed" && (
+                      <Link className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50" href={customerLedgerHref}>
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" /> 결과 확인
+                      </Link>
+                    )}
+                    {upload.status === "running" && (
+                      <p className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> 처리 완료 후 결과를 확인할 수 있습니다.
+                      </p>
+                    )}
                   </article>
                 ))}
               </div>
@@ -313,10 +348,14 @@ export default function CustomerDataManagementPage() {
                       <td className="px-4 py-2.5">
                         {upload.status === "failed" ? (
                           <Link className="inline-flex h-9 items-center rounded-md bg-rose-600 px-3 text-xs font-bold text-white transition hover:bg-rose-700" href={dataRegistrationHref}>
-                            다시 업로드
+                            <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> 다시 업로드
+                          </Link>
+                        ) : upload.status === "completed" ? (
+                          <Link className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50" href={customerLedgerHref}>
+                            결과 확인 <ArrowRight className="h-3.5 w-3.5" />
                           </Link>
                         ) : (
-                          <span className="text-xs text-slate-300">-</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700"><Loader2 className="h-3.5 w-3.5 animate-spin" /> 처리 중</span>
                         )}
                       </td>
                     </tr>

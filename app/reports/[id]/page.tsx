@@ -129,12 +129,12 @@ export default async function ReportDetailPage({
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle={`거래처 ${report.customers}개 · 지역 ${report.regions}개 · 잠재매출 ${report.potentialRevenue.toLocaleString()}만원`}
+      subtitle={`운영 우선순위 · 거래처 ${report.customers}개 · 지역 ${report.regions}개`}
       title="AI 리포트"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-5 px-3 py-3 sm:px-4 sm:py-5">
+      <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-3 sm:px-4 sm:py-5">
         <Card className="border-slate-200 bg-white shadow-sm">
           <CardContent className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center lg:p-6">
             <div>
@@ -143,7 +143,7 @@ export default async function ReportDetailPage({
                 <ReportActions companyName={report.companyName} />
               </div>
               <h2 className="text-xl font-bold leading-snug text-slate-950 sm:text-2xl">{reportGrade} · {primaryAction.title}부터 시작하세요</h2>
-              <p className="mt-2 text-sm font-medium leading-6 text-slate-600">가장 낮은 {primaryAction.label} 점수를 먼저 보완하면 거래처 원장, 코스, 매출 분석의 정확도를 함께 높일 수 있습니다.</p>
+              <p className="mt-2 text-sm font-medium leading-6 text-slate-600">가장 낮은 {primaryAction.label}부터 보완하면 운영 데이터의 정확도를 함께 높일 수 있습니다.</p>
               <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-bold text-white transition hover:bg-teal-800" href={primaryAction.href}>
                   우선 작업 열기
@@ -164,6 +164,21 @@ export default async function ReportDetailPage({
             </div>
           </CardContent>
         </Card>
+
+        <div aria-labelledby="report-actions-title" className="space-y-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-teal-700">1. 다음 행동</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-950" id="report-actions-title">낮은 점수부터 실행</h2>
+            </div>
+            <p className="text-xs font-medium text-slate-500">각 항목을 누르면 실제 작업 화면으로 이동합니다.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {scoreActions.map((item) => (
+              <ScoreActionCard key={item.label} {...item} />
+            ))}
+          </div>
+        </div>
 
         <div aria-labelledby="report-evidence-title" className="space-y-3">
           <div>
@@ -240,10 +255,10 @@ export default async function ReportDetailPage({
           </Card>
         </div>
 
-        <div aria-labelledby="report-actions-title" className="space-y-3">
+        <div aria-labelledby="report-plan-title" className="space-y-3">
           <div>
             <p className="text-xs font-semibold text-teal-700">3. 권장 행동</p>
-            <h2 className="mt-1 text-lg font-bold text-slate-950" id="report-actions-title">지금 실행할 작업</h2>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950" id="report-plan-title">실행 일정</h2>
           </div>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <Card>
@@ -283,26 +298,6 @@ export default async function ReportDetailPage({
           </Card>
           </div>
         </div>
-
-        <Card className="border-slate-200/80 shadow-sm">
-          <CardHeader>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5 text-primary" />
-                  후속 실행 보드
-                </CardTitle>
-                <p className="mt-1 text-sm font-semibold text-muted-foreground">낮은 점수 항목부터 실제 운영 화면으로 이동해 보완합니다.</p>
-              </div>
-              <Badge className="w-fit bg-slate-100 text-slate-700">낮은 점수 우선</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {scoreActions.map((item) => (
-              <ScoreActionCard key={item.label} {...item} />
-            ))}
-          </CardContent>
-        </Card>
 
         <details className="maju-section-card group">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
@@ -473,17 +468,17 @@ function ScoreActionCard({
         : { badge: "bg-emerald-100 text-emerald-800", text: "양호", value: "text-emerald-700" };
 
   return (
-    <Link className="group flex min-h-48 flex-col rounded-lg border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 sm:min-h-52" href={href}>
+    <Link className="group flex min-h-40 flex-col rounded-lg border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-slate-500">{label}</p>
-          <p className={`mt-2 text-4xl font-bold leading-none ${tone.value}`}>{score}</p>
+          <p className={`mt-1 text-3xl font-bold leading-none ${tone.value}`}>{score}<span className="ml-1 text-xs font-semibold text-slate-400">점</span></p>
         </div>
         <Badge className={tone.badge}>{tone.text}</Badge>
       </div>
-      <p className="mt-4 text-sm font-bold text-slate-950">{title}</p>
-      <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{description}</p>
-      <span className="mt-auto inline-flex items-center gap-1 pt-4 text-xs font-semibold text-teal-800 transition group-hover:translate-x-0.5">작업 화면 열기 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+      <p className="mt-3 text-sm font-semibold text-slate-950">{title}</p>
+      <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-slate-500">{description}</p>
+      <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold text-teal-800 transition group-hover:translate-x-0.5">작업 열기 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
     </Link>
   );
 }

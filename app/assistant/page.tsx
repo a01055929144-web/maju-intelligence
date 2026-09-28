@@ -54,17 +54,17 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle="방문 기록으로 후속 문장과 견적 메모를 만듭니다."
+      subtitle="방문 기록을 다음 영업 행동으로 연결합니다."
       title="AI 영업"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-3 sm:px-4 sm:py-5">
-        <div className="maju-section-card">
+        <div className="maju-section-card overflow-hidden">
           <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="maju-section-title">영업 초안 작업 흐름</p>
-              <p className="mt-1 text-sm text-slate-500">기록 확인 → 초안 검토 → 후속 업무 순서로 진행하세요.</p>
+              <p className="maju-section-title">다음 영업 행동</p>
+              <p className="mt-1 text-sm text-slate-500">기록을 확인하고 필요한 후속 업무를 바로 이어가세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
@@ -74,7 +74,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               <span className="text-sm text-slate-400">후속 {followUps} · 견적 {quotes}</span>
             </div>
           </div>
-          <div className="grid sm:grid-cols-3">
+          <div className="grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {assistantActions.map((action) => (
               <AssistantActionCard key={action.label} {...action} />
             ))}
@@ -84,11 +84,11 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
         <section className="maju-section-card">
           <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-950">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-950">
                 <ClipboardEdit className="h-5 w-5 text-teal-700" />
                 검토할 초안
               </h2>
-              <p className="mt-1 text-sm text-slate-500">내용을 확인한 뒤 복사하거나 파일로 저장하세요.</p>
+              <p className="mt-1 text-sm text-slate-500">초안을 검토하고 복사한 뒤 표시된 후속 업무로 이동하세요.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={hasLiveDraftData ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
@@ -173,9 +173,9 @@ function AssistantActionCard({
         </div>
         <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">연결</Badge>
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
-      <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-800 transition group-hover:translate-x-0.5">
-        바로가기 <ArrowRight className="h-3.5 w-3.5" />
+      <p className="mt-2 text-sm leading-5 text-slate-500">{description}</p>
+      <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-teal-800 transition group-hover:translate-x-0.5">
+        작업 열기 <ArrowRight className="h-3.5 w-3.5" />
       </span>
     </Link>
   );
