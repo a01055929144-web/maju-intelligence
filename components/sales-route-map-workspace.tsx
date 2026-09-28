@@ -2461,7 +2461,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[364px]"}
+                    controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[328px]"}
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
@@ -2668,7 +2668,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               스타일로 반영합니다. */}
           <div
             className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              leftCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[440px]"
+              leftCollapsed ? "xl:w-[60px]" : "xl:bottom-3 xl:w-[360px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -2731,7 +2731,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
           <div
             className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              rightCollapsed ? "xl:w-[72px]" : "xl:bottom-3 xl:w-[340px]"
+              rightCollapsed ? "xl:w-[60px]" : "xl:bottom-3 xl:w-[304px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -3352,13 +3352,13 @@ function DeliveryAssignmentPanel({
 
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-slate-200/80 bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-3 py-2">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-bold text-slate-950">
             <Truck className="h-4 w-4 text-slate-500" />
             담당자 · 차량
           </p>
-          <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{vehicles.filter((vehicle) => !vehicle.isUnassigned).length}명 · 미배정 라이브 {unassignedLiveVehicles.length}건</p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">등록 {vehicles.filter((vehicle) => !vehicle.isUnassigned).length} · 미연결 {unassignedLiveVehicles.length}</p>
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
@@ -3369,18 +3369,18 @@ function DeliveryAssignmentPanel({
           <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
-      <div className="shrink-0 space-y-2 border-b border-slate-200 bg-slate-50/70 px-3 py-2.5">
+      <div className="shrink-0 space-y-1.5 border-b border-slate-200 bg-slate-50/70 px-3 py-2">
         {liveVehicleError ? (
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs font-medium leading-5 text-amber-800" role="status">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>라이브 연결 지연 · 마지막 정상 위치를 표시 중입니다. {liveVehicleError}</span>
           </div>
         ) : null}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
         <label className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
           <input
-            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+            className="h-8 w-full rounded-md border border-slate-200 bg-white pl-8 pr-2 text-xs font-medium text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
             onChange={(event) => setLiveSearch(event.target.value)}
             placeholder="담당자·차량 검색"
             value={liveSearch}
@@ -3401,7 +3401,7 @@ function DeliveryAssignmentPanel({
               <button
                 aria-label={`${label} ${count}대`}
                 aria-pressed={liveStatusFilter === status}
-                className={`h-8 rounded-md px-2 text-[11px] font-semibold ${liveStatusFilter === status ? "bg-teal-700 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"}`}
+                className={`h-7 rounded-md px-1.5 text-[11px] font-semibold ${liveStatusFilter === status ? "bg-teal-700 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"}`}
                 key={status}
                 onClick={() => setLiveStatusFilter(status)}
                 type="button"
@@ -3412,8 +3412,8 @@ function DeliveryAssignmentPanel({
           })}
         </div>
         </div>
-        <div className="flex items-center gap-2 overflow-hidden rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px]" aria-label="오늘 배송 현황">
-          <span className="font-medium text-slate-500">오늘 배송</span>
+        <div className="flex items-center gap-2 overflow-hidden px-0.5 text-[11px]" aria-label="오늘 배송 현황">
+          <span className="font-semibold text-slate-400">오늘</span>
           <span className="font-semibold text-sky-800">예정 {deliverySummary.scheduled}</span>
           <span className="font-semibold text-emerald-700">완료 {deliverySummary.completed}</span>
           <span className="font-semibold text-amber-700">대기 {deliverySummary.pending}</span>
@@ -3422,27 +3422,24 @@ function DeliveryAssignmentPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       {liveVehicleDetails}
-      <div className="border-b border-slate-100 px-3 py-2">
+      <div className="border-b border-slate-100 px-3 py-1.5">
         <button
-          className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition ${
-            selectedVehicleId === "all" ? "border-teal-300 bg-teal-50 ring-1 ring-teal-100" : "border-slate-200 bg-white hover:bg-slate-50"
+          className={`flex w-full items-center justify-between gap-3 rounded-md border px-2.5 py-2 text-left transition ${
+            selectedVehicleId === "all" ? "border-teal-400 bg-teal-50 shadow-[inset_3px_0_0_#0f766e] ring-1 ring-teal-100" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
           }`}
           onClick={() => onSelectVehicle("all")}
           type="button"
         >
           <div className="min-w-0">
             <p className="text-xs font-bold text-slate-950">전체 담당자</p>
-            <p className="truncate text-[11px] font-medium text-slate-500">담당자 필터 없이 전체 표시</p>
+            <p className="truncate text-[11px] font-medium text-slate-500">모든 거래처 표시</p>
           </div>
           <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">{totalStores}곳</span>
         </button>
       </div>
       <section aria-labelledby="registered-assignment-heading">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-3 py-2">
-          <div>
-            <h3 className="text-xs font-bold text-slate-800" id="registered-assignment-heading">등록 담당자 · 차량</h3>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-500">거래처 배정에 사용하는 정식 목록</p>
-          </div>
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-3 py-1.5">
+          <h3 className="text-xs font-bold text-slate-800" id="registered-assignment-heading">등록 담당자 · 차량</h3>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">{filteredVehicles.length}개</span>
         </div>
       <div className="divide-y divide-slate-100">
@@ -3454,8 +3451,8 @@ function DeliveryAssignmentPanel({
           const pendingCount = Math.max(0, vehicle.stops.length - completedCount);
           return (
             <div
-              className={`w-full px-3 py-2.5 text-left transition ${
-                selected ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : "bg-white hover:bg-slate-50"
+              className={`w-full px-3 py-2 text-left transition ${
+                selected ? "bg-teal-50 shadow-[inset_4px_0_0_#0f766e] ring-1 ring-inset ring-teal-200" : "bg-white hover:bg-slate-50"
               }`}
               key={vehicle.id}
             >
@@ -3473,7 +3470,7 @@ function DeliveryAssignmentPanel({
               ) : (
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm font-bold text-slate-950">{vehicle.name}</p>
+                    <p className={`min-w-0 flex-1 truncate text-sm font-bold ${selected ? "text-teal-950" : "text-slate-950"}`}>{vehicle.name}</p>
                     <div className="flex shrink-0 items-center gap-1">
                       <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${liveVehicle ? (liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-teal-100 text-teal-800") : "bg-slate-100 text-slate-500"}`}>
                         {liveVehicle ? (liveVehicle.isStale ? "지연" : "활성") : "오프라인"}
@@ -3553,7 +3550,7 @@ function DeliveryAssignmentPanel({
                       </div>
                     )}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
+                  <div className="mt-1.5 flex flex-wrap gap-1" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
                     {vehicle.stops.length ? (
                       <>
                         <span className="rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">예정 {vehicle.stops.length}</span>
@@ -5187,10 +5184,10 @@ function StoreManagementPanel({
   return (
     <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2">
           <div className="min-w-0">
             <p className="truncate text-sm font-black text-slate-950">{title}</p>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">거래처를 누르면 지도 위치를 보여줍니다.</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">목록 {stores.length.toLocaleString()}곳</p>
           </div>
           <button
             aria-label="거래처 목록 패널 접기"
@@ -5200,10 +5197,9 @@ function StoreManagementPanel({
           >
             <PanelRightClose className="h-4 w-4" />
           </button>
-          <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{stores.length}곳</span>
         </div>
         {storesMissingDistance.length > 0 ? (
-          <div className="shrink-0 border-b border-slate-200/80 bg-amber-50 px-4 py-2">
+          <div className="shrink-0 border-b border-slate-200/80 bg-amber-50 px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold leading-4 text-amber-800">거리 미계산 {storesMissingDistance.length}곳</p>
               <button
@@ -5224,21 +5220,21 @@ function StoreManagementPanel({
             stores.map((store) => (
               <div
                 className={`flex items-stretch border-b border-slate-100 transition hover:bg-slate-50 ${
-                  store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
+                  store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_4px_0_0_#0f766e] ring-1 ring-inset ring-teal-200" : ""
                 }`}
                 key={store.id}
                 ref={(el) => {
                   itemRefs.current[store.id] = el;
                 }}
               >
-                <button className="min-w-0 flex-1 px-4 py-3 text-left" onClick={() => onSelectStore(store.id)} type="button">
+                <button className="min-w-0 flex-1 px-3 py-2.5 text-left" onClick={() => onSelectStore(store.id)} type="button">
                   <div className="flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
                     <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                   </div>
-                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                  <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
-                    <p className="text-xs font-bold text-slate-400">
+                  <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{store.address || store.region}</p>
+                  <div className="mt-1.5 grid grid-cols-[1fr_auto] items-center gap-2">
+                    <p className="truncate text-[11px] font-bold text-slate-400">
                       {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
                     </p>
                     <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
@@ -5246,7 +5242,7 @@ function StoreManagementPanel({
                 </button>
                 <button
                   aria-label={`${store.name} 상세 편집`}
-                  className="my-3 mr-3 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-teal-50 hover:text-teal-700"
+                  className="my-2.5 mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-teal-700 hover:shadow-sm"
                   onClick={() => onEditStore(store.id)}
                   title="상세 편집"
                   type="button"
@@ -5270,9 +5266,6 @@ function StoreManagementPanel({
               </div>
             </div>
           )}
-        </div>
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-bold leading-5 text-slate-500">연필 아이콘을 누르면 상세 정보를 편집할 수 있습니다.</p>
         </div>
       </div>
     </aside>
@@ -5329,10 +5322,10 @@ function LeadListPanel({
   return (
     <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2">
           <div className="min-w-0">
             <p className="truncate text-sm font-black text-slate-950">{title}</p>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">리드를 누르면 지도 카드가 열립니다.</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">목록 {leads.length.toLocaleString()}곳</p>
           </div>
           <button
             aria-label="리드 목록 패널 접기"
@@ -5342,7 +5335,6 @@ function LeadListPanel({
           >
             <PanelRightClose className="h-4 w-4" />
           </button>
-          <span className="shrink-0 rounded-md bg-teal-50 px-2 py-1 text-xs font-black text-teal-700">{leads.length}곳</span>
         </div>
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {leads.length ? (
@@ -5357,8 +5349,8 @@ function LeadListPanel({
               const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
               return (
                 <div
-                  className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-teal-50 ${
-                    lead.id === selectedLeadId ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : ""
+                  className={`block w-full border-b border-slate-100 px-3 py-2.5 text-left transition hover:bg-teal-50 ${
+                    lead.id === selectedLeadId ? "bg-teal-50 shadow-[inset_4px_0_0_#0f766e] ring-1 ring-inset ring-teal-200" : ""
                   }`}
                   key={lead.id}
                   ref={(el) => {
@@ -5372,14 +5364,14 @@ function LeadListPanel({
                         {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
                       </Badge>
                     </div>
-                    <p className="mt-1 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
-                    <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
+                    <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{lead.address || "주소 확인 필요"}</p>
+                    <div className="mt-1.5 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
                       <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
                       <span className="truncate">{openDate || "개시일 미확인"}</span>
                       <span className="truncate">{lead.phone || "전화 미확인"}</span>
                       <span className="truncate font-black text-teal-700">우선순위 {confidence.score}점</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
                       {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-inset ring-amber-100">
                           리뷰 {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}

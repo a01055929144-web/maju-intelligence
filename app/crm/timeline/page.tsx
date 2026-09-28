@@ -1125,12 +1125,45 @@ export default function CrmTimelinePage() {
           title="거래처 관리"
         />
 
+        <div className="mb-4 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm sm:grid-cols-3">
+          <Link
+            className={`flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50 ${workspaceSection === "list" ? "bg-teal-50/70" : ""}`}
+            href={withCompanyQuery("/crm/timeline?section=list")}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-black text-slate-700">1</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-black text-slate-950">대상 찾기</span>
+              <span className="block truncate text-xs font-bold text-slate-500">보완 필요 {businessCheckCount + loadingMissingCount + managerMissingCount}건</span>
+            </span>
+          </Link>
+          <Link
+            className={`flex items-center gap-3 border-t border-slate-200 px-4 py-3 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "ledger" ? "bg-teal-50/70" : ""}`}
+            href={withCompanyQuery(`/crm/timeline?section=ledger${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-sm font-black text-amber-800">2</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-black text-slate-950">원장 보완</span>
+              <span className="block truncate text-xs font-bold text-slate-500">{selectedCustomer.customerName || "거래처 선택"} · 미완료 {Math.max(0, operationalChecks.length - operationalReadyCount)}건</span>
+            </span>
+          </Link>
+          <Link
+            className={`flex items-center gap-3 border-t border-slate-200 px-4 py-3 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "history" ? "bg-teal-50/70" : ""}`}
+            href={withCompanyQuery(`/crm/timeline?section=history${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-black text-blue-800">3</span>
+            <span className="min-w-0">
+              <span className="block text-sm font-black text-slate-950">기록·다음 행동</span>
+              <span className="block truncate text-xs font-bold text-slate-500">{latestNote?.nextAction || (historyCount ? `기록 ${historyCount}건 확인` : "첫 메모 남기기")}</span>
+            </span>
+          </Link>
+        </div>
+
         <div className="min-w-0 space-y-4">
         <div className={`${workspaceSection === "list" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="customer-ledger-list">
           <SectionHeader
             eyebrow="거래처 작업"
             title="거래처 목록"
-            description={`${filteredCustomers.length.toLocaleString()}곳 · 거래처를 선택하면 원장과 현장 기록이 열립니다.`}
+            description={`${filteredCustomers.length.toLocaleString()}곳 · 검색하거나 보완 필터를 선택해 작업 대상을 좁히세요.`}
           />
           {/*
             검색·필터 사이드바(360~400px)가 거래처 상세(원장/첨부자료) 그리드 옆에 항상 펼쳐져 있으면,
@@ -1159,7 +1192,7 @@ export default function CrmTimelinePage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h2 className="text-base font-bold text-slate-950">거래처 검색·필터</h2>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">검색 · 등급 · 보완 항목</p>
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">검색 후 보완 대상을 선택하세요.</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
@@ -1181,7 +1214,7 @@ export default function CrmTimelinePage() {
                     aria-label="거래처 검색"
                     className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
                     onChange={(event) => setCustomerSearch(event.target.value)}
-                    placeholder="상호명, 주소, 사업자번호 검색"
+                    placeholder="상호명, 주소, 사업자번호, 담당자 검색"
                     value={customerSearch}
                   />
                   {customerSearch ? (
@@ -1465,7 +1498,7 @@ export default function CrmTimelinePage() {
             <div className={`${workspaceSection === "ledger" ? "maju-section-card" : "hidden"} scroll-mt-28 p-4`} id="customer-ledger-detail">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <p className="mb-1 text-xs font-black uppercase tracking-wide text-teal-700">거래처 원장</p>
+                  <p className="mb-1 text-xs font-black uppercase tracking-wide text-teal-700">2 · 원장 보완</p>
                   <h2 className="truncate text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
                   <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
@@ -1503,6 +1536,13 @@ export default function CrmTimelinePage() {
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Link
+                    className="maju-button-primary h-8"
+                    href={withCompanyQuery(`/crm/timeline?section=history${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    기록·다음 행동
+                  </Link>
                   <div className="inline-flex h-11 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
                     <button
                       aria-label="이전 거래처"

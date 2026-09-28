@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { Building2, Loader2, UserPlus } from "lucide-react";
+import { ArrowRight, Building2, Loader2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,10 +84,10 @@ export default function CompanySignupPage() {
         <CardHeader>
           <Badge className="mb-3 w-fit bg-lime-100 text-slate-950 ring-1 ring-inset ring-lime-200">
             <Building2 className="mr-1 h-3.5 w-3.5" />
-            MAJU Company
+            회사 계정 등록
           </Badge>
-          <CardTitle className="text-2xl">회사 시작하기</CardTitle>
-          <p className="text-sm font-medium text-slate-500">운영 책임자 계정과 회사 정보를 등록합니다.</p>
+          <CardTitle className="text-2xl">MAJU 도입 신청</CardTitle>
+          <p className="text-sm font-medium text-slate-500">회사 정보와 최초 운영자 계정을 등록하세요.</p>
         </CardHeader>
         <CardContent>
           <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
@@ -115,7 +115,7 @@ export default function CompanySignupPage() {
               name="ownerName"
               value={ownerName}
               onChange={(event) => setOwnerName(event.target.value)}
-              placeholder="담당자명"
+              placeholder="운영 책임자 이름"
               required
             />
             <input
@@ -125,7 +125,7 @@ export default function CompanySignupPage() {
               value={ownerEmail}
               onChange={(event) => setOwnerEmail(event.target.value)}
               type="email"
-              placeholder="담당자 이메일"
+              placeholder="업무용 이메일"
               required
             />
             <input
@@ -188,12 +188,13 @@ export default function CompanySignupPage() {
 
             <Button className="mt-1.5 min-h-12 w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              {loading ? "회사 계정 만드는 중…" : "가입하기"}
+              {loading ? "회사 계정 등록 중…" : "회사 계정 등록"}
+              {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}
             </Button>
             {loading ? <p aria-live="polite" className="text-center text-xs font-medium text-slate-500">완료되면 운영 화면으로 자동 이동합니다.</p> : null}
 
             <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/dashboard/login">
-              이미 계정이 있으신가요? 로그인
+              이미 등록된 회사인가요? 로그인
             </Link>
           </form>
         </CardContent>

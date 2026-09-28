@@ -22,8 +22,8 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
         <header className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-600 text-sm font-semibold text-white">M</span>
           <div>
-            <p className="text-xs font-medium text-slate-500">MAJU Intelligence</p>
-            <h1 className="text-xl font-bold tracking-[-0.025em]">{joinMode === "company" ? "배송팀 합류" : "직원 로그인"}</h1>
+            <p className="text-xs font-medium text-slate-500">MAJU 현장 운영</p>
+            <h1 className="text-xl font-bold tracking-[-0.025em]">{joinMode === "company" ? "회사 초대 확인" : "직원 로그인"}</h1>
           </div>
         </header>
 
@@ -49,12 +49,12 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
                   {invitePreview.status === "pending" ? (
                     <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      가입 가능
+                      유효한 초대
                     </p>
                   ) : invitePreview.status === "accepted" ? (
                     <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      바로 로그인 가능
+                      등록된 직원
                     </p>
                   ) : (
                     <p className="mt-3 text-xs font-bold text-amber-800">
@@ -72,7 +72,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
 
           {canContinue ? <OAuthLoginButtons inviteCode={inviteCode} /> : null}
           <p className="text-center text-xs font-medium leading-5 text-slate-500">
-            {inviteCode ? "카카오 로그인 후 오늘 코스로 이동합니다." : "초대 링크가 없다면 관리자에게 요청하세요."}
+            {inviteCode ? "카카오 인증 후 배정된 현장 업무로 이동합니다." : "최초 등록은 회사 관리자가 보낸 초대 링크에서 진행하세요."}
           </p>
         </div>
       </section>

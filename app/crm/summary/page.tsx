@@ -120,6 +120,14 @@ function customerOperationalIssueCount(customer: CustomerSummaryRow) {
   return count;
 }
 
+function customerPrimaryAction(customer: CustomerSummaryRow) {
+  if (customer.businessStatus !== "정상") return { filter: "business-check", label: "사업자 확인" };
+  if (!customer.address) return { filter: "address-missing", label: "주소 등록" };
+  if (!customer.phone || !customer.representativeName) return { filter: "contact-missing", label: "연락처 보완" };
+  if (!customer.loadingPosition) return { filter: "loading-missing", label: "적재위치 등록" };
+  return { filter: "all", label: "기록 확인" };
+}
+
 export default function CrmSummaryPage() {
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
@@ -448,7 +456,7 @@ export default function CrmSummaryPage() {
         </div>
 
         <div className="maju-section-card">
-          <SectionHeader eyebrow="거래처 작업" title="거래처 운영 현황" description="보완 대상부터 정리합니다." />
+          <SectionHeader eyebrow="다음 작업" title="보완 대상을 바로 처리하세요" description="건수를 누르면 해당 거래처만 모아 원장에서 이어서 작업합니다." />
           <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_260px]">
             <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -480,30 +488,18 @@ export default function CrmSummaryPage() {
                 <p className="border-t border-slate-200 pt-3 text-xs font-black text-emerald-700">필수값 정상</p>
               )}
             </div>
-            <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-3 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/")}>
+            <Link className="flex items-center justify-between rounded-lg border border-teal-700 bg-teal-700 p-3 text-white shadow-sm transition hover:bg-teal-800" href={withCompanyQuery("/crm/timeline?section=list")}>
               <span>
-                <span className="block text-sm font-black">거래처 데이터 보완</span>
-                <span className="mt-1 block text-xs font-bold text-slate-300">엑셀/수기로 기준값 업데이트</span>
+                <span className="block text-sm font-black">보완 작업 시작</span>
+                <span className="mt-1 block text-xs font-bold text-slate-200">검색 → 원장 수정 → 기록 확인</span>
               </span>
               <Plus className="h-5 w-5 shrink-0" />
             </Link>
           </div>
-          <div className="grid divide-y divide-slate-200 border-t border-slate-200/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <div className="min-w-0 px-3 py-3">
-              <p className="text-[11px] font-black uppercase text-slate-400">배송 담당자</p>
-              <p className="mt-1 text-sm font-black text-slate-950">{managerCount.toLocaleString()}명</p>
-            </div>
-            <div className="min-w-0 px-3 py-3">
-              <p className="text-[11px] font-black uppercase text-slate-400">적재위치 등록</p>
-              <p className="mt-1 text-sm font-black text-slate-950">{loadingReadyCount.toLocaleString()}곳</p>
-            </div>
-            <div className="min-w-0 px-3 py-3">
-              <p className="text-[11px] font-black uppercase text-slate-400">메모 이력</p>
-              <p className="mt-1 flex items-center gap-1.5 text-sm font-black text-slate-950">
-                {isOperationsSummaryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-700" /> : null}
-                {isOperationsSummaryLoading ? "집계 중" : `${realMemoCount.toLocaleString()}건`}
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-200/80 px-3 py-2.5 text-xs font-bold text-slate-500">
+            <span>배송 담당자 <strong className="text-slate-900">{managerCount.toLocaleString()}명</strong></span>
+            <span>적재위치 <strong className="text-slate-900">{loadingReadyCount.toLocaleString()}곳</strong></span>
+            <span className="flex items-center gap-1">메모 {isOperationsSummaryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-700" /> : <strong className="text-slate-900">{realMemoCount.toLocaleString()}건</strong>}</span>
           </div>
         </div>
 
@@ -512,7 +508,7 @@ export default function CrmSummaryPage() {
             <SectionHeader
               eyebrow="국세청 상태조회"
               title="사업자 상태·메모·첨부 현황"
-              description="기본정보, 메모, 첨부자료를 한 표에서 봅니다."
+              description="검색한 뒤 우선 작업을 눌러 원장이나 기록으로 이동합니다."
             />
             <div className="no-print flex shrink-0 flex-wrap gap-1.5 p-3">
               <button
@@ -679,6 +675,7 @@ export default function CrmSummaryPage() {
             {pagedRows.map((customer) => {
               const summaryEntry = customer.id ? operationsSummary[customer.id] : undefined;
               const status = customer.businessStatus || "확인 필요";
+              const primaryAction = customerPrimaryAction(customer);
               return (
                 <Link
                   className="grid min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 px-3 py-2.5 transition hover:bg-slate-50"
@@ -693,6 +690,9 @@ export default function CrmSummaryPage() {
                     <span className="mt-0.5 flex items-center gap-1">
                       <Badge className={`px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
                       {customer.address ? <span className="truncate text-[11px] font-bold text-slate-400">{customer.address}</span> : null}
+                    </span>
+                    <span className={`mt-1 block text-[11px] font-black ${primaryAction.filter === "all" ? "text-teal-700" : "text-amber-700"}`}>
+                      다음 · {primaryAction.label}
                     </span>
                   </span>
                   <span className="truncate text-xs font-bold text-slate-700">{customer.representativeName || "—"}</span>
@@ -757,6 +757,7 @@ export default function CrmSummaryPage() {
             {pagedRows.map((customer) => {
               const summaryEntry = customer.id ? operationsSummary[customer.id] : undefined;
               const status = customer.businessStatus || "확인 필요";
+              const primaryAction = customerPrimaryAction(customer);
               return (
                 <Link
                   className="block space-y-3 px-4 py-4 transition active:bg-slate-50"
@@ -784,6 +785,10 @@ export default function CrmSummaryPage() {
                     <span className="text-slate-300">·</span>
                     <span className={summaryEntry?.loadingPositionPhotoUrl ? "text-teal-700" : "text-slate-400"}>적재위치 {summaryEntry?.loadingPositionPhotoUrl ? "등록" : "미등록"}</span>
                     <span className="ml-auto text-teal-700">상세 보기</span>
+                  </span>
+                  <span className="flex items-center justify-between rounded-md bg-slate-50 px-2.5 py-2 text-xs font-black text-slate-600">
+                    <span>다음 작업</span>
+                    <span className={primaryAction.filter === "all" ? "text-teal-700" : "text-amber-700"}>{primaryAction.label} →</span>
                   </span>
                 </Link>
               );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowRight, Building2, Check, Clock3, Loader2, LogIn, MapPinned, Route, Smartphone, Truck } from "lucide-react";
+import { ArrowRight, Building2, Check, Clock3, Loader2, LogIn, Route, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,20 +95,19 @@ export default function CustomerLoginPage() {
               </div>
             </div>
             <h1 className="mt-16 text-[36px] font-bold leading-[1.18] tracking-[-0.045em]">
-              <span className="block whitespace-nowrap">오늘의 배송을</span>
-              <span className="block whitespace-nowrap">한 화면에서</span>
-              <span className="block whitespace-nowrap">끝내세요.</span>
+              <span className="block">회사의 영업과 배송을</span>
+              <span className="block">하나의 운영 체계로.</span>
             </h1>
             <p className="mt-5 max-w-sm text-sm font-medium leading-6 text-slate-300">
-              배차, 최적 경로, 실시간 차량, 배송 증빙을 하나의 운영 흐름으로 연결합니다.
+              회사 계정으로 로그인하면 권한에 맞는 작업공간과 운영 화면으로 연결됩니다.
             </p>
           </div>
 
           <div className="relative space-y-3">
             {[
-              { icon: MapPinned, label: "거래처와 차량을 한 지도에서 확인" },
-              { icon: Route, label: "배송 순서를 자동으로 최적화" },
-              { icon: Truck, label: "완료 사진과 운행기록을 자동 보관" }
+              { icon: LogIn, label: "1. 회사 계정으로 로그인" },
+              { icon: Building2, label: "2. 담당 작업공간 선택" },
+              { icon: Route, label: "3. 영업·배송 운영 시작" }
             ].map((item) => (
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3" key={item.label}>
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal-400/15 text-teal-300">
@@ -125,10 +124,10 @@ export default function CustomerLoginPage() {
           <CardHeader>
             <Badge className="mb-3 w-fit bg-lime-100 text-slate-900 ring-1 ring-inset ring-lime-200">
               <Building2 className="mr-1 h-3.5 w-3.5" />
-              회사 운영자
+              회사 계정
             </Badge>
-            <CardTitle className="text-2xl font-bold tracking-[-0.03em]">운영 화면 로그인</CardTitle>
-            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">대표·관리자는 이메일로 로그인하세요.</p>
+            <CardTitle className="text-2xl font-bold tracking-[-0.03em]">MAJU 로그인</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">등록된 회사 이메일과 비밀번호를 입력하세요.</p>
           </CardHeader>
           <CardContent>
             {recentLoginEmail ? (
@@ -154,7 +153,7 @@ export default function CustomerLoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
-                placeholder="이메일"
+                placeholder="회사 이메일"
               />
               <input
                 autoComplete="current-password"
@@ -183,7 +182,7 @@ export default function CustomerLoginPage() {
               </label>
               <Button aria-busy={loading} className="mt-1.5 h-12 w-full rounded-lg" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-                {loading ? "계정과 작업공간 확인 중…" : "로그인"}
+                {loading ? "접속 권한 확인 중…" : "회사 운영 화면으로 이동"}
                 {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}
               </Button>
               {loading ? <p aria-live="polite" className="text-center text-xs font-medium text-slate-500">로그인이 완료되면 운영 화면으로 자동 이동합니다.</p> : null}
@@ -206,8 +205,8 @@ export default function CustomerLoginPage() {
               <Smartphone className="mr-1 h-3.5 w-3.5" />
               직원용
             </Badge>
-            <CardTitle className="text-xl font-bold tracking-[-0.025em]">직원 카카오 로그인</CardTitle>
-            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">초대받은 직원은 카카오로 바로 시작하세요.</p>
+            <CardTitle className="text-xl font-bold tracking-[-0.025em]">현장 직원 로그인</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">회사 초대를 받은 직원은 카카오 계정으로 접속하세요.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             <OAuthLoginButtons />
@@ -216,7 +215,7 @@ export default function CustomerLoginPage() {
               href="/mobile/join"
             >
               <Smartphone className="h-4 w-4" />
-              모바일 화면으로 카카오 로그인
+              직원용 모바일 화면 열기
             </Link>
             <p className="break-keep text-center text-xs font-medium leading-5 text-slate-500">
               처음 한 번은 관리자가 보낸 초대 링크가 필요합니다.
