@@ -359,7 +359,7 @@ export function MobileDeliveryProofPanel({
         <Plus className="h-4 w-4" />
         {files.length ? `사진 추가 (${files.length}/5)` : "1. 적재 위치와 상품 사진 촬영"}
       </label>
-      {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="relative rounded-lg bg-[#111827] p-2 ring-1 ring-inset ring-slate-700" key={fileKey(file)}><ImageIcon className="h-8 w-8 text-teal-400" /><p className="mt-1 truncate text-[10px] font-bold text-slate-300">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950" onClick={() => removeFile(index)} type="button"><X className="h-3.5 w-3.5" /></button></div>)}</div> : null}
+      {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="relative rounded-lg bg-[#111827] p-2 ring-1 ring-inset ring-slate-700" key={fileKey(file)}><ImageIcon className="h-8 w-8 text-teal-400" /><p className="mt-1 truncate pr-7 text-[10px] font-bold text-slate-300">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full text-white" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
 
       {files.length ? (
@@ -423,11 +423,11 @@ export function MobileDeliveryProofPanel({
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
           <div className="flex shrink-0 gap-1.5">
-            <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={() => void shareOwnerMessage()} type="button">
+            <button className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={() => void shareOwnerMessage()} type="button">
               <Send className="h-3.5 w-3.5" />
               공유
             </button>
-            <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={copyOwnerMessage} type="button">
+            <button className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-black text-slate-700" onClick={copyOwnerMessage} type="button">
               <Copy className="h-3.5 w-3.5" />
               복사
             </button>
@@ -459,7 +459,7 @@ export function MobileDeliveryProofPanel({
                 ? "위치 미지원"
                 : "위치 확인 대기 중"}
         {locationStatus === "denied" ? (
-          <button className="-m-2 p-2 underline decoration-dotted underline-offset-2" onClick={requestLocation} type="button">
+          <button className="-my-3 ml-0 min-h-11 px-2 underline decoration-dotted underline-offset-2" onClick={requestLocation} type="button">
             다시 시도
           </button>
         ) : null}

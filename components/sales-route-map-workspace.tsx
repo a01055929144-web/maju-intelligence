@@ -512,12 +512,22 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 지도 홈 퀵카드에서 "경유지 추가"를 누르면 경유 코스 탭으로 바로 이동시키면서 이 값을 같이
   // 넘겨, TodayCourseView가 마운트된 뒤 해당 거래처를 오늘 경유 선택에 자동으로 포함시킵니다.
   const [pendingCourseStoreId, setPendingCourseStoreId] = useState("");
-  // /leads/permits 같은 예전 딥링크(?view=leads)로 들어와도 같은 탭이 바로 열리도록 초기값을 URL에서 읽습니다.
-  const [activeView, setActiveView] = useState<WorkspaceView>(() => {
-    if (typeof window === "undefined") return "map";
-    const requested = new URLSearchParams(window.location.search).get("view");
-    return requested === "leads" || requested === "customers" || requested === "course" ? requested : "map";
-  });
+  // 서버 렌더와 첫 클라이언트 렌더는 같은 기본 탭을 사용하고, 마운트 뒤 URL 딥링크를 반영합니다.
+  // history도 정식 탭이므로 ?view=history를 누락하지 않습니다.
+  const [activeView, setActiveView] = useState<WorkspaceView>("map");
+  useEffect(() => {
+    const applyViewFromUrl = () => {
+      const requested = new URLSearchParams(window.location.search).get("view");
+      setActiveView(
+        requested === "leads" || requested === "customers" || requested === "course" || requested === "history"
+          ? requested
+          : "map"
+      );
+    };
+    applyViewFromUrl();
+    window.addEventListener("popstate", applyViewFromUrl);
+    return () => window.removeEventListener("popstate", applyViewFromUrl);
+  }, []);
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
@@ -1305,6 +1315,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
   const resetWorkspace = () => {
     setActiveView("map");
+    const params = new URLSearchParams(window.location.search);
+    params.delete("view");
+    window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`);
     setCourseSummary(null);
     setExcludeClosedStores(false);
     setGradeFilter("all");
@@ -1317,6 +1330,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   };
   const changeWorkspaceView = (nextView: WorkspaceView) => {
     setActiveView(nextView);
+    const params = new URLSearchParams(window.location.search);
+    if (nextView === "map") params.delete("view");
+    else params.set("view", nextView);
+    window.history.pushState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`);
     setPreviewStoreId("");
     setMapFocusId("");
     if (nextView === "course" && vehicleFilterId === "all" && deliveryVehicles[0]) {

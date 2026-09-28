@@ -267,7 +267,7 @@ function MobileRegisterForm({
 }) {
   return (
     <div className="space-y-4">
-      <button className="flex items-center gap-1 text-xs font-black text-slate-500" onClick={onBack} type="button">
+      <button className="flex min-h-11 items-center gap-1 px-1 text-xs font-black text-slate-500" onClick={onBack} type="button">
         검색으로 돌아가기
       </button>
 

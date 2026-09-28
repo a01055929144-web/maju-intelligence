@@ -178,7 +178,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 xl:flex-wrap xl:overflow-visible xl:pb-0">
           {(Object.keys(statusCopy) as UploadStatusFilter[]).map((key) => (
             <button
-              className={`h-10 shrink-0 rounded-md border px-3 text-sm font-black transition ${
+              className={`h-11 shrink-0 rounded-md border px-3 text-sm font-black transition ${
                 status === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-foreground hover:bg-muted"
               }`}
               key={key}
@@ -192,7 +192,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             </button>
           ))}
         </div>
-        <Button className="h-10 gap-2" disabled={!filteredUploads.length} onClick={downloadCsv} type="button" variant="outline">
+        <Button className="h-11 gap-2" disabled={!filteredUploads.length} onClick={downloadCsv} type="button" variant="outline">
           <Download className="h-4 w-4" />
           CSV 다운로드
         </Button>
@@ -223,7 +223,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredUploads.length.toLocaleString()}건
           </span>
           <button
-            className="rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-11 rounded-md border border-border bg-white px-3 py-2 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
             disabled={currentPage <= 1}
             onClick={() => setPage((value) => Math.max(1, value - 1))}
             type="button"
@@ -234,7 +234,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
           </span>
           <button
-            className="rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-11 rounded-md border border-border bg-white px-3 py-2 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
             disabled={currentPage >= totalPages}
             onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
             type="button"

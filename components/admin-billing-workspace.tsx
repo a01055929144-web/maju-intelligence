@@ -127,7 +127,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
             <Search className="h-4 w-4 text-slate-400" />
             <span className="sr-only">고객사 또는 카드번호 검색</span>
             <input className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" onChange={(event) => setQuery(event.target.value)} placeholder="고객사, 카드번호, 결제 상태 검색..." value={query} />
-            {query ? <button aria-label="검색어 지우기" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setQuery("")} type="button"><X className="h-4 w-4" /></button> : null}
+            {query ? <button aria-label="검색어 지우기" className="-mr-3 grid h-11 w-11 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setQuery("")} type="button"><X className="h-4 w-4" /></button> : null}
           </label>
           <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-500" onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} value={statusFilter}>
             <option value="all">전체 결제 상태</option>
@@ -196,7 +196,8 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
                       />
                       <span className="text-xs text-slate-400">원</span>
                       <button
-                        className="maju-button-secondary !h-7 !px-2"
+                        aria-label={`${row.companyName} 월 이용료 저장`}
+                        className="maju-button-secondary !h-11 !w-11 !px-0"
                         disabled={savingCompanyId === row.companyId}
                         onClick={() => savePlanAmount(row.companyId)}
                         type="button"
