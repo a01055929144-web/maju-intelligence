@@ -126,6 +126,17 @@ html {
   background-clip: padding-box;
 }
 
+/* 페이지 내부의 탭·지도 도구는 좁은 화면에서 줄바꿈해 높이를 키우는 대신 한 줄 작업대로
+   유지합니다. 가로 스크롤은 입력 장치로 사용할 수 있지만 시각적인 레일은 감춥니다. */
+.maju-toolbar-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.maju-toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 * {
   box-sizing: border-box;
 }

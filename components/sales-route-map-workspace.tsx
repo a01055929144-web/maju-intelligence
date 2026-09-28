@@ -1770,9 +1770,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </p>
           </div>
         </div>
-        <div className="flex max-w-full flex-wrap items-center justify-start gap-2 xl:justify-end">
+        <div className="maju-toolbar-scroll flex max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
           {activeView === "map" ? (
-            <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
+            <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
               <button
                 aria-pressed={leadRadiusOpen}
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
@@ -1805,7 +1805,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </button>
             </div>
           ) : null}
-          <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
+          <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
             {[
               { label: "등급별", value: "grade" },
               { label: "차량별", value: "vehicle" }
@@ -1825,7 +1825,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               );
             })}
           </div>
-          <nav className="flex h-10 items-center gap-1 rounded-lg bg-slate-100 p-1">
+          <nav className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
@@ -1846,16 +1846,17 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             })}
           </nav>
           <button
-            className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-lime-300 bg-lime-100 px-3 text-xs font-bold text-slate-950 transition hover:bg-lime-200"
+            className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
             onClick={() => setMarkerViewMode("vehicle")}
             title={`최근 수신 ${liveVehicleSummary.latestLabel} · ${STAFF_LOCATION_FRESHNESS_MINUTES}분 이내 활성, 초과 시 지연`}
             type="button"
           >
-            <Truck className="h-4 w-4 shrink-0 text-slate-800" />
+            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${liveVehicleSummary.active ? "bg-emerald-500" : "bg-slate-300"}`} />
+            <Truck className="h-4 w-4 shrink-0 text-slate-500" />
             <span className="whitespace-nowrap">라이브차 {liveVehicleSummary.active}대</span>
             {liveVehicleSummary.stale ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
-          <div className="flex h-10 items-center gap-1 rounded-lg bg-slate-50 p-1">
+          <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-50 p-1">
             <button
               aria-expanded={statsExpanded}
               aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}

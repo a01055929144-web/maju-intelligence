@@ -21,29 +21,29 @@ type WorkspaceSectionNavProps = {
  */
 export function WorkspaceSectionNav({ eyebrow = "페이지", items }: WorkspaceSectionNavProps) {
   return (
-    <nav className="mb-3 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-[0_4px_18px_rgba(15,23,42,0.035)] [scrollbar-width:thin]">
-      <span className="hidden shrink-0 px-2 text-xs font-semibold text-slate-500 sm:inline">{eyebrow}</span>
+    <nav className="maju-toolbar-scroll mb-4 flex flex-nowrap items-center gap-1 overflow-x-auto border-b border-slate-200 bg-transparent px-0.5" aria-label={`${eyebrow} 전환`}>
+      <span className="mr-2 hidden shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400 lg:inline">{eyebrow}</span>
       {items.map((item) => {
         const Icon = item.icon;
         const selected = Boolean(item.active);
 
         return (
           <a
-            className={`flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
+            className={`relative flex h-11 shrink-0 items-center gap-2 px-3 text-sm font-semibold transition ${
               selected
-                ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]"
-                : "border-transparent bg-white text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950"
+                ? "text-teal-800 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-teal-600"
+                : "text-slate-500 hover:bg-slate-100/70 hover:text-slate-950"
             }`}
             href={item.href}
             key={item.label}
             title={item.description}
           >
-            <Icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+            <Icon className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-400"}`} />
             <span>{item.label}</span>
             {item.badge ? (
               <span
                 className={`rounded-md px-1.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${
-                  selected ? "bg-white/95 text-teal-800 ring-white/70" : "bg-slate-50 text-slate-600 ring-slate-200"
+                  selected ? "bg-teal-50 text-teal-800 ring-teal-200" : "bg-slate-50 text-slate-600 ring-slate-200"
                 }`}
               >
                 {item.badge}
