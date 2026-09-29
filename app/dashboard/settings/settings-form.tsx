@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Bell, Building2, ClipboardCheck, Database, FileSpreadsheet, Loader2, MapPin, Route, Save, SendHorizonal, Truck, Upload } from "lucide-react";
+import { Bell, Building2, ClipboardCheck, Loader2, MapPin, Route, Save, SendHorizonal, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -150,33 +150,6 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           </div>
         </section>
 
-        {/* 2026-09-08 피드백("회사설정 내의 레이아웃과 카드내용이 다른데 합쳐진 경우가 있어 이를
-            개선해"): 예전엔 이 3단계 안내가 카드 테두리 없이 옆 카드들 사이에 붕 떠 있었습니다 —
-            다른 섹션들과 같은 maju-section-card로 감싸 시각적 리듬을 맞춥니다. */}
-        <section className="maju-section-card">
-          <div className="maju-card-header">
-            <p className="maju-section-title">설정 절차</p>
-            <p className="mt-1 maju-muted-label normal-case tracking-normal">아래 3단계로 저장한 기준값이 지도·코스·거래처 화면에 그대로 반영됩니다.</p>
-          </div>
-          <div className="grid gap-3 p-4 md:grid-cols-3">
-            <BasisCard
-              icon={<FileSpreadsheet className="h-4 w-4" />}
-              title="1. 기준정보 저장"
-              description="회사명과 물류 출발지가 저장되어야 거래처 거리와 코스 계산 기준이 맞습니다."
-            />
-            <BasisCard
-              icon={<Upload className="h-4 w-4" />}
-              title="2. 거래처 데이터 연결"
-              description="수기 등록 또는 엑셀 업로드 데이터가 같은 회사 기준으로 누적됩니다."
-            />
-            <BasisCard
-              icon={<Truck className="h-4 w-4" />}
-              title="3. 현장 화면 반영"
-              description="지도 홈과 거래처 원장에서 동일한 기준값을 사용합니다."
-            />
-          </div>
-        </section>
-
         {/* 2026-09-08 개선: 예전엔 이 카드 하나("회사 설정" 헤더)에 회사 정보 + 문자 발송 설정 +
             텔레그램 이탈 알림까지 서로 다른 세 기능이 한 카드 안에 섞여 있어서, 카드 헤더가 말하는
             내용과 실제 카드 본문 내용이 어긋나 보였습니다. 셋을 각자 헤더가 맞는 별도 카드로 나눕니다. */}
@@ -186,10 +159,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <Building2 className="mr-1 h-3.5 w-3.5" />
               회사 설정
             </Badge>
-            <h2 className="text-2xl font-black text-slate-950">관리자가 생성한 회사 정보를 수정합니다</h2>
-            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-              회사 계정과 최초 회사 등록은 MAJU 관리자가 생성합니다. 고객사는 운영에 필요한 기준값만 설정에서 수정합니다.
-            </p>
+            <h2 className="text-2xl font-black text-slate-950">회사 기준정보</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500">지도와 배송코스에 사용할 회사명과 출발지를 관리합니다.</p>
           </div>
           <div className="space-y-4 p-4">
             <label className="space-y-1.5">
@@ -233,6 +204,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           </div>
           <SectionSaveFooter
             disabled={anySectionSaving || !sectionDirty.company}
+            dirty={sectionDirty.company}
             label="회사 기준정보 저장"
             onSave={() => void saveSection("company")}
             state={saveStates.company}
@@ -245,7 +217,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <SendHorizonal className="mr-1 h-3.5 w-3.5" />
               문자 발송 설정
             </Badge>
-            <h2 className="text-xl font-black text-slate-950">고객 문자 발신 정보와 상태별 기본 문구</h2>
+            <h2 className="text-xl font-black text-slate-950">문자 발신 정보와 기본 문구</h2>
             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">현장 직원이 배송 메모를 남기지 않아도 여기 저장된 문구로 자동 발송됩니다.</p>
           </div>
           <div className="space-y-4 p-4">
@@ -311,6 +283,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           </div>
           <SectionSaveFooter
             disabled={anySectionSaving || !sectionDirty.messaging}
+            dirty={sectionDirty.messaging}
             label="문자 설정 저장"
             onSave={() => void saveSection("messaging")}
             state={saveStates.messaging}
@@ -323,7 +296,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <Bell className="mr-1 h-3.5 w-3.5" />
               이탈 위험 알림
             </Badge>
-            <h2 className="text-xl font-black text-slate-950">텔레그램 그룹으로 이탈 위험 거래처 알림 받기</h2>
+            <h2 className="text-xl font-black text-slate-950">텔레그램 이탈 위험 알림</h2>
             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">21일 이상 매출 없는 거래처가 있으면 매일 이 텔레그램 그룹으로 알림을 보냅니다.</p>
           </div>
           <div className="space-y-3 p-4">
@@ -371,6 +344,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           </div>
           <SectionSaveFooter
             disabled={anySectionSaving || !sectionDirty.telegram}
+            dirty={sectionDirty.telegram}
             label="텔레그램 설정 저장"
             onSave={() => void saveSection("telegram")}
             state={saveStates.telegram}
@@ -378,11 +352,11 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         </section>
       </div>
 
-      <aside className="h-fit maju-section-card">
+      <aside className="h-fit maju-section-card xl:sticky xl:top-4">
         <div className="maju-card-header space-y-3">
           <h2 className="flex items-center gap-2 text-lg font-black text-slate-950">
             <MapPin className="h-5 w-5 text-primary" />
-            저장 가이드
+            적용 현황
           </h2>
           <div className="rounded-lg border border-teal-100 bg-teal-50/70 p-3">
             <p className="text-xs font-black text-primary">현재 출발지</p>
@@ -391,32 +365,14 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         </div>
         <div className="space-y-4 p-4 text-sm leading-6 text-muted-foreground">
           <WorkflowItem
-            icon={<Database className="h-4 w-4" />}
-            title="고객사 계정"
-            description="관리자가 회사 ID와 로그인 계정을 생성하면 고객사 데이터가 회사별로 분리됩니다."
-          />
-          <WorkflowItem
-            icon={<Upload className="h-4 w-4" />}
-            title="거래처 등록"
-            description="수기 등록 또는 엑셀 업로드로 매장 기본정보, 사업자번호, 배송주소를 저장합니다."
-          />
-          <WorkflowItem
             icon={<Truck className="h-4 w-4" />}
             title="배송 기준"
-            description="물류 출발지는 모든 거래처 거리, 차량별 경유 코스, 티맵 계산의 기준점입니다."
+            description="저장한 출발지는 거리와 차량별 코스 계산에 바로 사용됩니다."
           />
           <div className="grid gap-2 pt-1">
             <QuickLink href="/dashboard" label="지도 홈 보기" />
             <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" />
             <QuickLink href="/" label="거래처 관리 · 등록으로 이동" />
-          </div>
-          <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-4">
-            <p className="font-black text-blue-950">저장 후 확인 순서</p>
-            <ol className="mt-2 space-y-2 text-xs font-bold leading-5 text-blue-900">
-              <li>1. 출발지 주소 저장 상태 확인</li>
-              <li>2. 거래처 등록 화면에서 배송주소 데이터 확인</li>
-              <li>3. 지도 홈에서 출발지-매장 거리 확인</li>
-            </ol>
           </div>
           <p className="text-xs">마지막 수정: {initial.updatedAt}</p>
         </div>
@@ -425,35 +381,23 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   );
 }
 
-function BasisCard({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
-  return (
-    <div className="maju-stat-card p-4">
-      <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-        <span className="text-teal-700">{icon}</span>
-        {title}
-      </div>
-      <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{description}</p>
-    </div>
-  );
-}
-
-function SectionSaveFooter({ disabled, label, onSave, state }: { disabled: boolean; label: string; onSave: () => void; state: SectionSaveState }) {
+function SectionSaveFooter({ disabled, dirty, label, onSave, state }: { disabled: boolean; dirty: boolean; label: string; onSave: () => void; state: SectionSaveState }) {
   const saving = state.status === "saving";
 
   return (
-    <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={`flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${state.status === "error" ? "border-rose-200 bg-rose-50/70" : !dirty && !saving ? "border-emerald-100 bg-emerald-50/50" : "border-teal-100 bg-teal-50/60"}`}>
       <div aria-live="polite" className="min-h-5 text-xs font-bold">
         {state.message ? (
           <span className={state.status === "error" ? "text-rose-700" : state.status === "saved" ? "text-emerald-700" : "text-slate-500"}>
             {state.message}
           </span>
-        ) : disabled && !saving ? (
+        ) : !dirty && !saving ? (
           <span className="text-emerald-700">저장된 최신 상태입니다.</span>
         ) : (
           <span className="text-slate-500">이 카드에 저장하지 않은 변경사항이 있습니다.</span>
         )}
       </div>
-      <Button className="w-full shrink-0 sm:w-auto" disabled={disabled} onClick={onSave} type="button">
+      <Button className="h-11 w-full shrink-0 font-black sm:w-auto" disabled={disabled} onClick={onSave} type="button">
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         {saving ? "저장 중..." : label}
       </Button>

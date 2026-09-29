@@ -86,11 +86,8 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
             <Building2 className="mr-1 h-3.5 w-3.5" />
             중복 허용 사업자번호
           </Badge>
-          <h2 className="text-2xl font-black text-slate-950">하나의 사업자번호로 여러 거래처를 운영하는 경우를 등록합니다</h2>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-            종사업자번호처럼 같은 사업자등록번호로 여러 지점(거래처)을 운영하는 경우, 여기에 등록하면 데이터 등록·업로드 시 자동 병합이나
-            중복 경고 대상에서 제외되고 상호명+주소 기준으로 구분됩니다.
-          </p>
+          <h2 className="text-2xl font-black text-slate-950">중복 허용 번호 관리</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-500">여러 지점이 같은 사업자번호를 쓸 때 등록하세요. 상호명과 주소로 지점을 구분합니다.</p>
         </div>
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{exceptions.length}건</Badge>
       </div>
@@ -123,7 +120,7 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
             </span>
             <div>
               <p className="font-black text-slate-950">사업자번호 등록</p>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">등록 후에는 이 사업자번호가 여러 거래처에 있어도 중복으로 처리되지 않습니다.</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">등록한 번호는 거래처 중복 경고에서 제외됩니다.</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3">
@@ -139,7 +136,7 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
               value={memo}
               onChange={(event) => setMemo(event.target.value)}
             />
-            <Button className="h-11 bg-teal-700 font-black hover:bg-teal-800" disabled={!businessNumber.trim() || creating} onClick={addException} type="button">
+            <Button className="h-12 bg-teal-700 font-black hover:bg-teal-800" disabled={!businessNumber.trim() || creating} onClick={addException} type="button">
               <Plus className="h-4 w-4" />
               {creating ? "등록 중" : "중복 허용 등록"}
             </Button>

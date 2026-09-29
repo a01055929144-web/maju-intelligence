@@ -35,6 +35,12 @@ function formatDateKeyLabel(dateKey: string) {
   const date = new Date(year, (month || 1) - 1, day || 1);
   return date.toLocaleDateString("ko-KR", { day: "numeric", month: "long", weekday: "short", year: "numeric" });
 }
+function shiftDateKey(dateKey: string, amount: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  date.setDate(date.getDate() + amount);
+  return toDateKey(date.getFullYear(), date.getMonth(), date.getDate());
+}
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 // 아래 위치/경로 요약 로직은 components/sales-route-map-workspace.tsx의 VehicleAnalysisModal이 쓰는
@@ -216,6 +222,14 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
     }
     return cells;
   }, [cursor, counts]);
+  const monthCompletionCount = useMemo(() => Object.values(counts).reduce((sum, count) => sum + count, 0), [counts]);
+  const monthActiveDayCount = useMemo(() => Object.values(counts).filter((count) => count > 0).length, [counts]);
+
+  const selectDate = (dateKey: string) => {
+    setSelectedDate(dateKey);
+    const [year, month] = dateKey.split("-").map(Number);
+    setCursor({ month: Math.max(0, (month || 1) - 1), year });
+  };
 
   const activeDriver: DeliveryHistoryDriverGroup | undefined = useMemo(
     () => history?.drivers.find((driver) => driver.driverName === activeDriverName),
@@ -276,6 +290,16 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="rounded-lg bg-teal-50 px-3 py-2">
+              <p className="text-[10px] font-black text-teal-600">이달 운행일</p>
+              <p className="mt-0.5 text-base font-black text-teal-950">{monthActiveDayCount}일</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2">
+              <p className="text-[10px] font-black text-slate-500">이달 배송완료</p>
+              <p className="mt-0.5 text-base font-black text-slate-950">{monthCompletionCount.toLocaleString()}건</p>
+            </div>
+          </div>
           <div className="mt-2 grid grid-cols-7 gap-1 px-1">
             {WEEKDAY_LABELS.map((label) => (
               <div className="py-1 text-center text-[10px] font-black text-slate-400" key={label}>
@@ -315,6 +339,22 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
               );
             })}
           </div>
+          <div className="mt-2 grid grid-cols-[40px_1fr_40px] gap-2">
+            <button aria-label="이전 날짜" className="maju-button-secondary h-10 px-0" onClick={() => selectDate(shiftDateKey(selectedDate, -1))} type="button">
+              <ChevronLeft className="mx-auto h-4 w-4" />
+            </button>
+            <input
+              aria-label="운행 기록 날짜 선택"
+              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-center text-xs font-black text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+              max={todayKey()}
+              onChange={(event) => selectDate(event.target.value)}
+              type="date"
+              value={selectedDate}
+            />
+            <button aria-label="다음 날짜" className="maju-button-secondary h-10 px-0 disabled:cursor-not-allowed disabled:opacity-40" disabled={todayIsSelected} onClick={() => selectDate(shiftDateKey(selectedDate, 1))} type="button">
+              <ChevronRight className="mx-auto h-4 w-4" />
+            </button>
+          </div>
           {!todayIsSelected ? (
             <button
               className="maju-button-secondary mt-2 h-8 w-full text-[11px]"
@@ -335,11 +375,11 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
         <div className="maju-section-card flex min-h-[520px] flex-col">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
             <div>
-              <p className="text-xs font-black uppercase text-teal-700">배송 히스토리</p>
+              <p className="text-xs font-black uppercase text-teal-700">선택 날짜 운행 기록</p>
               <h3 className="mt-0.5 text-base font-black text-slate-950">{formatDateKeyLabel(selectedDate)}</h3>
             </div>
             <Badge className="bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-100">
-              {history ? `배송완료 ${history.totalCompletions.toLocaleString()}건` : "-"}
+              {history ? (history.totalCompletions ? `완료 ${history.totalCompletions.toLocaleString()}건` : "완료 기록 없음") : "-"}
             </Badge>
           </header>
 
@@ -352,7 +392,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
             <div className="grid flex-1 place-items-center p-8 text-center text-sm font-bold text-rose-600">{detailError}</div>
           ) : !history || (!history.drivers.length && !history.unassignedCompletions.length) ? (
             <div className="grid flex-1 place-items-center p-8 text-center text-sm font-bold text-slate-500">
-              이 날짜에는 저장된 배송완료 기록이 없습니다.
+              이 날짜에는 저장된 완료·운행 기록이 없습니다. 달력에서 완료 건수가 표시된 날짜를 선택하세요.
             </div>
           ) : (
             <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1fr_300px]">
@@ -416,7 +456,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                     {pendingPlannedStores.length ? (
                       <div className={`mt-3 rounded-lg border p-3 ${todayIsSelected ? "border-amber-200 bg-amber-50" : "border-rose-200 bg-rose-50"}`}>
                         <div className="flex items-center justify-between gap-2">
-                          <p className={`text-xs font-black ${todayIsSelected ? "text-amber-900" : "text-rose-900"}`}>{todayIsSelected ? "아직 배송 전" : "배송 미완료 확인 필요"}</p>
+                          <p className={`text-xs font-black ${todayIsSelected ? "text-amber-900" : "text-rose-900"}`}>{todayIsSelected ? "다음 행동 · 남은 배송" : "다음 행동 · 미완료 처리"}</p>
                           <Badge className={todayIsSelected ? "bg-white text-amber-800" : "bg-white text-rose-800"}>{pendingPlannedStores.length}곳</Badge>
                         </div>
                         <div className="mt-2 space-y-1">
@@ -428,7 +468,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                               {!todayIsSelected ? (
                                 <div className="mt-2 flex flex-wrap gap-1">
                                   {([
-                                    { icon: RotateCcw, label: "재배송", status: "redelivery" as const },
+                                    { icon: RotateCcw, label: "재배송 지정", status: "redelivery" as const },
                                     { icon: XCircle, label: "취소", status: "cancelled" as const },
                                     { icon: CheckCircle2, label: "확인", status: "checked" as const }
                                   ]).map((action) => {
@@ -458,14 +498,14 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                           ))}
                         </div>
                         {followUpError ? <p className="mt-2 text-[10px] font-black text-rose-700">{followUpError}</p> : null}
-                        {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 선택 매장도 다음 날 전체 배송 후보에 자동으로 다시 표시됩니다. 후속 상태와 처리자·처리시각은 회사별 운영 기록으로 저장됩니다.</p> : null}
+                        {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 지정 건은 다음 배송 후보에 다시 표시됩니다.</p> : null}
                       </div>
                     ) : activeDriver.planMatchedThatDay ? (
                       <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">확정 코스의 모든 배송이 완료됐습니다.</p>
                     ) : null}
                     <div className="mt-3 rounded-lg border border-slate-200 bg-white">
                       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-                        <p className="text-xs font-black text-slate-950">방문 순서</p>
+                        <p className="text-xs font-black text-slate-950">완료 순서</p>
                         <Badge className="bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-100">{activeDriver.completions.length}건</Badge>
                       </div>
                       <div className="max-h-72 overflow-auto p-2">

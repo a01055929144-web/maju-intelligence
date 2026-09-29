@@ -17,6 +17,7 @@ const statusCopy = {
 };
 
 type UploadStatusFilter = keyof typeof statusCopy;
+type IssueReasonFilter = "all" | "failed" | "lowQuality" | "duplicates" | "missingReport";
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
@@ -24,6 +25,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<UploadStatusFilter>("all");
   const [companyId, setCompanyId] = useState("all");
+  const [issueReason, setIssueReason] = useState<IssueReasonFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
 
@@ -43,12 +45,18 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
     return uploads.filter((upload) => {
       const matchesStatus = status === "all" || (status === "needsAction" ? needsReview(upload) : upload.status === status);
       const matchesCompany = companyId === "all" || upload.companyId === companyId;
+      const matchesIssueReason =
+        issueReason === "all" ||
+        (issueReason === "failed" && upload.status === "failed") ||
+        (issueReason === "lowQuality" && upload.qualityScore < 80) ||
+        (issueReason === "duplicates" && upload.duplicateCount > 0) ||
+        (issueReason === "missingReport" && !upload.reportId);
       const matchesQuery =
         !normalizedQuery ||
         [upload.filename, upload.company, upload.createdAt, upload.status].some((value) => value.toLowerCase().includes(normalizedQuery));
-      return matchesCompany && matchesStatus && matchesQuery;
+      return matchesCompany && matchesStatus && matchesIssueReason && matchesQuery;
     });
-  }, [companyId, query, status, uploads]);
+  }, [companyId, issueReason, query, status, uploads]);
   const totalPages = Math.max(1, Math.ceil(filteredUploads.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedUploads = useMemo(() => {
@@ -113,17 +121,22 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
                 </p>
               </div>
             </div>
-            <Button className="w-fit bg-amber-900 text-white hover:bg-amber-950" onClick={() => setStatus("needsAction")} type="button">
+            <Button className="w-fit bg-amber-900 text-white hover:bg-amber-950" onClick={() => { setStatus("needsAction"); setIssueReason("all"); setPage(1); }} type="button">
               보완 필요만 보기
             </Button>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {issueReasons.map((reason) => (
               <button
-                key={reason.label}
-                className="rounded-md border border-amber-200 bg-white p-3 text-left transition hover:border-amber-300 hover:bg-amber-100/40"
+                key={reason.key}
+                className={`rounded-md border p-3 text-left transition ${issueReason === reason.key ? "border-amber-700 bg-amber-100 ring-2 ring-amber-200" : "border-amber-200 bg-white hover:border-amber-300 hover:bg-amber-100/40"}`}
                 type="button"
-                onClick={() => setStatus("needsAction")}
+                aria-pressed={issueReason === reason.key}
+                onClick={() => {
+                  setStatus("needsAction");
+                  setIssueReason((current) => current === reason.key ? "all" : reason.key);
+                  setPage(1);
+                }}
               >
                 <p className="text-xs font-black text-amber-700">{reason.label}</p>
                 <p className="mt-1 text-xl font-black text-amber-950">{reason.count.toLocaleString()}건</p>
@@ -184,6 +197,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
               key={key}
               onClick={() => {
                 setStatus(key);
+                if (key !== "needsAction") setIssueReason("all");
                 setPage(1);
               }}
               type="button"
@@ -202,6 +216,11 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-muted-foreground">검색 결과</span>
           <span className="font-black">{filteredUploads.length.toLocaleString()}건</span>
+          {issueReason !== "all" ? (
+            <button className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900" onClick={() => setIssueReason("all")} type="button">
+              {issueReasons.find((reason) => reason.key === issueReason)?.label} ×
+            </button>
+          ) : null}
           <label className="ml-2 flex h-8 items-center gap-1 rounded-md border border-border bg-white px-2 text-xs font-black text-muted-foreground">
             보기
             <select
@@ -270,7 +289,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
               <span className="text-right">품질</span>
               <span className="text-right">중복</span>
               <span>보완 사유</span>
-              <span className="text-center">운영 액션</span>
+              <span className="text-center">조치 · 확인</span>
             </div>
             <div className="divide-y divide-border">
               {pagedUploads.map((upload) => (
@@ -284,13 +303,14 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
           <p className="font-black">조건에 맞는 업로드 이력이 없습니다.</p>
           <p className="mt-2 text-sm text-muted-foreground">검색어 또는 상태 필터를 조정해보세요.</p>
-          {(query || status !== "all" || companyId !== "all") ? (
+          {(query || status !== "all" || companyId !== "all" || issueReason !== "all") ? (
             <Button
               className="mt-4"
               onClick={() => {
                 setQuery("");
                 setStatus("all");
                 setCompanyId("all");
+                setIssueReason("all");
                 setPage(1);
               }}
               type="button"
@@ -454,10 +474,10 @@ function getIssueReasonSummary(uploads: UploadHistoryItem[]) {
   const missingReport = uploads.filter((upload) => !upload.reportId).length;
 
   return [
-    { count: failed, description: "파일 처리 자체가 실패한 건입니다.", label: "업로드 실패" },
-    { count: lowQuality, description: "필수 컬럼, 주소, 지역 값 보완이 필요합니다.", label: "품질 낮음" },
-    { count: duplicates, description: "거래처명, 주소, 사업자번호 중복 후보입니다.", label: "중복 후보" },
-    { count: missingReport, description: "분석 리포트가 생성되지 않은 업로드입니다.", label: "리포트 미생성" }
+    { count: failed, description: "파일 처리 자체가 실패한 건입니다.", key: "failed" as const, label: "업로드 실패" },
+    { count: lowQuality, description: "필수 컬럼, 주소, 지역 값 보완이 필요합니다.", key: "lowQuality" as const, label: "품질 낮음" },
+    { count: duplicates, description: "거래처명, 주소, 사업자번호 중복 후보입니다.", key: "duplicates" as const, label: "중복 후보" },
+    { count: missingReport, description: "분석 리포트가 생성되지 않은 업로드입니다.", key: "missingReport" as const, label: "리포트 미생성" }
   ];
 }
 

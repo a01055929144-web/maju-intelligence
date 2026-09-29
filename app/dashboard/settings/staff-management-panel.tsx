@@ -309,8 +309,8 @@ export function StaffManagementPanel({
             <Users className="mr-1 h-3.5 w-3.5" />
             직원 관리
           </Badge>
-          <h2 className="text-2xl font-bold text-slate-950">직원 초대</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">직원별 업무와 초대 상태를 관리합니다.</p>
+          <h2 className="text-2xl font-bold text-slate-950">직원 초대와 연결</h2>
+          <p className="mt-2 text-sm text-slate-500">초대 링크를 보내고 가입 후 배정 상태만 확인하세요.</p>
         </div>
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
@@ -331,11 +331,11 @@ export function StaffManagementPanel({
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-950">
-            <span className="font-medium">링크 생성</span>
+            <span className="font-black">1. 링크 생성</span>
             <span aria-hidden="true" className="text-blue-300">→</span>
-            <span className="font-medium">직원 가입</span>
+            <span className="font-black">2. 직원 가입</span>
             <span aria-hidden="true" className="text-blue-300">→</span>
-            <span className="font-medium">배정 확인</span>
+            <span className="font-black">3. 배정 확인</span>
           </div>
 
           {invitations.length ? (
@@ -495,7 +495,7 @@ export function StaffManagementPanel({
                           <td className="max-w-[220px] px-3 py-3">
                             {invitation.membershipOnly ? (
                               <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-bold leading-4 text-amber-800">
-                                가입 계정은 확인됐지만 연결 이력이 없습니다. 배정 기준을 저장하면 자동 복구됩니다.
+                                가입됨 · 배정 기준을 저장해 연결하세요.
                               </div>
                             ) : (
                               <p className="truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] font-bold text-slate-500">{invitation.inviteUrl}</p>
@@ -575,9 +575,7 @@ export function StaffManagementPanel({
                           <tr className="border-b border-slate-100 bg-slate-50/60">
                             <td className="px-3 py-3" colSpan={7}>
                               <p className="text-xs font-black text-slate-900">배정 기준 수동 연결</p>
-                              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                                거래처의 배송담당자/차량 표기가 직원명과 다르면 자동 매칭이 안 됩니다. 그럴 때만 실제 등록된 담당자명 또는 차량번호를 입력해 수동으로 연결하세요.
-                              </p>
+                              <p className="mt-1 text-xs font-bold text-slate-500">자동 매칭이 안 될 때만 실제 담당자명 또는 차량번호를 선택하세요.</p>
                               {invitation.status === "accepted" ? (
                                 <StaffAssignmentEditor
                                   canEdit={canManageMembers}
@@ -625,19 +623,18 @@ export function StaffManagementPanel({
           ) : null}
         </div>
 
-        <aside className="h-fit rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <aside className="order-first h-fit rounded-lg border border-teal-200 bg-teal-50/30 p-4 lg:order-last lg:sticky lg:top-4">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
               <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
               <p className="font-bold text-slate-950">직원 추가</p>
-              <p className="mt-1 text-sm leading-5 text-slate-500">이름과 담당 업무를 정한 뒤 링크를 공유하세요.</p>
+              <p className="mt-1 text-sm text-slate-500">이름 입력 → 업무 선택 → 링크 생성</p>
             </div>
           </div>
           {canManageMembers ? (
             <div className="mt-4 grid gap-3">
-              <p className="-mb-1 text-sm leading-5 text-slate-500">여러 명을 추가하려면 입력 줄을 늘리세요.</p>
               <div className="grid gap-2">
                 {inviteRows.map((row) => (
                   <div className="grid grid-cols-[minmax(0,1fr)_40px] gap-1.5 sm:grid-cols-[1fr_1fr_auto]" key={row.id}>
@@ -685,12 +682,9 @@ export function StaffManagementPanel({
                   </option>
                 ))}
               </select>
-              <div className="-mt-1 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 text-sm leading-5 text-blue-900">
-                <p>선택한 담당 업무가 입력한 모든 직원에게 적용됩니다.</p>
-                <p className="mt-1 text-blue-700">화면에 보이는 거래처 범위는 가입 후 연결된 담당자·차량 기준으로 결정됩니다.</p>
-              </div>
+              <p className="-mt-1 text-xs font-bold text-blue-800">선택한 업무가 입력한 모든 직원에게 적용됩니다.</p>
               <Button
-                className="h-11 bg-teal-700 font-semibold hover:bg-teal-800"
+                className="h-12 bg-teal-700 font-black hover:bg-teal-800"
                 disabled={!inviteRows.some((row) => row.employeeName.trim()) || creating}
                 onClick={createStaff}
                 type="button"
@@ -701,9 +695,7 @@ export function StaffManagementPanel({
 
               <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-white p-3">
                 <p className="text-sm font-semibold text-slate-900">담당 업무 항목 관리</p>
-                <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
-                  배송기사·영업직원·현장관리자·일반직원은 기본 제공 항목이라 삭제할 수 없습니다. 필요한 이름을 자유롭게 추가·삭제하세요.
-                </p>
+                <p className="mt-1 text-xs font-medium text-slate-500">기본 업무는 유지되며 필요한 항목만 추가할 수 있습니다.</p>
                 {jobTitles.length ? (
                   <ul className="mt-2 space-y-1.5">
                     {jobTitles.map((jobTitle) => (

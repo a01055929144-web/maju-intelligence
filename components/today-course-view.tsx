@@ -119,6 +119,9 @@ export function TodayCourseView({
   // 않은 첫 번째 경유지를 "다음 배송지"로 표시해, 방금 하나를 완료하면 자연스럽게 그다음 카드가
   // 강조되도록 합니다.
   const nextPendingStoreId = selectedRouteStoresAll.find((store) => !completedStoreIds?.has(store.id))?.id;
+  const completedRouteStoreCount = selectedRouteStoresAll.filter((store) => completedStoreIds?.has(store.id)).length;
+  const pendingRouteStoreCount = Math.max(0, selectedRouteStoresAll.length - completedRouteStoreCount);
+  const noDeliveryStoreCount = isVehicleScoped ? Math.max(0, orderedStores.length - selectedRouteStoresAll.length) : 0;
   const selectedRouteTotals = getStoreTotals(selectedRouteStores);
   const routeDistanceKm = routeSequence?.totalDistanceKm ?? selectedRouteTotals.distanceKm;
   const routeDurationMinutes = routeSequence?.totalDurationMinutes ?? selectedRouteTotals.durationMinutes;
@@ -583,6 +586,22 @@ export function TodayCourseView({
                 요약 · 티맵 계산
               </button>
             </div>
+            {isVehicleScoped ? (
+              <div className="grid grid-cols-3 gap-1.5 border-b border-slate-200/80 bg-white p-2">
+                <div className="rounded-md bg-blue-50 px-2 py-2 text-center">
+                  <p className="text-[10px] font-bold text-blue-600">오늘 예정</p>
+                  <p className="mt-0.5 text-sm font-black text-blue-900">{selectedRouteStoresAll.length}곳</p>
+                </div>
+                <div className="rounded-md bg-emerald-50 px-2 py-2 text-center">
+                  <p className="text-[10px] font-bold text-emerald-600">완료</p>
+                  <p className="mt-0.5 text-sm font-black text-emerald-900">{completedRouteStoreCount}곳</p>
+                </div>
+                <div className="rounded-md bg-slate-100 px-2 py-2 text-center">
+                  <p className="text-[10px] font-bold text-slate-500">배송 없음</p>
+                  <p className="mt-0.5 text-sm font-black text-slate-800">{noDeliveryStoreCount}곳</p>
+                </div>
+              </div>
+            ) : null}
             <div className="min-h-0 xl:flex-1 xl:overflow-auto">
               {routeRightPanelTab === "summary" ? (
               <div className="border-b border-slate-200/80 p-3">
@@ -697,6 +716,15 @@ export function TodayCourseView({
               {routeRightPanelTab === "list" ? (
               <>
               <div className="space-y-2 border-b border-slate-200/80 p-3">
+                {isVehicleScoped && selectedRouteStoresAll.length ? (
+                  <button
+                    className="maju-button-primary flex h-11 w-full items-center justify-center gap-2"
+                    onClick={() => setRouteRightPanelTab("summary")}
+                    type="button"
+                  >
+                    {routeSequence ? "계산 결과 확인 · 코스 확정" : `루트 최적화 시작 · 대기 ${pendingRouteStoreCount}곳`}
+                  </button>
+                ) : null}
                 <label className="relative block">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input

@@ -53,9 +53,7 @@ export function CompanyClosurePanel({ companyName }: { companyName: string }) {
           위험 구역
         </Badge>
         <h2 className="text-2xl font-black text-slate-950">회사 탈퇴</h2>
-        <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-          회사 계정을 탈퇴 처리합니다. 모든 직원의 로그인이 즉시 막히고 활성 구독은 자동으로 해지됩니다. 데이터는 바로 삭제되지 않지만, 이 화면에서 되돌릴 수 없습니다.
-        </p>
+        <p className="mt-2 text-sm font-semibold text-slate-500">모든 직원의 로그인이 중지되고 활성 구독이 해지됩니다. 이 화면에서는 되돌릴 수 없습니다.</p>
       </div>
       <div className="grid gap-3 p-4 sm:max-w-md">
         <label className="text-xs font-bold text-slate-500">
