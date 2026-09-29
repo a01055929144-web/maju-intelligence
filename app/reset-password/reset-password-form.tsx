@@ -60,14 +60,17 @@ export function ResetPasswordForm({ token }: { token: string }) {
     <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
       <input
         autoComplete="new-password"
+        autoFocus
         className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
         name="newPassword"
         value={newPassword}
         onChange={(event) => setNewPassword(event.target.value)}
         type="password"
+        enterKeyHint="next"
         placeholder="새 비밀번호 (8자 이상)"
         minLength={8}
         required
+        disabled={loading}
       />
       <input
         autoComplete="new-password"
@@ -76,9 +79,11 @@ export function ResetPasswordForm({ token }: { token: string }) {
         value={newPasswordConfirm}
         onChange={(event) => setNewPasswordConfirm(event.target.value)}
         type="password"
+        enterKeyHint="done"
         placeholder="새 비밀번호 확인"
         minLength={8}
         required
+        disabled={loading}
       />
       {error ? (
         <div aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">

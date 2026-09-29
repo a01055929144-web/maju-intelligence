@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { KeyRound, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, CheckCircle2, KeyRound, Loader2, Mail, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,18 +53,32 @@ export default function ForgotPasswordPage() {
         </CardHeader>
         <CardContent>
           {submitted ? (
-            <p aria-live="polite" className="rounded-md bg-emerald-50 px-3 py-3 text-sm font-bold leading-6 text-emerald-800" role="status">{message}</p>
+            <div className="space-y-3" aria-live="polite" role="status">
+              <div className="rounded-xl bg-emerald-50 px-4 py-4 text-sm font-bold leading-6 text-emerald-800">
+                <CheckCircle2 className="mb-2 h-5 w-5" />
+                {message}
+              </div>
+              <p className="text-xs font-medium leading-5 text-slate-500">메일이 보이지 않으면 스팸함을 확인하거나 잠시 후 다시 요청하세요.</p>
+              <Button className="min-h-12 w-full" onClick={() => { setSubmitted(false); setMessage(""); }} type="button" variant="outline">
+                <RotateCcw className="h-4 w-4" />
+                다시 요청하기
+              </Button>
+            </div>
           ) : (
             <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
               <p className="mb-1 text-sm font-semibold leading-6 text-muted-foreground">가입하신 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.</p>
               <input
                 autoComplete="email"
+                autoFocus
                 className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
                 name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
+                inputMode="email"
+                enterKeyHint="send"
                 placeholder="가입 이메일"
+                disabled={loading}
                 required
               />
               {message ? <p aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">{message}</p> : null}
@@ -74,7 +88,8 @@ export default function ForgotPasswordPage() {
               </Button>
             </form>
           )}
-          <Link className="mt-4 block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/dashboard/login">
+          <Link className="mt-4 flex min-h-11 items-center justify-center gap-1.5 text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/dashboard/login">
+            <ArrowLeft className="h-4 w-4" />
             로그인 화면으로 돌아가기
           </Link>
         </CardContent>

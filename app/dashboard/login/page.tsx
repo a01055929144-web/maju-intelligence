@@ -127,11 +127,12 @@ export default function CustomerLoginPage() {
               회사 계정
             </Badge>
             <CardTitle className="text-2xl font-bold tracking-[-0.03em]">MAJU 로그인</CardTitle>
-            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">등록된 회사 이메일과 비밀번호를 입력하세요.</p>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">회사 운영자·관리자는 이메일로 로그인하세요.</p>
           </CardHeader>
           <CardContent>
             {recentLoginEmail ? (
-              <div className="mb-3">
+              <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-2 text-xs font-semibold leading-5 text-slate-500">최근 입력한 이메일입니다. 선택해도 자동 로그인되지는 않습니다.</p>
                 <button
                   aria-label={`최근 사용 이메일 ${recentLoginEmail} 입력`}
                   className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-lime-100 hover:text-slate-950"
@@ -139,7 +140,7 @@ export default function CustomerLoginPage() {
                   type="button"
                 >
                   <Clock3 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="shrink-0">최근 사용 이메일</span>
+                  <span className="shrink-0">이메일 채우기</span>
                   <span className="truncate">{recentLoginEmail}</span>
                 </button>
               </div>
@@ -147,13 +148,18 @@ export default function CustomerLoginPage() {
             <form className="space-y-2.5" onSubmit={handleSubmit}>
               <input
                 autoComplete="username"
+                autoFocus
                 className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
                 id="customer-login-email"
                 name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
+                inputMode="email"
+                enterKeyHint="next"
                 placeholder="회사 이메일"
+                disabled={loading}
+                required
               />
               <input
                 autoComplete="current-password"
@@ -163,10 +169,13 @@ export default function CustomerLoginPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
+                enterKeyHint="go"
                 placeholder="비밀번호"
+                disabled={loading}
+                required
               />
               {error ? <p aria-live="polite" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" role="alert">{error}</p> : null}
-              <label className="flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl border border-border bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-primary/30 hover:bg-lime-50/60">
+              <label className="flex min-w-0 cursor-pointer items-start justify-between gap-2 rounded-xl border border-border bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-primary/30 hover:bg-lime-50/60">
                 <span className="flex items-center gap-2">
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-md border ${
@@ -175,10 +184,13 @@ export default function CustomerLoginPage() {
                   >
                     <Check className="h-3.5 w-3.5" />
                   </span>
-                  로그인 상태 유지
+                  <span>
+                    로그인 상태 유지
+                    <span className="mt-0.5 block text-xs font-medium leading-4 text-slate-500">브라우저를 닫아도 접속 상태를 유지합니다.</span>
+                  </span>
                 </span>
                 <input checked={remember} className="sr-only" onChange={(event) => setRemember(event.target.checked)} type="checkbox" />
-                <span className="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:inline">개인 PC에서만</span>
+                <span className="hidden shrink-0 pt-0.5 text-xs font-semibold text-muted-foreground sm:inline">개인 기기 전용</span>
               </label>
               <Button aria-busy={loading} className="mt-1.5 h-12 w-full rounded-lg" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
@@ -205,8 +217,8 @@ export default function CustomerLoginPage() {
               <Smartphone className="mr-1 h-3.5 w-3.5" />
               직원용
             </Badge>
-            <CardTitle className="text-xl font-bold tracking-[-0.025em]">현장 직원 로그인</CardTitle>
-            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">회사 초대를 받은 직원은 카카오 계정으로 접속하세요.</p>
+            <CardTitle className="text-xl font-bold tracking-[-0.025em]">직원으로 접속</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">배송·영업 직원은 회사에서 연결한 소셜 계정으로 접속하세요.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             <OAuthLoginButtons />

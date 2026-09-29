@@ -659,7 +659,8 @@ export default function CrmTimelinePage() {
       count: loadingPositionAttachments,
       description: "기사님이 현장에서 바로 보는 핵심 자료입니다.",
       label: "배송 적재위치",
-      required: true,
+      recommended: true,
+      required: false,
       type: "loading_position"
     },
     {
@@ -673,13 +674,15 @@ export default function CrmTimelinePage() {
       count: bankAccountAttachments,
       description: "정산과 결제정보 확인에 사용합니다.",
       label: "통장사본",
-      required: true,
+      recommended: true,
+      required: false,
       type: "bank_account"
     },
     {
       count: identityDocumentAttachments,
       description: "필요한 거래처만 보안 파일 업로드로 보관합니다.",
       label: "신분증",
+      recommended: false,
       required: false,
       type: "identity_document"
     },
@@ -687,6 +690,7 @@ export default function CrmTimelinePage() {
       count: deliveryProofAttachments,
       description: "현장 배송완료 사진과 서류를 이력으로 보관합니다.",
       label: "배송완료 증빙",
+      recommended: false,
       required: false,
       type: "delivery_proof"
     }
@@ -713,8 +717,8 @@ export default function CrmTimelinePage() {
       title: "배송 적재위치"
     },
     {
-      description: `사업자등록증 ${businessCertificateAttachments}건 · 통장사본 ${bankAccountAttachments}건`,
-      ok: businessCertificateAttachments > 0 && bankAccountAttachments > 0,
+      description: businessCertificateAttachments > 0 ? `사업자등록증 ${businessCertificateAttachments}건 등록` : "사업자등록증을 필수 자료로 등록하세요.",
+      ok: businessCertificateAttachments > 0,
       title: "필수 첨부자료"
     },
     {
@@ -1499,24 +1503,31 @@ export default function CrmTimelinePage() {
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <p className="mb-1 text-xs font-black uppercase tracking-wide text-teal-700">2 · 원장 보완</p>
-                  <h2 className="truncate text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
-                  <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
+                  <h2 className="break-words text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
+                  <p className="mt-2 break-words text-sm font-bold leading-6 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
                   </p>
                   {duplicateCandidates.length ? (
                     <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
-                      <p className="text-xs font-black text-rose-900">
-                        같은 상호명의 다른 레코드가 {duplicateCandidates.length}개 있습니다. 중복이면 이 거래처로 병합하거나 이동해서 비교하세요.
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-black text-rose-900">중복 가능 거래처 {duplicateCandidates.length}개</p>
+                          <p className="mt-1 text-xs font-bold leading-5 text-rose-800">후보의 주소를 먼저 비교한 뒤, 현재 거래처를 유지할 때만 병합하세요.</p>
+                        </div>
+                        <Badge className="bg-white text-rose-800 ring-1 ring-inset ring-rose-200">유지 대상 · {selectedCustomer.customerName}</Badge>
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
                         {duplicateCandidates.map((customer) => (
-                          <div className="flex items-center gap-1" key={customer.id}>
+                          <div className="min-w-0 rounded-md border border-rose-200 bg-white p-2" key={customer.id}>
+                            <p className="truncate text-xs font-black text-slate-900">삭제 후보 · {customer.customerName}</p>
+                            <p className="mt-0.5 min-h-8 break-words text-xs font-bold leading-4 text-slate-500">{customer.address || "주소 미등록"}</p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
                             <button
                               className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-100"
                               onClick={() => jumpToCustomer(customer.id)}
                               type="button"
                             >
-                              {customer.address || "주소 없음"} 보기
+                              후보 먼저 보기
                             </button>
                             {customer.id ? (
                               <button
@@ -1525,9 +1536,10 @@ export default function CrmTimelinePage() {
                                 onClick={() => void mergeDuplicateIntoSelected(customer.id as string, customer.address || customer.customerName)}
                                 type="button"
                               >
-                                {mergingCustomerId === customer.id ? "병합 중..." : "이 거래처로 병합"}
+                                {mergingCustomerId === customer.id ? "병합 중..." : "현재 거래처에 병합"}
                               </button>
                             ) : null}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2706,17 +2718,19 @@ function LoadingPositionFieldCard({
 function AttachmentChecklistPanel({
   checklist
 }: {
-  checklist: Array<{ count: number; description: string; label: string; required: boolean; type: string }>;
+  checklist: Array<{ count: number; description: string; label: string; recommended?: boolean; required: boolean; type: string }>;
 }) {
-  const readyCount = checklist.filter((item) => item.count > 0 || !item.required).length;
+  const readyCount = checklist.filter((item) => item.count > 0).length;
   const progress = checklist.length ? Math.round((readyCount / checklist.length) * 100) : 0;
+  const missingRequired = checklist.filter((item) => item.required && item.count === 0);
+  const missingRecommended = checklist.filter((item) => item.recommended && item.count === 0);
 
   return (
     <div className="maju-section-card mt-4 overflow-hidden">
       <div className="maju-card-header flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-bold text-slate-950">첨부자료 준비 상태</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">필수 자료가 채워질수록 원장 신뢰도가 올라갑니다.</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">필수 누락과 운영 보완 권장 자료를 구분해 확인합니다.</p>
         </div>
         <Badge className={progress === 100 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {readyCount}/{checklist.length} 완료
@@ -2724,6 +2738,14 @@ function AttachmentChecklistPanel({
       </div>
       <div className="h-1.5 bg-slate-100">
         <div className="h-full bg-emerald-600" style={{ width: `${progress}%` }} />
+      </div>
+      <div className="grid gap-2 border-b border-slate-200 bg-white p-3 sm:grid-cols-2">
+        <div className={`rounded-md border px-3 py-2 ${missingRequired.length ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+          <p className="text-xs font-black">{missingRequired.length ? `필수 누락 · ${missingRequired.map((item) => item.label).join(", ")}` : "필수 자료 완료"}</p>
+        </div>
+        <div className={`rounded-md border px-3 py-2 ${missingRecommended.length ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+          <p className="text-xs font-black">{missingRecommended.length ? `운영 보완 권장 · ${missingRecommended.map((item) => item.label).join(", ")}` : "운영 권장 자료 완료"}</p>
+        </div>
       </div>
       <div className="hidden grid-cols-[140px_72px_100px_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 md:grid">
         <span>자료명</span>
@@ -2747,8 +2769,8 @@ function AttachmentChecklistPanel({
               <p className="truncate text-sm font-bold text-slate-950">{item.label}</p>
               {item.type === "loading_position" ? <p className="mt-0.5 text-xs font-semibold text-teal-700">배송 최우선 자료</p> : null}
             </div>
-            <Badge className={`w-fit ${item.required ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100" : "bg-slate-100 text-slate-600"}`}>
-              {item.required ? "필수" : "선택"}
+            <Badge className={`w-fit ${item.required ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100" : item.recommended ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-100" : "bg-slate-100 text-slate-600"}`}>
+              {item.required ? "필수" : item.recommended ? "권장" : "선택"}
             </Badge>
             <Badge className={`w-fit gap-1 ${item.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
               {item.count > 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
@@ -2794,14 +2816,15 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
     "배송 적재위치와 로드뷰 확인"
   ];
   const searchLinks = buildPlaceSearchLinks(customer.customerName, customer.address);
+  const mapVerificationLinks = searchLinks.filter((link) => link.label !== "네이버 블로그");
 
   return (
     <div className="maju-section-card overflow-hidden border-teal-100">
       <div className="maju-card-header flex flex-col gap-3 border-teal-100 bg-teal-50/80 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-wide text-teal-700">외부 매장 정보</p>
-          <h4 className="mt-1 text-base font-black text-slate-950">네이버·카카오·구글 링크</h4>
-          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">리뷰, 영업시간, 휴폐업 확인, 로드뷰 확인에 사용할 기준 링크입니다.</p>
+          <p className="text-xs font-black uppercase tracking-wide text-teal-700">지도 위치 확인</p>
+          <h4 className="mt-1 text-base font-black text-slate-950">등록 주소와 지도 위치 비교</h4>
+          <p className="mt-1 text-xs font-bold leading-5 text-slate-600">등록 주소로 지도를 먼저 확인하고, 일치하는 공식 장소 링크를 원장에 저장하세요.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge className={filledCount === links.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
@@ -2822,6 +2845,25 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
       </div>
       <div className="grid gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-3">
+          <div className={`rounded-md border p-3 ${customer.address?.trim() ? "border-teal-200 bg-teal-50/70" : "border-amber-200 bg-amber-50"}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-black text-slate-500">원장 등록 주소</p>
+                <p className="mt-1 break-words text-sm font-black leading-5 text-slate-950">{customer.address || "주소 미등록 · 원장 편집에서 주소를 먼저 입력하세요."}</p>
+              </div>
+              {customer.address?.trim() ? (
+                <div className="flex shrink-0 flex-wrap gap-1.5">
+                  {mapVerificationLinks.map((link) => (
+                    <a className="maju-button-secondary h-8 px-2.5 text-xs hover:border-teal-300 hover:bg-white" href={link.href} key={link.label} rel="noreferrer" target="_blank">
+                      {link.label} 확인 <LinkIcon className="h-3.5 w-3.5" />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <button className="maju-button-secondary h-8 px-2.5 text-xs" onClick={onEdit} type="button">주소 입력</button>
+              )}
+            </div>
+          </div>
           <div className="grid gap-2 md:grid-cols-3">
             {links.map((link) => (
               <PlaceLinkButton key={link.label} label={link.label} purpose={link.purpose} url={link.url} />
@@ -2849,7 +2891,7 @@ function PlaceLinksPanel({ customer, onEdit }: { customer: CustomerView; onEdit:
           </div>
         </div>
         <div className="maju-filter-box bg-slate-50 p-3">
-          <p className="text-xs font-black text-slate-500">링크 찾기</p>
+          <p className="text-xs font-black text-slate-500">장소 링크 찾기</p>
           <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{nextAction}</p>
           <div className="mt-2 grid gap-2">
             {searchLinks.map((link) => (

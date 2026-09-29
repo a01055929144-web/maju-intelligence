@@ -683,7 +683,7 @@ function WorkspaceModeTabs({
         <p className="truncate text-sm font-black text-slate-950">{copy[0]}</p>
         <InfoTooltip text={copy[1]} />
       </div>
-      <div aria-label="데이터 등록 작업 단계" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 sm:w-auto" role="tablist">
+      <div aria-label="데이터 등록 화면 전환" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 sm:w-auto" role="tablist">
         {tabs.map(([key, label]) => {
           const disabled = key === "report" && !hasReport;
           return (
@@ -925,10 +925,10 @@ function DataRegistrationSidePanel({
   ];
 
   return (
-    <nav aria-label="등록 데이터 유형" className="maju-section-card grid h-fit grid-cols-3 gap-1 p-2 lg:sticky lg:top-20 lg:block lg:space-y-1 lg:self-start">
-      <div className="col-span-3 px-2 pb-2 pt-1">
+    <nav aria-label="등록 데이터 유형" className="maju-section-card grid grid-cols-3 gap-1 p-2 xl:grid-cols-[160px_repeat(3,minmax(0,1fr))]">
+      <div className="col-span-3 flex flex-col justify-center px-2 py-1 xl:col-span-1">
         <p className="text-xs font-semibold text-slate-500">데이터 등록</p>
-        <p className="mt-1 text-xs font-medium leading-5 text-slate-500">유형을 선택해 바로 시작하세요.</p>
+        <p className="mt-1 hidden text-xs font-medium leading-5 text-slate-500 sm:block">유형을 선택해 바로 시작하세요.</p>
       </div>
       {items.map((item) => {
         const selected = activeSection === item.key;
@@ -936,22 +936,22 @@ function DataRegistrationSidePanel({
           <button
             key={item.key}
             aria-current={selected ? "step" : undefined}
-            className={`flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-lg px-2 text-center text-sm transition lg:min-h-12 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-left ${selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
+            className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-2 text-center text-sm transition sm:justify-start sm:px-3 sm:text-left ${selected ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"}`}
             onClick={() => onSelect(item.key)}
             type="button"
           >
             <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-semibold ${selected ? "bg-white/10 text-white ring-1 ring-inset ring-white/20" : "bg-slate-100 text-slate-500"}`}>
               {item.step}
             </span>
-            <span className="min-w-0 lg:flex-1">
-              <span className="flex min-w-0 items-center justify-center gap-1.5 lg:justify-start">
-                <item.icon className={`hidden h-3.5 w-3.5 shrink-0 lg:block ${selected ? "text-white" : "text-slate-400"}`} />
+            <span className="min-w-0 sm:flex-1">
+              <span className="flex min-w-0 items-center justify-center gap-1.5 sm:justify-start">
+                <item.icon className={`hidden h-3.5 w-3.5 shrink-0 sm:block ${selected ? "text-white" : "text-slate-400"}`} />
                 <span className="block truncate text-sm font-semibold">{item.label}</span>
               </span>
-              <span className={`hidden truncate text-xs font-medium lg:block ${selected ? "text-white/80" : "text-slate-500"}`}>{item.description}</span>
+              <span className={`hidden truncate text-xs font-medium md:block ${selected ? "text-white/80" : "text-slate-500"}`}>{item.description}</span>
             </span>
             {item.badge ? (
-              <Badge className={selected ? "hidden shrink-0 bg-white px-2 py-0.5 text-xs text-slate-950 ring-1 ring-inset ring-white/70 lg:inline-flex" : "hidden shrink-0 bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200 lg:inline-flex"}>
+              <Badge className={selected ? "hidden shrink-0 bg-white px-2 py-0.5 text-xs text-slate-950 ring-1 ring-inset ring-white/70 xl:inline-flex" : "hidden shrink-0 bg-slate-100 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200 xl:inline-flex"}>
                 {item.badge}
               </Badge>
             ) : null}
@@ -1123,6 +1123,7 @@ function Onboarding({
   const manualComplete =
     manualMissingRequiredFields.length === 0 && manualBusinessNumberValid;
   const canAnalyze = rawRows.length > 0 && complete;
+  const hasPersistedResult = pipelineMeta.persisted || (uploadType === "customer-master" && Boolean(lastManualCustomer));
   const mappedRequiredCount = requiredFields.length - missingRequiredFields.length;
   const mappingProgress = requiredFields.length ? Math.round((mappedRequiredCount / requiredFields.length) * 100) : 100;
   const dataQuality = useMemo(
@@ -1148,9 +1149,9 @@ function Onboarding({
       ok: !hasBlockingQualityIssues
     },
     {
-      detail: pipelineMeta.persisted ? "운영 화면 확인 가능" : "저장 버튼 실행 후 확인됩니다.",
+      detail: hasPersistedResult ? "거래처 원장과 지도에서 반영 상태를 확인할 수 있습니다." : "저장 버튼 실행 후 확인됩니다.",
       label: "저장 확인",
-      ok: pipelineMeta.persisted
+      ok: hasPersistedResult
     }
   ];
   const flowSteps = [
@@ -1173,10 +1174,10 @@ function Onboarding({
       value: hasDataRows ? `${mappedRequiredCount}/${requiredFields.length} 필수 매핑` : "대기 중"
     },
     {
-      description: pipelineMeta.persisted ? "저장 후 리포트와 운영 화면에 반영됐습니다." : "업데이트 후 리포트 갱신을 눌러 저장 결과를 확인합니다.",
-      done: pipelineMeta.persisted,
+      description: hasPersistedResult ? "저장 후 원장과 지도에서 반영 상태를 확인할 수 있습니다." : "업데이트 후 리포트 갱신을 눌러 저장 결과를 확인합니다.",
+      done: hasPersistedResult,
       label: "저장",
-      value: pipelineMeta.persisted ? "저장 완료" : "저장 확인 전"
+      value: hasPersistedResult ? "반영 확인 가능" : "저장 확인 전"
     }
   ];
   const reviewTabs = [
@@ -1201,14 +1202,14 @@ function Onboarding({
       value: hasBlockingQualityIssues ? "보완 필요" : hasDataRows ? "정상" : "대기"
     },
     {
-      actionHint: pipelineMeta.persisted ? "운영 화면 확인" : canAnalyze ? "저장 실행" : "앞 단계 완료",
+      actionHint: hasPersistedResult ? "운영 화면 확인" : canAnalyze ? "저장 실행" : "앞 단계 완료",
       description: "저장 상태와 최근 이력 확인",
       key: "save" as const,
       label: "저장",
-      statusLabel: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "저장 가능" : "대기",
+      statusLabel: hasPersistedResult ? "반영 확인 가능" : canAnalyze ? "저장 가능" : "대기",
       step: "3",
-      tone: pipelineMeta.persisted ? "ready" as const : canAnalyze ? "action" as const : "idle" as const,
-      value: pipelineMeta.persisted ? "반영 완료" : canAnalyze ? "실행 가능" : "대기"
+      tone: hasPersistedResult ? "ready" as const : canAnalyze ? "action" as const : "idle" as const,
+      value: hasPersistedResult ? "반영 확인 가능" : canAnalyze ? "실행 가능" : "대기"
     }
   ];
   const activeReviewTab = reviewTabs.find((tab) => tab.key === reviewTab) || reviewTabs[0];
@@ -1229,7 +1230,7 @@ function Onboarding({
       return;
     }
 
-    if (pipelineMeta.persisted) {
+    if (hasPersistedResult) {
       setReviewTab("save");
       return;
     }
@@ -1237,7 +1238,7 @@ function Onboarding({
     if (complete && hasBlockingQualityIssues) {
       setReviewTab("quality");
     }
-  }, [complete, hasBlockingQualityIssues, hasDataRows, pipelineMeta.persisted, uploadType]);
+  }, [complete, hasBlockingQualityIssues, hasDataRows, hasPersistedResult, uploadType]);
 
   const businessNameQuery = String(manualDraft.customerName || "").trim();
 
@@ -1431,12 +1432,12 @@ function Onboarding({
   }
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[200px_minmax(0,1fr)]">
+    <div className="space-y-3">
       <DataRegistrationSidePanel
         activeSection={sidebarSection}
         customerRows={uploadType === "customer-master" ? rawRows.length : 0}
         onSelect={selectDataRegistrationSection}
-        persisted={pipelineMeta.persisted}
+        persisted={hasPersistedResult}
         salesRows={uploadType === "sales-analysis" ? rawRows.length : 0}
       />
       <section className="min-w-0 space-y-3">
@@ -1453,7 +1454,7 @@ function Onboarding({
               setEntryMode(mode);
             }}
             onSelectType={onUploadType}
-            persisted={pipelineMeta.persisted}
+            persisted={hasPersistedResult}
             registrationStatus={registrationStatus}
             rows={rawRows.length}
             typeLabel={template.label}
@@ -1480,7 +1481,7 @@ function Onboarding({
                 <p className="text-xs font-black text-slate-500">지금 할 일</p>
                 <p className="mt-0.5 text-sm font-bold text-slate-900">{registrationStatus.nextAction}</p>
               </div>
-              {pipelineMeta.persisted ? (
+              {hasPersistedResult ? (
                 <Link className="maju-button-secondary inline-flex h-9 items-center justify-center gap-2 px-3 text-sm" href={currentLedgerHref}>
                   {currentLedgerLabel}<ArrowRight className="h-4 w-4" />
                 </Link>
@@ -1514,7 +1515,7 @@ function Onboarding({
             activeType={uploadType}
             canAnalyze={canAnalyze}
             entryMode={entryMode}
-            persisted={pipelineMeta.persisted}
+            persisted={hasPersistedResult}
             rowsWaiting={rawRows.length}
           />
 
@@ -1911,7 +1912,7 @@ function Onboarding({
                       ledgerHref={currentLedgerHref}
                       ledgerLabel={currentLedgerLabel}
                       missingRequiredFields={missingRequiredFields}
-                      persisted={pipelineMeta.persisted}
+                      persisted={hasPersistedResult}
                       registrationStatus={registrationStatus}
                       rows={rawRows.length}
                     />
@@ -1921,7 +1922,7 @@ function Onboarding({
                       items={saveReadinessItems}
                       ledgerHref={currentLedgerHref}
                       ledgerLabel={currentLedgerLabel}
-                      persisted={pipelineMeta.persisted}
+                      persisted={hasPersistedResult}
                       routeHref={routeHref}
                       typeLabel={template.label}
                     />
@@ -3321,6 +3322,10 @@ function DataQualityCard({
   const issuePageStart = sortedIssuePreview.length ? issueStart + 1 : 0;
   const issuePageEnd = Math.min(sortedIssuePreview.length, issueStart + issuePageSize);
 
+  useEffect(() => {
+    setIssuePage((current) => Math.min(current, issueTotalPages));
+  }, [issueTotalPages]);
+
   return (
     <div className={`maju-section-card mb-4 overflow-hidden ${hasIssues ? "border-amber-200" : "border-emerald-100"}`}>
       <div className={`flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between ${hasIssues ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
@@ -3590,7 +3595,9 @@ function SaveReadinessPanel({
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-black text-slate-400">{index + 1}차 확인</span>
-                <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                <Badge className={persisted ? "bg-white text-emerald-800 ring-1 ring-inset ring-emerald-200" : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200"}>
+                  {persisted ? "확인 가능" : "저장 후 확인"}
+                </Badge>
               </span>
               <span className="mt-1 block text-sm font-black text-slate-950">{item.label}</span>
               <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{item.value}</span>
@@ -3757,6 +3764,10 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
   const pageStart = sortedUploads.length ? start + 1 : 0;
   const pageEnd = Math.min(sortedUploads.length, start + pageSize);
 
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
   return (
     <div className="maju-section-card mb-4 overflow-hidden">
       <div className="maju-card-header flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
@@ -3795,6 +3806,7 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
                 {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {uploads.length.toLocaleString()}
               </span>
               <button
+                aria-label="등록 이력 이전 페이지"
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={currentPage <= 1}
                 onClick={() => setPage((value) => Math.max(1, value - 1))}
@@ -3802,7 +3814,11 @@ function RecentUploadHistoryCard({ uploads }: { uploads: UploadHistoryRow[] }) {
               >
                 이전
               </button>
+              <span className="text-xs font-black text-slate-400" aria-live="polite">
+                {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+              </span>
               <button
+                aria-label="등록 이력 다음 페이지"
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={currentPage >= totalPages}
                 onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
