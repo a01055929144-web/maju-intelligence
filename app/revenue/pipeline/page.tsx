@@ -44,25 +44,25 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const pipelineActions = [
     {
-      description: "단가표와 방문일 확정",
+      description: "보류·실패 사유를 확인하고 재연락 일정을 잡으세요.",
+      href: sectionHref("candidates"),
+      label: "미처리 우선",
+      tone: "amber" as const,
+      value: `${pipeline.pending + pipeline.failed}건`
+    },
+    {
+      description: "단가와 조건을 확정해 견적을 마무리하세요.",
       href: sectionHref("candidates"),
       label: "견적 요청",
       tone: "teal" as const,
       value: `${pipeline.quoteRequests}건`
     },
     {
-      description: "품목 제안, 샘플 확인",
+      description: "관심 품목을 제안하고 샘플 일정을 확인하세요.",
       href: sectionHref("candidates"),
       label: "관심 있음",
       tone: "emerald" as const,
       value: `${pipeline.interested}건`
-    },
-    {
-      description: "메모 후 재연락",
-      href: sectionHref("status"),
-      label: "재관리",
-      tone: "slate" as const,
-      value: `${pipeline.pending + pipeline.failed}건`
     }
   ];
 
@@ -120,7 +120,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
         <div className={section === "summary" ? "maju-section-card" : "hidden"}>
           <div className="maju-card-header">
             <p className="maju-section-title">다음 액션 요약</p>
-            <p className="mt-1 maju-muted-label">견적 · 관심 · 재관리 단계별 다음 할 일</p>
+            <p className="mt-1 maju-muted-label">미처리 건부터 바로 이어서 할 일</p>
           </div>
           <div className="grid lg:grid-cols-3">
             {pipelineActions.map((action) => (
@@ -262,12 +262,12 @@ function PipelineActionCard({
   description: string;
   href: string;
   label: string;
-  tone: "emerald" | "slate" | "teal";
+  tone: "amber" | "emerald" | "teal";
   value: string;
 }) {
   const toneClassName = {
     emerald: "border-emerald-100 bg-emerald-50/70 text-emerald-800",
-    slate: "border-slate-200 bg-slate-50/80 text-slate-800",
+    amber: "border-amber-200 bg-amber-50/80 text-amber-900",
     teal: "border-teal-100 bg-teal-50/70 text-teal-800"
   }[tone];
 

@@ -109,9 +109,7 @@ export function SalesTransactionMatcher({
       <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 border-amber-200/80 bg-amber-50/70">
         <div>
           <p className="maju-section-title">거래처 미매칭 수동 연결</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-amber-900">
-            사업자번호 또는 상호명·주소가 거래처 원장과 달라 자동 연결되지 않은 거래입니다. 실제 거래처를 선택하면 같은 key로 들어온 거래 전체가 한 번에 연결됩니다.
-          </p>
+          <p className="mt-1 text-xs font-bold leading-5 text-amber-900">실제 거래처를 선택하면 같은 이름으로 들어온 거래를 한 번에 연결합니다.</p>
         </div>
         <Badge className="bg-amber-100 text-amber-800">{unmatchedGroups.length.toLocaleString()}건 미매칭</Badge>
       </div>
@@ -183,7 +181,7 @@ export function SalesTransactionMatcher({
                       </button>
                     ))
                   ) : (
-                    <p className="px-2 py-3 text-xs font-bold text-slate-400">일치하는 거래처가 없습니다.</p>
+                    <p className="px-2 py-3 text-xs font-bold text-slate-500">일치하는 거래처가 없습니다. 상호 일부나 주소로 다시 검색하세요.</p>
                   )}
                 </div>
               </div>

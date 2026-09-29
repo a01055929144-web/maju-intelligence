@@ -175,6 +175,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
   const handleStatusChange = useCallback(
     async (status: "active" | "paused" | "canceled") => {
       setActionError("");
+      setBanner(null);
       setStatusChanging(status);
       try {
         const response = await fetch("/api/billing/subscription", {
@@ -185,6 +186,10 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
         const body = await response.json();
         if (!response.ok) throw new Error(body?.message || "설정을 변경하지 못했습니다.");
         await loadStatus();
+        setBanner({
+          tone: "success",
+          message: status === "active" ? "자동결제를 재개했습니다." : status === "paused" ? "자동결제를 일시중지했습니다." : "구독을 해지했습니다."
+        });
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "설정을 변경하지 못했습니다.");
       } finally {
@@ -197,8 +202,8 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
   if (loadError) {
     return (
       <div className="maju-filter-box flex flex-col items-start gap-3 border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-        <span>{loadError}</span>
-        <button className="maju-button-secondary shrink-0" onClick={() => void loadStatus()} type="button">다시 불러오기</button>
+        <span><strong className="block">결제 정보를 불러오지 못했습니다.</strong>{loadError}</span>
+        <button className="maju-button-secondary min-h-10 shrink-0" onClick={() => void loadStatus()} type="button">다시 시도</button>
       </div>
     );
   }
@@ -213,14 +218,17 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
   }
 
   const { subscription, payments } = data;
+  const failedPaymentCount = payments.filter((payment) => payment.status === "failed").length;
 
   return (
     <div className="space-y-4">
       {banner ? (
         <div
+          aria-live="polite"
           className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${
             banner.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"
           }`}
+          role="status"
         >
           {banner.tone === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
           {banner.message}
@@ -239,7 +247,10 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
             <p className="maju-section-title">자동결제 상태</p>
             <p className="mt-1 maju-muted-label">월 단위 카드 자동결제 · 항상 일시불</p>
           </div>
-          <Badge className={statusTone[subscription.status]}>{statusLabels[subscription.status]}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            {failedPaymentCount ? <Badge className="bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-100">결제 실패 {failedPaymentCount}건</Badge> : null}
+            <Badge className={statusTone[subscription.status]}>{statusLabels[subscription.status]}</Badge>
+          </div>
         </div>
         <div className="grid gap-4 p-4 md:grid-cols-3">
           <div>
@@ -267,7 +278,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
           </div>
         ) : null}
 
-        {actionError ? <div aria-live="polite" className="mx-4 mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-800">{actionError}</div> : null}
+        {actionError ? <div aria-live="assertive" className="mx-4 mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-800" role="alert"><strong className="block">요청을 완료하지 못했습니다.</strong>{actionError} 다시 시도해 주세요.</div> : null}
 
         <div className="flex flex-col gap-2 border-t border-slate-100 p-4 sm:flex-row sm:flex-wrap">
           <button aria-busy={registering} className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" disabled={registering || Boolean(statusChanging) || !data.configured} onClick={handleRegisterCard} type="button">

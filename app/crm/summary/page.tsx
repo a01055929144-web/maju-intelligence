@@ -413,16 +413,16 @@ export default function CrmSummaryPage() {
       companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="거래처, 사업자 상태, 메모·첨부 현황"
+      subtitle="보완 대상을 찾고 다음 작업을 결정합니다."
       title="전체 현황"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
       <section className="mx-auto max-w-[1560px] space-y-3">
         <div className="maju-section-card">
           <SectionHeader
-            eyebrow="지도 작업공간"
-            title="거래처 기준 현황"
-            description="지도 홈이 사용하는 거래처 기준입니다."
+            eyebrow="운영 기준"
+            title="거래처 원장 상태"
+            description="운영 가능 여부와 보완 대상을 먼저 확인하세요."
           />
           <div className="p-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[170px_minmax(220px,1.25fr)_repeat(2,minmax(0,1fr))]">

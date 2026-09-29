@@ -23,6 +23,7 @@ type UploadHistoryItem = {
 
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type HistoryPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
+type UploadStatusFilter = "all" | UploadHistoryItem["status"];
 
 function getUploadStatusLabel(status: UploadHistoryItem["status"]) {
   return status === "completed" ? "완료" : status === "failed" ? "실패" : "진행 중";
@@ -88,6 +89,7 @@ export default function CustomerDataManagementPage() {
   const [hasMore, setHasMore] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<UploadStatusFilter>("all");
 
   useEffect(() => {
     let active = true;
@@ -125,14 +127,16 @@ export default function CustomerDataManagementPage() {
   const completedCount = uploads.filter((upload) => upload.status === "completed").length;
   const failedCount = uploads.filter((upload) => upload.status === "failed").length;
   const duplicateCount = uploads.reduce((sum, upload) => sum + upload.duplicateCount, 0);
+  const runningCount = uploads.filter((upload) => upload.status === "running").length;
   const filteredUploads = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko");
-    if (!normalizedQuery) return uploads;
-    return uploads.filter((upload) =>
-      [upload.filename, getUploadStatusLabel(upload.status), upload.createdAt]
-        .some((value) => value.toLocaleLowerCase("ko").includes(normalizedQuery))
-    );
-  }, [query, uploads]);
+    return uploads.filter((upload) => {
+      const matchesStatus = statusFilter === "all" || upload.status === statusFilter;
+      const matchesQuery = !normalizedQuery || [upload.filename, getUploadStatusLabel(upload.status), upload.createdAt]
+        .some((value) => value.toLocaleLowerCase("ko").includes(normalizedQuery));
+      return matchesStatus && matchesQuery;
+    });
+  }, [query, statusFilter, uploads]);
 
   // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
   type UploadSortKey = "createdAt" | "duplicateCount" | "filename" | "qualityScore" | "rows" | "status";
@@ -151,7 +155,7 @@ export default function CustomerDataManagementPage() {
       companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="업로드 결과와 누락 데이터를 확인합니다."
+      subtitle="등록 작업의 진행 상태와 재처리 대상을 확인합니다."
       title="등록 이력 조회"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
@@ -163,10 +167,10 @@ export default function CustomerDataManagementPage() {
             <div>
               <p className="text-xs font-black text-teal-700">데이터 등록 결과</p>
               <h2 className="mt-1 text-lg font-black text-slate-950">
-                {failedCount ? `${failedCount.toLocaleString()}건의 실패 작업을 다시 처리하세요` : uploads.length ? "최근 등록 결과를 확인하세요" : "첫 데이터를 등록하세요"}
+                {failedCount ? `${failedCount.toLocaleString()}건의 실패 작업을 다시 처리하세요` : runningCount ? `${runningCount.toLocaleString()}건을 처리하고 있습니다` : uploads.length ? "등록 결과를 원장에서 확인하세요" : "첫 데이터를 등록하세요"}
               </h2>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                {failedCount ? "실패한 파일은 행의 다시 업로드에서 이어서 처리할 수 있습니다." : "완료된 데이터는 거래처 원장에서 실제 반영 결과를 확인할 수 있습니다."}
+                {failedCount ? "실패 상태로 좁혀 재업로드할 파일을 바로 찾을 수 있습니다." : runningCount ? "완료되면 거래처 원장에서 반영 결과를 확인할 수 있습니다." : "완료된 데이터는 거래처 원장에서 실제 반영 결과를 확인할 수 있습니다."}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -184,7 +188,7 @@ export default function CustomerDataManagementPage() {
 
         <div className="grid overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: "조회 작업", value: `${uploads.length.toLocaleString()}건`, tone: "text-slate-900" },
+            { label: "현재 페이지", value: `${uploads.length.toLocaleString()}건`, tone: "text-slate-900" },
             { label: "저장 완료", value: `${completedCount.toLocaleString()}건`, tone: "text-emerald-700" },
             { label: "중복 후보", value: `${duplicateCount.toLocaleString()}건`, tone: "text-amber-700" },
             { label: "재시도 필요", value: `${failedCount.toLocaleString()}건`, tone: "text-rose-700" }
@@ -225,17 +229,37 @@ export default function CustomerDataManagementPage() {
             </div>
           </div>
           <div className="border-b border-slate-200/80 bg-slate-50/70 px-4 py-3">
-            <label className="relative block max-w-xl">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="현재 페이지의 파일명·처리상태·등록일 검색"
-                type="search"
-                value={query}
-              />
-            </label>
-            {query ? <p className="mt-2 text-xs font-semibold text-slate-500">검색 결과 {filteredUploads.length.toLocaleString()}건</p> : null}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <label className="relative block w-full max-w-xl">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="현재 페이지의 파일명·등록일 검색"
+                  type="search"
+                  value={query}
+                />
+              </label>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="등록 작업 상태 필터">
+                {([
+                  { key: "all", label: "전체", count: uploads.length },
+                  { key: "failed", label: "재시도 필요", count: failedCount },
+                  { key: "running", label: "처리 중", count: runningCount },
+                  { key: "completed", label: "완료", count: completedCount }
+                ] as const).map((item) => (
+                  <button
+                    aria-pressed={statusFilter === item.key}
+                    className={`h-9 rounded-md px-3 text-xs font-black transition ${statusFilter === item.key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                    key={item.key}
+                    onClick={() => setStatusFilter(item.key)}
+                    type="button"
+                  >
+                    {item.label} {item.count.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {query || statusFilter !== "all" ? <p className="mt-2 text-xs font-semibold text-slate-500">조건에 맞는 작업 {filteredUploads.length.toLocaleString()}건</p> : null}
           </div>
           <div>
             {!uploadsLoaded ? (
@@ -273,9 +297,10 @@ export default function CustomerDataManagementPage() {
             ) : filteredUploads.length === 0 ? (
               <div className="flex min-h-40 flex-col items-center justify-center p-6 text-center">
                 <Search className="h-5 w-5 text-slate-400" />
-                <p className="mt-3 text-sm font-bold text-slate-800">검색 조건과 일치하는 이력이 없습니다</p>
-                <button className="mt-3 h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => setQuery("")} type="button">
-                  검색 초기화
+                <p className="mt-3 text-sm font-bold text-slate-800">조건과 일치하는 등록 작업이 없습니다</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">검색어나 상태 필터를 바꿔보세요.</p>
+                <button className="mt-3 h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => { setQuery(""); setStatusFilter("all"); }} type="button">
+                  검색·필터 초기화
                 </button>
               </div>
             ) : (

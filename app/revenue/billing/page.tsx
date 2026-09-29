@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CreditCard, ReceiptText, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { BillingWorkspace } from "@/components/billing-workspace";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
@@ -36,13 +36,6 @@ export default async function BillingPage({ searchParams }: { searchParams?: Pro
             {!companyId ? "고객사를 먼저 선택해주세요." : "결제 관리는 대표(owner)/관리자(manager) 권한이 있는 계정만 이용할 수 있습니다."}
           </div>
         ) : <>
-          <div className="maju-section-card overflow-hidden">
-            <div className="grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <BillingGuide icon={CreditCard} label="1. 결제수단" text="자동결제 카드를 등록합니다." />
-              <BillingGuide icon={ShieldCheck} label="2. 구독 상태" text="청구 상태와 다음 결제일을 확인합니다." />
-              <BillingGuide icon={ReceiptText} label="3. 결제 내역" text="결과와 영수증을 확인합니다." />
-            </div>
-          </div>
           <BillingWorkspace companyId={companyId} customerEmail={customerSession?.email} customerName={customerSession?.name} />
           <div className="flex justify-end">
             <Link className="inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-teal-800" href={companyId ? `/revenue/transactions?companyId=${encodeURIComponent(companyId)}` : "/revenue/transactions"}>
@@ -52,14 +45,5 @@ export default async function BillingPage({ searchParams }: { searchParams?: Pro
         </>}
       </section>
     </CustomerAppShell>
-  );
-}
-
-function BillingGuide({ icon: Icon, label, text }: { icon: typeof CreditCard; label: string; text: string }) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600"><Icon className="h-4 w-4" aria-hidden="true" /></span>
-      <div className="min-w-0"><p className="text-sm font-semibold text-slate-900">{label}</p><p className="mt-0.5 truncate text-xs font-medium text-slate-500">{text}</p></div>
-    </div>
   );
 }

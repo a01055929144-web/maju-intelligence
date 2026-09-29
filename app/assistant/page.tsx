@@ -13,6 +13,27 @@ const typeLabels = {
   summary: "방문 요약"
 };
 
+const draftPresentation = {
+  quote: {
+    actionLabel: "견적 후속 열기",
+    priority: "높음",
+    priorityClassName: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-100",
+    reason: "견적 요청이 확인되어 구매 의도가 가장 명확합니다."
+  },
+  "follow-up": {
+    actionLabel: "방문 기록 열기",
+    priority: "보통",
+    priorityClassName: "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100",
+    reason: "방문 대화를 이어갈 후속 메시지가 준비되었습니다."
+  },
+  summary: {
+    actionLabel: "방문 기록 열기",
+    priority: "참고",
+    priorityClassName: "bg-slate-100 text-slate-700",
+    reason: "후속 판단에 사용할 방문 결과가 정리되었습니다."
+  }
+} as const;
+
 export default async function SalesAssistantPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const customerSession = await getCustomerSession();
@@ -98,40 +119,58 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
             </div>
           </div>
           <div className="divide-y divide-slate-100">
-            {drafts.map((draft) => (
-              <article key={draft.id} className="grid gap-4 p-4 transition-colors hover:bg-slate-50/60 sm:p-5 lg:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)_240px]">
+            {drafts.map((draft, index) => {
+              const presentation = draftPresentation[draft.type];
+              const actionHref = draft.type === "quote"
+                ? (companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline")
+                : (companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline");
+
+              return (
+              <article key={draft.id} className="grid gap-4 p-4 transition-colors hover:bg-slate-50/60 sm:p-5 lg:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)_260px]">
                 <div className="min-w-0 border-b border-slate-100 pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
                     <Badge className="bg-teal-100 text-teal-800">{typeLabels[draft.type]}</Badge>
-                    <Badge className="bg-slate-100 text-slate-700">{draft.region}</Badge>
+                    <Badge className={presentation.priorityClassName}>우선순위 {presentation.priority}</Badge>
                   </div>
                   <p className="break-words text-sm font-bold text-slate-950">{draft.leadName}</p>
-                  <p className="mt-1 text-xs text-slate-500">후속 영업 대상</p>
+                  <p className="mt-1 text-xs text-slate-500">{draft.region} · 검토 순서 {index + 1}</p>
                 </div>
                 <div className="min-w-0">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <p className="text-base font-bold leading-6 text-slate-950">{draft.title}</p>
-                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-                      <CopyTextButton className="w-full justify-center sm:w-auto" text={draft.body} />
-                      <a
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                        download={`영업-초안-${draft.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`}
-                        href={`data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${draft.title}\n거래처: ${draft.leadName}\n지역: ${draft.region}\n유형: ${typeLabels[draft.type]}\n\n${draft.body}\n\n다음 액션: ${draft.nextAction}\n`)}`}
-                        aria-label={`${draft.leadName} ${draft.title} 텍스트 저장`}
-                      >
-                        <Download aria-hidden="true" className="h-3.5 w-3.5" />
-                        텍스트 저장
-                      </a>
-                    </div>
+                    <span className="text-xs font-medium leading-5 text-slate-500">{presentation.reason}</span>
                   </div>
-                  <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm leading-6 text-slate-700 sm:p-4">{draft.body}</p>
+                  <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 sm:p-4">
+                    <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{draft.body}</p>
+                    <details className="group mt-2">
+                      <summary className="cursor-pointer text-xs font-semibold text-teal-800 marker:text-teal-600">전체 내용 보기</summary>
+                      <p className="mt-3 whitespace-pre-wrap break-words border-t border-slate-200 pt-3 text-sm leading-6 text-slate-700">{draft.body}</p>
+                    </details>
+                  </div>
                 </div>
                 <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-4 lg:col-start-2 xl:col-start-auto">
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-teal-800"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />복사·저장 후 다음 액션</p>
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-teal-800"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />바로 실행</p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-950">{draft.nextAction}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <CopyTextButton className="w-full justify-center" text={draft.body} />
+                    <a
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      download={`영업-초안-${draft.id.replace(/[^a-zA-Z0-9_-]/g, "_")}.txt`}
+                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${draft.title}\n거래처: ${draft.leadName}\n지역: ${draft.region}\n유형: ${typeLabels[draft.type]}\n우선순위: ${presentation.priority}\n우선순위 사유: ${presentation.reason}\n\n${draft.body}\n\n다음 액션: ${draft.nextAction}\n`)}`}
+                      aria-label={`${draft.leadName} ${draft.title} 텍스트 저장`}
+                    >
+                      <Download aria-hidden="true" className="h-3.5 w-3.5" />
+                      저장
+                    </a>
+                  </div>
+                  <Link className="maju-button-primary mt-2 w-full justify-center" href={actionHref}>
+                    {presentation.actionLabel}
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
                 </div>
               </article>
-            ))}
+              );
+            })}
             {!drafts.length ? (
               <div className="px-5 py-10 text-center sm:px-8 sm:py-14">
                 <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-50 text-teal-700"><Sparkles className="h-6 w-6" aria-hidden="true" /></span>

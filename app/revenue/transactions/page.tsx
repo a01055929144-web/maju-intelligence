@@ -74,7 +74,7 @@ export default async function RevenueTransactionsPage({
       actionHref: companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline",
       actionLabel: "거래처 확인",
       description: sales.unmatchedCustomerCount
-        ? `${sales.unmatchedCustomerCount.toLocaleString()}곳이 거래처 원장과 매칭되지 않았습니다. 상호명·사업자번호를 확인하세요.`
+        ? `${sales.unmatchedCustomerCount.toLocaleString()}곳 미연결 · 상호명이나 사업자번호를 확인하세요.`
         : "매출 거래처가 모두 거래처 원장과 연결되어 있습니다.",
       label: "거래처 연결",
       ready: hasSalesData && sales.unmatchedCustomerCount === 0,
@@ -83,12 +83,12 @@ export default async function RevenueTransactionsPage({
     {
       actionHref: companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline",
       actionLabel: "파이프라인 보기",
-      description: sales.topProducts.length ? "품목별 매출 비중을 기반으로 이탈·감소 품목을 추적할 수 있습니다." : "품목 컬럼이 포함된 거래원장을 올리면 품목 이탈 분석이 가능합니다.",
+      description: sales.topProducts.length ? "품목별 매출 비중을 확인할 수 있습니다." : "품목 컬럼이 있는 원장을 올리면 분석을 시작합니다.",
       label: "품목 분석",
       ready: sales.topProducts.length > 0,
       value: sales.topProducts.length ? `${sales.topProducts.length}개 품목` : "품목 필요"
     }
-  ];
+  ].sort((left, right) => Number(left.ready) - Number(right.ready));
 
   return (
     <CustomerAppShell
@@ -185,7 +185,7 @@ export default async function RevenueTransactionsPage({
         <div className={section === "summary" ? "maju-section-card" : "hidden"}>
           <div className="maju-card-header">
             <p className="maju-section-title">다음 액션 요약</p>
-            <p className="mt-1 maju-muted-label">원장 적재 · 거래처 연결 · 품목 분석 준비 상태</p>
+            <p className="mt-1 maju-muted-label">미연결 항목과 바로 할 일</p>
           </div>
           <div className="divide-y divide-slate-100">
             {salesSignals.map((signal) => (

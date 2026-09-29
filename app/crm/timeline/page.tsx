@@ -1111,7 +1111,7 @@ export default function CrmTimelinePage() {
       companyName={isAdminPreview ? "선택 고객사" : sessionCompanyName || "고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={adminCompanyId || undefined}
-      subtitle="거래처 정보, 메모, 첨부파일을 관리합니다."
+      subtitle="거래처를 선택해 원장을 보완하고 다음 행동을 기록합니다."
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
