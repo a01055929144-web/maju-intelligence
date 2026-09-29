@@ -66,6 +66,8 @@ ACTIVE
 PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
+
+- [x] 2026-09-29 신규·영업 리드별 검색/필터 상태를 분리 보존하고, 우선순위 근거와 인스타 ID·DM 실행 동선을 통합했다.
 - [x] 지도 링크 항상 노출, 리드 공급원 섹션 기본 숨김
 - [x] KPI 카드 클릭 필터링, 테이블 헤더 정렬
 - [x] 신규리드/영업리드 구분(KPI 카드, 필터, 배지, 상세 드로어)

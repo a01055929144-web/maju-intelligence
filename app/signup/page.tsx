@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { ArrowRight, Building2, Loader2, UserPlus } from "lucide-react";
+import { ArrowRight, Building2, Check, Loader2, LogIn, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,16 +80,32 @@ export default function CompanySignupPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#eef1f4] px-4 py-10">
-      <Card className="w-full max-w-md rounded-[24px] shadow-[0_18px_50px_rgba(15,23,42,.10)]">
+      <Card className="w-full max-w-lg rounded-[24px] shadow-[0_18px_50px_rgba(15,23,42,.10)]">
         <CardHeader>
           <Badge className="mb-3 w-fit bg-lime-100 text-slate-950 ring-1 ring-inset ring-lime-200">
             <Building2 className="mr-1 h-3.5 w-3.5" />
             회사 계정 등록
           </Badge>
-          <CardTitle className="text-2xl">MAJU 도입 신청</CardTitle>
-          <p className="text-sm font-medium text-slate-500">회사 정보와 최초 운영자 계정을 등록하세요.</p>
+          <CardTitle className="text-2xl">새 회사 작업공간 만들기</CardTitle>
+          <p className="text-sm font-medium leading-6 text-slate-500">회사를 처음 등록하는 대표·운영 책임자용입니다. 가입을 마치면 이 계정이 최초 관리자가 됩니다.</p>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 grid gap-2 sm:grid-cols-2">
+            <Link className="flex min-h-14 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50" href="/dashboard/login">
+              <LogIn className="h-4 w-4 shrink-0 text-teal-700" />
+              <span>기존 회사 운영자<br /><span className="text-xs font-medium text-slate-500">로그인하기</span></span>
+            </Link>
+            <Link className="flex min-h-14 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50" href="/mobile/join">
+              <Users className="h-4 w-4 shrink-0 text-teal-700" />
+              <span>직원으로 초대받음<br /><span className="text-xs font-medium text-slate-500">초대 가입하기</span></span>
+            </Link>
+          </div>
+
+          <div className="mb-3 flex items-center gap-2 text-xs font-black text-slate-500">
+            <span className="h-px flex-1 bg-slate-200" />
+            새 회사 정보 입력
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
           <form aria-busy={loading} className="space-y-2.5" onSubmit={handleSubmit}>
             <input
               className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -192,10 +208,7 @@ export default function CompanySignupPage() {
               {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}
             </Button>
             {loading ? <p aria-live="polite" className="text-center text-xs font-medium text-slate-500">완료되면 운영 화면으로 자동 이동합니다.</p> : null}
-
-            <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/dashboard/login">
-              이미 등록된 회사인가요? 로그인
-            </Link>
+            {!loading ? <p className="flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-slate-500"><Check className="h-3.5 w-3.5 text-teal-700" />등록 후 운영 대시보드로 바로 이동합니다.</p> : null}
           </form>
         </CardContent>
       </Card>

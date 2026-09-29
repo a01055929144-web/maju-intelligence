@@ -226,6 +226,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [keywordVolumeScores, setKeywordVolumeScores] = useState<Record<string, number>>({});
   const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
   const [keywordVolumeConfigured, setKeywordVolumeConfigured] = useState(true);
+  const filterStateReadyRef = useRef(false);
 
   type LeadTableSortKey = "businessName" | "priority" | "grade" | "industryPrimary" | "instagram" | "nextAction" | "openDate" | "phone" | "review" | "status";
   const [tableSortKey, setTableSortKey] = useState<LeadTableSortKey | null>(null);
@@ -238,6 +239,79 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       setTableSortDirection(key === "priority" || key === "grade" || key === "review" ? "desc" : "asc");
     }
   }
+
+  // 신규 개업 탐색과 운영 매장 영업은 목적이 다르므로 각 화면의 검색·필터를 따로 기억합니다.
+  // 화면을 오가거나 상세 작업 뒤 돌아와도 검토하던 후보군이 사라지지 않게 세션 범위로만 보존합니다.
+  useEffect(() => {
+    const storageKey = `maju:permit-leads:filters:${leadQualityMode}`;
+    filterStateReadyRef.current = false;
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || "null") as null | {
+        actionFilter?: string;
+        excludeExcluded?: boolean;
+        gradeFilter?: string;
+        hasInstagramOnly?: boolean;
+        hasPhoneOnly?: boolean;
+        industryFilter?: string;
+        openDateEnd?: string;
+        openDateFilterMode?: LeadOpenDateFilterMode;
+        openDateMonth?: string;
+        openDateStart?: string;
+        openDateYear?: string;
+        periodFilter?: "all" | PermitLeadPeriod;
+        showAdvancedFilters?: boolean;
+        statusFilter?: string;
+        tableSearch?: string;
+      };
+      if (saved) {
+        setActionFilter(saved.actionFilter || "");
+        setExcludeExcluded(saved.excludeExcluded ?? true);
+        setGradeFilter(saved.gradeFilter || "");
+        setHasInstagramOnly(Boolean(saved.hasInstagramOnly));
+        setHasPhoneOnly(Boolean(saved.hasPhoneOnly));
+        setIndustryFilter(saved.industryFilter || "");
+        setOpenDateEnd(saved.openDateEnd || "");
+        setOpenDateFilterMode(saved.openDateFilterMode || "all");
+        setOpenDateMonth(saved.openDateMonth || "");
+        setOpenDateStart(saved.openDateStart || "");
+        setOpenDateYear(saved.openDateYear || "");
+        setPeriodFilter(saved.periodFilter || "all");
+        setShowAdvancedFilters(Boolean(saved.showAdvancedFilters));
+        setStatusFilter(saved.statusFilter || "");
+        setTableSearch(saved.tableSearch || "");
+      }
+    } catch {
+      // 손상된 브라우저 저장값은 기본 필터로 안전하게 무시합니다.
+    }
+    const frame = window.requestAnimationFrame(() => {
+      filterStateReadyRef.current = true;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [leadQualityMode]);
+
+  useEffect(() => {
+    if (!filterStateReadyRef.current) return;
+    window.sessionStorage.setItem(
+      `maju:permit-leads:filters:${leadQualityMode}`,
+      JSON.stringify({
+        actionFilter,
+        excludeExcluded,
+        gradeFilter,
+        hasInstagramOnly,
+        hasPhoneOnly,
+        industryFilter,
+        openDateEnd,
+        openDateFilterMode,
+        openDateMonth,
+        openDateStart,
+        openDateYear,
+        periodFilter,
+        showAdvancedFilters,
+        statusFilter,
+        tableSearch
+      })
+    );
+  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, statusFilter, tableSearch]);
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
   // quoteDraftRevision은 localStorage 변경 이벤트를 React 메모 갱신으로 연결하는 의도적인 트리거입니다.
@@ -2439,7 +2513,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     </th>
                     <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
                     <LeadSortableHeader
-                      className="w-[84px]"
+                      className="w-[150px]"
                       label="우선순위"
                       sortKeyValue="priority"
                       title="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다. 처음 누르면 높은 점수부터 정렬합니다."
@@ -2477,6 +2551,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     const quoteDraft = quoteDrafts[quoteDraftId(getPermitLeadQuoteSubject(lead))];
                     const tableActionLabel = tableAction.mode === "quote" && quoteDraft ? "이어 작성" : tableAction.label;
                     const selected = selectedLeadIds.includes(lead.id);
+                    const confidence = getLeadConfidence(lead);
                     const instagramHandle = getLeadInstagramHandle(lead);
                     const instagramSearchUrl = getLeadInstagramSearchUrl(lead);
                     return (
@@ -2527,10 +2602,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                             ) : null;
                           })()}
                         </td>
-                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
-                          <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">
+                        <td className="max-w-[150px] border-r border-slate-100 px-3 py-2">
+                          <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">
                             {isPermitLeadUnscored(lead) ? "채점 전" : `${lead.scoreTotal.toLocaleString()}점`}
                           </span>
+                          <p className="mt-1 truncate text-[10px] font-semibold text-slate-500" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
+                            {confidence.reasons[0] || "근거 확인 필요"}
+                          </p>
                         </td>
                         <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
@@ -2933,6 +3011,16 @@ function PermitLeadDetailPanel({
     }
   }
 
+  async function copyInstagramHandle() {
+    if (!instagramHandle) return;
+    try {
+      await navigator.clipboard.writeText(instagramHandle);
+      setInstagramSaveMessage(`${instagramHandle} ID를 복사했습니다.`);
+    } catch {
+      setInstagramSaveMessage("복사 권한이 없어 ID를 직접 선택해 복사해주세요.");
+    }
+  }
+
   async function enrichExternalInfo() {
     setExternalInfoSaving(true);
     setExternalInfoMessage("");
@@ -3114,7 +3202,24 @@ function PermitLeadDetailPanel({
                 저장
               </button>
             </div>
+            {instagramHandle ? (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => void copyInstagramHandle()} type="button">
+                  <Copy className="h-3.5 w-3.5" />
+                  ID 복사
+                </button>
+                <button className="maju-button-primary h-8 justify-center text-xs" onClick={() => void copyDmScript()} type="button">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  DM 문안 복사
+                </button>
+                <button className="maju-button-secondary h-8 justify-center text-xs" disabled={Boolean(savingAction)} onClick={() => void recordAction("dm", "DM 발송")} type="button">
+                  {savingAction === "DM 발송" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  발송 기록
+                </button>
+              </div>
+            ) : null}
             {instagramSaveMessage ? <p className="mt-2 text-[11px] font-bold text-pink-700">{instagramSaveMessage}</p> : null}
+            {copyMessage ? <p className="mt-2 text-[11px] font-bold text-pink-700">{copyMessage}</p> : null}
           </div>
 
           {intentGuide ? (
@@ -3185,44 +3290,6 @@ function PermitLeadDetailPanel({
               ) : null}
             </div>
           ) : null}
-
-          <div className="rounded-xl border border-pink-100 bg-pink-50/50 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5 text-xs font-black text-pink-800">
-                  <Instagram className="h-4 w-4" />
-                  인스타 DM 영업
-                </p>
-                <p className="mt-1 truncate text-sm font-black text-slate-950">{instagramHandle || "인스타 ID 미확인"}</p>
-                <p className="mt-1 text-[11px] font-semibold leading-4 text-slate-500">실제 ID가 없으면 상호명으로 인스타 검색을 열어 확인합니다.</p>
-              </div>
-              <a className="maju-button-secondary h-8 shrink-0 px-2 text-xs" href={instagramUrl} rel="noreferrer" target="_blank">
-                검색
-              </a>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button className="maju-button-primary h-8 justify-center text-xs" onClick={() => void copyDmScript()} type="button">
-                <Copy className="h-3.5 w-3.5" />
-                DM 문안 복사
-              </button>
-              <button className="maju-button-secondary h-8 justify-center text-xs" onClick={openQuoteDraft} type="button">
-                견적 품목 보기
-              </button>
-            </div>
-            {copyMessage ? (
-              <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1.5">
-                <p className="min-w-0 text-[11px] font-bold text-pink-800">{copyMessage}</p>
-                <button
-                  className="shrink-0 rounded-md bg-pink-600 px-2 py-1 text-[11px] font-black text-white disabled:opacity-50"
-                  disabled={Boolean(savingAction)}
-                  onClick={() => void recordAction("dm", "DM 발송")}
-                  type="button"
-                >
-                  기록
-                </button>
-              </div>
-            ) : null}
-          </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex items-start justify-between gap-3">
