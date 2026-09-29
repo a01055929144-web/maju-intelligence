@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, UserRound } from "lucide-react";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 import { getStaffInvitationPreview } from "@/lib/store";
 
@@ -46,6 +46,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
                 <div>
                   <p className="text-lg font-bold text-slate-950">{invitePreview.companyName}</p>
                   <p className="mt-1 text-sm font-medium text-slate-600">{invitePreview.employeeName} · {invitePreview.maskedPhone || "연락처 미등록"}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">담당 업무 · {getRoleLabel(invitePreview.role)}</p>
                   {invitePreview.status === "pending" ? (
                     <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -70,6 +71,16 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             </section>
           ) : null}
 
+          {inviteCode && invitePreview && canContinue ? (
+            <section aria-label="가입 후 연결 결과" className="rounded-xl border border-teal-100 bg-teal-50/60 px-4 py-3">
+              <p className="text-xs font-black text-teal-950">인증 후 바로 연결</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-xs font-bold text-teal-800">
+                <span className="inline-flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" />{invitePreview.companyName}</span>
+                <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{invitePreview.employeeName} · 배정 코스</span>
+              </div>
+            </section>
+          ) : null}
+
           {canContinue ? <OAuthLoginButtons inviteCode={inviteCode} /> : null}
           <p className="text-center text-xs font-medium leading-5 text-slate-500">
             {inviteCode ? "카카오 인증 후 배정된 현장 업무로 이동합니다." : "최초 등록은 회사 관리자가 보낸 초대 링크에서 진행하세요."}
@@ -78,6 +89,18 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
       </section>
     </main>
   );
+}
+
+function getRoleLabel(role: string) {
+  const labels: Record<string, string> = {
+    admin: "관리자",
+    driver: "배송기사",
+    manager: "현장관리자",
+    member: "일반직원",
+    owner: "대표",
+    sales: "영업직원"
+  };
+  return labels[role] || role;
 }
 
 // 각 프로바이더의 콜백(app/api/auth/{provider}/callback/route.ts)이 실패하면 이유를 담은

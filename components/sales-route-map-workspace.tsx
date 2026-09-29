@@ -1225,12 +1225,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     const leadMarkers = [...leadRadiusMapMarkers, ...allLeadsMapMarkers];
     return {
       customers: markers.filter((marker) => marker.tone === "customer").length,
+      completedCustomers: markers.filter((marker) => marker.tone === "customer" && marker.id && completedStoreIdsToday.has(marker.id)).length,
       newLeads: leadMarkers.filter((marker) => marker.label?.startsWith("신규")).length,
       salesLeads: leadMarkers.filter((marker) => marker.label?.startsWith("영업")).length,
       activeVehicles: liveVehicleLocations.filter((location) => !location.isStale).length,
       staleVehicles: liveVehicleLocations.filter((location) => location.isStale).length
     };
-  }, [markers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleLocations]);
+  }, [markers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleLocations, completedStoreIdsToday]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
   const mapReadyStoreCount = useMemo(() => allStores.filter((store) => Boolean(store.address?.trim())).length, [allStores]);
   const visibleMapReadyStoreCount = useMemo(() => visibleStores.filter((store) => Boolean(store.address?.trim())).length, [visibleStores]);
@@ -1846,14 +1847,21 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             })}
           </nav>
           <button
-            className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            className={`flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition ${
+              liveVehicleSummary.active
+                ? "border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_0_0_3px_rgba(16,185,129,.10)] hover:bg-emerald-100"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+            }`}
             onClick={() => setMarkerViewMode("vehicle")}
             title={`최근 수신 ${liveVehicleSummary.latestLabel} · ${STAFF_LOCATION_FRESHNESS_MINUTES}분 이내 활성, 초과 시 지연`}
             type="button"
           >
-            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${liveVehicleSummary.active ? "bg-emerald-500" : "bg-slate-300"}`} />
-            <Truck className="h-4 w-4 shrink-0 text-slate-500" />
-            <span className="whitespace-nowrap">라이브차 {liveVehicleSummary.active}대</span>
+            <span aria-hidden="true" className="relative flex h-2.5 w-2.5">
+              {liveVehicleSummary.active ? <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /> : null}
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${liveVehicleSummary.active ? "bg-emerald-500" : "bg-slate-300"}`} />
+            </span>
+            <Truck className={`h-4 w-4 shrink-0 ${liveVehicleSummary.active ? "text-emerald-700" : "text-slate-500"}`} />
+            <span className="whitespace-nowrap"><span className="hidden sm:inline">실시간 차량 </span>{liveVehicleSummary.active}대</span>
             {liveVehicleSummary.stale ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
           {activeView === "map" ? (
@@ -2523,6 +2531,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     showList={false}
                   />
                 </div>
+                <MapLayerLegend counts={visibleMapLayerCounts} />
                 {/* 2026-09-07 피드백("분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도
                     구현할 수 있도록해줘"): 라이브 차량 패널에서 "경로" 버튼을 누르면 그 차량의 최근
                     12시간 GPS 경로를 분석 모달을 열지 않고 메인 지도 위에 바로 그려줍니다. 로딩/에러/
@@ -4706,6 +4715,37 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
 // DriverSelectField는 components/driver-select-field.tsx로 옮겨서 app/dashboard/settings의
 // 직원 배정 기준 화면에서도 같이 씁니다(무거운 지도 워크스페이스 모듈 전체를 끌어오지 않도록
 // 이 파일이 그 작은 컴포넌트를 import합니다 — 아래 import 문 참고).
+
+function MapLayerLegend({
+  counts
+}: {
+  readonly counts: {
+    activeVehicles: number;
+    completedCustomers: number;
+    customers: number;
+    newLeads: number;
+    salesLeads: number;
+    staleVehicles: number;
+  };
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex justify-center sm:inset-x-3 sm:bottom-3">
+      <div
+        aria-label="지도 마커 범례"
+        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-[10px] font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] xl:max-w-[calc(100%-700px)]"
+      >
+        <span className="font-black text-slate-500">범례</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />거래처 {counts.customers}</span>
+        {(counts.newLeads > 0 || counts.salesLeads > 0) ? (
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded bg-violet-600" />리드 {counts.newLeads + counts.salesLeads}</span>
+        ) : null}
+        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] text-white">🚚</span>실시간 {counts.activeVehicles}</span>
+        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-[9px] text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
+        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
+      </div>
+    </div>
+  );
+}
 
 // 등급/배송차별 마커 색상 범례입니다. 예전에는 색점만 모아 보여주고 전체 설명은 마우스오버
 // 툴팁으로 옮겼는데("마커 ●●●"), 어떤 색이 어떤 등급/배송차인지 hover 없이는 전혀 알 수 없다는

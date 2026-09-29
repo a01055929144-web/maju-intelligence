@@ -30,6 +30,7 @@ type OperationNote = {
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
 type DeliverySaveProgress = { attachments: Record<string, Attachment>; key: string; noteId?: string };
+type MessageOutcome = "failed" | "idle" | "pending" | "sent";
 
 const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
   { label: "도착완료", value: "arrived" },
@@ -79,12 +80,14 @@ export function MobileDeliveryProofPanel({
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState("");
   const [loadingProofs, setLoadingProofs] = useState(false);
+  const [loadProofsError, setLoadProofsError] = useState("");
   const [location, setLocation] = useState<LocationTag | null>(null);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [memo, setMemo] = useState("");
   const [manualRecipientPhone, setManualRecipientPhone] = useState("");
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
   const [messageResult, setMessageResult] = useState("");
+  const [messageOutcome, setMessageOutcome] = useState<MessageOutcome>("idle");
   const [resolvedMessage, setResolvedMessage] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
   const [saving, setSaving] = useState(false);
@@ -147,10 +150,15 @@ export function MobileDeliveryProofPanel({
 
   async function loadProofs() {
     setLoadingProofs(true);
+    setLoadProofsError("");
     const response = await fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000).catch(() => null);
     const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[]; notes?: OperationNote[] } | null) : null;
-    setAttachments(payload?.attachments || []);
-    setNotes(payload?.notes || []);
+    if (payload) {
+      setAttachments(payload.attachments || []);
+      setNotes(payload.notes || []);
+    } else {
+      setLoadProofsError("기록을 불러오지 못했습니다. 연결을 확인하고 다시 눌러주세요.");
+    }
     setLoadingProofs(false);
   }
 
@@ -161,17 +169,6 @@ export function MobileDeliveryProofPanel({
       setFileError("배송완료된 적재 위치와 상품 사진을 1장 이상 촬영해주세요.");
       return;
     }
-    setSaving(true);
-    if (messageChannel === "kakao") {
-      setProgressLabel("카카오 공유 준비 중");
-      const shared = await shareOwnerMessage(files);
-      if (!shared) { setSaving(false); setProgressLabel(""); return; }
-    }
-
-    setProgressLabel("사진과 메모 저장 중");
-    setStatus("idle");
-    setMessageResult("");
-    setManualRecipientPhone("");
     const locationText = location
       ? `\n위치 태그: https://www.google.com/maps?q=${location.lat},${location.lng} (정확도 약 ${location.accuracy}m)`
       : "";
@@ -184,6 +181,20 @@ export function MobileDeliveryProofPanel({
       files.map(fileKey)
     ]);
     const progress = saveProgressRef.current?.key === attemptKey ? saveProgressRef.current : { attachments: {}, key: attemptKey };
+    const isNotificationRetry = Boolean(progress.noteId) && files.every((file) => Boolean(progress.attachments[fileKey(file)]));
+
+    setSaving(true);
+    setStatus("idle");
+    setMessageResult("");
+    setMessageOutcome("idle");
+    setManualRecipientPhone("");
+    if (messageChannel === "kakao" && !isNotificationRetry) {
+      setProgressLabel("카카오 공유 준비 중");
+      const shared = await shareOwnerMessage(files);
+      if (!shared) { setSaving(false); setProgressLabel(""); return; }
+    }
+
+    setProgressLabel(isNotificationRetry ? "알림만 다시 요청 중" : "사진과 메모 저장 중");
 
     const noteRequest = progress.noteId ? Promise.resolve(null) : fetchWithTimeout("/api/customer-operations", {
       method: "POST",
@@ -253,6 +264,7 @@ export function MobileDeliveryProofPanel({
     setManualRecipientPhone(messagePayload?.log?.recipientPhone || "");
     setResolvedMessage(messagePayload?.log?.messageBody || ownerMessage);
     if (!messageResponse?.ok) {
+      setMessageOutcome("failed");
       setMessageResult(messagePayload?.message || "거래처 알림 요청에 실패했습니다.");
       setErrorDetail("배송 메모와 증빙은 저장됐지만 거래처 알림 처리에 실패했습니다. 아래 재시도 버튼을 누르면 알림만 다시 요청합니다.");
       setSaving(false);
@@ -265,6 +277,7 @@ export function MobileDeliveryProofPanel({
         ? `거래처 알림 발송 완료 · ${messagePayload.log?.recipientPhone || "수신번호"}`
         : messagePayload?.log?.errorMessage || messagePayload?.message || "거래처 알림은 발송 대기 상태로 저장되었습니다."
     );
+    setMessageOutcome(messagePayload?.sent ? "sent" : "pending");
     setFiles([]);
     setMemo("");
     saveProgressRef.current = null;
@@ -272,9 +285,9 @@ export function MobileDeliveryProofPanel({
     setProgressLabel("");
     setStatus("saved");
     if (nextCustomerId) {
-      router.replace(`/mobile/today?customer=${encodeURIComponent(nextCustomerId)}`);
+      window.setTimeout(() => router.replace(`/mobile/today?customer=${encodeURIComponent(nextCustomerId)}`), 1800);
     } else {
-      router.refresh();
+      window.setTimeout(() => router.refresh(), 1800);
     }
   }
 
@@ -486,7 +499,26 @@ export function MobileDeliveryProofPanel({
         </div>
       ) : null}
       {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">원장 저장 완료</p> : null}
-      {messageResult ? <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-bold leading-5 text-blue-800 ring-1 ring-inset ring-blue-100">{messageResult}</p> : null}
+      {messageResult ? (
+        <div
+          aria-live="polite"
+          className={`mt-2 rounded-xl border p-3 ${
+            messageOutcome === "sent"
+              ? "border-emerald-500/30 bg-emerald-950/30 text-emerald-200"
+              : messageOutcome === "failed"
+                ? "border-rose-500/40 bg-rose-950/30 text-rose-200"
+                : "border-amber-500/30 bg-amber-950/30 text-amber-200"
+          }`}
+          role="status"
+        >
+          <p className="flex items-center gap-2 text-xs font-black">
+            {messageOutcome === "sent" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : messageOutcome === "failed" ? <RefreshCw className="h-4 w-4 shrink-0" /> : <MessageSquareText className="h-4 w-4 shrink-0" />}
+            {messageOutcome === "sent" ? "알림 발송 완료" : messageOutcome === "failed" ? "알림 발송 실패" : "알림 발송 대기"}
+          </p>
+          <p className="mt-1 text-xs font-bold leading-5">{messageResult}</p>
+          {status === "saved" && nextCustomerName ? <p className="mt-1 text-[11px] font-bold opacity-80">결과 확인 후 {nextCustomerName}(으)로 이동합니다.</p> : null}
+        </div>
+      ) : null}
       {status === "saved" && manualRecipientPhone ? (
         <a
           className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white text-sm font-black text-blue-800 shadow-sm"
@@ -513,6 +545,12 @@ export function MobileDeliveryProofPanel({
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
             증빙자료를 불러오는 중입니다.
           </p>
+        ) : null}
+        {loadProofsError ? (
+          <button className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 text-xs font-black text-rose-700" onClick={loadProofs} type="button">
+            <RefreshCw className="h-4 w-4" />
+            {loadProofsError}
+          </button>
         ) : null}
         {!loadingProofs && !deliveryProofAttachments.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송완료 증빙이 없습니다.</p> : null}
         {deliveryProofAttachments.length ? (

@@ -139,7 +139,10 @@ export default async function ReportDetailPage({
           <CardContent className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center lg:p-6">
             <div>
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <Badge className="bg-teal-700 text-white">핵심 결론 · {report.companyName}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="bg-teal-700 text-white">핵심 결론 · {report.companyName}</Badge>
+                  <Badge className="border border-slate-200 bg-white text-slate-600">실제 운영 데이터 기반</Badge>
+                </div>
                 <ReportActions companyName={report.companyName} />
               </div>
               <h2 className="text-xl font-bold leading-snug text-slate-950 sm:text-2xl">{reportGrade} · {primaryAction.title}부터 시작하세요</h2>
@@ -331,9 +334,12 @@ export default async function ReportDetailPage({
 
         <details className="maju-section-card group">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
-            <span className="flex items-center gap-2 text-base font-semibold text-slate-950">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              AI 실행 제안
+            <span>
+              <span className="flex items-center gap-2 text-base font-semibold text-slate-950">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                AI 실행 제안
+              </span>
+              <span className="mt-1 block text-xs font-medium text-slate-500">운영 데이터를 바탕으로 만든 참고 제안이며, 확정 판단은 담당자가 검토합니다.</span>
             </span>
             <span className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700">
               {report.aiInsights.length.toLocaleString()}개 보기

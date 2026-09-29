@@ -86,6 +86,10 @@ export function StaffManagementPanel({
   const linkedCount = invitations.filter((invitation) => Boolean(invitation.acceptedBy)).length;
   const acceptedWithoutIdentityCount = invitations.filter((invitation) => invitation.status === "accepted" && !invitation.acceptedBy).length;
   const unmatchedAcceptedCount = invitations.filter((invitation) => invitation.status === "accepted" && invitation.matchedCustomerCount === 0).length;
+  const invitationsNeedingAttention = invitations.filter(
+    (invitation) => invitation.membershipOnly || (invitation.status === "accepted" && (!invitation.acceptedBy || invitation.matchedCustomerCount === 0))
+  );
+  const needsAttentionCount = invitationsNeedingAttention.length;
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("ko");
   const filteredInvitations = invitations.filter((invitation) => {
     const matchesFilter =
@@ -323,8 +327,8 @@ export function StaffManagementPanel({
         <StaffSignal
           icon={<AlertCircle className="h-4 w-4" />}
           label="매핑 확인"
-          tone={acceptedWithoutIdentityCount + unmatchedAcceptedCount > 0 ? "warn" : "good"}
-          value={`${(acceptedWithoutIdentityCount + unmatchedAcceptedCount).toLocaleString()}건`}
+          tone={needsAttentionCount > 0 ? "warn" : "good"}
+          value={`${needsAttentionCount.toLocaleString()}건`}
         />
       </div>
 
@@ -337,6 +341,36 @@ export function StaffManagementPanel({
             <span aria-hidden="true" className="text-blue-300">→</span>
             <span className="font-black">3. 배정 확인</span>
           </div>
+
+          {needsAttentionCount > 0 ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" role="status">
+              <div>
+                <p className="text-sm font-black text-amber-950">직원 {needsAttentionCount.toLocaleString()}명의 연결 확인이 필요합니다.</p>
+                <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
+                  {acceptedWithoutIdentityCount > 0 ? `고유 ID 미연결 ${acceptedWithoutIdentityCount.toLocaleString()}명` : ""}
+                  {acceptedWithoutIdentityCount > 0 && unmatchedAcceptedCount > 0 ? " · " : ""}
+                  {unmatchedAcceptedCount > 0 ? `거래처 매칭 없음 ${unmatchedAcceptedCount.toLocaleString()}명` : ""}
+                  {" · 목록에서 담당자 또는 차량을 연결하세요."}
+                </p>
+              </div>
+              <Button
+                className="min-h-10 shrink-0 bg-amber-900 text-white hover:bg-amber-950"
+                onClick={() => {
+                  setListFilter("needs-link");
+                  setSearchQuery("");
+                  setPage(1);
+                  setExpandedId(invitationsNeedingAttention[0]?.id || "");
+                }}
+                type="button"
+              >
+                확인할 직원 보기
+              </Button>
+            </div>
+          ) : acceptedCount > 0 ? (
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+              가입한 직원의 고유 ID와 거래처 배정 연결을 모두 확인했습니다.
+            </div>
+          ) : null}
 
           {invitations.length ? (
             <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
@@ -525,6 +559,7 @@ export function StaffManagementPanel({
                               </button>
                                 </>
                               ) : null}
+                            <span className="mt-1 block text-[11px] font-black text-teal-700">{expanded ? "편집 닫기" : "연결 확인·편집"}</span>
                               {invitation.acceptedBy ? (
                                 <button
                                   className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -555,6 +590,7 @@ export function StaffManagementPanel({
                                 className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={!canManageMembers || savingId === invitation.id}
                                 onClick={() => updateStaff(invitation, { status: invitation.status === "revoked" ? "pending" : "revoked" })}
+                                title={invitation.status === "revoked" ? "직원 접근을 다시 허용합니다" : "초대와 직원 접근을 해제합니다"}
                                 type="button"
                               >
                                 {savingId === invitation.id ? "저장 중" : invitation.status === "revoked" ? "재활성화" : "비활성화"}
@@ -563,6 +599,7 @@ export function StaffManagementPanel({
                                 className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={!canManageMembers || savingId === invitation.id}
                                 onClick={() => deleteStaff(invitation)}
+                                title="직원 기록을 영구 삭제"
                                 type="button"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -575,7 +612,7 @@ export function StaffManagementPanel({
                           <tr className="border-b border-slate-100 bg-slate-50/60">
                             <td className="px-3 py-3" colSpan={7}>
                               <p className="text-xs font-black text-slate-900">배정 기준 수동 연결</p>
-                              <p className="mt-1 text-xs font-bold text-slate-500">자동 매칭이 안 될 때만 실제 담당자명 또는 차량번호를 선택하세요.</p>
+                              <p className="mt-1 text-xs font-bold text-slate-500">자동 매칭이 안 될 때 실제 거래처에 적힌 담당자명 또는 배송차량 중 하나 이상을 선택해 저장하세요.</p>
                               {invitation.status === "accepted" ? (
                                 <StaffAssignmentEditor
                                   canEdit={canManageMembers}
