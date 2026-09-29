@@ -137,6 +137,8 @@ export default async function AdminSystemPage({
   ];
   const launchReadyCount = launchGates.filter((gate) => gate.ready).length;
   const launchProgress = Math.round((launchReadyCount / launchGates.length) * 100);
+  const orderedLaunchGates = [...launchGates].sort((a, b) => Number(a.ready) - Number(b.ready));
+  const unresolvedCount = system.blockingIssues.length + system.warningIssues.length;
   const priorityActions = [
     {
       description: system.mode === "production-db" ? "실 DB 연결 상태입니다. 테이블 카운트와 Storage만 확인하면 됩니다." : "Supabase 환경변수와 schema.sql 적용 여부를 먼저 확인해야 합니다.",
@@ -180,9 +182,9 @@ export default async function AdminSystemPage({
                 <Badge className={system.readyForOperations ? "mb-3 bg-primary text-primary-foreground" : "mb-3 bg-amber-100 text-amber-900"}>
                   {system.readyForOperations ? "운영 가능" : "조치 필요"}
                 </Badge>
-                <h2 className="text-2xl font-black">운영 준비 상태</h2>
+                <h2 className="text-2xl font-black">{unresolvedCount ? `${unresolvedCount}개 항목을 확인하세요` : "운영 준비가 완료되었습니다"}</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  관리자, 고객사, 저장 상태, 첨부자료, 경로 계산에 필요한 설정을 기준으로 실제 운영 가능 여부를 점검합니다.
+                  미완료 항목을 먼저 조치한 뒤 고객사 데이터와 업로드 결과를 확인하세요.
                 </p>
               </div>
               <div className="w-full rounded-md border border-border bg-white p-4 lg:w-72">
@@ -229,8 +231,8 @@ export default async function AdminSystemPage({
           <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <CardTitle>운영 오픈 판정표</CardTitle>
-                <p className="mt-2 text-sm font-semibold text-muted-foreground">실사용 전 반드시 확인할 5가지 기준입니다. 모두 준비되면 고객사 운영 화면을 안정적으로 열 수 있습니다.</p>
+                <CardTitle>미완료 항목 우선 점검</CardTitle>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">조치가 필요한 항목을 앞에 표시합니다.</p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge className={launchReadyCount === launchGates.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
@@ -241,7 +243,7 @@ export default async function AdminSystemPage({
             </div>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-            {launchGates.map((gate) => (
+            {orderedLaunchGates.map((gate) => (
               <LaunchGateCard key={gate.label} {...gate} />
             ))}
           </CardContent>
@@ -263,13 +265,6 @@ export default async function AdminSystemPage({
             ))}
           </CardContent>
         </Card>
-
-        <div className="grid gap-4 md:grid-cols-4">
-          <Metric icon={Database} label="데이터 모드" value={system.mode === "production-db" ? "실 DB" : "저장 확인 필요"} />
-          <Metric icon={ServerCog} label="앱 URL" value={system.appUrlConfigured ? "설정됨" : "미설정"} />
-          <Metric icon={KeyRound} label="관리자 인증" value={system.adminConfigured && !credentialSafety.issues.some((issue) => issue.startsWith("관리자")) ? "안전" : "점검 필요"} />
-          <Metric icon={ShieldAlert} label="고객사 인증" value={system.customerConfigured && !credentialSafety.issues.some((issue) => issue.startsWith("고객사")) ? "안전" : "점검 필요"} />
-        </div>
 
         <Card className={credentialSafety.safe ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}>
           <CardHeader>
@@ -900,19 +895,7 @@ function LaunchGateCard({ description, label, ready }: { description: string; la
         {ready ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
       </div>
       <Badge className={ready ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>{ready ? "준비" : "점검"}</Badge>
-      <p className="mt-3 text-xs font-bold leading-5 text-slate-600">{description}</p>
+      <p className="mt-3 text-xs font-bold leading-5 text-slate-600">{ready ? "확인 완료" : description}</p>
     </div>
-  );
-}
-
-function Metric({ icon: Icon, label, value }: { icon: typeof Database; label: string; value: string }) {
-  return (
-    <Card className="shadow-none">
-      <CardContent className="p-4">
-        <Icon className="mb-4 h-5 w-5 text-primary" />
-        <p className="text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 text-3xl font-black">{value}</p>
-      </CardContent>
-    </Card>
   );
 }

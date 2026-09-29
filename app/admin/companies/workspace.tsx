@@ -422,6 +422,8 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
   const selectedReadiness = selectedCompany ? getCompanyReadiness(selectedCompany) : null;
+  const selectedMissingChecks = selectedReadiness?.checks.filter((check) => !check.ok) || [];
+  const hasUnsavedChanges = JSON.stringify(form) !== JSON.stringify(formBaseline);
   const totalCustomers = companies.reduce((sum, company) => sum + company.customerCount, 0);
   const totalSalesRows = companies.reduce((sum, company) => sum + company.salesTransactionCount, 0);
   const totalUploads = companies.reduce((sum, company) => sum + company.uploadCount, 0);
@@ -601,6 +603,11 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   {company.status === "active" ? "운영" : company.status === "closed" ? "탈퇴" : "중지"}
                 </Badge>
               </div>
+              {selectedId === company.id ? (
+                <p className="mt-2 inline-flex items-center gap-1 text-xs font-black text-primary">
+                  <Check className="h-3.5 w-3.5" /> 현재 편집 중
+                </p>
+              ) : null}
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <Users className="h-3.5 w-3.5" />
@@ -638,13 +645,46 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             <Badge className="mb-2 bg-slate-100 text-slate-700">{selectedCompany ? "선택 고객사" : "신규 고객사"}</Badge>
             <h2 className="text-2xl font-black">{selectedCompany?.name || "새 고객사 등록"}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              회사 기본정보, 출발지, 고객사 로그인 계정을 한 번에 관리합니다.
+              {selectedCompany ? `목록에서 선택한 ${selectedCompany.name}의 이상 상태와 다음 조치를 확인합니다.` : "필수 정보를 입력하고 신규 고객사를 저장합니다."}
             </p>
           </div>
           <Building2 className="h-8 w-8 text-primary" />
         </div>
 
         <form className="space-y-6 p-4" onSubmit={handleSubmit}>
+          {selectedCompany ? (
+            <div className={`rounded-lg border p-4 ${selectedMissingChecks.length ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-start gap-3">
+                  {selectedMissingChecks.length ? <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" /> : <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />}
+                  <div>
+                    <p className={`font-black ${selectedMissingChecks.length ? "text-amber-950" : "text-emerald-950"}`}>
+                      {selectedMissingChecks.length ? `미완료 ${selectedMissingChecks.length}건 · ${selectedMissingChecks[0].label}부터 처리` : "운영 준비 항목 완료"}
+                    </p>
+                    <p className={`mt-1 text-xs font-bold leading-5 ${selectedMissingChecks.length ? "text-amber-800" : "text-emerald-800"}`}>
+                      {selectedMissingChecks.length ? selectedMissingChecks.map((check) => check.label).join(" · ") : "이상 징후가 있으면 데이터 진단을 실행해 원장 간 일치 여부를 확인하세요."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={runCompanyDiagnostic} type="button" variant="outline" disabled={diagnosing}>
+                    <RefreshCw className={`h-4 w-4 ${diagnosing ? "animate-spin" : ""}`} />
+                    {diagnosing ? "진단 중" : diagnostic ? "다시 진단" : "이상 진단"}
+                  </Button>
+                  <a className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white hover:bg-teal-800" href="#company-editor">
+                    {selectedMissingChecks.length ? "정보 보완" : "계정 정보 수정"}
+                  </a>
+                </div>
+              </div>
+              {diagnosticError ? <p className="mt-3 rounded-md bg-white px-3 py-2 text-xs font-bold text-rose-700">진단 실패 · {diagnosticError}</p> : null}
+              {diagnostic ? (
+                <p className={`mt-3 rounded-md bg-white px-3 py-2 text-xs font-black ${diagnostic.ok ? "text-emerald-700" : "text-amber-800"}`}>
+                  최근 진단 · {diagnostic.ok ? "정상" : `점검 필요 (${diagnostic.summary.passedChecks}/${diagnostic.summary.totalChecks} 통과)`}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {selectedCompany ? (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -655,9 +695,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                   </div>
                   {selectedReadiness ? <ReadinessMeter readiness={selectedReadiness} /> : null}
                 </div>
-                {selectedReadiness ? (
+                {selectedReadiness && selectedMissingChecks.length ? (
                   <div className="mt-4 grid gap-2 md:grid-cols-2">
-                    {selectedReadiness.checks.map((check) => (
+                    {selectedMissingChecks.map((check) => (
                       <div key={check.label} className="flex items-start gap-2 rounded-md border border-slate-200 bg-white p-3">
                         {check.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />}
                         <div>
@@ -667,7 +707,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
                       </div>
                     ))}
                   </div>
-                ) : null}
+                ) : <p className="mt-4 text-xs font-bold text-emerald-700">필수 {selectedReadiness?.total || 0}개 항목이 모두 준비되었습니다.</p>}
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -875,7 +915,9 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
           ) : null}
 
           {selectedCompany ? (
-            <CompanyDiagnosticPanel diagnostic={diagnostic} error={diagnosticError} loading={diagnosing} onRun={runCompanyDiagnostic} />
+            <div id="company-diagnostic">
+              <CompanyDiagnosticPanel diagnostic={diagnostic} error={diagnosticError} loading={diagnosing} onRun={runCompanyDiagnostic} />
+            </div>
           ) : null}
 
           {selectedCompany ? (
@@ -893,7 +935,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2" id="company-editor">
             <Field label="고객사명" required value={form.name} onChange={(value) => update("name", value)} />
             <Field label="대표자/담당자명" value={form.ownerName || ""} onChange={(value) => update("ownerName", value)} />
             <Field label="업종" value={form.businessType || ""} onChange={(value) => update("businessType", value)} />
@@ -1025,21 +1067,27 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             </div>
           ) : null}
 
-          {message ? (
-            <p className={message.includes("실패") ? "rounded-md bg-destructive/10 px-3 py-2 text-sm font-bold text-destructive" : "rounded-md bg-primary/10 px-3 py-2 text-sm font-bold text-primary"}>
-              {message}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap gap-3">
-            <Button disabled={saving}>
-              <Save className="h-4 w-4" />
-              {saving ? "저장 중" : form.id ? "고객사 수정 저장" : "고객사 생성"}
-            </Button>
-            <Button type="button" variant="outline" onClick={startNewCompany}>
-              <Plus className="h-4 w-4" />
-              새 고객사 입력
-            </Button>
+          <div className="sticky bottom-3 z-10 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className={`text-sm font-black ${hasUnsavedChanges ? "text-amber-800" : "text-slate-700"}`}>
+                  {hasUnsavedChanges ? "저장하지 않은 변경사항이 있습니다." : form.id ? "현재 저장된 정보와 같습니다." : "신규 고객사 정보를 입력하세요."}
+                </p>
+                {message ? (
+                  <p className={`mt-1 text-xs font-bold ${message.includes("실패") ? "text-destructive" : "text-primary"}`}>{message}</p>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={saving}>
+                  <Save className="h-4 w-4" />
+                  {saving ? "저장 중" : form.id ? "고객사 수정 저장" : "고객사 생성"}
+                </Button>
+                <Button type="button" variant="outline" onClick={startNewCompany}>
+                  <Plus className="h-4 w-4" />
+                  새 고객사 입력
+                </Button>
+              </div>
+            </div>
           </div>
         </form>
       </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { GitBranch, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, GitBranch, Loader2, RotateCcw } from "lucide-react";
 import { KakaoAddressMap, KakaoMapMarker, KakaoRoutePoint } from "@/components/kakao-address-map";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -50,6 +50,7 @@ export function RouteSequenceAction({
   const [sequence, setSequence] = useState<RouteSequence | null>(null);
   const uniqueDestinations = useMemo(() => Array.from(new Set(destinations.filter(Boolean))).slice(0, 15), [destinations]);
   const routeMarkers = useMemo(() => (sequence ? createRouteMarkers(sequence) : []), [sequence]);
+  const hasError = message === "경유 계산 실패";
 
   async function calculateSequence() {
     if (!uniqueDestinations.length) return;
@@ -81,18 +82,36 @@ export function RouteSequenceAction({
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-border bg-white p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" className="gap-2" disabled={!uniqueDestinations.length || isLoading} onClick={calculateSequence}>
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
-          {isLoading ? "경유 계산 중" : buttonLabel}
+    <div className="space-y-3 rounded-lg border border-border bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-black text-foreground">
+            {sequence ? "2. 최적 순서 확인" : `1. 경유지 ${uniqueDestinations.length}곳 선택됨`}
+          </p>
+          <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+            {sequence ? "거리와 방문 순서를 확인한 뒤 아래에서 코스를 확정하세요." : uniqueDestinations.length ? "선택한 경유지로 실제 도로 순서를 계산합니다." : "먼저 오늘 배송할 매장을 선택하세요."}
+          </p>
+        </div>
+        <Button size="sm" variant={sequence ? "outline" : "default"} className="gap-2" disabled={!uniqueDestinations.length || isLoading} onClick={calculateSequence}>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : hasError ? <RotateCcw className="h-4 w-4" /> : <GitBranch className="h-4 w-4" />}
+          {isLoading ? "최적 순서 계산 중" : hasError ? "다시 계산" : sequence ? "순서 다시 계산" : buttonLabel}
         </Button>
-        {message ? <span className="text-xs font-bold text-muted-foreground">{message}</span> : null}
       </div>
-      {!sequence ? (
-        <p className="text-xs font-bold leading-5 text-muted-foreground">
-          선택한 매장 {uniqueDestinations.length}곳을 {originAddress ? "선택한 출발 기준" : "회사 출발지"}에서 경유지로 보내 티맵 도로 거리·시간을 계산합니다. 티맵이 도로 좌표를 반환하면 지도에 실제 경유선도 함께 표시됩니다.
-        </p>
+      {isLoading ? (
+        <div className="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800" role="status">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          선택한 {uniqueDestinations.length}곳의 거리와 최적 순서를 계산하고 있습니다.
+        </div>
+      ) : hasError ? (
+        <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-800" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>계산하지 못했습니다. 연결 상태를 확인한 뒤 <strong>다시 계산</strong>을 눌러주세요. 선택한 경유지는 유지됩니다.</span>
+        </div>
+      ) : sequence ? (
+        <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800" role="status">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          최적 순서 계산 완료 · 결과가 맞으면 코스를 확정하세요.
+        </div>
       ) : null}
 
       {sequence ? (
@@ -100,7 +119,7 @@ export function RouteSequenceAction({
           <div className="flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-md bg-muted px-2 py-1">총 {sequence.totalDistanceKm.toLocaleString()}km</span>
             <span className="rounded-md bg-muted px-2 py-1">총 {formatMinutes(sequence.totalDurationMinutes)}</span>
-            <span className="rounded-md bg-muted px-2 py-1">최적 순서 {sequence.legs.length}개 구간</span>
+            <span className="rounded-md bg-muted px-2 py-1">경유 {sequence.stops.length}곳 · {sequence.legs.length}개 구간</span>
             <span className="rounded-md bg-muted px-2 py-1">도로 좌표 {countFiniteRoutePoints(sequence.path).toLocaleString()}개</span>
           </div>
           <div className="space-y-1">
@@ -124,9 +143,7 @@ export function RouteSequenceAction({
           ) : !sequence.path.length ? (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
               <p className="text-xs font-bold text-amber-800">티맵 도로 좌표가 없어 구간 거리/시간만 표시합니다.</p>
-              <p className="text-xs text-amber-800">
-                이 경우는 티맵 키/주소 지오코딩/요청 제한 중 하나로 실제 도로 geometry가 반환되지 않은 상태입니다. 주소 목록과 선택 배송지는 유지됩니다.
-              </p>
+              <p className="text-xs text-amber-800">순서와 거리·시간은 확인할 수 있으며, 선택한 배송지는 유지됩니다.</p>
             </div>
           ) : null}
         </div>

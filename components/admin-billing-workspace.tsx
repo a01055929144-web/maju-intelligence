@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { Loader2, Search, Save, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Search, Save, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableTh } from "@/components/sortable-th";
 import { useTableSort } from "@/lib/use-table-sort";
@@ -44,6 +44,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingCompanyId, setSavingCompanyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [savedCompanyId, setSavedCompanyId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | AdminSubscriptionRow["status"]>("all");
 
@@ -79,6 +80,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
       return;
     }
     setError("");
+    setSavedCompanyId(null);
     setSavingCompanyId(companyId);
     try {
       const response = await fetch("/api/admin/billing", {
@@ -94,6 +96,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
         delete next[companyId];
         return next;
       });
+      setSavedCompanyId(companyId);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "저장하지 못했습니다.");
     } finally {
@@ -106,11 +109,29 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
       {loadError ? <div role="alert" className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{loadError}</div> : null}
       {error ? <div aria-live="assertive" className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{error}</div> : null}
 
+      {statusCounts.pending_card || statusCounts.paused ? (
+        <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <div>
+              <p className="font-black text-amber-950">청구 전 확인이 필요한 고객사가 {statusCounts.pending_card + statusCounts.paused}곳 있습니다.</p>
+              <p className="mt-1 text-sm font-semibold text-amber-800">카드 미등록 고객사를 먼저 확인하고, 일시중지 고객사는 이용료와 재개 여부를 점검하세요.</p>
+            </div>
+          </div>
+          <button className="h-10 shrink-0 rounded-md bg-amber-900 px-4 text-sm font-black text-white hover:bg-amber-950" onClick={() => setStatusFilter("pending_card")} type="button">카드 미등록 보기</button>
+        </section>
+      ) : (
+        <section className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <p className="text-sm font-black">현재 카드 미등록 또는 일시중지 고객사가 없습니다.</p>
+        </section>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <BillingMetric label="정상 청구중" value={statusCounts.active} tone="success" />
-        <BillingMetric label="카드 미등록" value={statusCounts.pending_card} tone="warning" />
-        <BillingMetric label="일시중지" value={statusCounts.paused} />
-        <BillingMetric label="해지됨" value={statusCounts.canceled} tone="danger" />
+        <BillingMetric active={statusFilter === "active"} label="정상 청구중" onClick={() => setStatusFilter("active")} value={statusCounts.active} tone="success" />
+        <BillingMetric active={statusFilter === "pending_card"} label="카드 미등록" onClick={() => setStatusFilter("pending_card")} value={statusCounts.pending_card} tone="warning" />
+        <BillingMetric active={statusFilter === "paused"} label="일시중지" onClick={() => setStatusFilter("paused")} value={statusCounts.paused} />
+        <BillingMetric active={statusFilter === "canceled"} label="해지됨" onClick={() => setStatusFilter("canceled")} value={statusCounts.canceled} tone="danger" />
       </div>
 
       <section className="maju-section-card">
@@ -137,7 +158,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
         </div>
 
         <div className="grid gap-3 p-4 md:hidden">
-          {sortedRows.map((row) => <BillingMobileCard drafts={drafts} key={row.id} row={row} saving={savingCompanyId === row.companyId} setDrafts={setDrafts} onSave={savePlanAmount} />)}
+          {sortedRows.map((row) => <BillingMobileCard drafts={drafts} key={row.id} row={row} saved={savedCompanyId === row.companyId} saving={savingCompanyId === row.companyId} setDrafts={setDrafts} onSave={savePlanAmount} />)}
           {!sortedRows.length ? (
             <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
               <p className="font-black text-slate-800">{rows.length ? "검색 조건에 맞는 고객사가 없습니다." : "아직 결제 관리 대상 고객사가 없습니다."}</p>
@@ -205,6 +226,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
                         {savingCompanyId === row.companyId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                       </button>
                     </div>
+                    {savedCompanyId === row.companyId ? <p aria-live="polite" className="mt-1 text-xs font-bold text-emerald-700">저장 완료</p> : drafts[row.companyId] !== undefined ? <p className="mt-1 text-xs font-bold text-amber-700">저장하지 않은 변경</p> : null}
                   </td>
                   <td className="border-b border-slate-100 px-4 py-3 text-slate-700">{row.nextBillingDate || "-"}</td>
                   <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
@@ -227,15 +249,16 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
   );
 }
 
-function BillingMetric({ label, tone = "default", value }: { label: string; tone?: "danger" | "default" | "success" | "warning"; value: number }) {
+function BillingMetric({ active, label, onClick, tone = "default", value }: { active: boolean; label: string; onClick: () => void; tone?: "danger" | "default" | "success" | "warning"; value: number }) {
   const toneClass = tone === "success" ? "border-emerald-200 bg-emerald-50" : tone === "warning" ? "border-amber-200 bg-amber-50" : tone === "danger" ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-white";
-  return <div className={`rounded-lg border p-4 ${toneClass}`}><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}<span className="ml-1 text-sm text-slate-500">곳</span></p></div>;
+  return <button aria-pressed={active} className={`rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass} ${active ? "ring-2 ring-teal-600 ring-offset-2" : ""}`} onClick={onClick} type="button"><p className="text-xs font-bold text-slate-500">{label} · 눌러서 보기</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}<span className="ml-1 text-sm text-slate-500">곳</span></p></button>;
 }
 
-function BillingMobileCard({ drafts, onSave, row, saving, setDrafts }: { drafts: Record<string, string>; onSave: (companyId: string) => void; row: AdminSubscriptionRow; saving: boolean; setDrafts: Dispatch<SetStateAction<Record<string, string>>> }) {
+function BillingMobileCard({ drafts, onSave, row, saved, saving, setDrafts }: { drafts: Record<string, string>; onSave: (companyId: string) => void; row: AdminSubscriptionRow; saved: boolean; saving: boolean; setDrafts: Dispatch<SetStateAction<Record<string, string>>> }) {
   return <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-black text-slate-950">{row.companyName}</p><p className="mt-1 text-xs font-semibold text-slate-500">{row.cardNumberMasked || "등록된 카드 없음"}</p></div><Badge className={statusTone[row.status]}>{statusLabels[row.status]}</Badge></div>
     <div className="mt-4 grid grid-cols-2 gap-2 text-sm"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">다음 청구일</p><p className="mt-1 font-black">{row.nextBillingDate || "미정"}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">최근 결제</p><p className="mt-1 font-black">{row.lastPaymentStatus === "succeeded" ? "성공" : row.lastPaymentStatus ? "실패" : "내역 없음"}</p></div></div>
     <label className="mt-4 block text-xs font-bold text-slate-500">월 이용료</label><div className="mt-1 flex gap-2"><input className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 px-3 text-right font-bold outline-none focus:border-teal-500" inputMode="numeric" min={0} onChange={(event) => setDrafts((current) => ({ ...current, [row.companyId]: event.target.value }))} type="number" value={drafts[row.companyId] ?? row.planAmountWon} /><button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:opacity-60" disabled={saving} onClick={() => onSave(row.companyId)} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}저장</button></div>
+    {saved ? <p aria-live="polite" className="mt-2 text-xs font-bold text-emerald-700">월 이용료 저장 완료</p> : drafts[row.companyId] !== undefined ? <p className="mt-2 text-xs font-bold text-amber-700">저장하지 않은 변경이 있습니다.</p> : null}
   </article>;
 }

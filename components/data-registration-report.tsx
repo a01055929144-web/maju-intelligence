@@ -54,21 +54,23 @@ export function Report({
         <div className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <Badge className="mb-4 bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">MAJU AI 리포트</Badge>
+              <Badge className={`mb-3 ${meta.persisted ? "bg-teal-50 text-teal-700" : "bg-amber-100 text-amber-800"}`}>
+                {meta.persisted ? "저장 완료 · 운영 반영됨" : "저장 확인 필요"}
+              </Badge>
               <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} AI 리포트</h1>
               <p className="mt-2 text-sm font-semibold text-slate-500">
                 {isSalesReport ? "매출 원장 업데이트" : "거래처 등록"} 기준 · 거래처 {analysis.customers}곳 · 거래지역 {analysis.regions}개 · 분석 완료
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href={dashboardHref}>
-                대시보드 보기
+              <Link className="inline-flex h-10 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href={ledgerHref}>
+                {isSalesReport ? "매출 원장 확인" : "거래처 원장 확인"}
               </Link>
               <Link
                 className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-                href={ledgerHref}
+                href={dashboardHref}
               >
-                {isSalesReport ? "매출 원장 보기" : "거래처 히스토리 보기"}
+                대시보드 보기
               </Link>
               <Link
                 className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
@@ -76,7 +78,7 @@ export function Report({
               >
                 지도 홈 보기
               </Link>
-              <Button variant="outline" onClick={onReset}>데이터 다시 등록</Button>
+              <Button variant="outline" onClick={onReset}>{meta.persisted ? "새 데이터 등록" : "저장 다시 시도"}</Button>
             </div>
           </div>
 

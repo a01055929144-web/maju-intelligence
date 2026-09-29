@@ -82,7 +82,7 @@ export function ExcelHeaderMappingPreview({
               <FileSpreadsheet className="h-4 w-4 text-blue-700" />
               엑셀 헤더 매칭
             </p>
-            <p className="mt-1 truncate text-xs font-bold text-slate-500">원본 컬럼을 표준 필드에 연결합니다.</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">필수 컬럼을 연결한 뒤 품질 오류를 검수합니다.</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{rows.length.toLocaleString()}행</Badge>
@@ -92,7 +92,7 @@ export function ExcelHeaderMappingPreview({
               {missingRequiredFields.length ? `필수 ${missingRequiredFields.length}개 남음` : "필수 완료"}
             </Badge>
             <Button className="maju-button-blue h-9 bg-blue-700 px-3 text-white hover:bg-blue-800" size="sm" type="button" onClick={() => setIsWorkspaceOpen(true)}>
-              매칭 화면 열기
+              {missingRequiredFields.length ? "필수 매칭 계속" : "품질 검수로 이동"}
             </Button>
           </div>
         </div>
@@ -107,7 +107,7 @@ export function ExcelHeaderMappingPreview({
           </div>
         ) : (
           <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
-            필수 필드 연결 완료. 데이터 검수 후 저장할 수 있습니다.
+            매핑 완료 · 다음 단계에서 누락값과 중복 후보를 검수하세요.
           </div>
         )}
       </div>
@@ -323,7 +323,7 @@ function MappingWorkspaceModal({
             <div className="mt-3 grid gap-2 lg:grid-cols-3">
               <MappingStage active label="1" title="원본 컬럼 확인" value={`${filteredHeaders.length}/${headers.length}`} />
               <MappingStage active={mappedCount > 0} label="2" title="표준 필드 연결" value={`${mappedCount}/${fields.length}`} />
-              <MappingStage active={readyToReview} label="3" title="저장 가능 상태" value={readyToReview ? "완료" : `필수 ${missingRequiredFields.length}개`} />
+              <MappingStage active={readyToReview} label="3" title="품질 오류 검수" value={readyToReview ? "이동 가능" : `필수 ${missingRequiredFields.length}개`} />
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -480,7 +480,7 @@ function MappingWorkspaceModal({
               </p>
               <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
                 {readyToReview
-                  ? "닫은 뒤 데이터 검수에서 사업자번호, 누락값, 중복 후보를 확인하면 저장 단계로 넘어갈 수 있습니다."
+                  ? "다음 단계에서 사업자번호, 누락값, 중복 후보를 확인한 뒤 저장합니다."
                   : `${missingRequiredFields.map((field) => field.label).join(", ")} 필드가 아직 비어 있습니다.`}
               </p>
             </div>
@@ -501,7 +501,7 @@ function MappingWorkspaceModal({
               미연결 컬럼 {unmappedColumnCount}개
             </button>
             <Button className={readyToReview ? "maju-button-primary h-10" : "maju-button-secondary h-10"} type="button" variant={readyToReview ? "default" : "outline"} onClick={readyToReview ? onDone : onClose}>
-              {readyToReview ? "닫고 데이터 검수" : "닫기"}
+              {readyToReview ? "품질 오류 검수로 이동" : "닫기"}
             </Button>
           </div>
         </div>
