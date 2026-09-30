@@ -221,7 +221,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
   const failedPaymentCount = payments.filter((payment) => payment.status === "failed").length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {banner ? (
         <div
           aria-live="polite"
@@ -252,7 +252,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
             <Badge className={statusTone[subscription.status]}>{statusLabels[subscription.status]}</Badge>
           </div>
         </div>
-        <div className="grid gap-4 p-4 md:grid-cols-3">
+        <div className="grid gap-3 px-4 py-3 md:grid-cols-3">
           <div>
             <p className="maju-muted-label">등록된 카드</p>
             <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-slate-950">
@@ -272,7 +272,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
           </div>
         </div>
         {subscription.lastPaymentStatus ? (
-          <div className={`mx-4 mb-4 rounded-lg px-3 py-2.5 text-sm font-medium ${subscription.lastPaymentStatus === "succeeded" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+          <div className={`mx-4 mb-3 rounded-lg px-3 py-2 text-sm font-medium ${subscription.lastPaymentStatus === "succeeded" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
             최근 결제: {subscription.lastPaymentStatus === "succeeded" ? "성공" : `실패 (${subscription.lastPaymentMessage || "사유 미상"})`}
             {subscription.lastPaymentAt ? ` · ${new Date(subscription.lastPaymentAt).toLocaleString("ko-KR")}` : ""}
           </div>
@@ -280,7 +280,7 @@ export function BillingWorkspace({ companyId, customerEmail, customerName }: { r
 
         {actionError ? <div aria-live="assertive" className="mx-4 mb-4 rounded-lg bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-800" role="alert"><strong className="block">요청을 완료하지 못했습니다.</strong>{actionError} 다시 시도해 주세요.</div> : null}
 
-        <div className="flex flex-col gap-2 border-t border-slate-100 p-4 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-2 border-t border-slate-100 p-3 sm:flex-row sm:flex-wrap sm:px-4">
           <button aria-busy={registering} className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" disabled={registering || Boolean(statusChanging) || !data.configured} onClick={handleRegisterCard} type="button">
             {registering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
             {registering ? "카드 등록 화면 준비 중..." : subscription.billingKey ? "카드 변경" : "카드 등록"}
@@ -340,17 +340,17 @@ function PaymentHistoryTable({ payments }: { readonly payments: SubscriptionPaym
 
   return (
     <section className="maju-section-card">
-      <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
+      <div className="maju-card-header flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="maju-section-title">결제 이력</p>
-          <p className="mt-1 maju-muted-label">청구 성공/실패 전체 기록</p>
+          <p className="mt-0.5 maju-muted-label">청구 성공/실패 전체 기록</p>
         </div>
         <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
           <Banknote className="mr-1 h-3 w-3" />
           누적 결제 {totalSucceeded.toLocaleString()}원
         </Badge>
       </div>
-      <div className="flex flex-col gap-2 border-b border-slate-200/80 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
         <label className="relative min-w-0 flex-1 sm:max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -384,31 +384,31 @@ function PaymentHistoryTable({ payments }: { readonly payments: SubscriptionPaym
         <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="text-left text-xs font-black text-slate-500">
-              <SortableTh active={sortKey === "billedAt"} className="border-b border-slate-200 px-4 py-3" direction={sortDirection} label="청구일시" onClick={() => toggleSort("billedAt")} />
-              <SortableTh active={sortKey === "status"} className="border-b border-slate-200 px-4 py-3" direction={sortDirection} label="결과" onClick={() => toggleSort("status")} />
+              <SortableTh active={sortKey === "billedAt"} className="border-b border-slate-200 px-4 py-2.5" direction={sortDirection} label="청구일시" onClick={() => toggleSort("billedAt")} />
+              <SortableTh active={sortKey === "status"} className="border-b border-slate-200 px-4 py-2.5" direction={sortDirection} label="결과" onClick={() => toggleSort("status")} />
               <SortableTh
                 active={sortKey === "amount"}
-                className="border-b border-slate-200 px-4 py-3 text-right"
+                className="border-b border-slate-200 px-4 py-2.5 text-right"
                 direction={sortDirection}
                 label="금액"
                 onClick={() => toggleSort("amount")}
               />
-              <th className="border-b border-slate-200 px-4 py-3">카드</th>
-              <th className="border-b border-slate-200 px-4 py-3">비고</th>
+              <th className="border-b border-slate-200 px-4 py-2.5">카드</th>
+              <th className="border-b border-slate-200 px-4 py-2.5">비고</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.map((payment) => (
               <tr key={payment.id} className="font-bold text-slate-800 odd:bg-white even:bg-slate-50/60">
-                <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{new Date(payment.billedAt).toLocaleString("ko-KR")}</td>
-                <td className="border-b border-slate-100 px-4 py-3">
+                <td className="border-b border-slate-100 px-4 py-2.5 text-xs text-slate-600">{new Date(payment.billedAt).toLocaleString("ko-KR")}</td>
+                <td className="border-b border-slate-100 px-4 py-2.5">
                   <Badge className={payment.status === "succeeded" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}>
                     {payment.status === "succeeded" ? "성공" : "실패"}
                   </Badge>
                 </td>
-                <td className="border-b border-slate-100 px-4 py-3 text-right text-slate-950">{payment.amount.toLocaleString()}원</td>
-                <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{payment.cardNumberMasked || "-"}</td>
-                <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
+                <td className="border-b border-slate-100 px-4 py-2.5 text-right text-slate-950">{payment.amount.toLocaleString()}원</td>
+                <td className="border-b border-slate-100 px-4 py-2.5 text-xs text-slate-500">{payment.cardNumberMasked || "-"}</td>
+                <td className="border-b border-slate-100 px-4 py-2.5 text-xs text-slate-500">
                   {payment.status === "failed" ? payment.failureMessage || "-" : payment.receiptUrl ? (
                     <a className="text-teal-700 underline" href={payment.receiptUrl} rel="noreferrer" target="_blank">
                       영수증

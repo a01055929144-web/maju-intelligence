@@ -193,17 +193,19 @@ export default function CustomerDataManagementPage() {
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
         <section className="maju-section-card overflow-hidden">
-          <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-black text-teal-700">데이터 등록 결과</p>
-              <h2 className="mt-1 text-lg font-black text-slate-950">
-                {failedCount ? `${failedCount.toLocaleString()}건의 실패 작업을 다시 처리하세요` : runningCount ? `${runningCount.toLocaleString()}건을 처리하고 있습니다` : uploads.length ? "등록 결과를 원장에서 확인하세요" : "첫 데이터를 등록하세요"}
-              </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500">
-                {failedCount ? "실패 상태로 좁혀 재업로드할 파일을 바로 찾을 수 있습니다." : runningCount ? "완료되면 거래처 원장에서 반영 결과를 확인할 수 있습니다." : "완료된 데이터는 거래처 원장에서 실제 반영 결과를 확인할 수 있습니다."}
+          <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-slate-950">
+                {failedCount ? `${failedCount.toLocaleString()}건 재시도 필요` : runningCount ? `${runningCount.toLocaleString()}건 처리 중` : uploads.length ? "등록 결과 확인" : "첫 데이터 등록"}
               </p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-500" aria-label="등록 작업 요약">
+                <span>현재 {uploads.length.toLocaleString()}건</span>
+                <span className="text-emerald-700">완료 {completedCount.toLocaleString()}</span>
+                <span className="text-amber-700">중복 {duplicateCount.toLocaleString()}</span>
+                <span className={failedCount ? "text-rose-700" : undefined}>실패 {failedCount.toLocaleString()}</span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               {completedCount ? (
                 <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50" href={customerLedgerHref}>
                   거래처 원장 확인
@@ -215,20 +217,6 @@ export default function CustomerDataManagementPage() {
             </div>
           </div>
         </section>
-
-        <div className="grid overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "현재 페이지", value: `${uploads.length.toLocaleString()}건`, tone: "text-slate-900" },
-            { label: "저장 완료", value: `${completedCount.toLocaleString()}건`, tone: "text-emerald-700" },
-            { label: "중복 후보", value: `${duplicateCount.toLocaleString()}건`, tone: "text-amber-700" },
-            { label: "재시도 필요", value: `${failedCount.toLocaleString()}건`, tone: "text-rose-700" }
-          ].map((item) => (
-            <div className="border-b border-slate-100 p-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0" key={item.label}>
-              <p className="text-xs font-semibold text-slate-500">{item.label}</p>
-              <p className={`mt-1 text-xl font-black ${item.tone}`}>{item.value}</p>
-            </div>
-          ))}
-        </div>
 
         <div aria-busy={!uploadsLoaded} aria-live="polite" className="maju-section-card">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/80 p-4">
@@ -256,28 +244,20 @@ export default function CustomerDataManagementPage() {
               {paginationControls}
             </div>
           </div>
-          <div className="border-b border-slate-200/80 bg-slate-50/70 px-4 py-3">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <label className="relative block w-full max-w-xl">
+          <div className="border-b border-slate-200/80 bg-slate-50/70 px-3 py-2.5 sm:px-4">
+            <div className="grid gap-2 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-center">
+              <label className="relative block w-full">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                   onChange={(event) => { setQuery(event.target.value); setPage(1); }}
                   placeholder="현재 페이지의 파일명·등록일 검색"
                   type="search"
                   value={query}
                 />
               </label>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
-                  시작일
-                  <input className="w-[116px] bg-transparent text-xs font-bold text-slate-800 outline-none" max={dateTo || undefined} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} type="date" value={dateFrom} />
-                </label>
-                <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-500">
-                  종료일
-                  <input className="w-[116px] bg-transparent text-xs font-bold text-slate-800 outline-none" min={dateFrom || undefined} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} type="date" value={dateTo} />
-                </label>
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="등록 작업 상태 필터">
+              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5">
+                <div className="flex flex-nowrap gap-1.5" role="group" aria-label="등록 작업 상태 필터">
                 {([
                   { key: "all", label: "전체", count: uploads.length },
                   { key: "failed", label: "재시도 필요", count: failedCount },
@@ -297,12 +277,17 @@ export default function CustomerDataManagementPage() {
                 </div>
               </div>
             </div>
-            {hasActiveFilters ? (
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-slate-500">현재 페이지에서 조건에 맞는 작업 {filteredUploads.length.toLocaleString()}건</p>
-                <button className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={resetFilters} type="button">검색·필터 초기화</button>
-              </div>
-            ) : null}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <details className="group rounded-md border border-slate-200 bg-white px-2 py-1.5">
+                <summary className="cursor-pointer list-none text-xs font-black text-slate-600">기간 필터{dateFrom || dateTo ? " · 적용 중" : ""}</summary>
+                <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
+                  <label className="flex h-8 items-center gap-2 text-xs font-black text-slate-500">시작일<input className="w-[116px] bg-transparent text-xs font-bold text-slate-800 outline-none" max={dateTo || undefined} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} type="date" value={dateFrom} /></label>
+                  <label className="flex h-8 items-center gap-2 text-xs font-black text-slate-500">종료일<input className="w-[116px] bg-transparent text-xs font-bold text-slate-800 outline-none" min={dateFrom || undefined} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} type="date" value={dateTo} /></label>
+                </div>
+              </details>
+              {hasActiveFilters ? <p className="text-xs font-semibold text-slate-500">결과 {filteredUploads.length.toLocaleString()}건</p> : null}
+              {hasActiveFilters ? <button className="ml-auto h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 hover:bg-slate-50" onClick={resetFilters} type="button">초기화</button> : null}
+            </div>
           </div>
           <div>
             {!uploadsLoaded ? (

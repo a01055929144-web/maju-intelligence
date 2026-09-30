@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Bell, Building2, ClipboardCheck, Loader2, MapPin, Route, Save, SendHorizonal, Truck } from "lucide-react";
+import { Bell, Building2, Loader2, MapPin, Route, Save, SendHorizonal, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -128,7 +128,9 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               {completedItems}/4 완료
             </Badge>
           </div>
-          <div className="grid md:grid-cols-3">
+          {/* 완료율은 바로 위 배지에서 이미 확인할 수 있어 같은 값을 세 번째 칸으로 반복하지
+              않습니다. 설정에 바로 영향을 주는 회사명과 출발지만 남겨 첫 화면 높이를 줄입니다. */}
+          <div className="grid sm:grid-cols-2">
             <OperationSignal
               icon={<Building2 className="h-4 w-4" />}
               label="회사 기준값"
@@ -140,12 +142,6 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               label="물류 출발지"
               ok={hasOrigin}
               value={hasOrigin ? "거리 계산 가능" : "주소 필요"}
-            />
-            <OperationSignal
-              icon={<ClipboardCheck className="h-4 w-4" />}
-              label="운영 준비도"
-              ok={completedItems >= 4}
-              value={`${completedItems}/4 완료`}
             />
           </div>
         </section>

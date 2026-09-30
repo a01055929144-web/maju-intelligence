@@ -368,7 +368,20 @@ export default async function AdminSystemPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <details className="maju-section-card group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 sm:px-6">
+            <div>
+              <p className="text-xs font-black text-slate-500">필요할 때 확인</p>
+              <h2 className="mt-1 text-base font-black text-slate-950">배포·장애 대응 상세 가이드</h2>
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">환경 점검 명령, 헬스체크 API, 고객사 데이터 진단, 로그 추적 순서</p>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-2 text-xs font-black text-teal-700">
+              상세 보기
+              <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-border p-4 sm:p-6">
+        <Card className="shadow-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ServerCog className="h-5 w-5 text-primary" />
@@ -397,7 +410,7 @@ export default async function AdminSystemPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-none">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -447,7 +460,7 @@ export default async function AdminSystemPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-none">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -508,6 +521,8 @@ export default async function AdminSystemPage({
             ))}
           </CardContent>
         </Card>
+          </div>
+        </details>
 
         <Card id="audit-logs">
           <CardHeader>

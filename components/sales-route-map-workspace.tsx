@@ -2189,7 +2189,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <span className={`min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-semibold ${sourceReady ? "bg-white text-slate-700" : "bg-amber-50 text-amber-800"}`}>
                 {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
               </span>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+              {/* 지도 하단 범례가 레이어별 건수를 계속 보여주므로, 1366px급 작업 화면에서는
+                  같은 집계를 한 번 더 길게 노출하지 않습니다. 필터와 선택 차량은 그대로 남기고
+                  넓은 화면에서만 보조 요약을 추가해 검색·필터 행이 두 줄로 커지는 일을 줄입니다. */}
+              <span className="hidden shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 2xl:inline-flex">
                 {sourceReady
                   ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}${visibleMapLayerCounts.staleVehicles ? `(+지연 ${visibleMapLayerCounts.staleVehicles})` : ""}`
                   : "등록 필요"}
