@@ -1098,7 +1098,10 @@ function Onboarding({
       active = false;
     };
   }, []);
-  const requiredFields = template.fields.filter((field) => field.required);
+  // requiredFields is also an input to the row-wide quality summary below. Keep
+  // its reference stable so unrelated UI state (tabs, search, OCR status) does
+  // not invalidate that comparatively expensive memoized calculation.
+  const requiredFields = useMemo(() => template.fields.filter((field) => field.required), [template.fields]);
   const missingRequiredFields = requiredFields.filter((field) => !fieldMap[field.key]);
   const complete = missingRequiredFields.length === 0;
   const isMaster = uploadType === "customer-master";

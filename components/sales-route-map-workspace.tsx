@@ -2020,7 +2020,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         key={store.id}
                         onClick={() => {
                           setPreviewLeadId("");
+                          setSelectedId("");
                           setPreviewStoreId(store.id || "");
+                          setRightPanelTab("stores");
                           setShowExternalResults(false);
                         }}
                         onMouseDown={(event) => event.preventDefault()}
@@ -2046,7 +2048,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         key={lead.id}
                         onClick={() => {
                           setPreviewStoreId("");
+                          setSelectedId("");
                           setPreviewLeadId(lead.id);
+                          // 검색 결과에서 리드를 고르면 해당 마커와 우측 리드 목록도 같은 대상을
+                          // 가리키도록 전체 리드 레이어를 함께 켭니다. 이미 켜져 있으면 변화가 없습니다.
+                          setShowAllLeadsOnMap(true);
+                          setRightPanelTab("leads");
                           setShowExternalResults(false);
                         }}
                         onMouseDown={(event) => event.preventDefault()}
@@ -2482,6 +2489,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       }
                       if (marker.tone === "lead") {
                         setPreviewStoreId("");
+                        setSelectedId("");
                         setPreviewLeadId(marker.id || "");
                         // 2026-08-31 피드백 대응: 우측 패널이 "거래처" 탭에 머물러 있으면 리드
                         // 마커를 클릭해도 그 항목이 아예 목록에 없어 우측 패널이 안 바뀝니다.
@@ -2772,6 +2780,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 leads={leadsForRightPanel}
                 onSelectLead={(leadId) => {
                   setPreviewStoreId("");
+                  setSelectedId("");
                   setPreviewLeadId(leadId);
                 }}
                 onToggleCollapsed={() => setRightCollapsed((value) => !value)}
@@ -2787,6 +2796,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 onRecalculateDistances={recalculateStoreDistances}
                 onSelectStore={(storeId) => {
                   setPreviewLeadId("");
+                  setSelectedId("");
                   setPreviewStoreId(storeId);
                 }}
                 onToggleCollapsed={() => setRightCollapsed((value) => !value)}

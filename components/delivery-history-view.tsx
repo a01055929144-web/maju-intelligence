@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, RotateCcw, Truck, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Loader2, MapPin, RotateCcw, Route, Truck, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -43,6 +43,13 @@ function shiftDateKey(dateKey: string, amount: number) {
 }
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+type HistoryRecordFilter = "all" | "completed" | "incomplete" | "redelivery";
+const HISTORY_RECORD_FILTERS: Array<{ label: string; value: HistoryRecordFilter }> = [
+  { label: "전체", value: "all" },
+  { label: "완료", value: "completed" },
+  { label: "미완료", value: "incomplete" },
+  { label: "재배송", value: "redelivery" }
+];
 // 아래 위치/경로 요약 로직은 components/sales-route-map-workspace.tsx의 VehicleAnalysisModal이 쓰는
 // 것과 동일한 판단 기준(GPS 오차 150m 초과·5분 이상 공백·시속 120km 초과 구간 제외)입니다. 그 파일의
 // 내부(비-export) 헬퍼라 가져다 쓸 수 없어 이 화면에서 같은 로직을 그대로 다시 씁니다.
@@ -125,6 +132,11 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
   const [activeDriverName, setActiveDriverName] = useState("");
   const [followUpSavingId, setFollowUpSavingId] = useState("");
   const [followUpError, setFollowUpError] = useState("");
+  const [recordFilter, setRecordFilter] = useState<HistoryRecordFilter>("all");
+  const [dateRange, setDateRange] = useState(() => {
+    const now = new Date();
+    return { from: toDateKey(now.getFullYear(), now.getMonth(), 1), to: todayKey() };
+  });
 
   const setPendingFollowUp = async (customerId: string, status: DeliveryHistoryFollowUpStatus) => {
     if (followUpSavingId) return;
@@ -155,12 +167,10 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
     let cancelled = false;
     const load = async () => {
       try {
-        const first = new Date(cursor.year, cursor.month, 1);
-        const last = new Date(cursor.year, cursor.month + 1, 0);
         const search = new URLSearchParams({
-          from: toDateKey(first.getFullYear(), first.getMonth(), first.getDate()),
+          from: dateRange.from,
           mode: "summary",
-          to: toDateKey(last.getFullYear(), last.getMonth(), last.getDate())
+          to: dateRange.to
         });
         if (companyId) search.set("companyId", companyId);
         const response = await fetchWithTimeout(`/api/routes/history?${search.toString()}`, { cache: "no-store" }, 10000);
@@ -174,7 +184,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
     return () => {
       cancelled = true;
     };
-  }, [cursor, companyId]);
+  }, [companyId, dateRange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,8 +232,16 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
     }
     return cells;
   }, [cursor, counts]);
-  const monthCompletionCount = useMemo(() => Object.values(counts).reduce((sum, count) => sum + count, 0), [counts]);
-  const monthActiveDayCount = useMemo(() => Object.values(counts).filter((count) => count > 0).length, [counts]);
+  const rangeCompletionCount = useMemo(() => Object.values(counts).reduce((sum, count) => sum + count, 0), [counts]);
+  const rangeActiveDayCount = useMemo(() => Object.values(counts).filter((count) => count > 0).length, [counts]);
+
+  const setVisibleMonth = (year: number, month: number) => {
+    const first = toDateKey(year, month, 1);
+    const lastDate = new Date(year, month + 1, 0);
+    const last = toDateKey(year, month, lastDate.getDate());
+    setCursor({ month, year });
+    setDateRange({ from: first, to: last > todayKey() ? todayKey() : last });
+  };
 
   const selectDate = (dateKey: string) => {
     setSelectedDate(dateKey);
@@ -236,6 +254,9 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
     [history, activeDriverName]
   );
   const routeMetrics = useMemo(() => summarizeLocationEvents(activeDriver?.events || []), [activeDriver]);
+  const reliableLocationCount = useMemo(() => (activeDriver?.events || []).filter(isReliableLocationEvent).length, [activeDriver]);
+  const hasRouteDistance = reliableLocationCount >= 2 && routeMetrics.distanceKm > 0;
+  const hasRouteDuration = reliableLocationCount >= 2 && routeMetrics.durationMinutes > 0;
   const pendingPlannedStores = useMemo(() => {
     if (!activeDriver?.planMatchedThatDay) return [];
     const completedIds = new Set(activeDriver.completions.map((completion) => completion.customerId));
@@ -265,6 +286,16 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
   }, [activeDriver, storeById]);
   const canRenderMap = Boolean(activeDriver && (activeDriver.events.length > 0 || markers.length > 0));
   const todayIsSelected = selectedDate === todayKey();
+  const now = new Date();
+  const canAdvanceMonth = cursor.year < now.getFullYear() || (cursor.year === now.getFullYear() && cursor.month < now.getMonth());
+  const selectedDayIncompleteCount = useMemo(() => history?.drivers.reduce((sum, driver) => {
+    if (!driver.planMatchedThatDay) return sum;
+    const completedIds = new Set(driver.completions.map((completion) => completion.customerId));
+    return sum + driver.plannedCustomerIds.filter((id) => !completedIds.has(id)).length;
+  }, 0) || 0, [history]);
+  const selectedDayRedeliveryCount = useMemo(() => history?.followUps.filter((item) => item.status === "redelivery").length || 0, [history]);
+  const showCompleted = recordFilter === "all" || recordFilter === "completed";
+  const showIncomplete = recordFilter === "all" || recordFilter === "incomplete" || recordFilter === "redelivery";
 
   return (
     <section className="flex flex-1 flex-col gap-4 overflow-auto p-4">
@@ -272,8 +303,12 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
         <div className="maju-section-card p-3">
           <div className="flex items-center justify-between gap-2 px-1 py-1">
             <button
+              aria-label="이전 달"
               className="maju-hit-slop grid h-8 w-8 place-items-center rounded-md text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-              onClick={() => setCursor((current) => (current.month === 0 ? { month: 11, year: current.year - 1 } : { month: current.month - 1, year: current.year }))}
+              onClick={() => {
+                const next = cursor.month === 0 ? { month: 11, year: cursor.year - 1 } : { month: cursor.month - 1, year: cursor.year };
+                setVisibleMonth(next.year, next.month);
+              }}
               type="button"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -283,8 +318,13 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
               {cursor.year}년 {cursor.month + 1}월
             </p>
             <button
-              className="maju-hit-slop grid h-8 w-8 place-items-center rounded-md text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-              onClick={() => setCursor((current) => (current.month === 11 ? { month: 0, year: current.year + 1 } : { month: current.month + 1, year: current.year }))}
+              aria-label="다음 달"
+              className="maju-hit-slop grid h-8 w-8 place-items-center rounded-md text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-30"
+              disabled={!canAdvanceMonth}
+              onClick={() => {
+                const next = cursor.month === 11 ? { month: 0, year: cursor.year + 1 } : { month: cursor.month + 1, year: cursor.year };
+                setVisibleMonth(next.year, next.month);
+              }}
               type="button"
             >
               <ChevronRight className="h-4 w-4" />
@@ -292,13 +332,22 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-teal-50 px-3 py-2">
-              <p className="text-[10px] font-black text-teal-600">이달 운행일</p>
-              <p className="mt-0.5 text-base font-black text-teal-950">{monthActiveDayCount}일</p>
+              <p className="text-[10px] font-black text-teal-600">조회 기간 운행일</p>
+              <p className="mt-0.5 text-base font-black text-teal-950">{rangeActiveDayCount}일</p>
             </div>
             <div className="rounded-lg bg-slate-50 px-3 py-2">
-              <p className="text-[10px] font-black text-slate-500">이달 배송완료</p>
-              <p className="mt-0.5 text-base font-black text-slate-950">{monthCompletionCount.toLocaleString()}건</p>
+              <p className="text-[10px] font-black text-slate-500">조회 기간 완료</p>
+              <p className="mt-0.5 text-base font-black text-slate-950">{rangeCompletionCount.toLocaleString()}건</p>
             </div>
+          </div>
+          <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+            <p className="text-[10px] font-black text-slate-500">날짜 범위</p>
+            <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+              <input aria-label="조회 시작일" className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-700" max={dateRange.to} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} type="date" value={dateRange.from} />
+              <span className="text-[10px] font-bold text-slate-400">~</span>
+              <input aria-label="조회 종료일" className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-700" max={todayKey()} min={dateRange.from} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} type="date" value={dateRange.to} />
+            </div>
+            <p className="mt-1.5 text-[9px] font-bold leading-4 text-slate-400">달력 배지와 기간 합계에 적용됩니다. 날짜를 선택하면 해당 일자의 기록을 엽니다.</p>
           </div>
           <div className="mt-2 grid grid-cols-7 gap-1 px-1">
             {WEEKDAY_LABELS.map((label) => (
@@ -320,7 +369,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                         : "text-slate-700 hover:bg-slate-50"
                   }`}
                   key={cell.dateKey}
-                  onClick={() => setSelectedDate(cell.dateKey)}
+                  onClick={() => selectDate(cell.dateKey)}
                   type="button"
                 >
                   <span>{cell.day}</span>
@@ -364,6 +413,10 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                   const now = new Date();
                   return { month: now.getMonth(), year: now.getFullYear() };
                 });
+                setDateRange(() => {
+                  const now = new Date();
+                  return { from: toDateKey(now.getFullYear(), now.getMonth(), 1), to: todayKey() };
+                });
               }}
               type="button"
             >
@@ -382,6 +435,22 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
               {history ? (history.totalCompletions ? `완료 ${history.totalCompletions.toLocaleString()}건` : "완료 기록 없음") : "-"}
             </Badge>
           </header>
+
+          {!detailLoading && !detailError && history ? (
+            <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">완료</p><p className="mt-0.5 text-sm font-black text-emerald-700">{history.totalCompletions}건</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">미완료</p><p className="mt-0.5 text-sm font-black text-rose-700">{selectedDayIncompleteCount}건</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">재배송 후속</p><p className="mt-0.5 text-sm font-black text-amber-700">{selectedDayRedeliveryCount}건</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">담당자</p><p className="mt-0.5 text-sm font-black text-slate-950">{history.drivers.length}명</p></div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5" aria-label="운행 기록 상태 필터">
+                {HISTORY_RECORD_FILTERS.map((filter) => (
+                  <button className={`rounded-full px-3 py-1.5 text-[11px] font-black ring-1 ring-inset ${recordFilter === filter.value ? "bg-slate-900 text-white ring-slate-900" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-100"}`} key={filter.value} onClick={() => setRecordFilter(filter.value)} type="button">{filter.label}</button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {detailLoading ? (
             <div className="grid flex-1 place-items-center gap-2 p-8 text-center text-sm font-black text-slate-500">
@@ -448,19 +517,24 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                       </p>
                     ) : null}
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <RouteMetric label="실제 이동" value={`${routeMetrics.distanceKm.toLocaleString()}km`} />
-                      <RouteMetric label="운행 시간" value={formatMinutes(routeMetrics.durationMinutes)} />
+                      <RouteMetric label="GPS 실제 이동" value={hasRouteDistance ? `${routeMetrics.distanceKm.toLocaleString()}km` : "GPS 기록 필요"} />
+                      <RouteMetric label="GPS 운행 시간" value={hasRouteDuration ? formatMinutes(routeMetrics.durationMinutes) : "GPS 기록 필요"} />
                       <RouteMetric label="완료 매장" value={`${activeDriver.completions.length.toLocaleString()}곳`} />
                       <RouteMetric label={todayIsSelected ? "배송 대기" : "미완료"} value={`${pendingPlannedStores.length.toLocaleString()}곳`} />
                     </div>
-                    {pendingPlannedStores.length ? (
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] font-bold">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600"><Route className="mb-1 h-3.5 w-3.5 text-teal-700" />거리: {hasRouteDistance ? "유효 GPS 구간 합계" : "좌표 2건 이상 필요"}</div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600"><Clock3 className="mb-1 h-3.5 w-3.5 text-teal-700" />시간: {hasRouteDuration ? "첫·마지막 GPS 기준" : "시작·종료 기록 필요"}</div>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800"><CircleDollarSign className="mb-1 h-3.5 w-3.5" />비용: 단가·인건비 데이터 필요</div>
+                    </div>
+                    {showIncomplete && pendingPlannedStores.filter((store) => recordFilter !== "redelivery" || history.followUps?.some((item) => item.customerId === store.id && item.status === "redelivery")).length ? (
                       <div className={`mt-3 rounded-lg border p-3 ${todayIsSelected ? "border-amber-200 bg-amber-50" : "border-rose-200 bg-rose-50"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <p className={`text-xs font-black ${todayIsSelected ? "text-amber-900" : "text-rose-900"}`}>{todayIsSelected ? "다음 행동 · 남은 배송" : "다음 행동 · 미완료 처리"}</p>
-                          <Badge className={todayIsSelected ? "bg-white text-amber-800" : "bg-white text-rose-800"}>{pendingPlannedStores.length}곳</Badge>
+                          <Badge className={todayIsSelected ? "bg-white text-amber-800" : "bg-white text-rose-800"}>{pendingPlannedStores.filter((store) => recordFilter !== "redelivery" || history.followUps?.some((item) => item.customerId === store.id && item.status === "redelivery")).length}곳</Badge>
                         </div>
                         <div className="mt-2 space-y-1">
-                          {pendingPlannedStores.map((store) => (
+                          {pendingPlannedStores.filter((store) => recordFilter !== "redelivery" || history.followUps?.some((item) => item.customerId === store.id && item.status === "redelivery")).map((store) => (
                             <div className="rounded-md bg-white px-2.5 py-2 ring-1 ring-inset ring-slate-100" key={store.id}>
                               <button className="flex w-full items-center justify-between text-left text-[11px] font-black text-slate-800" onClick={() => onOpenStore(store.id)} type="button">
                                 <span className="truncate">{store.name}</span><span className={todayIsSelected ? "text-amber-700" : "text-rose-700"}>{todayIsSelected ? "대기" : "미완료"}</span>
@@ -500,10 +574,12 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                         {followUpError ? <p className="mt-2 text-[10px] font-black text-rose-700">{followUpError}</p> : null}
                         {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 지정 건은 다음 배송 후보에 다시 표시됩니다.</p> : null}
                       </div>
-                    ) : activeDriver.planMatchedThatDay ? (
+                    ) : showIncomplete && recordFilter !== "redelivery" && activeDriver.planMatchedThatDay ? (
                       <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">확정 코스의 모든 배송이 완료됐습니다.</p>
+                    ) : showIncomplete ? (
+                      <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">이 담당자에게 선택한 상태의 후속 기록이 없습니다.</p>
                     ) : null}
-                    <div className="mt-3 rounded-lg border border-slate-200 bg-white">
+                    {showCompleted ? <div className="mt-3 rounded-lg border border-slate-200 bg-white">
                       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
                         <p className="text-xs font-black text-slate-950">완료 순서</p>
                         <Badge className="bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-100">{activeDriver.completions.length}건</Badge>
@@ -542,7 +618,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                           <p className="rounded-md bg-slate-50 p-3 text-[11px] font-bold text-slate-500">이 담당자의 완료 기록이 없습니다.</p>
                         )}
                       </div>
-                    </div>
+                    </div> : null}
                   </>
                 ) : null}
 
