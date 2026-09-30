@@ -45,6 +45,10 @@ export default async function AdminSystemPage({
   const requestedAuditPage = Math.max(1, Number.parseInt(singleParam(params.auditPage), 10) || 1);
   const auditQuery = singleParam(params.auditQuery).trim().toLowerCase();
   const auditTone = singleParam(params.auditTone);
+  const requestedIssueTone = singleParam(params.issueTone);
+  const issueTone = ["blocking", "warning"].includes(requestedIssueTone) ? requestedIssueTone : "";
+  const requestedEnvironmentStatus = singleParam(params.environmentStatus);
+  const environmentStatus = ["missing", "optional", "ready"].includes(requestedEnvironmentStatus) ? requestedEnvironmentStatus : "";
   const [system, auditResult] = await Promise.all([
     getSystemDiagnostics(),
     getAdminAuditLogs(undefined, 50)
@@ -69,6 +73,8 @@ export default async function AdminSystemPage({
     if (auditCompany) query.set("auditCompany", auditCompany);
     if (auditQuery) query.set("auditQuery", auditQuery);
     if (auditTone) query.set("auditTone", auditTone);
+    if (issueTone) query.set("issueTone", issueTone);
+    if (environmentStatus) query.set("environmentStatus", environmentStatus);
     query.set("auditPage", String(page));
     return `/admin/system?${query.toString()}#audit-logs`;
   };
@@ -139,6 +145,29 @@ export default async function AdminSystemPage({
   const launchProgress = Math.round((launchReadyCount / launchGates.length) * 100);
   const orderedLaunchGates = [...launchGates].sort((a, b) => Number(a.ready) - Number(b.ready));
   const unresolvedCount = system.blockingIssues.length + system.warningIssues.length;
+  const missingRequiredEnvironment = system.requiredEnvironment.filter((item) => item.required && !item.present).length;
+  const missingOptionalEnvironment = system.requiredEnvironment.filter((item) => !item.required && !item.present).length;
+  const visibleEnvironment = system.requiredEnvironment.filter((item) => {
+    if (environmentStatus === "missing") return item.required && !item.present;
+    if (environmentStatus === "optional") return !item.required && !item.present;
+    if (environmentStatus === "ready") return item.present;
+    return true;
+  });
+  const systemViewHref = ({ nextEnvironmentStatus = environmentStatus, nextIssueTone = issueTone }: { nextEnvironmentStatus?: string; nextIssueTone?: string }) => {
+    const query = new URLSearchParams();
+    if (auditCompany) query.set("auditCompany", auditCompany);
+    if (auditQuery) query.set("auditQuery", auditQuery);
+    if (auditTone) query.set("auditTone", auditTone);
+    if (nextIssueTone) query.set("issueTone", nextIssueTone);
+    if (nextEnvironmentStatus) query.set("environmentStatus", nextEnvironmentStatus);
+    return `/admin/system${query.size ? `?${query.toString()}` : ""}`;
+  };
+  const auditResetHref = (() => {
+    const query = new URLSearchParams();
+    if (issueTone) query.set("issueTone", issueTone);
+    if (environmentStatus) query.set("environmentStatus", environmentStatus);
+    return `/admin/system${query.size ? `?${query.toString()}` : ""}#audit-logs`;
+  })();
   const priorityActions = [
     {
       description: system.mode === "production-db" ? "실 DB 연결 상태입니다. 테이블 카운트와 Storage만 확인하면 됩니다." : "Supabase 환경변수와 schema.sql 적용 여부를 먼저 확인해야 합니다.",
@@ -175,7 +204,7 @@ export default async function AdminSystemPage({
       <AdminPageHeader active="system" badge="System Check" session={session} subtitle="실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다" title="운영 설정 점검" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
-        <Card className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
+        <Card id="operation-issues" className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
           <CardContent className="p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl">
@@ -196,19 +225,39 @@ export default async function AdminSystemPage({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              <ReadinessList
-                empty="필수 운영 항목이 준비되었습니다."
-                icon="danger"
-                items={system.blockingIssues}
-                title="필수 조치"
-              />
-              <ReadinessList
-                empty="권장 점검 항목이 없습니다."
-                icon="warning"
-                items={system.warningIssues}
-                title="권장 점검"
-              />
+            <div className={`mt-5 grid gap-4 ${issueTone ? "" : "lg:grid-cols-2"}`}>
+              {issueTone !== "warning" ? (
+                <ReadinessList
+                  empty="필수 운영 항목이 준비되었습니다."
+                  icon="danger"
+                  items={system.blockingIssues}
+                  title="필수 조치"
+                />
+              ) : null}
+              {issueTone !== "blocking" ? (
+                <ReadinessList
+                  empty="권장 점검 항목이 없습니다."
+                  icon="warning"
+                  items={system.warningIssues}
+                  title="권장 점검"
+                />
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="운영 이슈 필터">
+              <span className="mr-1 text-xs font-black text-muted-foreground">이슈 보기</span>
+              {[
+                ["", "전체", unresolvedCount],
+                ["blocking", "필수 조치", system.blockingIssues.length],
+                ["warning", "권장 점검", system.warningIssues.length]
+              ].map(([value, label, count]) => (
+                <Link
+                  className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-black ${issueTone === value ? "border-slate-950 bg-slate-950 text-white" : "border-border bg-white text-slate-700 hover:bg-muted"}`}
+                  href={`${systemViewHref({ nextIssueTone: String(value) })}#operation-issues`}
+                  key={String(value)}
+                >
+                  {label} {count}
+                </Link>
+              ))}
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white shadow-sm transition hover:bg-teal-800" href="/admin/companies">
@@ -486,6 +535,8 @@ export default async function AdminSystemPage({
             ) : null}
 
             <form action="/admin/system" className="mb-4 grid gap-3 rounded-md border border-border bg-muted/30 p-4 md:grid-cols-[1fr_180px_180px_auto]" method="get">
+              {issueTone ? <input name="issueTone" type="hidden" value={issueTone} /> : null}
+              {environmentStatus ? <input name="environmentStatus" type="hidden" value={environmentStatus} /> : null}
               <label className="grid gap-1.5">
                 <span className="text-xs font-black text-muted-foreground">검색</span>
                 <input className="h-10 rounded-md border border-input bg-white px-3 text-sm" defaultValue={singleParam(params.auditQuery)} name="auditQuery" placeholder="작업, 수행자, 고객사" />
@@ -509,7 +560,7 @@ export default async function AdminSystemPage({
               </label>
               <div className="flex items-end gap-2">
                 <button className="h-10 rounded-md bg-slate-950 px-4 text-sm font-black text-white" type="submit">조회</button>
-                <Link className="inline-flex h-10 items-center rounded-md border border-border bg-white px-3 text-sm font-black text-slate-700" href="/admin/system">초기화</Link>
+                <Link className="inline-flex h-10 items-center rounded-md border border-border bg-white px-3 text-sm font-black text-slate-700" href={auditResetHref}>초기화</Link>
               </div>
             </form>
 
@@ -582,12 +633,36 @@ export default async function AdminSystemPage({
         </Card>
 
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <Card>
+          <Card id="environment-status">
             <CardHeader>
-              <CardTitle>운영 환경변수</CardTitle>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <CardTitle>운영 환경변수</CardTitle>
+                  <p className="mt-2 text-sm font-semibold text-muted-foreground">필수 누락을 먼저 해결하고 선택 항목은 사용하는 기능에 맞춰 확인하세요.</p>
+                </div>
+                <Badge className={missingRequiredEnvironment ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}>
+                  {missingRequiredEnvironment ? `필수 누락 ${missingRequiredEnvironment}건` : "필수 항목 준비"}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {system.requiredEnvironment.map((item) => (
+              <div className="flex flex-wrap gap-2" aria-label="환경변수 상태 필터">
+                {[
+                  ["", "전체", system.requiredEnvironment.length],
+                  ["missing", "필수 누락", missingRequiredEnvironment],
+                  ["optional", "선택 미설정", missingOptionalEnvironment],
+                  ["ready", "설정 완료", system.requiredEnvironment.filter((item) => item.present).length]
+                ].map(([value, label, count]) => (
+                  <Link
+                    className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-black ${environmentStatus === value ? "border-slate-950 bg-slate-950 text-white" : "border-border bg-white text-slate-700 hover:bg-muted"}`}
+                    href={`${systemViewHref({ nextEnvironmentStatus: String(value) })}#environment-status`}
+                    key={String(value)}
+                  >
+                    {label} {count}
+                  </Link>
+                ))}
+              </div>
+              {visibleEnvironment.map((item) => (
                 <div key={item.key} className="grid grid-cols-2 items-center gap-3 rounded-md border border-border p-3 sm:grid-cols-[minmax(0,1fr)_72px_72px_90px]">
                   <code className="col-span-2 min-w-0 truncate text-sm font-bold sm:col-span-1">{item.key}</code>
                   <Badge className={item.required ? "justify-center bg-slate-100 text-slate-700" : "justify-center bg-blue-50 text-blue-700"}>
@@ -599,6 +674,12 @@ export default async function AdminSystemPage({
                   </Badge>
                 </div>
               ))}
+              {!visibleEnvironment.length ? (
+                <div className="rounded-md border border-dashed border-border bg-muted/35 p-4">
+                  <p className="text-sm font-black text-slate-900">이 상태에 해당하는 환경변수가 없습니다.</p>
+                  <p className="mt-1 text-xs font-bold text-muted-foreground">다른 필터를 선택하면 전체 설정 상태를 확인할 수 있습니다.</p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 

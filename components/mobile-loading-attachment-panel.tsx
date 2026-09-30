@@ -143,9 +143,15 @@ export function MobileLoadingAttachmentPanel({
             불러오는 중
           </p>
         ) : null}
-        {loadState === "error" ? <p className="rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700">첨부자료를 불러오지 못했습니다.</p> : null}
+        {loadState === "error" ? (
+          <div className="rounded-lg bg-rose-50 p-3 text-rose-700">
+            <p className="text-sm font-bold">적재위치 자료를 불러오지 못했습니다.</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-rose-600">연결 상태를 확인한 뒤 다시 불러오세요. 배송 완료 입력은 아래에서 계속할 수 있습니다.</p>
+            <button className="mt-2 min-h-11 rounded-lg bg-white px-4 text-xs font-black shadow-sm ring-1 ring-inset ring-rose-200" onClick={loadAttachments} type="button">다시 불러오기</button>
+          </div>
+        ) : null}
         {loadState === "ready" ? (
-          <LoadingPositionGallery emptyMessage="등록된 자료 없음" items={loadingAttachments} />
+          <LoadingPositionGallery emptyMessage="등록된 적재위치 자료가 없습니다. 필요하면 위 버튼으로 사진이나 영상을 추가하세요." items={loadingAttachments} />
         ) : null}
       </div>
     </section>

@@ -59,6 +59,8 @@ ACTIVE
 PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
+
+- [x] 2026-09-30 운영 이슈·환경변수 상태 필터와 건수·빈 상태를 추가하고 감사 로그 조회 중 필터 상태를 보존했다.
 - [x] 고객사 완전 삭제(hard delete, 탈퇴 상태 선행 요구)
 - [x] 관리자 거래처 목록 표 정렬
 - [x] 비인증 프록시 API 인증/레이트리밋 추가, map-diagnostics 관리자 인증 추가

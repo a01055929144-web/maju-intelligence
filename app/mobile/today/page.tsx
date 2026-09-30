@@ -4,6 +4,7 @@ import { Building2, CheckCircle2, History, MessageSquareText, PackageCheck, Rout
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
+import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
 import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { MobileRouteList } from "@/components/mobile-route-list";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
@@ -99,9 +100,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           ) : null}
 
           {sourceReady && !isPersonalized && normalizedDriverName ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800 ring-1 ring-inset ring-amber-100">
-              배정된 거래처가 없습니다. 관리자에게 확인해주세요.
-            </p>
+            <div className="rounded-lg bg-amber-50 px-3 py-3 text-amber-800 ring-1 ring-inset ring-amber-100">
+              <p className="text-sm font-bold">오늘 배정된 코스가 없습니다.</p>
+              <p className="mt-1 text-xs font-semibold leading-5">새 배정이 필요한 경우 관리자에게 확인하세요. 이미 완료한 코스는 배송 기록에서 확인할 수 있습니다.</p>
+            </div>
           ) : null}
 
           {sourceReady && isPersonalized ? (
@@ -137,6 +139,12 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               </div>
               <div className="p-3">
                 {!selectedStopCompleted ? <p className="mb-2 text-xs font-bold text-slate-400">먼저 지도나 전화로 방문을 시작하세요.</p> : null}
+                <ol aria-label="현장 실행 순서" className="mb-3 grid grid-cols-4 gap-1 text-center text-[11px] font-bold text-slate-400">
+                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">1 매장 선택</li>
+                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">2 방문 시작</li>
+                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">3 적재 확인</li>
+                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">4 완료 저장</li>
+                </ol>
                 <MobileRouteActionPanel
                   address={selectedStop.address || selectedStop.region || selectedStop.name}
                   customerId={selectedStop.id}
@@ -151,6 +159,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
 
           {selectedStop ? (
             <>
+            <MobileLoadingAttachmentPanel
+              customerId={selectedStop.id}
+              customerName={selectedStop.name}
+              loadingPosition={selectedStop.loadingPosition}
+            />
             <section>
               <MobileDeliveryProofPanel
                 companyName={companySettings.name || session.companyName}

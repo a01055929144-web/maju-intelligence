@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, MapPinned, Phone } from "lucide-react";
+import { Camera, CheckCircle2, Copy, MapPinned, Phone } from "lucide-react";
 
 export function MobileRouteActionPanel({
   address,
@@ -54,6 +54,20 @@ export function MobileRouteActionPanel({
           <Copy className="h-4 w-4" />
           주소복사
         </button>
+        <a
+          className="mobile-card-raised flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold"
+          href="#loading-position"
+        >
+          <Camera className="h-4 w-4" />
+          적재위치
+        </a>
+        <a
+          className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-bold text-white shadow-sm"
+          href="#delivery-proof"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          배송 완료
+        </a>
       </div>
       {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
     </section>
