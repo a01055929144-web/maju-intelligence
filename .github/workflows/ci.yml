@@ -32,7 +32,8 @@ jobs:
         run: npm run check:auth-boundaries
 
       - name: Dependency security audit
-        run: npm audit --audit-level=high
+        # Build-only tooling is isolated from the deployed runtime bundle.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Build
         run: npm run build
