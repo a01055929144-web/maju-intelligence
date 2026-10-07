@@ -1771,68 +1771,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </p>
           </div>
         </div>
-        <div className="maju-toolbar-scroll flex max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
-          {activeView === "map" ? (
-            <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
-              <button
-                aria-pressed={leadRadiusOpen}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
-                  leadRadiusOpen ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white"
-                }`}
-                onClick={() => setLeadRadiusOpen((value) => !value)}
-                title="지도를 클릭해 원하는 지점 주변 반경 안의 신규·영업 리드를 찾습니다."
-                type="button"
-              >
-                <Radar className="h-4 w-4" />
-                <span className="hidden sm:inline">반경</span>
-              </button>
-              <button
-                aria-pressed={showAllLeadsOnMap}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
-                  showAllLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
-                }`}
-                onClick={() =>
-                  setShowAllLeadsOnMap((value) => {
-                    const next = !value;
-                    setRightPanelTab(next ? "leads" : "stores");
-                    return next;
-                  })
-                }
-                title="지도에 활성 신규·영업 리드 전체를 표시합니다."
-                type="button"
-              >
-                <Layers className="h-4 w-4" />
-                <span className="hidden sm:inline">{allLeadsLoadState === "loading" ? "로딩" : "리드"}</span>
-              </button>
-            </div>
-          ) : null}
-          <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
-            {[
-              { label: "등급별", value: "grade" },
-              { label: "차량별", value: "vehicle" }
-            ].map((item) => {
-              const selected = markerViewMode === item.value;
-              return (
-                <button
-                  className={`h-9 rounded-md px-3 text-xs font-semibold transition ${
-                    selected ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
-                  }`}
-                  key={item.value}
-                  onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-          <nav className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="maju-toolbar-scroll flex max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 xl:justify-end xl:overflow-visible xl:pb-0">
+          <nav className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
               return (
                 <button
-                  className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
+                  className={`flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition 2xl:px-3 ${
                     selected ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
@@ -1864,10 +1810,76 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <span className="whitespace-nowrap"><span className="hidden sm:inline">실시간 차량 </span>{liveVehicleSummary.active}대</span>
             {liveVehicleSummary.stale ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
+          <details className="group relative shrink-0">
+            <summary
+              className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+              title="마커 표현, 리드 레이어, 패널과 화면 설정"
+            >
+              <MapPinned className="h-4 w-4" />
+              <span>화면 설정</span>
+              <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
+            </summary>
+            <div className="absolute right-0 top-12 z-50 w-[min(92vw,420px)] space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_16px_40px_rgba(15,23,42,.18)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-slate-900">지도 표시</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-500">리드 레이어와 마커 기준</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1">
+                  {[{ label: "등급별", value: "grade" }, { label: "차량별", value: "vehicle" }].map((item) => {
+                    const selected = markerViewMode === item.value;
+                    return (
+                      <button
+                        className={`h-8 rounded-md px-2.5 text-xs font-semibold transition ${selected ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                        key={item.value}
+                        onClick={() => setMarkerViewMode(item.value as MarkerViewMode)}
+                        type="button"
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {activeView === "map" ? (
+                <div className="grid grid-cols-2 gap-1.5">
+              <button
+                aria-pressed={leadRadiusOpen}
+                className={`flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
+                  leadRadiusOpen ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white"
+                }`}
+                onClick={() => setLeadRadiusOpen((value) => !value)}
+                title="지도를 클릭해 원하는 지점 주변 반경 안의 신규·영업 리드를 찾습니다."
+                type="button"
+              >
+                <Radar className="h-4 w-4" />
+                <span>반경 리드</span>
+              </button>
+              <button
+                aria-pressed={showAllLeadsOnMap}
+                className={`flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
+                  showAllLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
+                }`}
+                onClick={() =>
+                  setShowAllLeadsOnMap((value) => {
+                    const next = !value;
+                    setRightPanelTab(next ? "leads" : "stores");
+                    return next;
+                  })
+                }
+                title="지도에 활성 신규·영업 리드 전체를 표시합니다."
+                type="button"
+              >
+                <Layers className="h-4 w-4" />
+                <span>{allLeadsLoadState === "loading" ? "불러오는 중" : "전체 리드"}</span>
+              </button>
+                </div>
+          ) : null}
+              <div className="grid grid-cols-4 gap-1.5 border-t border-slate-100 pt-2">
           {activeView === "map" ? (
             <button
               aria-pressed={leftCollapsed && rightCollapsed}
-              className={`flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition ${
+              className={`col-span-1 grid h-9 place-items-center rounded-md border text-xs font-semibold transition ${
                 leftCollapsed && rightCollapsed
                   ? "border-teal-200 bg-teal-50 text-teal-800"
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
@@ -1881,14 +1893,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               type="button"
             >
               {leftCollapsed && rightCollapsed ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              <span className="hidden 2xl:inline">{leftCollapsed && rightCollapsed ? "패널 복원" : "지도 넓게"}</span>
             </button>
           ) : null}
-          <div className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-50 p-1">
             <button
               aria-expanded={statsExpanded}
               aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
-              className={`maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${statsExpanded ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              className={`maju-hit-slop grid h-9 place-items-center rounded-md border border-slate-200 transition ${statsExpanded ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
               onClick={() => setStatsExpanded((value) => !value)}
               title={statsExpanded ? "통계 패널 접고 지도 크게 보기" : "매출·거리·유류비 통계 펼치기"}
               type="button"
@@ -1898,7 +1908,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <button
               aria-label={isFullscreen ? "전체 화면 종료" : "전체 화면"}
               aria-pressed={isFullscreen}
-              className={`maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md transition ${isFullscreen ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              className={`maju-hit-slop grid h-9 place-items-center rounded-md border border-slate-200 transition ${isFullscreen ? "bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
               onClick={toggleFullscreen}
               title={isFullscreen ? "전체 화면 종료" : "전체 화면으로 크게 보기"}
               type="button"
@@ -1907,14 +1917,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </button>
             <button
               aria-label="필터 초기화"
-              className="maju-hit-slop grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              className="maju-hit-slop grid h-9 place-items-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
               onClick={resetWorkspace}
               title="필터 초기화"
               type="button"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
-          </div>
+              </div>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -1996,7 +2008,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         }`}
         ref={mapHeaderRef}
       >
-        <div className="grid gap-2 xl:grid-cols-[minmax(360px,1fr)_minmax(420px,auto)] xl:items-center">
+        <div className="grid gap-2 xl:grid-cols-[minmax(360px,1fr)_minmax(340px,auto)] xl:items-center">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -2151,7 +2163,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             ) : null}
           </label>
           <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-            <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
+            <div className="hidden 2xl:block">
+              <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
+            </div>
             <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end">
               <select
                 className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
@@ -2186,7 +2200,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               >
                 출발지
               </button>
-              <span className={`min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-semibold ${sourceReady ? "bg-white text-slate-700" : "bg-amber-50 text-amber-800"}`}>
+              <span className={`hidden min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-semibold 2xl:inline ${sourceReady ? "bg-white text-slate-700" : "bg-amber-50 text-amber-800"}`}>
                 {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
               </span>
               {/* 지도 하단 범례가 레이어별 건수를 계속 보여주므로, 1366px급 작업 화면에서는
