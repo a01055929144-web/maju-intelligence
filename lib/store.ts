@@ -109,6 +109,7 @@ export type CompanySettingsInput = {
   ownerName?: string;
   smsSenderPhone?: string;
   telegramChatId?: string;
+  section?: "company" | "messaging" | "telegram";
 };
 export type CustomerMasterItem = {
   id: string;
@@ -469,6 +470,7 @@ export type StaffInvitationInput = {
 export type StaffInvitationUpdateInput = {
   companyId: string;
   invitationId: string;
+  employeeName?: string;
   role?: StaffInvitation["role"];
   status?: Extract<StaffInvitation["status"], "pending" | "revoked">;
   // 빈 문자열("")을 넘기면 지정 해제(null)로 저장됩니다.
@@ -2400,12 +2402,17 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
   if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
 
   const patch: Record<string, string | null> = {};
+  if (input.employeeName !== undefined) {
+    const employeeName = input.employeeName.trim();
+    if (!employeeName) throw new Error("직원 이름은 비워둘 수 없습니다.");
+    patch.employee_name = employeeName;
+  }
   if (input.role) patch.role = input.role;
   if (input.status) patch.status = input.status;
   // 빈 문자열은 "지정 해제"로 취급해 null로 저장합니다. undefined면 아예 건드리지 않습니다.
   if (input.assignedManagerName !== undefined) patch.assigned_manager_name = input.assignedManagerName.trim() || null;
   if (input.assignedVehicle !== undefined) patch.assigned_vehicle = input.assignedVehicle.trim() || null;
-  if (!Object.keys(patch).length) throw new Error("변경할 직원 업무 구분, 상태 또는 배정 기준이 필요합니다.");
+  if (!Object.keys(patch).length) throw new Error("변경할 직원 이름, 업무 구분, 상태 또는 배정 기준이 필요합니다.");
 
   if (!isProductionStoreConfigured()) {
     return {
@@ -2465,7 +2472,7 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
         body: JSON.stringify([
           {
             company_id: input.companyId,
-            employee_name: member.app_users?.name?.trim() || "이름 미등록 직원",
+            employee_name: input.employeeName?.trim() || member.app_users?.name?.trim() || "이름 미등록 직원",
             employee_phone: member.app_users?.phone?.trim() || null,
             invite_code: createInviteCode(input.companyId),
             role: input.role || member.role || "member",
@@ -9977,22 +9984,30 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
 }
 
 export async function updateCompanySettings(companyId: string, input: CompanySettingsInput) {
-  const payload: Record<string, unknown> = {
+  const basePayload: Record<string, unknown> = {
     id: companyId,
     name: input.name.trim(),
-    business_type: input.businessType?.trim() || null,
-    delivery_complete_message: input.deliveryCompleteMessage?.trim() || null,
-    delivery_issue_message: input.deliveryIssueMessage?.trim() || null,
-    delivery_partial_message: input.deliveryPartialMessage?.trim() || null,
-    notification_phone: input.notificationPhone?.trim() || null,
-    notification_sender_name: input.notificationSenderName?.trim() || null,
-    owner_name: input.ownerName?.trim() || null,
-    origin_address: input.originAddress?.trim() || null,
-    sms_sender_phone: input.smsSenderPhone?.trim() || null,
-    telegram_chat_id: input.telegramChatId?.trim() || null,
     status: "active",
     updated_at: new Date().toISOString()
   };
+  const payload: Record<string, unknown> = input.section === "messaging"
+    ? {
+        ...basePayload,
+        delivery_complete_message: input.deliveryCompleteMessage?.trim() || null,
+        delivery_issue_message: input.deliveryIssueMessage?.trim() || null,
+        delivery_partial_message: input.deliveryPartialMessage?.trim() || null,
+        notification_phone: input.notificationPhone?.trim() || null,
+        notification_sender_name: input.notificationSenderName?.trim() || null,
+        sms_sender_phone: input.smsSenderPhone?.trim() || null
+      }
+    : input.section === "telegram"
+      ? { ...basePayload, telegram_chat_id: input.telegramChatId?.trim() || null }
+      : {
+          ...basePayload,
+          business_type: input.businessType?.trim() || null,
+          owner_name: input.ownerName?.trim() || null,
+          origin_address: input.originAddress?.trim() || null
+        };
 
   if (!payload.name) throw new Error("회사명은 필수입니다.");
 

@@ -70,6 +70,7 @@ export async function PATCH(request: NextRequest) {
       await updateStaffInvitation({
         companyId: session.companyId,
         invitationId: body.invitationId,
+        employeeName: body.employeeName,
         role: body.role,
         status: body.status,
         assignedManagerName: body.assignedManagerName,

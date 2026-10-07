@@ -215,7 +215,7 @@ export function StaffManagementPanel({
     setMessage("직원을 삭제했습니다.");
   }
 
-  async function saveAssignment(invitation: StaffInvitation, patch: { assignedManagerName: string; assignedVehicle: string }) {
+  async function saveAssignment(invitation: StaffInvitation, patch: { employeeName: string; assignedManagerName: string; assignedVehicle: string }) {
     setSavingId(invitation.id);
     setMessage("");
 
@@ -236,7 +236,7 @@ export function StaffManagementPanel({
 
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === invitation.id ? { ...updated, matchedCustomerCount: item.matchedCustomerCount } : item)));
-    setMessage(payload.persisted ? "배정 기준 저장이 완료되었습니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다." : "배정 기준이 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(payload.persisted ? "직원 이름과 연결 정보가 저장되었습니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다." : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
   }
 
   async function addJobTitle() {
@@ -611,22 +611,18 @@ export function StaffManagementPanel({
                         {expanded ? (
                           <tr className="border-b border-slate-100 bg-slate-50/60">
                             <td className="px-3 py-3" colSpan={7}>
-                              <p className="text-xs font-black text-slate-900">배정 기준 수동 연결</p>
-                              <p className="mt-1 text-xs font-bold text-slate-500">자동 매칭이 안 될 때 실제 거래처에 적힌 담당자명 또는 배송차량 중 하나 이상을 선택해 저장하세요.</p>
-                              {invitation.status === "accepted" ? (
-                                <StaffAssignmentEditor
-                                  canEdit={canManageMembers}
-                                  invitation={invitation}
-                                  managerOptions={managerChoices}
-                                  onAddManagerOption={(name) => setManagerChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
-                                  onAddVehicleOption={(name) => setVehicleChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
-                                  onSave={(patch) => saveAssignment(invitation, patch)}
-                                  saving={savingId === invitation.id}
-                                  vehicleOptions={vehicleChoices}
-                                />
-                              ) : (
-                                <p className="mt-2 text-xs font-bold text-slate-400">가입 완료 후 연결할 수 있습니다.</p>
-                              )}
+                              <p className="text-xs font-black text-slate-900">직원 이름과 배정 기준</p>
+                              <p className="mt-1 text-xs font-bold text-slate-500">직원 이름은 언제든 수정할 수 있습니다. 가입 완료 직원은 거래처 담당자명이나 배송차량도 함께 연결하세요.</p>
+                              <StaffAssignmentEditor
+                                canEdit={canManageMembers}
+                                invitation={invitation}
+                                managerOptions={managerChoices}
+                                onAddManagerOption={(name) => setManagerChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
+                                onAddVehicleOption={(name) => setVehicleChoices((current) => (current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b, "ko"))))}
+                                onSave={(patch) => saveAssignment(invitation, patch)}
+                                saving={savingId === invitation.id}
+                                vehicleOptions={vehicleChoices}
+                              />
                             </td>
                           </tr>
                         ) : null}
@@ -816,25 +812,34 @@ function StaffAssignmentEditor({
   managerOptions: string[];
   onAddManagerOption: (name: string) => void;
   onAddVehicleOption: (name: string) => void;
-  onSave: (patch: { assignedManagerName: string; assignedVehicle: string }) => void;
+  onSave: (patch: { employeeName: string; assignedManagerName: string; assignedVehicle: string }) => void;
   saving: boolean;
   vehicleOptions: string[];
 }) {
+  const [employeeName, setEmployeeName] = useState(invitation.employeeName || "");
   const [managerName, setManagerName] = useState(invitation.assignedManagerName || "");
   const [vehicle, setVehicle] = useState(invitation.assignedVehicle || "");
-  const dirty = managerName !== (invitation.assignedManagerName || "") || vehicle !== (invitation.assignedVehicle || "");
+  const dirty = employeeName !== (invitation.employeeName || "") || managerName !== (invitation.assignedManagerName || "") || vehicle !== (invitation.assignedVehicle || "");
 
   if (!canEdit) {
-    return invitation.assignedManagerName || invitation.assignedVehicle ? (
+    return invitation.employeeName || invitation.assignedManagerName || invitation.assignedVehicle ? (
       <p className="mt-2 text-xs font-bold text-slate-600">
-        수동 연결: {[invitation.assignedManagerName, invitation.assignedVehicle].filter(Boolean).join(" · ")}
+        직원 정보: {[invitation.employeeName, invitation.assignedManagerName, invitation.assignedVehicle].filter(Boolean).join(" · ")}
       </p>
     ) : null;
   }
 
   return (
-    <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-      <DriverSelectField
+    <div className={`mt-2 grid gap-2 ${invitation.status === "accepted" ? "sm:grid-cols-[1fr_1fr_1fr_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]"}`}>
+      <label className="grid gap-1">
+        <span className="text-[11px] font-bold text-slate-500">직원 이름</span>
+        <input
+          className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+          onChange={(event) => setEmployeeName(event.target.value)}
+          value={employeeName}
+        />
+      </label>
+      {invitation.status === "accepted" ? <DriverSelectField
         compact
         driverOptions={managerOptions}
         entityLabel="담당자"
@@ -846,8 +851,8 @@ function StaffAssignmentEditor({
         }}
         onChange={setManagerName}
         value={managerName}
-      />
-      <DriverSelectField
+      /> : null}
+      {invitation.status === "accepted" ? <DriverSelectField
         compact
         driverOptions={vehicleOptions}
         entityLabel="배송차량"
@@ -859,15 +864,15 @@ function StaffAssignmentEditor({
         }}
         onChange={setVehicle}
         value={vehicle}
-      />
+      /> : null}
       <Button
         className="h-9 px-3 text-xs"
-        disabled={!dirty || saving}
-        onClick={() => onSave({ assignedManagerName: managerName, assignedVehicle: vehicle })}
+        disabled={!dirty || !employeeName.trim() || saving}
+        onClick={() => onSave({ employeeName, assignedManagerName: managerName, assignedVehicle: vehicle })}
         type="button"
         variant="outline"
       >
-        {saving ? "저장 중" : "연결 저장"}
+        {saving ? "저장 중" : "직원 정보 저장"}
       </Button>
     </div>
   );

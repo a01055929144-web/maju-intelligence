@@ -43,8 +43,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [telegramTesting, setTelegramTesting] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
   const hasCompanyName = Boolean(form.name.trim());
-  const hasNotificationPhone = Boolean(form.notificationPhone.trim());
-  const completedItems = [hasCompanyName, hasOrigin, Boolean(form.ownerName.trim()), hasNotificationPhone].filter(Boolean).length;
+  const completedItems = [hasCompanyName, hasOrigin].filter(Boolean).length;
   const anySectionSaving = Object.values(saveStates).some((state) => state.status === "saving");
   const sectionDirty: Record<SettingsSection, boolean> = {
     company: form.businessType !== savedForm.businessType || form.name !== savedForm.name || form.originAddress !== savedForm.originAddress || form.ownerName !== savedForm.ownerName,
@@ -87,7 +86,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payloadForm)
+        body: JSON.stringify({ ...payloadForm, section })
       },
       12000
     ).catch(() => null);
@@ -142,14 +141,14 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             </label>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5">
-                <span className="text-xs font-bold text-muted-foreground">대표자/운영 표시명</span>
+                <span className="text-xs font-bold text-muted-foreground">현장 표시명 <span className="font-semibold text-slate-400">(선택)</span></span>
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.ownerName}
                   onChange={(event) => updateSection("company", { ownerName: event.target.value })}
-                  placeholder="라이브 차량과 모바일 화면에 표시할 이름"
+                  placeholder="배송 업무를 직접 할 때만 입력"
                 />
-                <span className="block text-[11px] font-semibold text-slate-400">개인·오너 계정의 라이브 차량 및 현장 화면 이름으로 사용됩니다.</span>
+                <span className="block text-[11px] font-semibold text-slate-400">대표자가 직접 배송·현장 업무를 할 때만 라이브 차량과 기사 화면에 사용됩니다.</span>
               </label>
               <label className="space-y-1.5">
                 <span className="text-xs font-bold text-muted-foreground">업태/업종</span>
@@ -326,8 +325,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <h2 className="text-base font-black text-slate-950">적용 현황</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">지도·배송에 쓰는 핵심 기준</p>
           </div>
-          <Badge className={completedItems >= 4 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
-            {completedItems}/4 완료
+          <Badge className={completedItems >= 2 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+            {completedItems}/2 완료
           </Badge>
         </div>
         <div className="space-y-3 p-4">
