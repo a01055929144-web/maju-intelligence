@@ -1129,32 +1129,32 @@ export default function CrmTimelinePage() {
           title="거래처 관리"
         />
 
-        <div className="mb-4 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm sm:grid-cols-3">
+        <div className="mb-3 grid overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-3">
           <Link
-            className={`flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50 ${workspaceSection === "list" ? "bg-teal-50/70" : ""}`}
+            className={`flex min-w-0 items-center gap-2.5 px-3 py-2.5 transition hover:bg-slate-50 ${workspaceSection === "list" ? "bg-teal-50/70" : ""}`}
             href={withCompanyQuery("/crm/timeline?section=list")}
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-black text-slate-700">1</span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-black text-slate-700">1</span>
             <span className="min-w-0">
               <span className="block text-sm font-black text-slate-950">대상 찾기</span>
               <span className="block truncate text-xs font-bold text-slate-500">보완 필요 {businessCheckCount + loadingMissingCount + managerMissingCount}건</span>
             </span>
           </Link>
           <Link
-            className={`flex items-center gap-3 border-t border-slate-200 px-4 py-3 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "ledger" ? "bg-teal-50/70" : ""}`}
+            className={`flex min-w-0 items-center gap-2.5 border-t border-slate-200 px-3 py-2.5 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "ledger" ? "bg-teal-50/70" : ""}`}
             href={withCompanyQuery(`/crm/timeline?section=ledger${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-100 text-sm font-black text-amber-800">2</span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-100 text-xs font-black text-amber-800">2</span>
             <span className="min-w-0">
               <span className="block text-sm font-black text-slate-950">원장 보완</span>
               <span className="block truncate text-xs font-bold text-slate-500">{selectedCustomer.customerName || "거래처 선택"} · 미완료 {Math.max(0, operationalChecks.length - operationalReadyCount)}건</span>
             </span>
           </Link>
           <Link
-            className={`flex items-center gap-3 border-t border-slate-200 px-4 py-3 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "history" ? "bg-teal-50/70" : ""}`}
+            className={`flex min-w-0 items-center gap-2.5 border-t border-slate-200 px-3 py-2.5 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "history" ? "bg-teal-50/70" : ""}`}
             href={withCompanyQuery(`/crm/timeline?section=history${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-black text-blue-800">3</span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-black text-blue-800">3</span>
             <span className="min-w-0">
               <span className="block text-sm font-black text-slate-950">기록·다음 행동</span>
               <span className="block truncate text-xs font-bold text-slate-500">{latestNote?.nextAction || (historyCount ? `기록 ${historyCount}건 확인` : "첫 메모 남기기")}</span>
@@ -1499,12 +1499,12 @@ export default function CrmTimelinePage() {
         </div>
 
         <div className="min-w-0 space-y-4">
-            <div className={`${workspaceSection === "ledger" ? "maju-section-card" : "hidden"} scroll-mt-28 p-4`} id="customer-ledger-detail">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className={`${workspaceSection === "ledger" ? "maju-section-card" : "hidden"} scroll-mt-28 p-3 sm:p-4`} id="customer-ledger-detail">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <p className="mb-1 text-xs font-black uppercase tracking-wide text-teal-700">2 · 원장 보완</p>
-                  <h2 className="break-words text-2xl font-bold leading-tight text-slate-950">{selectedCustomer.customerName}</h2>
-                  <p className="mt-2 break-words text-sm font-bold leading-6 text-slate-500">
+                  <h2 className="break-words text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{selectedCustomer.customerName}</h2>
+                  <p className="mt-1.5 break-words text-sm font-bold leading-5 text-slate-500">
                     {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
                   </p>
                   {duplicateCandidates.length ? (
@@ -1547,7 +1547,7 @@ export default function CrmTimelinePage() {
                     </div>
                   ) : null}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5 lg:max-w-[620px] lg:justify-end">
                   <Link
                     className="maju-button-primary h-8"
                     href={withCompanyQuery(`/crm/timeline?section=history${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
@@ -1555,22 +1555,22 @@ export default function CrmTimelinePage() {
                     <FileText className="h-3.5 w-3.5" />
                     기록·다음 행동
                   </Link>
-                  <div className="inline-flex h-11 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
+                  <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-black text-slate-700">
                     <button
                       aria-label="이전 거래처"
-                      className="grid h-full w-11 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      className="grid h-full w-8 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                       disabled={!previousFilteredCustomer}
                       onClick={() => moveFilteredSelection("previous")}
                       type="button"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </button>
-                    <span className="min-w-[72px] px-2 text-center">
+                    <span className="min-w-[60px] px-2 text-center">
                       {filteredCustomers.length ? `${selectedFilteredPosition}/${filteredCustomers.length}` : "0/0"}
                     </span>
                     <button
                       aria-label="다음 거래처"
-                      className="grid h-full w-11 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      className="grid h-full w-8 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                       disabled={!nextFilteredCustomer}
                       onClick={() => moveFilteredSelection("next")}
                       type="button"
@@ -1619,7 +1619,7 @@ export default function CrmTimelinePage() {
                 </p>
               ) : null}
 
-              <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
+              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
                 <div className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4">
                   <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber || "미등록"} />
                   <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone || "미등록"} />
@@ -1653,10 +1653,10 @@ export default function CrmTimelinePage() {
                 totalCount={operationalChecks.length}
               />
               <details className="maju-section-card mt-4 overflow-hidden">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
-                  <span>
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
+                  <span className="min-w-0 flex-1">
                     <span className="block text-sm font-black text-slate-950">현장 기록 상세</span>
-                    <span className="mt-0.5 block text-xs font-bold text-slate-500">첨부자료, 배송완료 증빙 등 모바일 현장 기록 건수는 필요할 때 펼쳐서 확인합니다.</span>
+                    <span className="mt-0.5 block text-xs font-bold text-slate-500">첨부·배송완료 증빙을 펼쳐서 확인합니다.</span>
                   </span>
                   <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
                     {operationsStatus === "ready"
@@ -1715,7 +1715,7 @@ export default function CrmTimelinePage() {
               </div>
             </div>
 
-            {workspaceSection === "ledger" && detailTab === "ledger" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-3">
+            {workspaceSection === "ledger" && detailTab === "ledger" ? <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,.92fr)]">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -1740,7 +1740,7 @@ export default function CrmTimelinePage() {
                   </p>
                 ) : null}
                 {isEditing && draftCustomer ? (
-                  <div className="p-4">
+                  <div className="p-3 sm:p-4">
                     <div className="maju-panel border-teal-100 bg-teal-50/60 p-3">
                       <div className="flex items-center gap-2 text-sm font-black text-slate-950">
                         <MapPin className="h-4 w-4 text-teal-700" />
@@ -1793,7 +1793,7 @@ export default function CrmTimelinePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-3 gap-y-3">
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <EditableField label="상호명" value={draftCustomer.customerName} onChange={(value) => updateDraft("customerName", value)} />
                       <EditableField
                         helper={
@@ -1869,7 +1869,7 @@ export default function CrmTimelinePage() {
                   <p className="text-xs font-black uppercase tracking-wide text-teal-700">첨부자료</p>
                   <h3 className="mt-1 text-base font-black text-slate-950">첨부자료 / 적재위치</h3>
                 </div>
-                <div className="p-4">
+                <div className="p-3 sm:p-4">
                   <LoadingPositionFieldCard
                     attachmentCount={loadingPositionAttachments}
                     loadingPosition={selectedCustomer.loadingPosition}
@@ -1888,10 +1888,10 @@ export default function CrmTimelinePage() {
                     />
                   )}
                   <div className="maju-section-card mt-4 overflow-hidden">
-                    <div className="maju-card-header flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="maju-card-header flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
                       <div>
                         <p className="text-xs font-black uppercase tracking-wide text-slate-400">자료 추가</p>
-                        <p className="mt-1 text-sm font-black text-slate-950">파일 업로드와 외부 URL 등록을 구분해서 저장합니다.</p>
+                        <p className="mt-0.5 text-sm font-black text-slate-950">파일 업로드 또는 외부 URL 등록</p>
                       </div>
                       <Badge className="w-fit bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100">
                         파일 선택 즉시 저장
@@ -1928,8 +1928,8 @@ export default function CrmTimelinePage() {
                           />
                         </label>
                       </div>
-                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(260px,.8fr)]">
-                        <label className="maju-panel flex min-h-28 cursor-pointer items-center gap-3 border-dashed border-teal-200 bg-teal-50/60 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
+                      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(240px,.85fr)]">
+                        <label className="maju-panel flex min-h-24 min-w-0 cursor-pointer items-center gap-3 border-dashed border-teal-200 bg-teal-50/60 p-3 text-left transition hover:border-teal-300 hover:bg-teal-50">
                           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-teal-700 text-white">
                             <Plus className="h-4 w-4" />
                           </span>
@@ -1938,7 +1938,7 @@ export default function CrmTimelinePage() {
                               {isAttachmentSaving ? "업로드 중..." : newAttachmentFiles.length ? `${newAttachmentFiles.length}개 파일 저장 중` : "+ 파일 업로드"}
                             </span>
                             <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">
-                              사진, PDF, 영상을 선택하면 거래처 원장에 바로 저장됩니다. 파일당 최대 50MB.
+                              사진·PDF·영상 선택 시 즉시 저장 · 파일당 최대 50MB
                             </span>
                             {newAttachmentFiles.length ? (
                               <span className="mt-2 flex flex-wrap gap-1">
@@ -2053,7 +2053,7 @@ export default function CrmTimelinePage() {
               </div>
             </div> : null}
 
-            {workspaceSection === "history" && detailTab === "history" ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(280px,100%),1fr))] gap-4">
+            {workspaceSection === "history" && detailTab === "history" ? <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,.92fr)]">
               <div className="maju-section-card overflow-hidden">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -2065,7 +2065,7 @@ export default function CrmTimelinePage() {
                     {operationsStatus === "ready" ? `${customerNotes.length || selectedCustomer.memoCount}건` : operationsStatus === "error" ? "조회 실패" : "확인 중"}
                   </Badge>
                 </div>
-                <div className="border-b border-slate-200/80 bg-slate-50/50 p-4">
+                <div className="border-b border-slate-200/80 bg-slate-50/50 p-3 sm:p-4">
                   {operationsStatus === "ready" ? (
                     <HistoryInputSummary
                       historyCount={historyCount}
@@ -2076,7 +2076,7 @@ export default function CrmTimelinePage() {
                   <div className="maju-section-card mt-3 overflow-hidden">
                     <div className="maju-card-header px-3 py-3">
                       <p className="text-xs font-black uppercase tracking-wide text-slate-400">빠른 메모</p>
-                      <p className="mt-1 text-sm font-black text-slate-950">현장에서 자주 남기는 문구를 먼저 선택하고, 필요한 내용을 이어서 보완합니다.</p>
+                      <p className="mt-0.5 text-sm font-black text-slate-950">자주 쓰는 문구를 선택한 뒤 내용을 보완하세요.</p>
                     </div>
                     <div className="flex flex-wrap gap-2 p-3">
                       {[
@@ -2099,7 +2099,7 @@ export default function CrmTimelinePage() {
                       <label className="grid gap-1.5">
                         <span className="text-xs font-black text-slate-500">상담·배송 메모</span>
                         <textarea
-                          className="min-h-24 w-full resize-none rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                          className="min-h-20 w-full resize-y rounded-md border border-slate-200 bg-white p-3 text-sm font-bold leading-6 text-slate-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
                           onChange={(event) => setNewMemo(event.target.value)}
                           placeholder="상담 내용, 배송 특이사항, 대표 요청사항을 기록하세요."
                           value={newMemo}

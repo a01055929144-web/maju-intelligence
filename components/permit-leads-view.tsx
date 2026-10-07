@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   CalendarDays,
@@ -1435,26 +1436,22 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     ? {
         eyebrow: "SALES PIPELINE",
         title: "영업 리드",
-        description: "운영 중인 매장의 수요 신호를 비교하고, 가능성 높은 곳부터 영업을 실행합니다.",
+        description: "선별된 영업 후보의 접촉·견적·후속 일정을 한곳에서 실행합니다.",
         resultLabel: "영업 후보",
         searchPlaceholder: "상호명·지역·전화·인스타 ID로 영업 후보 검색",
-        workflow: [
-          { detail: "검색량·리뷰·업종 적합도", icon: Radar, label: "후보 발굴" },
-          { detail: "전화·DM 또는 방문", icon: Phone, label: "접촉 실행" },
-          { detail: "견적·재연락 일정", icon: FileImage, label: "후속 관리" }
-        ]
+        role: "배정 후 실행 · 접촉 · 견적",
+        nextHref: "/dashboard?view=leads&leadType=permit",
+        nextLabel: "신규 후보 더 찾기"
       }
     : {
         eyebrow: "NEW OPENING SIGNALS",
         title: "신규 리드",
-        description: "새로 문을 여는 매장을 빠르게 발견하고, 연락 가능한 후보를 먼저 선점합니다.",
+        description: "인허가·개업 신호를 수집하고 검증해 영업할 후보를 선별합니다.",
         resultLabel: "신규 개업 후보",
         searchPlaceholder: "상호명·주소·전화로 신규 개업 후보 검색",
-        workflow: [
-          { detail: "개업일·업종·지역", icon: Search, label: "신호 확인" },
-          { detail: "연락처·플레이스 검증", icon: UserCheck, label: "후보 선별" },
-          { detail: "전화 또는 방문 준비", icon: MapPin, label: "첫 접촉" }
-        ]
+        role: "탐색 · 수집 · 후보 발굴",
+        nextHref: "/dashboard?view=leads&leadType=keyword",
+        nextLabel: "선별 후보 영업 실행"
       };
 
   function LeadSortableHeader({
@@ -1499,21 +1496,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             </a>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200/70 pt-3">
-          {leadPageCopy.workflow.map((step, index) => {
-            const StepIcon = step.icon;
-            return (
-              <div className="flex min-w-0 items-center gap-2" key={step.label}>
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${isSalesLeadPage ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"}`}>
-                  <StepIcon className="h-3.5 w-3.5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[10px] font-black text-slate-400">{index + 1}. {step.label}</span>
-                  <span className="block truncate text-[10px] font-semibold text-slate-500">{step.detail}</span>
-                </span>
-              </div>
-            );
-          })}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3">
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isSalesLeadPage ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"}`}>
+            이 화면의 역할 · {leadPageCopy.role}
+          </span>
+          <a className="inline-flex items-center gap-1 text-xs font-black text-slate-600 transition hover:text-slate-950" href={leadPageCopy.nextHref}>
+            {leadPageCopy.nextLabel}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </a>
         </div>
       </div>
 
@@ -2275,7 +2265,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             >
               {visibleLeadSummary.total.toLocaleString()}곳 전체 보기
             </button>
-            <LeadQuickFilterChip
+            {isSalesLeadPage ? <LeadQuickFilterChip
               active={actionFilter === "오늘 바로 전화"}
               count={visibleLeadSummary.call}
               label="전화"
@@ -2283,14 +2273,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 setActionFilter("오늘 바로 전화");
                 setStatusFilter("");
               }}
-            />
-            <LeadQuickFilterChip
+            /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip
               active={hasPhoneOnly}
               count={visibleLeadSummary.phone}
               label="전화가능"
               onClick={() => setHasPhoneOnly((value) => !value)}
-            />
-            <LeadQuickFilterChip
+            /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip
               active={actionFilter === "오늘 DM 발송"}
               count={visibleLeadSummary.dm}
               label="DM"
@@ -2298,14 +2288,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 setActionFilter("오늘 DM 발송");
                 setStatusFilter("");
               }}
-            />
-            <LeadQuickFilterChip
+            /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip
               active={hasInstagramOnly}
               count={visibleLeadSummary.instagram}
               label="인스타"
               onClick={() => setHasInstagramOnly((value) => !value)}
-            />
-            <LeadQuickFilterChip
+            /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip
               active={actionFilter === "정보 보강"}
               count={visibleLeadSummary.enrichment}
               label="정보 보강"
@@ -2313,8 +2303,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 setActionFilter("정보 보강");
                 setStatusFilter("");
               }}
-            />
-            <LeadQuickFilterChip
+            /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip
               active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER}
               count={visibleLeadSummary.followup}
               label="견적 후속"
@@ -2322,7 +2312,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 setActionFilter("");
                 setStatusFilter(QUOTE_FOLLOW_UP_STATUS_FILTER);
               }}
-            />
+            /> : null}
             {hasActiveLeadFilters ? (
               <button className="ml-auto rounded-md px-2 py-1 text-[11px] font-black text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={clearLeadFilters} type="button">
                 필터 초기화
@@ -2369,7 +2359,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
             <div className="flex min-h-[420px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="shrink-0 divide-y divide-slate-100 border-b border-slate-200 bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                  <div className="flex flex-wrap items-center gap-2">
+                  {isSalesLeadPage ? <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                       선택 {selectedLeads.length.toLocaleString()}곳
                     </span>
@@ -2383,7 +2373,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <button className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={toggleAllVisibleLeads} type="button">
                       {allVisibleSelected ? "페이지 선택 해제" : "현재 페이지 선택"}
                     </button>
-                  </div>
+                  </div> : <p className="text-xs font-semibold text-slate-500">후보를 검토해 상세 정보를 확인하세요. 접촉·견적 작업은 영업 리드에서 진행합니다.</p>}
                   <div className="flex flex-wrap items-center gap-1.5">
                     <label className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500">
                       보기
@@ -2423,7 +2413,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 bg-slate-50/70 px-3 py-2">
+                {isSalesLeadPage ? <div className="flex flex-wrap items-center gap-2 bg-slate-50/70 px-3 py-2">
                   <button
                     className="maju-button-secondary h-8 text-xs disabled:opacity-50"
                     disabled={!selectedLeads.length || Boolean(bulkActionBusy)}
@@ -2495,13 +2485,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                   <button className="rounded-md px-2 py-1 text-[11px] font-black text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" disabled={!selectedLeadIds.length || Boolean(bulkActionBusy)} onClick={() => setSelectedLeadIds([])} type="button">
                     선택 해제
                   </button>
-                </div>
-                {selectedLeads.length ? (
+                </div> : null}
+                {isSalesLeadPage && selectedLeads.length ? (
                   <p className="bg-slate-50/70 px-3 pb-2 text-[11px] font-bold text-slate-400">
                     선택한 리드는 현재 필터 화면 기준으로 처리됩니다. 전화·DM·견적·재연락 기록은 영업 이력에 저장됩니다.
                   </p>
                 ) : null}
-                {bulkActionBusy ? (
+                {isSalesLeadPage && bulkActionBusy ? (
                   <InlineLoading
                     className="!justify-start !rounded-none !border-x-0 !border-b-0 !bg-blue-50 !px-3 !py-2 !text-blue-700"
                     label={bulkActionBusy === "quote" ? "선택한 리드에 견적 요청을 기록하는 중입니다..." : bulkActionBusy === "quoteFollowUp" ? "견적 후속 일정을 기록하는 중입니다..." : "선택한 리드의 영업 이력을 저장하는 중입니다..."}
@@ -2512,14 +2502,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
-                    <th className="w-[40px] border-r border-slate-200 px-2 py-2">
+                    {isSalesLeadPage ? <th className="w-[40px] border-r border-slate-200 px-2 py-2">
                       <input
                         aria-label="현재 페이지 전체 선택"
                         checked={allVisibleSelected}
                         onChange={toggleAllVisibleLeads}
                         type="checkbox"
                       />
-                    </th>
+                    </th> : null}
                     <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
                     <LeadSortableHeader
                       className="w-[150px]"
@@ -2580,7 +2570,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                         role="button"
                         tabIndex={0}
                       >
-                        <td className="border-r border-slate-100 px-2 py-2">
+                        {isSalesLeadPage ? <td className="border-r border-slate-100 px-2 py-2">
                           <input
                             aria-label={`${lead.businessName} 선택`}
                             checked={selected}
@@ -2588,7 +2578,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                             onClick={(event) => event.stopPropagation()}
                             type="checkbox"
                           />
-                        </td>
+                        </td> : null}
                         <td className="min-w-0 border-r border-slate-100 px-3 py-2">
                           <div className="flex min-w-0 items-center gap-1.5">
                             <span

@@ -457,12 +457,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  // 지도 탭에서 검색/필터/신규 리드 반경 바가 지도 위에 떠 있는 카드로 표시됩니다(xl:absolute).
+  // 지도 탭에서 검색/필터/신규 리드 반경 바가 1024px 이상에서 지도 위 카드로 표시됩니다(lg:absolute).
   // "신규 리드 반경"을 켜면 이 카드에 한 줄이 더 늘어나 높이가 커지는데, 지도 오른쪽 위
   // MapControls(내 위치 버튼)의 세로 위치가 고정값이면 늘어난 카드와 겹칩니다.
   //
   // 이 카드(mapHeaderRef)는 위쪽 KPI/이탈 위험 알림 블록을 건너뛰고 항상 지도 영역의 부모
-  // 기준 top-2에 뜨는데(xl:absolute), MapControls는 지도 영역 자신(mapAreaRef)의 top을
+  // 기준 top-2에 뜨는데(lg:absolute), MapControls는 지도 영역 자신(mapAreaRef)의 top을
   // 기준으로 위치합니다 — 두 기준점이 서로 다른 조상이라, 카드 높이만으로 오프셋을 계산하면
   // KPI 패널이 펼쳐져 있거나 이탈 위험 알림 배너가 떠 있을 때 실제 카드 아래쪽 가장자리와
   // MapControls 위치가 어긋납니다. getBoundingClientRect()로 카드의 실제 화면 아래쪽 가장자리와
@@ -1743,8 +1743,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
   return (
     <div
-      className={`maju-section-card flex min-h-[760px] flex-col text-slate-900 ${
-        activeView === "map" ? "xl:h-full xl:min-h-0" : "!overflow-visible xl:min-h-[760px]"
+      className={`maju-section-card flex min-h-[680px] flex-col text-slate-900 ${
+        activeView === "map" ? "lg:h-full lg:min-h-0" : "!overflow-visible lg:min-h-[760px]"
       } ${isFullscreen ? "!rounded-none" : ""}`}
       ref={workspaceRef}
     >
@@ -1762,7 +1762,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         </div>
       ) : null}
-      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div>
             <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em]">오늘의 운영 지도</h2>
@@ -1771,14 +1771,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </p>
           </div>
         </div>
-        <div className="maju-toolbar-scroll flex max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 xl:justify-end xl:overflow-visible xl:pb-0">
-          <nav className="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 xl:w-auto xl:gap-2">
+          <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
               const selected = activeView === item.value;
               return (
                 <button
-                  className={`flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition 2xl:px-3 ${
+                  className={`flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition sm:px-2.5 2xl:px-3 ${
                     selected ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-white hover:text-slate-900"
                   }`}
                   key={item.value}
@@ -1787,13 +1787,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   type="button"
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="hidden md:inline">{item.label}</span>
                 </button>
               );
             })}
           </nav>
           <button
-            className={`flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition ${
+            aria-label={`실시간 차량 ${liveVehicleSummary.active}대${liveVehicleSummary.stale ? `, 지연 ${liveVehicleSummary.stale}대` : ""}`}
+            className={`flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition sm:px-3 ${
               liveVehicleSummary.active
                 ? "border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_0_0_3px_rgba(16,185,129,.10)] hover:bg-emerald-100"
                 : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
@@ -1806,17 +1807,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               {liveVehicleSummary.active ? <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /> : null}
               <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${liveVehicleSummary.active ? "bg-emerald-500" : "bg-slate-300"}`} />
             </span>
-            <Truck className={`h-4 w-4 shrink-0 ${liveVehicleSummary.active ? "text-emerald-700" : "text-slate-500"}`} />
-            <span className="whitespace-nowrap"><span className="hidden sm:inline">실시간 차량 </span>{liveVehicleSummary.active}대</span>
-            {liveVehicleSummary.stale ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">지연 {liveVehicleSummary.stale}</span> : null}
+            <Truck className={`hidden h-4 w-4 shrink-0 sm:block ${liveVehicleSummary.active ? "text-emerald-700" : "text-slate-500"}`} />
+            <span className="whitespace-nowrap"><span className="hidden lg:inline">실시간 차량 </span>{liveVehicleSummary.active}대</span>
+            {liveVehicleSummary.stale ? <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 sm:inline">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
           <details className="group relative shrink-0">
             <summary
-              className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
+              aria-label="지도 화면 설정"
+              className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:px-3 [&::-webkit-details-marker]:hidden"
               title="마커 표현, 리드 레이어, 패널과 화면 설정"
             >
               <MapPinned className="h-4 w-4" />
-              <span>화면 설정</span>
+              <span className="hidden sm:inline">화면 설정</span>
               <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
             </summary>
             <div className="absolute right-0 top-12 z-50 w-[min(92vw,420px)] space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_16px_40px_rgba(15,23,42,.18)]">
@@ -1930,7 +1932,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         </div>
       </header>
 
-      <div className={`relative flex flex-1 flex-col ${activeView === "map" ? "xl:min-h-0" : ""}`}>
+      <div className={`relative flex flex-1 flex-col ${activeView === "map" ? "lg:min-h-0" : ""}`}>
         {showOriginAddressBanner ? (
           <div className="shrink-0 px-4 pt-3">
             <Link
@@ -2003,12 +2005,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       <section
         className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-white px-4 py-2 ${
           activeView === "map"
-            ? "xl:absolute xl:inset-x-3 xl:top-3 xl:z-20 xl:space-y-1.5 xl:rounded-2xl xl:border xl:border-slate-200 xl:bg-white/95 xl:px-3 xl:py-2.5 xl:shadow-[0_12px_32px_rgba(15,23,42,.12)] xl:backdrop-blur"
+            ? "lg:absolute lg:inset-x-3 lg:top-3 lg:z-20 lg:space-y-1.5 lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white/95 lg:px-3 lg:py-2.5 lg:shadow-[0_12px_32px_rgba(15,23,42,.12)] lg:backdrop-blur"
             : ""
         }`}
         ref={mapHeaderRef}
       >
-        <div className="grid gap-2 xl:grid-cols-[minmax(360px,1fr)_minmax(340px,auto)] xl:items-center">
+        <div className="grid gap-1.5 lg:grid-cols-[minmax(300px,1fr)_minmax(330px,auto)] lg:items-center xl:grid-cols-[minmax(360px,1fr)_minmax(340px,auto)] xl:gap-2">
           <label className="maju-search-field relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -2162,11 +2164,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </div>
             ) : null}
           </label>
-          <div className="grid gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/80 p-1 sm:p-1.5">
             <div className="hidden 2xl:block">
               <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
             </div>
-            <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end">
+            <div className="maju-toolbar-scroll flex min-w-0 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto sm:justify-end">
               <select
                 className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
                   gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
@@ -2487,16 +2489,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       </section>
 
       {activeView === "map" ? (
-        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl xl:block xl:min-h-0" ref={mapAreaRef}>
-          <div className={`relative min-h-0 min-w-0 bg-slate-100 xl:absolute xl:inset-0 ${isFullscreen ? "h-full" : "h-[420px] xl:h-full"}`}>
+        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl lg:block lg:min-h-0" ref={mapAreaRef}>
+          <div className={`relative min-h-0 min-w-0 bg-slate-100 lg:absolute lg:inset-0 ${isFullscreen ? "h-full" : "h-[420px] lg:h-full"}`}>
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName={rightCollapsed ? "xl:right-24" : "xl:right-[328px]"}
+                    controlsOffsetClassName={rightCollapsed ? "lg:right-24" : "lg:right-[304px] xl:right-[328px]"}
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
-                    mapClassName="h-full min-h-[420px] rounded-none border-0 xl:min-h-0"
+                    mapClassName="h-full min-h-[420px] rounded-none border-0 lg:min-h-0"
                     markers={mapDisplayMarkers}
                     onMarkerClick={(marker) => {
                       if (marker.tone === "unregistered") {
@@ -2562,7 +2564,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     12시간 GPS 경로를 분석 모달을 열지 않고 메인 지도 위에 바로 그려줍니다. 로딩/에러/
                     표시 상태를 알려주는 배너를 지도 우상단에 띄우고, 닫기를 누르면 경로를 지웁니다. */}
                 {mainMapRouteVehicleId ? (
-                  <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-xs xl:left-auto xl:right-3">
+                  <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-xs lg:left-auto lg:right-3">
                     <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -2696,13 +2698,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
 
           {/* 2026-08-24 피드백("차량 매니저 필터가 검색창하고 겹쳐보여"): 이 좌우 패널은 mapAreaRef
-              기준 xl:absolute 오버레이인데, 위 mapHeaderRef 검색창 카드도 같은 좌표계에 xl:absolute로
-              떠 있고 리드 필터 행이 늘어나면 높이가 커집니다. 좌우 패널이 고정 xl:top-3만 쓰면 헤더가
+              기준 lg:absolute 오버레이인데, 위 mapHeaderRef 검색창 카드도 같은 좌표계에 lg:absolute로
+              떠 있고 리드 필터 행이 늘어나면 높이가 커집니다. 좌우 패널이 고정 lg:top-3만 쓰면 헤더가
               커질 때 그 아래로 가려지므로, 크로스헤어 버튼과 동일하게 mapHeaderHeightPx를 top 인라인
               스타일로 반영합니다. */}
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:left-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              leftCollapsed ? "xl:w-[60px]" : "xl:bottom-3 xl:w-[360px]"
+            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
+              leftCollapsed ? "lg:w-[60px]" : "lg:bottom-3 lg:w-[320px] xl:w-[360px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -2764,8 +2766,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
 
           <div
-            className={`min-h-0 shrink-0 border-t border-slate-200 xl:absolute xl:right-3 xl:z-10 xl:overflow-hidden xl:rounded-xl xl:border xl:border-slate-200 xl:bg-white xl:shadow-lg ${
-              rightCollapsed ? "xl:w-[60px]" : "xl:bottom-3 xl:w-[304px]"
+            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:right-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
+              rightCollapsed ? "lg:w-[60px]" : "lg:bottom-3 lg:w-[280px] xl:w-[304px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -4337,9 +4339,9 @@ export function StoreQuickCard({
     variant === "grid"
       ? "left-4 w-[min(300px,calc(100%-32px))]"
       : `left-4 w-[min(300px,calc(100%-32px))] ${
-          leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(300px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(300px,calc(100%-352px))]"
+          leftPanelCollapsed ? "lg:left-[84px] lg:w-[min(300px,calc(100%-100px))]" : "lg:left-[336px] lg:w-[min(300px,calc(100%-352px))]"
         }`;
-  const topClassName = variant === "grid" ? "top-4" : "top-4 xl:top-[var(--quick-card-top,5rem)]";
+  const topClassName = variant === "grid" ? "top-4" : "top-4 lg:top-[var(--quick-card-top,5rem)]";
 
   return (
     <div
@@ -4759,7 +4761,7 @@ function MapLayerLegend({
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex justify-center sm:inset-x-3 sm:bottom-3">
       <div
         aria-label="지도 마커 범례"
-        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-[10px] font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] xl:max-w-[calc(100%-700px)]"
+        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-[10px] font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
       >
         <span className="font-black text-slate-500">범례</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />거래처 {counts.customers}</span>
@@ -6496,12 +6498,12 @@ function PermitLeadMapQuickCard({
   }
 
   const positionClassName = `left-4 w-[min(320px,calc(100%-32px))] ${
-    leftPanelCollapsed ? "xl:left-[84px] xl:w-[min(320px,calc(100%-100px))]" : "xl:left-[336px] xl:w-[min(320px,calc(100%-352px))]"
+    leftPanelCollapsed ? "lg:left-[84px] lg:w-[min(320px,calc(100%-100px))]" : "lg:left-[336px] lg:w-[min(320px,calc(100%-352px))]"
   }`;
 
   return (
     <div
-      className={`absolute top-4 xl:top-[var(--quick-card-top,5rem)] z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
+      className={`absolute top-4 lg:top-[var(--quick-card-top,5rem)] z-30 h-auto overflow-hidden rounded-xl border border-teal-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,.18)] ${positionClassName}`}
       style={{
         ["--quick-card-top" as string]: headerOffsetPx ? `${headerOffsetPx + 12}px` : undefined,
         transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`
