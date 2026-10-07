@@ -2703,8 +2703,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               커질 때 그 아래로 가려지므로, 크로스헤어 버튼과 동일하게 mapHeaderHeightPx를 top 인라인
               스타일로 반영합니다. */}
           <div
-            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              leftCollapsed ? "lg:w-[60px]" : "lg:bottom-3 lg:w-[320px] xl:w-[360px]"
+            className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
+              leftCollapsed ? "lg:w-[60px]" : "lg:bottom-3 lg:w-[360px] xl:w-[400px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -4921,6 +4921,9 @@ function LiveVehicleStatusPanel({
   });
   const activeCount = sorted.filter((vehicle) => !vehicle.isStale).length;
   const filtered = selectedVehicle ? [selectedVehicle] : [];
+  // 담당자 목록 위의 라이브 요약은 상단 상태 필터와 정보가 겹칩니다. 차량을 선택하지 않은
+  // 평상시에는 목록 공간을 온전히 사용하고, 선택한 차량의 실행 버튼이 필요할 때만 상세를 엽니다.
+  if (!selectedVehicle) return null;
   return (
     <section className="border-b border-slate-200/80 bg-white">
       <div className="flex items-center justify-between gap-2 px-3 py-2">

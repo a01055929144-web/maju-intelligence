@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CheckCircle2, ClipboardEdit, Download, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, ClipboardEdit, Download, Search, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CopyTextButton } from "@/components/copy-text-button";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -34,7 +34,7 @@ const draftPresentation = {
   }
 } as const;
 
-export default async function SalesAssistantPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+export default async function SalesAssistantPage({ searchParams }: { searchParams?: Promise<{ companyId?: string; q?: string; type?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const customerSession = await getCustomerSession();
   const adminSession = await getAdminSession();
@@ -44,10 +44,22 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const drafts = await getSalesAssistantDrafts(companyId);
+  const query = resolvedSearchParams?.q?.trim() || "";
+  const requestedType = resolvedSearchParams?.type;
+  const selectedType = requestedType === "follow-up" || requestedType === "quote" || requestedType === "summary" ? requestedType : "all";
+  const normalizedQuery = query.toLocaleLowerCase("ko-KR");
+  const filteredDrafts = drafts.filter((draft) => {
+    if (selectedType !== "all" && draft.type !== selectedType) return false;
+    if (!normalizedQuery) return true;
+    return [draft.leadName, draft.region, draft.title, draft.body, draft.nextAction, typeLabels[draft.type]]
+      .some((value) => value.toLocaleLowerCase("ko-KR").includes(normalizedQuery));
+  });
   const followUps = drafts.filter((draft) => draft.type === "follow-up").length;
   const quotes = drafts.filter((draft) => draft.type === "quote").length;
   const hasLiveDraftData = drafts.length > 0;
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const previewCompanyId = isAdminPreview ? companyId : undefined;
+  const resetSearchHref = previewCompanyId ? `/assistant?companyId=${encodeURIComponent(previewCompanyId)}` : "/assistant";
   const assistantActions = [
     {
       description: "방문 메모 기반 후속 문장",
@@ -118,8 +130,43 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{drafts.length.toLocaleString()}개</Badge>
             </div>
           </div>
+          <form action="/assistant" className="grid gap-2 border-b border-slate-100 bg-slate-50/70 p-3 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-center" method="get" role="search">
+            {previewCompanyId ? <input name="companyId" type="hidden" value={previewCompanyId} /> : null}
+            <label className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+              <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
+              <span className="sr-only">AI 영업 초안 검색</span>
+              <input
+                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-950 outline-none placeholder:font-medium placeholder:text-slate-400"
+                defaultValue={query}
+                name="q"
+                placeholder="거래처, 지역, 초안 내용 검색"
+                type="search"
+              />
+            </label>
+            <label className="min-w-0">
+              <span className="sr-only">초안 유형</span>
+              <select className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" defaultValue={selectedType} name="type">
+                <option value="all">전체 유형</option>
+                <option value="follow-up">후속 메시지</option>
+                <option value="quote">견적 메모</option>
+                <option value="summary">방문 요약</option>
+              </select>
+            </label>
+            <div className="flex min-w-0 gap-2">
+              <button className="maju-button-primary min-h-11 flex-1 justify-center sm:flex-none" type="submit">검색</button>
+              {query || selectedType !== "all" ? (
+                <Link aria-label="검색 조건 초기화" className="maju-button-secondary min-h-11 shrink-0 justify-center px-3" href={resetSearchHref} title="검색 조건 초기화">
+                  <X aria-hidden="true" className="h-4 w-4" />
+                </Link>
+              ) : null}
+            </div>
+          </form>
+          <div aria-live="polite" className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5 text-xs font-semibold text-slate-500">
+            <span>검색 결과 <strong className="text-slate-950">{filteredDrafts.length.toLocaleString()}개</strong></span>
+            {query ? <span className="max-w-full truncate">검색어: {query}</span> : <span>거래처·지역·내용을 한 번에 찾을 수 있습니다.</span>}
+          </div>
           <div className="divide-y divide-slate-100">
-            {drafts.map((draft, index) => {
+            {filteredDrafts.map((draft, index) => {
               const presentation = draftPresentation[draft.type];
               const actionHref = draft.type === "quote"
                 ? (companyId ? `/revenue/pipeline?companyId=${encodeURIComponent(companyId)}` : "/revenue/pipeline")
@@ -171,18 +218,22 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
               </article>
               );
             })}
-            {!drafts.length ? (
+            {!filteredDrafts.length ? (
               <div className="px-5 py-10 text-center sm:px-8 sm:py-14">
                 <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-50 text-teal-700"><Sparkles className="h-6 w-6" aria-hidden="true" /></span>
-                <p className="font-semibold text-slate-950">검토할 초안이 없습니다.</p>
-                <p className="mt-1 text-sm text-slate-500">방문 결과와 메모를 남기면 후속 문장과 견적 메모가 생성됩니다.</p>
-                <Link
-                  className="maju-button-primary mt-5"
-                  href={companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline"}
-                >
-                  방문 기록 작성
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+                <p className="font-semibold text-slate-950">{drafts.length ? "검색 조건과 일치하는 초안이 없습니다." : "검토할 초안이 없습니다."}</p>
+                <p className="mt-1 text-sm text-slate-500">{drafts.length ? "검색어나 초안 유형을 바꿔 다시 확인하세요." : "방문 결과와 메모를 남기면 후속 문장과 견적 메모가 생성됩니다."}</p>
+                {drafts.length ? (
+                  <Link className="maju-button-secondary mt-5" href={resetSearchHref}>검색 조건 초기화</Link>
+                ) : (
+                  <Link
+                    className="maju-button-primary mt-5"
+                    href={companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline"}
+                  >
+                    방문 기록 작성
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                )}
               </div>
             ) : null}
           </div>

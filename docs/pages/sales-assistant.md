@@ -57,6 +57,7 @@ ACTIVE
 PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
+- [x] 2026-10-08 초안이 많아져도 거래처·지역·초안 내용과 유형으로 바로 좁힐 수 있도록 서버 URL 기반 검색을 추가하고, 검색 결과 없음과 실제 초안 없음 상태를 구분했다.
 - [x] 헤더 없던 바로가기 카드 묶음에 maju-card-header 추가
 - [x] 견적 추천 품목 10/20/30개 선택값과 추천 근거 저장·재사용
 

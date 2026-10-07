@@ -12,8 +12,17 @@ export async function PATCH(request: Request) {
   }
 
   const body = await request.json().catch(() => null);
-  if (!body?.name) {
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "저장할 설정값을 확인해주세요." }, { status: 400 });
+  }
+  if (!["company", "messaging", "telegram"].includes(body.section)) {
+    return NextResponse.json({ error: "저장할 설정 구역이 올바르지 않습니다." }, { status: 400 });
+  }
+  if (typeof body.name !== "string" || !body.name.trim()) {
     return NextResponse.json({ error: "회사명은 필수입니다." }, { status: 400 });
+  }
+  if (body.section === "company" && body.originAddress?.trim() && (!Number.isFinite(body.originLat) || !Number.isFinite(body.originLng))) {
+    return NextResponse.json({ error: "주소 검색 결과에서 물류 출발지를 선택해주세요." }, { status: 400 });
   }
 
   try {

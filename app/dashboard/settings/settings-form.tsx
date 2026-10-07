@@ -56,9 +56,10 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [addressSearching, setAddressSearching] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
+  const hasOriginCoordinates = Number.isFinite(form.originLat) && Number.isFinite(form.originLng);
+  const originSelectionRequired = hasOrigin && !hasOriginCoordinates;
   const hasCompanyName = Boolean(form.name.trim());
-  const completedItems = [hasCompanyName, hasOrigin].filter(Boolean).length;
-  const anySectionSaving = Object.values(saveStates).some((state) => state.status === "saving");
+  const completedItems = [hasCompanyName, hasOrigin && hasOriginCoordinates].filter(Boolean).length;
   const sectionDirty: Record<SettingsSection, boolean> = {
     company: form.businessType !== savedForm.businessType || form.name !== savedForm.name || form.originAddress !== savedForm.originAddress || form.originLat !== savedForm.originLat || form.originLng !== savedForm.originLng || form.ownerName !== savedForm.ownerName,
     messaging:
@@ -77,6 +78,14 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   }
 
   async function saveSection(section: SettingsSection) {
+    if (!form.name.trim()) {
+      setSaveStates((current) => ({ ...current, [section]: { status: "error", message: "회사명을 입력해주세요." } }));
+      return;
+    }
+    if (section === "company" && originSelectionRequired) {
+      setSaveStates((current) => ({ ...current, company: { status: "error", message: "주소 검색 결과에서 정확한 출발지를 선택해주세요." } }));
+      return;
+    }
     setSaveStates((current) => ({ ...current, [section]: { status: "saving", message: "저장 중입니다." } }));
 
     // API 계약은 전체 회사 설정 payload를 유지하되, 다른 카드에서 아직 저장하지 않은 입력값까지
@@ -95,29 +104,45 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
           }
         : { ...savedForm, telegramChatId: form.telegramChatId };
 
-    const response = await fetchWithTimeout(
-      "/api/customer/settings",
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payloadForm, section })
-      },
-      12000
-    ).catch(() => null);
+    let response: Response | null = null;
+    let requestError = "";
+    try {
+      response = await fetchWithTimeout(
+        "/api/customer/settings",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payloadForm, section })
+        },
+        12000
+      );
+    } catch (error) {
+      requestError = error instanceof Error ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.";
+    }
     const payload = await response?.json().catch(() => null);
 
     const ok = Boolean(response?.ok);
-    if (ok) setSavedForm(payloadForm);
+    if (ok) {
+      setSavedForm((current) => section === "company"
+        ? { ...current, businessType: payloadForm.businessType, name: payloadForm.name, originAddress: payloadForm.originAddress, originLat: payloadForm.originLat, originLng: payloadForm.originLng, ownerName: payloadForm.ownerName }
+        : section === "messaging"
+          ? { ...current, deliveryCompleteMessage: payloadForm.deliveryCompleteMessage, deliveryIssueMessage: payloadForm.deliveryIssueMessage, deliveryPartialMessage: payloadForm.deliveryPartialMessage, notificationPhone: payloadForm.notificationPhone, notificationSenderName: payloadForm.notificationSenderName, smsSenderPhone: payloadForm.smsSenderPhone }
+          : { ...current, telegramChatId: payloadForm.telegramChatId });
+    }
     setSaveStates((current) => ({
       ...current,
       [section]: {
         status: ok ? "saved" : "error",
-        message: ok ? `${SECTION_LABELS[section]} 저장이 완료됐습니다.` : payload?.error || "저장에 실패했습니다. 값을 다시 확인해주세요."
+        message: ok ? `${SECTION_LABELS[section]} 저장이 완료됐습니다.` : payload?.error || requestError || "저장에 실패했습니다. 값을 다시 확인해주세요."
       }
     }));
   }
 
   async function handleTelegramTest() {
+    if (sectionDirty.telegram) {
+      setTelegramTestMessage("변경한 chat_id를 먼저 저장한 뒤 테스트해주세요.");
+      return;
+    }
     setTelegramTesting(true);
     setTelegramTestMessage("");
 
@@ -245,7 +270,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             </div>
           </div>
           <SectionSaveFooter
-            disabled={anySectionSaving || !sectionDirty.company}
+            disabled={saveStates.company.status === "saving" || !sectionDirty.company || originSelectionRequired}
             dirty={sectionDirty.company}
             label="회사 기준정보 저장"
             onSave={() => void saveSection("company")}
@@ -324,7 +349,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             <MessageTemplateManager mode="company" />
           </div>
           <SectionSaveFooter
-            disabled={anySectionSaving || !sectionDirty.messaging}
+            disabled={saveStates.messaging.status === "saving" || !sectionDirty.messaging}
             dirty={sectionDirty.messaging}
             label="문자 설정 저장"
             onSave={() => void saveSection("messaging")}
@@ -348,12 +373,15 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.telegramChatId}
-                  onChange={(event) => updateSection("telegram", { telegramChatId: event.target.value })}
+                  onChange={(event) => {
+                    updateSection("telegram", { telegramChatId: event.target.value });
+                    setTelegramTestMessage("");
+                  }}
                   placeholder="예: -1001234567890"
                 />
                 <Button
                   className="w-full shrink-0 sm:w-auto"
-                  disabled={!form.telegramChatId.trim() || telegramTesting}
+                  disabled={!form.telegramChatId.trim() || sectionDirty.telegram || telegramTesting}
                   onClick={handleTelegramTest}
                   type="button"
                   variant="outline"
@@ -385,7 +413,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             ) : null}
           </div>
           <SectionSaveFooter
-            disabled={anySectionSaving || !sectionDirty.telegram}
+            disabled={saveStates.telegram.status === "saving" || !sectionDirty.telegram}
             dirty={sectionDirty.telegram}
             label="텔레그램 설정 저장"
             onSave={() => void saveSection("telegram")}
@@ -407,11 +435,12 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         <div className="space-y-3 p-4">
           <div className="grid grid-cols-2 gap-2">
             <CompactStatus icon={<Building2 className="h-4 w-4" />} label="회사명" ok={hasCompanyName} />
-            <CompactStatus icon={<MapPin className="h-4 w-4" />} label="출발지" ok={hasOrigin} />
+            <CompactStatus icon={<MapPin className="h-4 w-4" />} label="출발지" ok={hasOrigin && hasOriginCoordinates} />
           </div>
           <div className="rounded-lg border border-teal-100 bg-teal-50/70 px-3 py-2.5">
             <p className="text-[11px] font-black text-primary">현재 출발지</p>
             <p className="mt-1 break-words text-sm font-black leading-5 text-foreground">{hasOrigin ? form.originAddress : "주소를 입력해주세요"}</p>
+            {hasOrigin && !hasOriginCoordinates ? <p className="mt-1 text-[11px] font-bold text-amber-700">카카오 주소 검색으로 지도 좌표를 확인해주세요.</p> : null}
           </div>
           <details className="group rounded-lg border border-slate-200 bg-white">
             <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between px-3 text-xs font-black text-slate-700 marker:content-none">
