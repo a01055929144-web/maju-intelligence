@@ -134,20 +134,20 @@ export default async function ReportDetailPage({
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-3 sm:px-4 sm:py-5">
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardContent className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center lg:p-6">
+      <section className="mx-auto max-w-[1500px] space-y-3 px-3 py-3 print:max-w-none print:space-y-2 print:p-0 sm:px-4 sm:py-4">
+        <Card className="break-inside-avoid border-slate-200 bg-white shadow-sm print:shadow-none">
+          <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center lg:p-5 print:grid-cols-[minmax(0,1fr)_240px] print:p-3">
             <div>
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="bg-teal-700 text-white">핵심 결론 · {report.companyName}</Badge>
                   <Badge className="border border-slate-200 bg-white text-slate-600">실제 운영 데이터 기반</Badge>
                 </div>
                 <ReportActions companyName={report.companyName} />
               </div>
-              <h2 className="text-xl font-bold leading-snug text-slate-950 sm:text-2xl">{reportGrade} · {primaryAction.title}부터 시작하세요</h2>
+              <h2 className="text-xl font-bold leading-snug text-slate-950 sm:text-2xl print:text-xl">{reportGrade} · {primaryAction.title}부터 시작하세요</h2>
               <p className="mt-2 text-sm font-medium leading-6 text-slate-600">가장 낮은 {primaryAction.label}부터 보완하면 운영 데이터의 정확도를 함께 높일 수 있습니다.</p>
-              <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <div className="mt-4 grid grid-cols-2 gap-2 print:hidden sm:flex sm:flex-wrap">
                 <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-bold text-white transition hover:bg-teal-800" href={primaryAction.href}>
                   우선 작업 열기
                   <ArrowRight className="h-4 w-4" />
@@ -157,7 +157,7 @@ export default async function ReportDetailPage({
                 </Link>
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
               <p className="text-xs font-semibold text-slate-500">결론을 뒷받침하는 핵심 근거</p>
               <div className="mt-3 grid gap-2">
                 <ReportRunMetric label="회사 건강도" value={`${report.health.total}점`} />
@@ -176,19 +176,19 @@ export default async function ReportDetailPage({
             </div>
             <p className="text-xs font-medium text-slate-500">각 항목을 누르면 실제 작업 화면으로 이동합니다.</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
             {scoreActions.map((item) => (
               <ScoreActionCard key={item.label} {...item} />
             ))}
           </div>
         </div>
 
-        <div aria-labelledby="report-evidence-title" className="space-y-3">
+        <div aria-labelledby="report-evidence-title" className="break-inside-avoid space-y-2">
           <div>
             <p className="text-xs font-semibold text-teal-700">2. 판단 근거</p>
             <h2 className="mt-1 text-lg font-bold text-slate-950" id="report-evidence-title">운영 데이터와 점수</h2>
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 print:grid-cols-4">
           <Metric icon={Building2} label="거래처" value={`${report.customers}개`} />
           <Metric icon={MapPin} label="거래지역" value={`${report.regions}개`} />
           <Metric icon={Target} label="신규 기회" value={`${report.newOpportunities}곳`} />
@@ -206,26 +206,26 @@ export default async function ReportDetailPage({
           regions={report.regions}
         />
 
-        <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-          <Card>
-            <CardHeader>
+        <div className="grid gap-3 lg:grid-cols-[0.85fr_1.15fr] print:grid-cols-[0.85fr_1.15fr]">
+          <Card className="break-inside-avoid">
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <HeartPulse className="h-5 w-5 text-primary" />
                 회사 건강도
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-5 flex items-end gap-3">
-                <span className="text-6xl font-bold text-primary sm:text-7xl">{report.health.total}</span>
-                <span className="pb-3 text-sm font-bold text-muted-foreground">점</span>
+              <div className="mb-3 flex items-end gap-2">
+                <span className="text-5xl font-bold text-primary">{report.health.total}</span>
+                <span className="pb-2 text-sm font-bold text-muted-foreground">점</span>
               </div>
-              <div className="mb-6 rounded-md border border-primary/15 bg-primary/5 p-4">
+              <div className="mb-4 rounded-md border border-primary/15 bg-primary/5 px-3 py-2.5">
                 <p className="text-sm font-bold text-primary">{reportGrade}</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-muted-foreground">
                   영업력, 배송효율, CRM관리, 신규영업, 거래처 집중도, 리스크를 가중 평균한 회사 건강도입니다.
                 </p>
               </div>
-              <div className="space-y-4">
+              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
                 {scoreRows.map(([label, value]) => (
                   <div key={label as string}>
                     <div className="mb-1 flex justify-between text-sm font-bold">
@@ -239,19 +239,19 @@ export default async function ReportDetailPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="break-inside-avoid">
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-primary" />
                 운영 진단 요약
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3">
+            <CardContent className="grid gap-2">
               {reportSummary.map((item) => (
-                <div key={item.label} className="rounded-md border border-border bg-muted/35 p-4">
+                <div key={item.label} className="rounded-md border border-border bg-muted/35 p-3">
                   <Badge className="mb-2 bg-white text-slate-600">{item.label}</Badge>
-                  <p className="text-lg font-bold text-slate-950">{item.title}</p>
-                  <p className="mt-2 text-sm font-semibold leading-6 text-muted-foreground">{item.body}</p>
+                  <p className="text-base font-bold text-slate-950">{item.title}</p>
+                  <p className="mt-1 text-sm font-semibold leading-5 text-muted-foreground">{item.body}</p>
                 </div>
               ))}
             </CardContent>
@@ -263,9 +263,9 @@ export default async function ReportDetailPage({
             <p className="text-xs font-semibold text-teal-700">3. 권장 행동</p>
             <h2 className="mt-1 text-lg font-semibold text-slate-950" id="report-plan-title">실행 일정</h2>
           </div>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <Card>
-            <CardHeader>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] print:grid-cols-[minmax(0,1fr)_260px]">
+          <Card className="break-inside-avoid">
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-primary" />
                 우선 실행 액션
@@ -273,7 +273,7 @@ export default async function ReportDetailPage({
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-3">
               {actionPlan.map(([period, action]) => (
-                <div key={period} className="rounded-md border border-border bg-white p-4">
+                <div key={period} className="rounded-md border border-border bg-white p-3">
                   <p className="text-sm font-bold text-primary">{period}</p>
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{action}</p>
                 </div>
@@ -281,8 +281,8 @@ export default async function ReportDetailPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="break-inside-avoid">
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
                 데이터 신뢰도
@@ -302,8 +302,8 @@ export default async function ReportDetailPage({
           </div>
         </div>
 
-        <details className="maju-section-card group">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+        <details className="maju-section-card group break-inside-avoid">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 print:hidden">
             <div>
               <p className="text-xs font-semibold text-slate-500">세부 분석</p>
               <h2 className="mt-1 text-base font-semibold text-slate-950" id="report-detail-title">지역·업종·추천 리드 근거</h2>
@@ -313,7 +313,7 @@ export default async function ReportDetailPage({
               <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
             </span>
           </summary>
-          <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-3">
+          <div className="grid gap-3 border-t border-slate-100 p-3 lg:grid-cols-3 print:grid-cols-3">
           <ReportBlock title="거래처 분포" icon={MapPin}>
             {report.regionDistribution.length ? report.regionDistribution.slice(0, 6).map((item) => (
               <Line key={item.region} label={item.region} value={`${item.count}개`} hint={`잠재 ${item.potential}곳`} />
@@ -332,8 +332,8 @@ export default async function ReportDetailPage({
           </div>
         </details>
 
-        <details className="maju-section-card group">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4">
+        <details className="maju-section-card group break-inside-avoid">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 print:hidden">
             <span>
               <span className="flex items-center gap-2 text-base font-semibold text-slate-950">
                 <BarChart3 className="h-5 w-5 text-primary" />
@@ -346,7 +346,7 @@ export default async function ReportDetailPage({
               <ArrowRight className="h-4 w-4 transition group-open:rotate-90" />
             </span>
           </summary>
-          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2">
+          <div className="grid gap-2 border-t border-slate-100 p-3 sm:grid-cols-2 print:grid-cols-2">
             {report.aiInsights.length ? report.aiInsights.map((insight) => (
               <div key={insight} className="rounded-md border border-border bg-muted/35 p-4 text-sm font-semibold leading-6">
                 {insight}
@@ -391,7 +391,7 @@ function ReportBasisPanel({
   ];
 
   return (
-    <details className="maju-section-card group">
+    <details className="maju-section-card group break-inside-avoid print:hidden">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
         <div>
           <p className="maju-section-title">진단 기준</p>
@@ -434,11 +434,13 @@ function ReportBasisPanel({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
   return (
-    <Card className="min-w-0 shadow-none">
-      <CardContent className="min-w-0 p-4">
-        <Icon className="mb-4 h-5 w-5 text-primary" />
+    <Card className="min-w-0 break-inside-avoid shadow-none">
+      <CardContent className="flex min-w-0 items-center gap-3 p-3">
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-teal-50"><Icon className="h-4 w-4 text-primary" /></span>
+        <div className="min-w-0">
         <p className="truncate text-xs font-bold text-muted-foreground">{label}</p>
-        <p className="mt-1 truncate text-2xl font-bold">{value}</p>
+        <p className="truncate text-xl font-bold">{value}</p>
+        </div>
       </CardContent>
     </Card>
   );
@@ -474,17 +476,17 @@ function ScoreActionCard({
         : { badge: "bg-emerald-100 text-emerald-800", text: "양호", value: "text-emerald-700" };
 
   return (
-    <Link className="group flex min-h-40 flex-col rounded-lg border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" href={href}>
+    <Link className="group flex min-h-32 break-inside-avoid flex-col rounded-lg border border-slate-200 bg-white p-3 transition hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 print:min-h-0" href={href}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-slate-500">{label}</p>
-          <p className={`mt-1 text-3xl font-bold leading-none ${tone.value}`}>{score}<span className="ml-1 text-xs font-semibold text-slate-400">점</span></p>
+          <p className={`mt-1 text-2xl font-bold leading-none ${tone.value}`}>{score}<span className="ml-1 text-xs font-semibold text-slate-400">점</span></p>
         </div>
         <Badge className={tone.badge}>{tone.text}</Badge>
       </div>
-      <p className="mt-3 text-sm font-semibold text-slate-950">{title}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-950">{title}</p>
       <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-slate-500">{description}</p>
-      <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-semibold text-teal-800 transition group-hover:translate-x-0.5">작업 열기 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+      <span className="mt-auto inline-flex items-center gap-1 pt-2 text-xs font-semibold text-teal-800 transition group-hover:translate-x-0.5 print:hidden">작업 열기 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
     </Link>
   );
 }

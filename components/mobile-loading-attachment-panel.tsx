@@ -97,15 +97,15 @@ export function MobileLoadingAttachmentPanel({
   }, [customerId]);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4" id="loading-position">
+    <section className="rounded-xl border border-slate-200 bg-white p-3" id="loading-position">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <span className="mb-2 inline-flex rounded-full bg-blue-100 px-2 py-1 text-[11px] font-black text-blue-800">적재위치</span>
-            <p className="font-black text-slate-950">{loadingPosition || "사진/영상 확인"}</p>
+            <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-[11px] font-black text-blue-800">3 · 적재 확인</span>
+            <p className="mt-1 truncate font-black text-slate-950">{loadingPosition || "사진/영상 확인"}</p>
           </div>
         </div>
         <button aria-label="적재위치 자료 새로고침" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500" onClick={loadAttachments} type="button">
@@ -113,7 +113,7 @@ export function MobileLoadingAttachmentPanel({
         </button>
       </div>
 
-      <label className="mt-4 flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-100">
+      <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-800 transition hover:bg-blue-100">
         <input
           accept="image/*,video/*"
           className="hidden"
@@ -136,7 +136,7 @@ export function MobileLoadingAttachmentPanel({
       ) : null}
       {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{saveErrorMessage || "업로드에 실패했습니다. 로그인 상태와 Storage 연결을 확인해주세요."}</p> : null}
 
-      <div className="mt-4">
+      <div className="mt-3">
         {loadState === "loading" ? (
           <p className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -150,8 +150,15 @@ export function MobileLoadingAttachmentPanel({
             <button className="mt-2 min-h-11 rounded-lg bg-white px-4 text-xs font-black shadow-sm ring-1 ring-inset ring-rose-200" onClick={loadAttachments} type="button">다시 불러오기</button>
           </div>
         ) : null}
-        {loadState === "ready" ? (
-          <LoadingPositionGallery emptyMessage="등록된 적재위치 자료가 없습니다. 필요하면 위 버튼으로 사진이나 영상을 추가하세요." items={loadingAttachments} />
+        {loadState === "ready" && loadingAttachments.length ? (
+          <details className="group rounded-lg border border-slate-200">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-bold text-slate-600">
+              기존 적재 자료 <span>{loadingAttachments.length}건 · 보기</span>
+            </summary>
+            <div className="border-t border-slate-100 p-2">
+              <LoadingPositionGallery emptyMessage="" items={loadingAttachments} />
+            </div>
+          </details>
         ) : null}
       </div>
     </section>

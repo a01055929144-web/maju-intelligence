@@ -72,7 +72,7 @@ export function ReportActions({ companyName }: { readonly companyName: string })
       : "text-slate-600";
 
   return (
-    <div className="w-full sm:w-auto">
+    <div className="w-full print:hidden sm:w-auto">
       <div className="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
         <button className="maju-button-secondary min-h-11 touch-manipulation justify-center px-4 text-sm active:scale-[0.98]" onClick={saveAsPdf} type="button">
           <Printer aria-hidden="true" className="h-4 w-4" />

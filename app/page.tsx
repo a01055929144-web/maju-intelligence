@@ -1463,18 +1463,18 @@ function Onboarding({
             typeLabel={template.label}
           />
           <div className="maju-section-card overflow-hidden">
-            <div className="grid divide-y divide-slate-200 md:grid-cols-4 md:divide-x md:divide-y-0">
+            <div className="grid divide-y divide-slate-200 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
               {flowSteps.map((step, index) => {
                 const active = !step.done && flowSteps.slice(0, index).every((item) => item.done);
                 return (
-                  <div className={`px-4 py-3 ${active ? "bg-teal-50" : "bg-white"}`} key={step.label}>
+                  <div className={`flex items-center gap-2 px-3 py-2 ${active ? "bg-teal-50" : "bg-white"}`} key={step.label}>
                     <div className="flex items-center gap-2">
                       <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-black ${step.done ? "bg-emerald-600 text-white" : active ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-500"}`}>
                         {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
                       </span>
                       <span className={`text-xs font-black ${active ? "text-teal-800" : "text-slate-700"}`}>{step.label}</span>
                     </div>
-                    <p className="mt-1.5 truncate text-sm font-bold text-slate-950">{step.value}</p>
+                    <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-700">{step.value}</p>
                   </div>
                 );
               })}
@@ -1505,33 +1505,28 @@ function Onboarding({
             </div>
           </div>
 
-        <div className="maju-section-card scroll-mt-4 border-l-4 border-l-teal-700 p-4" id="entry-panel">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <Badge className="mb-3 bg-teal-700 text-white">입력</Badge>
-              <h2 className="text-xl font-black text-slate-950">{template.label}</h2>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">등록 방식에 맞는 입력만 남겼습니다. 올리고, 확인하고, 저장하면 됩니다.</p>
+        <div className="maju-section-card scroll-mt-4 border-l-4 border-l-teal-700 p-3" id="entry-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Badge className="bg-teal-700 text-white">입력</Badge>
+              <h2 className="truncate text-base font-black text-slate-950">{template.label}</h2>
+              <span className="hidden text-xs font-semibold text-slate-400 sm:inline">· {entryMode === "excel" ? "엑셀 대량" : entryMode === "manual" ? "수기 1건" : "OCR 보조"}</span>
             </div>
-            <Badge className="w-fit bg-slate-100 px-3 py-1.5 text-slate-700">{entryMode === "excel" ? "엑셀 대량" : entryMode === "manual" ? "수기 1건" : "OCR 보조"}</Badge>
+            <Badge className={hasPersistedResult ? "bg-emerald-100 text-emerald-800" : canAnalyze ? "bg-teal-100 text-teal-800" : rawRows.length ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}>
+              {hasPersistedResult ? "저장 완료" : canAnalyze ? "저장 가능" : rawRows.length ? `${rawRows.length.toLocaleString()}행 검수 필요` : "등록 전"}
+            </Badge>
           </div>
-          <RegistrationEntrySummary
-            activeType={uploadType}
-            canAnalyze={canAnalyze}
-            entryMode={entryMode}
-            persisted={hasPersistedResult}
-            rowsWaiting={rawRows.length}
-          />
 
           {entryMode === "excel" ? (
             <>
-              <div className="mt-4">
-                <label className="maju-panel flex min-h-36 cursor-pointer items-center gap-4 border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-left transition hover:border-slate-400 hover:bg-white">
+              <div className="mt-3">
+                <label className="maju-panel flex min-h-24 cursor-pointer items-center gap-3 border-2 border-dashed border-slate-300 bg-slate-50 p-3 text-left transition hover:border-slate-400 hover:bg-white">
                   <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-white text-slate-800 shadow-sm ring-1 ring-inset ring-slate-200">
                     <Upload className="h-6 w-6" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-lg font-black text-slate-950">엑셀 선택</span>
-                    <span className="mt-1 block text-sm font-semibold leading-6 text-slate-500">ERP 파일을 올리면 전체 행 미리보기와 헤더 매칭으로 이동합니다.</span>
+                    <span className="block text-base font-black text-slate-950">엑셀 선택</span>
+                    <span className="mt-0.5 block text-xs font-semibold leading-5 text-slate-500">업로드 후 헤더 매칭과 오류 검수가 자동으로 이어집니다.</span>
                   </span>
                   <span className="hidden rounded-md bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-inset ring-slate-200 sm:inline-flex">.xlsx · .csv</span>
                   <input className="sr-only" type="file" accept=".xlsx,.csv" onChange={onFile} />
@@ -2009,23 +2004,24 @@ function DataRegistrationQuickPanel({
 
   return (
     <div className="maju-section-card overflow-hidden border-l-4 border-l-teal-700">
-      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="p-3">
-          <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center">
+      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="p-2.5">
+          <div className="flex flex-col gap-2 2xl:flex-row 2xl:items-center">
             <div className="flex min-w-[150px] items-center gap-2">
               <Badge className="bg-teal-700 text-white ring-1 ring-inset ring-teal-700">등록 설정</Badge>
               <Badge className={`w-fit px-2.5 py-1 text-xs font-semibold ring-1 ${statusTone}`}>{nextLabel}</Badge>
             </div>
-            <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+            <div className="grid flex-1 gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
               <div className="min-w-0">
                 <p className="mb-1 text-xs font-semibold text-slate-500">등록 데이터</p>
-                <div className="grid gap-1.5 sm:grid-cols-2">
+                <div className="grid gap-1 sm:grid-cols-2">
                   {typeOptions.map((option) => {
                     const selected = activeType === option.id;
                     const Icon = option.icon;
                     return (
                       <button
-                        className={`flex min-h-14 min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left transition ${
+                        aria-pressed={selected}
+                        className={`flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition ${
                           selected ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                         key={option.id}
@@ -2035,7 +2031,7 @@ function DataRegistrationQuickPanel({
                         <Icon className={selected ? "h-4 w-4 shrink-0 text-white" : "h-4 w-4 shrink-0 text-slate-400"} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-bold">{option.label}</span>
-                          <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{option.description}</span>
+                          <span className={`hidden truncate text-xs font-medium lg:block ${selected ? "text-white/80" : "text-slate-500"}`}>{option.description}</span>
                         </span>
                         <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${selected ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500"}`}>
                           {option.value}
@@ -2047,13 +2043,14 @@ function DataRegistrationQuickPanel({
               </div>
               <div>
                 <p className="mb-1 text-xs font-semibold text-slate-500">입력 방식</p>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-1">
                   {modeOptions.map((option) => {
                     const selected = entryMode === option.id;
                     const Icon = option.icon;
                     return (
                       <button
-                        className={`flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-md border px-2 py-2 text-left transition ${
+                        aria-pressed={selected}
+                        className={`flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-left transition ${
                           selected ? "border-teal-700 bg-teal-700 text-white shadow-[0_8px_18px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                         key={option.id}
@@ -2063,7 +2060,7 @@ function DataRegistrationQuickPanel({
                         <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-bold">{option.label}</span>
-                          <span className={`mt-0.5 block truncate text-xs font-medium ${selected ? "text-white/80" : "text-slate-500"}`}>{option.description}</span>
+                          <span className={`hidden truncate text-xs font-medium 2xl:block ${selected ? "text-white/80" : "text-slate-500"}`}>{option.description}</span>
                         </span>
                       </button>
                     );
@@ -2074,7 +2071,7 @@ function DataRegistrationQuickPanel({
           </div>
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50/80 p-3 xl:border-l xl:border-t-0">
+        <div aria-busy={isAnalyzing} aria-live="polite" className="border-t border-slate-200 bg-slate-50/80 p-2.5 xl:border-l xl:border-t-0">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-500">현재 작업</p>
@@ -2082,20 +2079,20 @@ function DataRegistrationQuickPanel({
             </div>
             <Badge className={`shrink-0 px-2 py-1 text-xs font-semibold ring-1 ${statusTone}`}>{nextLabel}</Badge>
           </div>
-          <div className="mt-2 overflow-hidden rounded-md border border-slate-200 bg-white">
+          <div className="mt-1.5 grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-white">
             {[
               ["대기 행", rows ? `${rows.toLocaleString()}행` : "없음"],
               ["파일", rows ? filename : "선택 전"]
             ].map(([label, value]) => (
-              <div className="grid grid-cols-[92px_minmax(0,1fr)] border-b border-slate-100 last:border-b-0" key={label}>
-                <span className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">{label}</span>
-                <span className="truncate px-3 py-2 text-xs font-bold text-slate-900">{value}</span>
+              <div className="min-w-0 border-r border-slate-100 p-2 last:border-r-0" key={label}>
+                <span className="block text-xs font-semibold text-slate-500">{label}</span>
+                <span className="mt-0.5 block truncate text-xs font-bold text-slate-900">{value}</span>
               </div>
             ))}
           </div>
-          <p className="mt-2 line-clamp-2 min-h-10 rounded-md bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-600 ring-1 ring-inset ring-slate-200">{nextDescription}</p>
-          <Button className="maju-button-primary mt-2 h-10 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
-            {isAnalyzing ? "저장 중" : canAnalyze ? "저장하고 리포트 갱신" : registrationStatus.actionLabel}
+          <p className="mt-1.5 truncate text-xs font-bold text-slate-600">{nextDescription}</p>
+          <Button className="maju-button-primary mt-1.5 h-9 w-full" disabled={!canAnalyze || isAnalyzing} onClick={onAnalyze}>
+            {isAnalyzing ? "저장 처리 중…" : canAnalyze ? "저장하고 리포트 갱신" : registrationStatus.actionLabel}
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
@@ -2564,40 +2561,6 @@ function DataRegistrationFlowCard({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function RegistrationEntrySummary({
-  activeType,
-  canAnalyze,
-  entryMode,
-  persisted,
-  rowsWaiting
-}: {
-  activeType: UploadTemplateType;
-  canAnalyze: boolean;
-  entryMode: EntryMode;
-  persisted: boolean;
-  rowsWaiting: number;
-}) {
-  const typeLabel = activeType === "customer-master" ? "거래처 기본정보" : "매출원장";
-  const modeLabel = entryMode === "excel" ? "엑셀 대량" : entryMode === "manual" ? "수기 1건" : "OCR 보조";
-  const stateLabel = persisted ? "저장 완료" : canAnalyze ? "저장 가능" : rowsWaiting ? "검수 필요" : "등록 전";
-  const stateClassName = persisted
-    ? "bg-emerald-100 text-emerald-800"
-    : canAnalyze
-      ? "bg-teal-100 text-teal-800"
-      : rowsWaiting
-        ? "bg-amber-100 text-amber-800"
-        : "bg-slate-100 text-slate-600";
-
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-      <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{typeLabel}</Badge>
-      <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{modeLabel}</Badge>
-      <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{rowsWaiting.toLocaleString()}행</Badge>
-      <Badge className={stateClassName}>{stateLabel}</Badge>
     </div>
   );
 }

@@ -52,14 +52,14 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
   }
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4" id="visit-memo">
+    <section className="rounded-xl bg-white p-3" id="visit-memo">
       <div className="flex items-start gap-3">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700">
           <MessageSquareText className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <span className="mb-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">메모</span>
-          <p className="truncate font-semibold text-slate-950">{customerName}</p>
+          <span className="inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">선택 · 방문 메모</span>
+          <p className="mt-1 truncate font-semibold text-slate-950">{customerName}</p>
         </div>
       </div>
 
@@ -76,10 +76,10 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
           ))}
         </select>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {quickMemos.map((item) => (
             <button
-              className="min-h-[2.75rem] rounded-full border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+              className="min-h-11 shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
               key={item}
               onClick={() => setMemo(item)}
               type="button"
@@ -90,7 +90,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
         </div>
 
         <textarea
-          className="min-h-[108px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+          className="min-h-[84px] resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
           placeholder="방문 메모"
           value={memo}
           onChange={(event) => setMemo(event.target.value)}

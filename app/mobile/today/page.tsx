@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CheckCircle2, History, MessageSquareText, PackageCheck, Route, Store } from "lucide-react";
+import { Building2, History, MessageSquareText, Route, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
@@ -71,8 +71,6 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         .find((stop) => !completedCustomerIds.has(stop.id))
     : undefined;
   const selectedStopCompleted = selectedStop ? completedCustomerIds.has(selectedStop.id) : false;
-  const completedCount = todayStops.filter((stop) => completedCustomerIds.has(stop.id)).length;
-  const pendingCount = Math.max(0, todayStops.length - completedCount);
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
 
@@ -106,26 +104,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </div>
           ) : null}
 
-          {sourceReady && isPersonalized ? (
-            <section className={`rounded-xl border px-4 py-3 ${pendingCount ? "border-blue-400/20 bg-blue-400/10" : "border-teal-400/20 bg-teal-400/10"}`} aria-label="오늘 배송 현황">
-              <div className="flex items-center gap-3">
-                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${pendingCount ? "bg-blue-400/15 text-blue-300" : "bg-teal-400/15 text-teal-300"}`}>
-                  {pendingCount ? <PackageCheck className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold">{pendingCount ? `다음 매장부터 ${pendingCount}곳 남음` : "오늘 배송을 모두 완료했습니다"}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-slate-400">완료 {completedCount}곳 · 전체 {todayStops.length}곳</p>
-                </div>
-                {pendingCount ? <a className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-white px-3 text-xs font-bold text-slate-950" href="#selected-customer">다음 매장</a> : null}
-              </div>
-            </section>
-          ) : null}
-
           <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
             <section className="mobile-card scroll-mt-24 overflow-hidden rounded-xl border" id="selected-customer">
-              <div className="border-b border-[var(--mobile-border)] px-4 py-3">
+              <div className="border-b border-[var(--mobile-border)] px-3 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
             <p className={`text-xs font-semibold ${selectedStopCompleted ? "text-teal-400" : "mobile-warning"}`}>
@@ -138,13 +121,9 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 </div>
               </div>
               <div className="p-3">
-                {!selectedStopCompleted ? <p className="mb-2 text-xs font-bold text-slate-400">먼저 지도나 전화로 방문을 시작하세요.</p> : null}
-                <ol aria-label="현장 실행 순서" className="mb-3 grid grid-cols-4 gap-1 text-center text-[11px] font-bold text-slate-400">
-                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">1 매장 선택</li>
-                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">2 방문 시작</li>
-                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">3 적재 확인</li>
-                  <li className="rounded-lg bg-slate-800 px-1 py-2 text-white">4 완료 저장</li>
-                </ol>
+                <p className="mb-2 text-[11px] font-bold tracking-tight text-slate-400" aria-label="현장 실행 순서">
+                  코스 선택 <span aria-hidden="true">→</span> 지도·전화 <span aria-hidden="true">→</span> 적재 확인 <span aria-hidden="true">→</span> 완료 저장
+                </p>
                 <MobileRouteActionPanel
                   address={selectedStop.address || selectedStop.region || selectedStop.name}
                   customerId={selectedStop.id}

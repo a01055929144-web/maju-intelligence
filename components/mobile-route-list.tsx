@@ -122,10 +122,10 @@ export function MobileRouteList({ completedCustomerIds = [], driverName, initial
     rollback("순서 변경을 취소했습니다.");
   }
 
-  return <section className="mobile-card scroll-mt-24 rounded-2xl p-4 shadow-sm" id="route-list">
+  return <section className="mobile-card scroll-mt-24 rounded-2xl p-3 shadow-sm" id="route-list">
     <div className="flex items-center justify-between gap-3"><div><p className="mobile-accent text-xs font-semibold">오늘의 경로</p><p className="mt-1 text-lg font-bold">{stops.length ? `${completedCount} / ${stops.length}곳 완료` : "오늘 배송 없음"}</p></div><span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${pendingCount ? "mobile-accent-soft" : "bg-teal-500/15 text-teal-300"}`}>{pendingCount ? `${pendingCount}곳 대기` : stops.length ? "모두 완료" : "배정 0곳"}</span></div>
     <div className="mobile-card-raised mt-3 h-2 overflow-hidden rounded-full"><div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${stops.length ? completedCount / stops.length * 100 : 0}%` }} /></div>
-    {stops.length ? <p className="mobile-muted mt-2 text-xs font-semibold">{pendingCount ? `${activeIndex + 1}번째 매장을 선택 중 · 완료 후 다음 미완료 매장으로 이동` : "모든 매장을 완료했습니다. 매장을 눌러 기록을 다시 확인할 수 있습니다."}</p> : null}
+    {stops.length ? <p className="mobile-muted mt-2 text-xs font-semibold">{pendingCount ? `${activeIndex + 1}번째 매장 · 완료하면 다음 매장으로 자동 이동` : "모두 완료 · 매장을 누르면 기록 확인"}</p> : null}
     <div className="mt-3 flex items-start overflow-hidden pb-1">
       {stops.slice(Math.max(0, activeIndex - 1), activeIndex + 2).map((stop, visibleIndex, visibleStops) => {
         const index = stops.findIndex((item) => item.id === stop.id);

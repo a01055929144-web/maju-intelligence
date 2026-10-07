@@ -49,16 +49,16 @@ export function Report({
   ] as const;
 
   return (
-    <section className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="space-y-3">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-md border border-slate-200 bg-white p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <Badge className={`mb-3 ${meta.persisted ? "bg-teal-50 text-teal-700" : "bg-amber-100 text-amber-800"}`}>
+              <Badge className={`mb-2 ${meta.persisted ? "bg-teal-50 text-teal-700" : "bg-amber-100 text-amber-800"}`}>
                 {meta.persisted ? "저장 완료 · 운영 반영됨" : "저장 확인 필요"}
               </Badge>
-              <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">{analysis.companyName} AI 리포트</h1>
-              <p className="mt-2 text-sm font-semibold text-slate-500">
+              <h1 className="text-xl font-black text-slate-950 sm:text-2xl">{analysis.companyName} AI 리포트</h1>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
                 {isSalesReport ? "매출 원장 업데이트" : "거래처 등록"} 기준 · 거래처 {analysis.customers}곳 · 거래지역 {analysis.regions}개 · 분석 완료
               </p>
             </div>
@@ -82,7 +82,7 @@ export function Report({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-4">
             <ResultMetric label="처리 데이터" value={`${meta.rows.toLocaleString()}행`} />
             <ResultMetric label="저장 상태" value={meta.persisted ? "저장 완료" : "저장 확인 필요"} />
             <ResultMetric label="품질 점수" value={meta.qualityScore ? `${meta.qualityScore}%` : "확인 필요"} />
@@ -100,18 +100,18 @@ export function Report({
           />
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold text-slate-500">회사 건강도</p>
-              <div className="mt-3 flex items-end gap-2">
-                <span className="text-6xl font-black text-teal-700">{analysis.health.total}</span>
+              <div className="mt-2 flex items-end gap-2">
+                <span className="text-5xl font-black text-teal-700">{analysis.health.total}</span>
                 <span className="pb-2 text-sm font-black text-slate-500">점</span>
               </div>
             </div>
             <HeartPulse className="h-6 w-6 text-teal-700" />
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-1">
             {scoreRows.map(([label, value]) => (
               <div key={label as string}>
                 <div className="mb-1 flex justify-between text-xs font-bold text-slate-500">
@@ -127,8 +127,8 @@ export function Report({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+        <div className="grid gap-3 lg:grid-cols-2">
           <ReportSection icon={MapPin} title="거래처 분포">
             {analysis.regionDistribution.slice(0, 6).map((item) => (
               <MetricLine key={item.region} label={item.region} value={`${item.count}곳`} hint={`잠재 ${item.potential}곳 · 공백 ${item.whitespace}곳`} />
@@ -158,7 +158,7 @@ export function Report({
           </ReportSection>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Card className="shadow-none">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -283,17 +283,17 @@ function ReportDataBasisCard({
   ];
 
   return (
-    <div className="mt-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-black text-blue-950">리포트 데이터 기준</p>
-          <p className="mt-1 text-xs font-bold leading-5 text-blue-800">대표가 보는 점수는 등록된 데이터 종류와 저장 상태를 기준으로 해석해야 합니다.</p>
-        </div>
+    <details className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3">
+        <span className="block">
+          <span className="block text-sm font-black text-blue-950">리포트 데이터 기준</span>
+          <span className="mt-0.5 block text-xs font-bold text-blue-800">기준 데이터와 저장 후 반영 경로 보기</span>
+        </span>
         <Badge className={persisted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
           {persisted ? "운영 반영 가능" : "저장 확인 필요"}
         </Badge>
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+      </summary>
+      <div className="grid gap-2 border-t border-blue-100 p-3 lg:grid-cols-3">
         {basisRows.map((row) => (
           <div className="rounded-md border border-white/80 bg-white p-3" key={row.label}>
             <p className="text-[11px] font-black text-slate-400">{row.label}</p>
@@ -302,7 +302,7 @@ function ReportDataBasisCard({
           </div>
         ))}
       </div>
-      <div className="rounded-lg border border-white/80 bg-white/80 p-3">
+      <div className="mx-3 mb-3 rounded-lg border border-white/80 bg-white/80 p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-black text-slate-950">저장 후 반영 확인 순서</p>
@@ -322,7 +322,7 @@ function ReportDataBasisCard({
           ))}
         </div>
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -342,7 +342,7 @@ function ReportSection({ icon: Icon, title, children }: { icon: typeof MapPin; t
 
 function ResultMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
+    <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
       <p className="text-xs font-black text-slate-400">{label}</p>
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
     </div>

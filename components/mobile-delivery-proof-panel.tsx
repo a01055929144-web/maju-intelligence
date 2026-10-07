@@ -341,15 +341,15 @@ export function MobileDeliveryProofPanel({
   }, [customerId]);
 
   return (
-    <section aria-busy={saving} className={`mobile-card rounded-2xl border p-4 ${files.length ? "has-files" : ""}`} id="delivery-proof">
+    <section aria-busy={saving} className={`mobile-card rounded-2xl border p-3 ${files.length ? "has-files" : ""}`} id="delivery-proof">
       <div className="proof-heading flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-400/15 text-amber-400">
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <span className="mb-1 inline-flex rounded-full bg-amber-400/10 px-2 py-1 text-[11px] font-black text-amber-400">방문 완료</span>
-            <p className="truncate font-black">사진을 찍고 완료하세요</p>
+            <span className="mb-1 inline-flex rounded-full bg-amber-400/10 px-2 py-1 text-[11px] font-black text-amber-400">4 · 완료 저장</span>
+            <p className="truncate font-black">사진 촬영 후 바로 완료</p>
             <p className="mobile-muted mt-1 text-xs font-bold">적재 위치: {loadingPosition || "점주 요청 위치"}</p>
           </div>
         </div>
@@ -382,7 +382,7 @@ export function MobileDeliveryProofPanel({
         </div>
       ) : null}
 
-      <details className="mobile-card-raised group mt-3 rounded-xl border" open={files.length > 0}>
+      <details className="mobile-card-raised group mt-3 rounded-xl border">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black">
           2. 상태 · 메시지 (선택)
           <span className="text-blue-700 group-open:hidden">열기</span>

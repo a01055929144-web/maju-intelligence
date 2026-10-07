@@ -29,9 +29,9 @@ export function MobileRouteActionPanel({
 
   return (
     <section id="contact-actions">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[1fr_1fr_44px] gap-2">
         <a
-          className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-bold text-white shadow-sm"
+          className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-blue-600 px-2 text-sm font-bold text-white shadow-sm"
           href={mapUrl}
           rel="noreferrer"
           target="_blank"
@@ -40,29 +40,29 @@ export function MobileRouteActionPanel({
           지도 열기
         </a>
         <a
-          className={`flex min-h-14 items-center justify-center gap-2 rounded-xl bg-teal-600 px-3 text-sm font-bold text-white shadow-sm ${phone ? "" : "pointer-events-none opacity-45"}`}
+          className={`flex min-h-14 items-center justify-center gap-2 rounded-xl bg-teal-600 px-2 text-sm font-bold text-white shadow-sm ${phone ? "" : "pointer-events-none opacity-45"}`}
           href={phone ? `tel:${phone}` : "#"}
         >
           <Phone className="h-4 w-4" />
           전화하기
         </a>
         <button
-          className="mobile-card-raised col-span-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold"
+          aria-label="주소 복사"
+          className="mobile-card-raised grid min-h-14 place-items-center rounded-xl border"
           onClick={copyAddress}
           type="button"
         >
           <Copy className="h-4 w-4" />
-          주소복사
         </button>
         <a
-          className="mobile-card-raised flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold"
+          className="mobile-card-raised col-span-1 flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold"
           href="#loading-position"
         >
           <Camera className="h-4 w-4" />
           적재위치
         </a>
         <a
-          className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-bold text-white shadow-sm"
+          className="col-span-2 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-bold text-white shadow-sm"
           href="#delivery-proof"
         >
           <CheckCircle2 className="h-4 w-4" />
