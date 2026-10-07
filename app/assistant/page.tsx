@@ -13,6 +13,8 @@ const typeLabels = {
   summary: "방문 요약"
 };
 
+const priorityWeight = { quote: 0, "follow-up": 1, summary: 2 } as const;
+
 const draftPresentation = {
   quote: {
     actionLabel: "견적 후속 열기",
@@ -48,12 +50,14 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
   const requestedType = resolvedSearchParams?.type;
   const selectedType = requestedType === "follow-up" || requestedType === "quote" || requestedType === "summary" ? requestedType : "all";
   const normalizedQuery = query.toLocaleLowerCase("ko-KR");
-  const filteredDrafts = drafts.filter((draft) => {
-    if (selectedType !== "all" && draft.type !== selectedType) return false;
-    if (!normalizedQuery) return true;
-    return [draft.leadName, draft.region, draft.title, draft.body, draft.nextAction, typeLabels[draft.type]]
-      .some((value) => value.toLocaleLowerCase("ko-KR").includes(normalizedQuery));
-  });
+  const filteredDrafts = drafts
+    .filter((draft) => {
+      if (selectedType !== "all" && draft.type !== selectedType) return false;
+      if (!normalizedQuery) return true;
+      return [draft.leadName, draft.region, draft.title, draft.body, draft.nextAction, typeLabels[draft.type]]
+        .some((value) => value.toLocaleLowerCase("ko-KR").includes(normalizedQuery));
+    })
+    .sort((left, right) => priorityWeight[left.type] - priorityWeight[right.type]);
   const followUps = drafts.filter((draft) => draft.type === "follow-up").length;
   const quotes = drafts.filter((draft) => draft.type === "quote").length;
   const hasLiveDraftData = drafts.length > 0;
@@ -163,7 +167,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
           </form>
           <div aria-live="polite" className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5 text-xs font-semibold text-slate-500">
             <span>검색 결과 <strong className="text-slate-950">{filteredDrafts.length.toLocaleString()}개</strong></span>
-            {query ? <span className="max-w-full truncate">검색어: {query}</span> : <span>거래처·지역·내용을 한 번에 찾을 수 있습니다.</span>}
+            {query ? <span className="max-w-full truncate">검색어: {query}</span> : <span>견적 요청 → 후속 메시지 → 방문 요약 순으로 먼저 처리할 일을 보여줍니다.</span>}
           </div>
           <div className="divide-y divide-slate-100">
             {filteredDrafts.map((draft, index) => {
