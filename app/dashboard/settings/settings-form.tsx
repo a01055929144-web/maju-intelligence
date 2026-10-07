@@ -12,6 +12,15 @@ import { CompanySettings } from "@/lib/store";
 
 type SettingsSection = "company" | "messaging" | "telegram";
 type SectionSaveState = { status: "idle" | "saving" | "saved" | "error"; message: string };
+type AddressSearchResult = {
+  address: string;
+  buildingName?: string;
+  jibunAddress?: string;
+  latitude: number;
+  longitude: number;
+  postalCode?: string;
+  roadAddress?: string;
+};
 
 const SECTION_LABELS: Record<SettingsSection, string> = {
   company: "회사 기준정보",
@@ -29,6 +38,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     notificationPhone: initial.notificationPhone || "",
     notificationSenderName: initial.notificationSenderName || initial.name,
     originAddress: initial.originAddress,
+    originLat: initial.originLat,
+    originLng: initial.originLng,
     ownerName: initial.ownerName,
     smsSenderPhone: initial.smsSenderPhone || "",
     telegramChatId: initial.telegramChatId || ""
@@ -41,12 +52,15 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   });
   const [telegramTestMessage, setTelegramTestMessage] = useState("");
   const [telegramTesting, setTelegramTesting] = useState(false);
+  const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
+  const [addressSearchMessage, setAddressSearchMessage] = useState("");
+  const [addressSearching, setAddressSearching] = useState(false);
   const hasOrigin = Boolean(form.originAddress.trim());
   const hasCompanyName = Boolean(form.name.trim());
   const completedItems = [hasCompanyName, hasOrigin].filter(Boolean).length;
   const anySectionSaving = Object.values(saveStates).some((state) => state.status === "saving");
   const sectionDirty: Record<SettingsSection, boolean> = {
-    company: form.businessType !== savedForm.businessType || form.name !== savedForm.name || form.originAddress !== savedForm.originAddress || form.ownerName !== savedForm.ownerName,
+    company: form.businessType !== savedForm.businessType || form.name !== savedForm.name || form.originAddress !== savedForm.originAddress || form.originLat !== savedForm.originLat || form.originLng !== savedForm.originLng || form.ownerName !== savedForm.ownerName,
     messaging:
       form.deliveryCompleteMessage !== savedForm.deliveryCompleteMessage ||
       form.deliveryIssueMessage !== savedForm.deliveryIssueMessage ||
@@ -68,7 +82,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     // API 계약은 전체 회사 설정 payload를 유지하되, 다른 카드에서 아직 저장하지 않은 입력값까지
     // 함께 반영되지 않도록 마지막 저장본에 현재 카드 필드만 합칩니다.
     const payloadForm = section === "company"
-      ? { ...savedForm, businessType: form.businessType, name: form.name, originAddress: form.originAddress, ownerName: form.ownerName }
+      ? { ...savedForm, businessType: form.businessType, name: form.name, originAddress: form.originAddress, originLat: form.originLat, originLng: form.originLng, ownerName: form.ownerName }
       : section === "messaging"
         ? {
             ...savedForm,
@@ -112,6 +126,31 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
 
     setTelegramTesting(false);
     setTelegramTestMessage(response?.ok ? "테스트 메시지를 보냈습니다. 텔레그램 그룹을 확인하세요." : payload?.message || "테스트 발송에 실패했습니다.");
+  }
+
+  async function searchOriginAddress() {
+    const query = form.originAddress.trim();
+    if (query.length < 2) {
+      setAddressResults([]);
+      setAddressSearchMessage("주소를 2글자 이상 입력하세요.");
+      return;
+    }
+
+    setAddressSearching(true);
+    setAddressSearchMessage("카카오 주소를 검색 중입니다.");
+    const response = await fetchWithTimeout(`/api/address-search?query=${encodeURIComponent(query)}`, { cache: "no-store" }, 12000).catch(() => null);
+    const payload = await response?.json().catch(() => null);
+    setAddressSearching(false);
+
+    if (!response?.ok) {
+      setAddressResults([]);
+      setAddressSearchMessage(payload?.message || "주소 검색에 실패했습니다.");
+      return;
+    }
+
+    const results = Array.isArray(payload?.results) ? payload.results as AddressSearchResult[] : [];
+    setAddressResults(results);
+    setAddressSearchMessage(results.length ? "검색 결과에서 정확한 주소를 선택하세요." : "검색 결과가 없습니다. 도로명이나 지번을 다시 확인하세요.");
   }
 
   return (
@@ -159,15 +198,51 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                 />
               </label>
             </div>
-            <label className="space-y-1.5">
+            <div className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">물류 출발지 주소</span>
-              <input
-                className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                value={form.originAddress}
-                onChange={(event) => updateSection("company", { originAddress: event.target.value })}
-                placeholder="예: 경기도 하남시 초이로 133 1층"
-              />
-            </label>
+              <div className="flex gap-2">
+                <input
+                  className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                  value={form.originAddress}
+                  onChange={(event) => {
+                    updateSection("company", { originAddress: event.target.value, originLat: undefined, originLng: undefined });
+                    setAddressResults([]);
+                    setAddressSearchMessage("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void searchOriginAddress();
+                    }
+                  }}
+                />
+                <Button disabled={addressSearching} onClick={() => void searchOriginAddress()} type="button" variant="outline">
+                  {addressSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                  {addressSearching ? "검색 중" : "주소 검색"}
+                </Button>
+              </div>
+              {addressSearchMessage ? <p aria-live="polite" className="text-xs font-semibold text-slate-500">{addressSearchMessage}</p> : null}
+              {addressResults.length ? (
+                <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  {addressResults.map((result, index) => (
+                    <button
+                      className="block w-full px-3 py-2.5 text-left transition hover:bg-teal-50"
+                      key={`${result.address}-${index}`}
+                      onClick={() => {
+                        updateSection("company", { originAddress: result.address, originLat: result.latitude, originLng: result.longitude });
+                        setAddressResults([]);
+                        setAddressSearchMessage("카카오 주소와 지도 좌표를 선택했습니다. 저장 버튼을 눌러주세요.");
+                      }}
+                      type="button"
+                    >
+                      <span className="block text-sm font-bold text-slate-900">{result.address}</span>
+                      {result.jibunAddress && result.jibunAddress !== result.address ? <span className="mt-0.5 block text-xs font-semibold text-slate-500">지번 {result.jibunAddress}</span> : null}
+                      {result.buildingName || result.postalCode ? <span className="mt-0.5 block text-[11px] font-semibold text-slate-400">{[result.buildingName, result.postalCode && `우편번호 ${result.postalCode}`].filter(Boolean).join(" · ")}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
           <SectionSaveFooter
             disabled={anySectionSaving || !sectionDirty.company}

@@ -26,6 +26,8 @@ export async function PATCH(request: Request) {
       notificationPhone: body.notificationPhone,
       notificationSenderName: body.notificationSenderName,
       originAddress: body.originAddress,
+      originLat: body.originLat,
+      originLng: body.originLng,
       ownerName: body.ownerName,
       smsSenderPhone: body.smsSenderPhone,
       telegramChatId: body.telegramChatId,

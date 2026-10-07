@@ -91,6 +91,8 @@ export type CompanySettings = {
   notificationSenderName?: string;
   ownerName: string;
   originAddress: string;
+  originLat?: number;
+  originLng?: number;
   smsSenderPhone?: string;
   status: string;
   telegramChatId?: string;
@@ -106,6 +108,8 @@ export type CompanySettingsInput = {
   notificationPhone?: string;
   notificationSenderName?: string;
   originAddress?: string;
+  originLat?: number;
+  originLng?: number;
   ownerName?: string;
   smsSenderPhone?: string;
   telegramChatId?: string;
@@ -9915,6 +9919,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     notificationSenderName: fallbackName,
     ownerName: "정두영",
     originAddress: process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층",
+    originLat: undefined,
+    originLng: undefined,
     smsSenderPhone: process.env.SOLAPI_SENDER_PHONE || "",
     status: "fallback",
     updatedAt: "기준 데이터",
@@ -9936,6 +9942,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     notification_sender_name?: string | null;
     owner_name: string | null;
     origin_address: string | null;
+    origin_lat?: number | null;
+    origin_lng?: number | null;
     sms_sender_phone?: string | null;
     status: string;
     telegram_chat_id?: string | null;
@@ -9946,7 +9954,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
 
   try {
     rows = await supabaseRequest<Array<CompanyRow>>(
-      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,sms_sender_phone,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,origin_lat,origin_lng,sms_sender_phone,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     );
   } catch (error) {
     if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
@@ -9975,6 +9983,8 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     notificationSenderName: row.notification_sender_name || row.name || fallback.notificationSenderName,
     ownerName: row.owner_name || "",
     originAddress: row.origin_address || "",
+    originLat: row.origin_lat == null ? undefined : Number(row.origin_lat),
+    originLng: row.origin_lng == null ? undefined : Number(row.origin_lng),
     smsSenderPhone: row.sms_sender_phone || fallback.smsSenderPhone,
     status: row.status,
     telegramChatId: row.telegram_chat_id || undefined,
@@ -10006,7 +10016,9 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
           ...basePayload,
           business_type: input.businessType?.trim() || null,
           owner_name: input.ownerName?.trim() || null,
-          origin_address: input.originAddress?.trim() || null
+          origin_address: input.originAddress?.trim() || null,
+          origin_lat: typeof input.originLat === "number" && Number.isFinite(input.originLat) ? input.originLat : null,
+          origin_lng: typeof input.originLng === "number" && Number.isFinite(input.originLng) ? input.originLng : null
         };
 
   if (!payload.name) throw new Error("회사명은 필수입니다.");
@@ -10025,6 +10037,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
         notificationSenderName: (payload.notification_sender_name as string) || (payload.name as string),
         ownerName: (payload.owner_name as string) || "",
         originAddress: (payload.origin_address as string) || "",
+        originLat: typeof payload.origin_lat === "number" ? payload.origin_lat : undefined,
+        originLng: typeof payload.origin_lng === "number" ? payload.origin_lng : undefined,
         smsSenderPhone: (payload.sms_sender_phone as string) || "",
         telegramChatId: (payload.telegram_chat_id as string) || undefined,
         status: "active",
@@ -10044,6 +10058,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     notification_sender_name?: string | null;
     owner_name: string | null;
     origin_address: string | null;
+    origin_lat?: number | null;
+    origin_lng?: number | null;
     sms_sender_phone?: string | null;
     telegram_chat_id?: string | null;
     status: string;
@@ -10112,6 +10128,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       notificationSenderName: row.notification_sender_name || row.name,
       ownerName: row.owner_name || "",
       originAddress: row.origin_address || "",
+      originLat: row.origin_lat == null ? undefined : Number(row.origin_lat),
+      originLng: row.origin_lng == null ? undefined : Number(row.origin_lng),
       smsSenderPhone: row.sms_sender_phone || "",
       telegramChatId: row.telegram_chat_id || undefined,
       status: row.status,

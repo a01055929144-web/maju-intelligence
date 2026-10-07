@@ -32,7 +32,7 @@ type CustomerAppShellProps = {
   readonly workspaceRole?: string;
 };
 
-export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, workspaceRole }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
@@ -253,7 +253,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-white">{companyName}</p>
-                    {userName ? <p className="truncate text-xs font-medium text-slate-400">{userName}님</p> : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {mode === "customer" ? (
@@ -283,7 +282,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
                     {mode === "customer" ? <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{roleLabel}</Badge> : null}
-                    {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                   </div>
                   <div className="flex min-w-0 items-center gap-1.5">
                     <h1 className="truncate text-[24px] font-bold tracking-[-0.03em] text-slate-950">{title}</h1>
@@ -294,7 +292,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                   <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
                   <span className="text-sm font-semibold text-slate-900">{activeWorkspaceLabel}</span>
-                  {userName ? <span className="text-xs font-bold text-slate-500">{userName}님</span> : null}
                 </div>
               )}
               <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
