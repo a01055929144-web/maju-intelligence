@@ -655,7 +655,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   // "미배정" 자동 그룹은 실제로 저장된 배송차가 아니므로, 헤더의 "N대" 배지에는 실제 배송차 수만
   // 셉니다(2026-08-24 피드백 대응으로 미배정 그룹을 도입하며 함께 정리).
-  const realVehicleCount = useMemo(() => deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length, [deliveryVehicles]);
+  // 차량 마스터가 준비된 회사에서는 "차량 N대"가 반드시 활성 차량 마스터 수를 뜻해야 합니다.
+  // 거래처에 담당자만 지정된 레거시 배정 그룹이나 모바일 GPS 계정은 실제 차량이 아니므로 이 수에
+  // 합치지 않습니다. 마스터 테이블을 아직 적용하지 않은 회사에서만 기존 배정 그룹 수로 폴백합니다.
+  const realVehicleCount = useMemo(
+    () => vehicleMasterAvailable ? activeVehicleMasterNames.length : deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length,
+    [activeVehicleMasterNames.length, deliveryVehicles, vehicleMasterAvailable]
+  );
   const fuelTypeConfiguredByVehicleId = useMemo(() => {
     const map = new Map<string, boolean>();
     baseDeliveryVehicles.forEach((vehicle) => map.set(vehicle.id, Boolean(vehicleFuelTypes?.[vehicle.driver])));
@@ -1793,7 +1799,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             })}
           </nav>
           <button
-            aria-label={`실시간 차량 ${liveVehicleSummary.active}대${liveVehicleSummary.stale ? `, 지연 ${liveVehicleSummary.stale}대` : ""}`}
+            aria-label={`GPS 활성 신호 ${liveVehicleSummary.active}건${liveVehicleSummary.stale ? `, 지연 ${liveVehicleSummary.stale}건` : ""}`}
             className={`flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition sm:px-3 ${
               liveVehicleSummary.active
                 ? "border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_0_0_3px_rgba(16,185,129,.10)] hover:bg-emerald-100"
@@ -1808,7 +1814,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${liveVehicleSummary.active ? "bg-emerald-500" : "bg-slate-300"}`} />
             </span>
             <Truck className={`hidden h-4 w-4 shrink-0 sm:block ${liveVehicleSummary.active ? "text-emerald-700" : "text-slate-500"}`} />
-            <span className="whitespace-nowrap"><span className="hidden lg:inline">실시간 차량 </span>{liveVehicleSummary.active}대</span>
+            <span className="whitespace-nowrap"><span className="hidden lg:inline">GPS 활성 </span>{liveVehicleSummary.active}건</span>
             {liveVehicleSummary.stale ? <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 sm:inline">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
           <details className="group relative shrink-0">
@@ -3301,6 +3307,9 @@ function DeliveryAssignmentPanel({
     if (vehicle && !liveVehicleByDeliveryGroup.has(vehicle.id)) liveVehicleByDeliveryGroup.set(vehicle.id, location);
   });
   const unassignedLiveVehicles = liveVehicles.filter((location) => !findVehicleForLiveLocation(location));
+  const registeredVehicleCount = vehicleMasterAvailable
+    ? vehicleMasterVehicles.filter((vehicle) => vehicle.status === "active").length
+    : vehicles.filter((vehicle) => !vehicle.isUnassigned).length;
   const filteredVehicles = vehicles.filter((vehicle) => {
     const live = liveVehicleByDeliveryGroup.get(vehicle.id);
     const matchesSearch = !normalizedLiveSearch || `${vehicle.name} ${vehicle.driver} ${vehicle.area} ${live?.displayName || ""}`.toLowerCase().includes(normalizedLiveSearch);
@@ -3381,7 +3390,7 @@ function DeliveryAssignmentPanel({
         <span className="relative inline-flex shrink-0" title="배송담당자 필터">
           <Truck className="h-4 w-4 text-slate-500" />
           <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-xs font-semibold leading-none text-white">
-            {vehicles.length}
+            {registeredVehicleCount}
           </span>
         </span>
       </aside>
@@ -3396,7 +3405,7 @@ function DeliveryAssignmentPanel({
             <Truck className="h-4 w-4 text-slate-500" />
             담당자 · 차량
           </p>
-          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">등록 {vehicles.filter((vehicle) => !vehicle.isUnassigned).length} · 미연결 {unassignedLiveVehicles.length}</p>
+          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">차량 {registeredVehicleCount}대 · 미연결 GPS {unassignedLiveVehicles.length}건</p>
         </div>
         <button
           aria-label="배송 담당자 패널 접기"
@@ -9098,8 +9107,19 @@ function createDeliveryVehiclesFromStores(
   // 담당자 이름이라 explicitVehicleKeys에는 넣지 않습니다 — 그래야 아래에서 배송차 이름은 자동
   // 채번("배송 N호차")되고, 담당자 표시값만 이 이름을 그대로 씁니다. 이미 실제 거래처가 있어 groups에
   // 존재하는 담당자면 건드리지 않습니다(중복 빈 그룹 방지).
+  const assignedDriverKeys = new Set(
+    Array.from(groups.values())
+      .flatMap((stops) => stops.map((stop) => stop.deliveryDriver?.trim().toLowerCase()))
+      .filter(Boolean)
+  );
   extraDrivers.forEach((driverName) => {
-    if (!groups.has(driverName)) groups.set(driverName, []);
+    const trimmedDriverName = driverName.trim();
+    if (!trimmedDriverName) return;
+    // 차량명이 담당자명과 다른 정상 배정(예: 차량 "1호차" + 담당자 "정동규")도 이미 존재하는
+    // 담당자입니다. 예전에는 groups.has(driverName)만 확인해 이 경우 빈 자동 차량을 하나 더 만들어
+    // 차량 마스터 3대가 지도에서는 4대로 표시될 수 있었습니다.
+    if (assignedDriverKeys.has(trimmedDriverName.toLowerCase())) return;
+    if (!groups.has(trimmedDriverName)) groups.set(trimmedDriverName, []);
   });
 
   // "미배정" 그룹은 항상 목록 맨 뒤에 오도록 정렬합니다 — 그래야 실제 배송차 자동 번호("배송 1호차",

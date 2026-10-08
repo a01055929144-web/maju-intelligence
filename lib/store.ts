@@ -22,7 +22,7 @@ import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment }
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
-import { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -3427,6 +3427,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
 export async function getStaffVehicleLocations(companyId?: string, options: { userId?: string } = {}): Promise<StaffVehicleLocation[]> {
   if (!companyId || !isProductionStoreConfigured()) return [];
   const userFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
+  const visibilityCutoff = getStaffLocationVisibilityCutoff();
   try {
     const rows = await supabaseRequest<
       Array<{
@@ -3445,7 +3446,7 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
     >(
       `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(
         companyId
-      )}${userFilter}&last_lat=not.is.null&last_lng=not.is.null&order=last_location_at.desc&limit=100`
+      )}${userFilter}&last_lat=not.is.null&last_lng=not.is.null&last_location_at=gte.${encodeURIComponent(visibilityCutoff)}&order=last_location_at.desc&limit=100`
     );
     const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter(Boolean)));
     const userIdFilter = userIds.map((id) => encodeURIComponent(id)).join(",");
