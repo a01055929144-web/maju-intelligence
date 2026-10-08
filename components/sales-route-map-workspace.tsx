@@ -2791,8 +2791,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               커질 때 그 아래로 가려지므로, 크로스헤어 버튼과 동일하게 mapHeaderHeightPx를 top 인라인
               스타일로 반영합니다. */}
           <div
-            className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:flex lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              leftCollapsed ? "hidden" : "lg:bottom-3 lg:w-[360px] xl:w-[400px]"
+            className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
+              mapPanelMode !== "driver" ? "hidden" : "flex lg:bottom-3 lg:w-[360px] xl:w-[400px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -2866,12 +2866,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
 
           <div
-            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:z-10 lg:flex lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              rightCollapsed
-                ? "hidden"
-                : leftCollapsed
-                  ? "lg:bottom-3 lg:left-3 lg:w-[360px] xl:w-[400px]"
-                  : "lg:bottom-3 lg:right-3 lg:w-[280px] xl:w-[304px]"
+            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
+              mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
+                ? "flex lg:bottom-3 lg:w-[360px] xl:w-[400px]"
+                : "hidden"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
