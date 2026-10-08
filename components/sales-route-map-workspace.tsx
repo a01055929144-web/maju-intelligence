@@ -1790,7 +1790,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </p>
           </div>
         </div>
-        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 xl:w-auto xl:gap-2">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 xl:w-auto xl:gap-2">
           <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
@@ -1832,15 +1832,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </button>
           {activeView === "map" ? (
             <div
-              aria-label="지도 화면 분할 빠른 전환"
+              aria-label="지도 업무 패널 빠른 전환"
               className="hidden h-10 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 lg:flex"
               role="group"
             >
               {([
-                ["three", "3", "담당자와 거래처를 함께 표시"],
-                ["driver", "2·담당", "담당자와 지도 표시"],
-                ["customer", "2·거래", "거래처와 지도 표시"],
-                ["map", "1", "지도만 표시"]
+                ["driver", "담당자", "담당자·차량 목록 열기"],
+                ["customer", "거래처", "전체 거래처 목록 열기"],
+                ["map", "지도만", "업무 패널 닫기"]
               ] as const).map(([mode, label, title]) => (
                 <button
                   aria-pressed={mapPanelMode === mode}
@@ -1862,12 +1861,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <details className="group relative shrink-0">
             <summary
               aria-label="지도 화면 설정"
-              className="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:px-3 [&::-webkit-details-marker]:hidden"
+              className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"
               title="마커 표현, 리드 레이어, 패널과 화면 설정"
             >
               <MapPinned className="h-4 w-4" />
-              <span className="hidden sm:inline">화면 설정</span>
-              <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
             </summary>
             <div className="absolute right-0 top-12 z-50 w-[min(92vw,420px)] space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_16px_40px_rgba(15,23,42,.18)]">
               <div className="flex items-center justify-between gap-3">
@@ -2218,9 +2215,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             ) : null}
           </label>
           <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/80 p-1 sm:p-1.5">
-            <div className="hidden 2xl:block">
-              <MarkerModeLegend mode={markerViewMode} vehicles={deliveryVehicles} />
-            </div>
             <div className="maju-toolbar-scroll flex min-w-0 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto sm:justify-end">
               <select
                 className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
@@ -2819,8 +2813,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
 
           <div
-            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:right-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              rightCollapsed ? "hidden" : "lg:bottom-3 lg:w-[280px] xl:w-[304px]"
+            className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
+              rightCollapsed
+                ? "hidden"
+                : leftCollapsed
+                  ? "lg:bottom-3 lg:left-3 lg:w-[360px] xl:w-[400px]"
+                  : "lg:bottom-3 lg:right-3 lg:w-[280px] xl:w-[304px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -4829,38 +4827,6 @@ function MapLayerLegend({
         <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
       </div>
     </div>
-  );
-}
-
-// 등급/배송차별 마커 색상 범례입니다. 예전에는 색점만 모아 보여주고 전체 설명은 마우스오버
-// 툴팁으로 옮겼는데("마커 ●●●"), 어떤 색이 어떤 등급/배송차인지 hover 없이는 전혀 알 수 없다는
-// 피드백을 받아(2026-08-19) 각 점 옆에 짧은 글자 라벨을 항상 보이게 되돌렸습니다. 대신 공간을
-// 아끼기 위해 등급은 "A"처럼 한 글자로, 배송차는 이름을 그대로 쓰되 개수를 4개로 줄였습니다.
-function MarkerModeLegend({ mode, vehicles }: { readonly mode: MarkerViewMode; readonly vehicles: DeliveryVehicle[] }) {
-  const items =
-    mode === "grade"
-      ? [
-          { color: "#7c3aed", label: "A등급", shortLabel: "A" },
-          { color: "#2563eb", label: "B등급", shortLabel: "B" },
-          { color: "#64748b", label: "C등급", shortLabel: "C" }
-        ]
-      : vehicles
-          .slice(0, 8)
-          .map((vehicle, index) => ({ color: vehicleMarkerColors[index % vehicleMarkerColors.length], label: vehicle.name, shortLabel: vehicle.name }));
-  const visibleCount = mode === "grade" ? items.length : 4;
-  const title = items.length ? `마커 색상 안내 · ${items.map((item) => item.label).join(" · ")}` : "마커 색상 안내";
-
-  return (
-    <span className="maju-filter-box inline-flex h-10 shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-1" title={title}>
-      <span className="mr-0.5 text-xs font-black text-slate-500">마커</span>
-      {items.slice(0, visibleCount).map((item) => (
-        <span className="inline-flex items-center gap-1" key={item.label}>
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
-          <span className="whitespace-nowrap text-[11px] font-bold text-slate-600">{item.shortLabel}</span>
-        </span>
-      ))}
-      {items.length > visibleCount ? <span className="text-[11px] font-black text-slate-400">+{items.length - visibleCount}</span> : null}
-    </span>
   );
 }
 
