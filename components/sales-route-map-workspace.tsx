@@ -430,6 +430,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 거래처 목록은 오른쪽 패널(StoreManagementPanel)이라 rightCollapsed 기본값이 문제였음).
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const mapPanelMode = !leftCollapsed && !rightCollapsed
+    ? "three"
+    : !leftCollapsed && rightCollapsed
+      ? "driver"
+      : leftCollapsed && !rightCollapsed
+        ? "customer"
+        : "map";
+
+  function setMapPanelMode(mode: "three" | "driver" | "customer" | "map") {
+    setLeftCollapsed(mode === "customer" || mode === "map");
+    setRightCollapsed(mode === "driver" || mode === "map");
+  }
   // 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함"): 지도에 신규 리드가
   // 함께 표시 중일 때(반경 검색 또는 "리드" 전체 표시 토글), 오른쪽 패널에서 거래처 목록과 리드
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
@@ -1886,26 +1898,31 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </button>
                 </div>
           ) : null}
-              <div className="grid grid-cols-4 gap-1.5 border-t border-slate-100 pt-2">
-          {activeView === "map" ? (
-            <button
-              aria-pressed={leftCollapsed && rightCollapsed}
-              className={`col-span-1 grid h-9 place-items-center rounded-md border text-xs font-semibold transition ${
-                leftCollapsed && rightCollapsed
-                  ? "border-teal-200 bg-teal-50 text-teal-800"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-              }`}
-              onClick={() => {
-                const showPanels = leftCollapsed && rightCollapsed;
-                setLeftCollapsed(!showPanels);
-                setRightCollapsed(!showPanels);
-              }}
-              title={leftCollapsed && rightCollapsed ? "담당자와 거래처 패널을 다시 엽니다." : "좌우 패널을 접어 지도를 넓게 봅니다."}
-              type="button"
-            >
-              {leftCollapsed && rightCollapsed ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </button>
-          ) : null}
+              {activeView === "map" ? (
+                <div className="grid grid-cols-4 gap-1.5 border-t border-slate-100 pt-2" aria-label="지도 화면 분할">
+                  {([
+                    ["three", "3분할"],
+                    ["driver", "담당자"],
+                    ["customer", "거래처"],
+                    ["map", "지도만"]
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      aria-pressed={mapPanelMode === mode}
+                      className={`h-9 rounded-md border px-1 text-[11px] font-semibold transition ${
+                        mapPanelMode === mode
+                          ? "border-teal-300 bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                      key={mode}
+                      onClick={() => setMapPanelMode(mode)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="grid grid-cols-3 gap-1.5 border-t border-slate-100 pt-2">
             <button
               aria-expanded={statsExpanded}
               aria-label={statsExpanded ? "KPI 접기" : "KPI 보기"}
@@ -2713,7 +2730,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               스타일로 반영합니다. */}
           <div
             className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              leftCollapsed ? "lg:w-[60px]" : "lg:bottom-3 lg:w-[360px] xl:w-[400px]"
+              leftCollapsed ? "hidden" : "lg:bottom-3 lg:w-[360px] xl:w-[400px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -2776,7 +2793,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
           <div
             className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:right-3 lg:z-10 lg:max-h-none lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              rightCollapsed ? "lg:w-[60px]" : "lg:bottom-3 lg:w-[280px] xl:w-[304px]"
+              rightCollapsed ? "hidden" : "lg:bottom-3 lg:w-[280px] xl:w-[304px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
