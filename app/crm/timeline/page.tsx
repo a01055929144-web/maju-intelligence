@@ -9,6 +9,7 @@ import { LinkifiedText } from "@/components/linkified-text";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { getCustomerRevenueGrade } from "@/lib/customer/domain/customer-grade";
 
 type TimelineItem = {
   id: string;
@@ -319,6 +320,9 @@ export default function CrmTimelinePage() {
   const [bulkManagerInput, setBulkManagerInput] = useState("");
   const [bulkManagerSubmitting, setBulkManagerSubmitting] = useState(false);
   const [bulkManagerMessage, setBulkManagerMessage] = useState("");
+  const [bulkGradeInput, setBulkGradeInput] = useState<"A" | "B" | "C" | "AUTO">("A");
+  const [bulkGradeSubmitting, setBulkGradeSubmitting] = useState(false);
+  const [bulkGradeMessage, setBulkGradeMessage] = useState("");
 
   function toggleBulkSelected(customerId: string) {
     setBulkSelectedIds((previous) => {
@@ -359,6 +363,56 @@ export default function CrmTimelinePage() {
       setBulkManagerMessage(error instanceof Error ? error.message : "일괄 변경에 실패했습니다.");
     } finally {
       setBulkManagerSubmitting(false);
+    }
+  }
+
+  async function applyBulkGrade() {
+    if (!bulkSelectedIds.size || bulkGradeSubmitting) return;
+    setBulkGradeSubmitting(true);
+    setBulkGradeMessage("");
+
+    try {
+      const customerIds = Array.from(new Set(Array.from(bulkSelectedIds).map((id) => id.trim()).filter(Boolean)));
+      const response = await fetchWithTimeout(
+        "/api/customers/bulk-grade",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, grade: bulkGradeInput })
+        },
+        15000
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "등급 일괄 변경에 실패했습니다.");
+
+      const updatedIds = Array.isArray(payload?.updatedIds)
+        ? payload.updatedIds.filter((id: unknown): id is string => typeof id === "string")
+        : [];
+      const updatedIdSet = new Set(updatedIds);
+      setCustomers((previous) =>
+        previous.map((customer) =>
+          customer.id && updatedIdSet.has(customer.id)
+            ? { ...customer, grade: bulkGradeInput === "AUTO" ? getCustomerRevenueGrade(customer.monthlyRevenue) : bulkGradeInput }
+            : customer
+        )
+      );
+
+      const requested = typeof payload?.requested === "number" ? payload.requested : customerIds.length;
+      const updated = typeof payload?.updated === "number" ? payload.updated : updatedIds.length;
+      if (updated < requested) {
+        setBulkGradeMessage(`${updated.toLocaleString()}/${requested.toLocaleString()}곳만 변경했습니다. 누락된 거래처는 목록을 새로고침한 뒤 다시 선택하세요.`);
+        setBulkSelectedIds(new Set(customerIds.filter((id) => !updatedIdSet.has(id))));
+      } else {
+        setBulkGradeMessage(
+          bulkGradeInput === "AUTO"
+            ? `${updated.toLocaleString()}곳을 매출 자동 등급으로 전환했습니다.`
+            : `${updated.toLocaleString()}곳을 ${bulkGradeInput}등급으로 변경했습니다.`
+        );
+      }
+    } catch (error) {
+      setBulkGradeMessage(error instanceof Error ? error.message : "등급 일괄 변경에 실패했습니다.");
+    } finally {
+      setBulkGradeSubmitting(false);
     }
   }
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
@@ -1267,7 +1321,9 @@ export default function CrmTimelinePage() {
               <div className="space-y-1.5 border-b border-teal-100 bg-teal-50/70 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-teal-900">{bulkSelectedIds.size.toLocaleString()}곳 선택됨</span>
+                  <span className="sr-only" id="bulk-manager-label">선택한 거래처 담당자</span>
                   <input
+                    aria-labelledby="bulk-manager-label"
                     className="h-8 min-w-0 flex-1 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold outline-none focus:border-teal-400"
                     list="bulk-manager-options"
                     onChange={(event) => setBulkManagerInput(event.target.value)}
@@ -1286,7 +1342,33 @@ export default function CrmTimelinePage() {
                     선택 해제
                   </button>
                 </div>
+                <div className="flex flex-wrap items-center gap-2 border-t border-teal-100 pt-2">
+                  <label className="text-xs font-semibold text-teal-900" htmlFor="bulk-customer-grade">
+                    등급
+                  </label>
+                  <select
+                    className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
+                    disabled={bulkGradeSubmitting}
+                    id="bulk-customer-grade"
+                    onChange={(event) => setBulkGradeInput(event.target.value as "A" | "B" | "C" | "AUTO")}
+                    value={bulkGradeInput}
+                  >
+                    <option value="A">A등급</option>
+                    <option value="B">B등급</option>
+                    <option value="C">C등급</option>
+                    <option value="AUTO">매출 자동 등급</option>
+                  </select>
+                  <button
+                    className="maju-button-secondary h-8 shrink-0 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={bulkGradeSubmitting}
+                    onClick={() => void applyBulkGrade()}
+                    type="button"
+                  >
+                    {bulkGradeSubmitting ? "등급 변경 중..." : "등급 일괄 변경"}
+                  </button>
+                </div>
                 {bulkManagerMessage ? <p className="text-xs font-medium text-teal-800">{bulkManagerMessage}</p> : null}
+                {bulkGradeMessage ? <p aria-live="polite" className="text-xs font-medium text-teal-800">{bulkGradeMessage}</p> : null}
               </div>
             ) : null}
             {filteredCustomers.length ? (
@@ -1330,7 +1412,7 @@ export default function CrmTimelinePage() {
                   >
                     다음
                   </button>
-                  {operationFilter !== "all" ? (
+                  {filteredCustomers.length ? (
                     <>
                       <button
                         className="min-h-9 rounded-md border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"

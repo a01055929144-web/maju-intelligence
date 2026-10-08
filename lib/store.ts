@@ -21,6 +21,7 @@ import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import type { LeadActionRepository } from "@/domains/lead/lead-action";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
@@ -791,6 +792,9 @@ const CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD = `${CUSTOMER_MASTER_SELECT_WITH
 // 동시 편집 감지(낙관적 동시성 제어)용 updated_at입니다. supabase/migrations/20260831c_normalized_customers_updated_at.sql을
 // 아직 실행하지 않은 환경에서도 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
 const CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY = `${CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD},updated_at`;
+// 수동 등급은 월 매출 기반 자동 등급보다 우선합니다. 마이그레이션이 아직 적용되지 않은 환경은
+// 바로 아래 조회 티어로 폴백해 기존 자동 등급을 계속 사용합니다.
+const CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE = `${CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY},grade_override`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -4068,6 +4072,7 @@ export async function getCustomerMaster(
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
+    grade_override?: string | null;
     industry: string | null;
     kakao_place_url?: string | null;
     last_order_days: number | null;
@@ -4100,6 +4105,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE,
     CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
     CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD,
     CUSTOMER_MASTER_SELECT_WITH_REVIEWS,
@@ -4210,6 +4216,7 @@ export async function getCustomerMapSummaries(
     delivery_vehicle?: string | null;
     email: string | null;
     id: string;
+    grade_override?: string | null;
     monthly_revenue: number | string | null;
     phone: string | null;
     region: string | null;
@@ -4218,13 +4225,20 @@ export async function getCustomerMapSummaries(
   let rows: CustomerMapRow[];
   try {
     rows = await supabaseRequest<CustomerMapRow[]>(
-      `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
   } catch (error) {
     if (!isMissingColumnError(error)) throw error;
-    rows = await supabaseRequest<CustomerMapRow[]>(
-      `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
-    );
+    try {
+      rows = await supabaseRequest<CustomerMapRow[]>(
+        `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+    } catch (fallbackError) {
+      if (!isMissingColumnError(fallbackError)) throw fallbackError;
+      rows = await supabaseRequest<CustomerMapRow[]>(
+        `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+    }
   }
 
   const assignmentKeys = (options?.assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
@@ -4242,7 +4256,7 @@ export async function getCustomerMapSummaries(
         deliveryManager: row.delivery_manager || undefined,
         deliveryVehicle: row.delivery_vehicle || undefined,
         email: row.email || undefined,
-        grade: getRevenueGrade(monthlyRevenue),
+        grade: row.grade_override === "A" || row.grade_override === "B" || row.grade_override === "C" ? row.grade_override : getRevenueGrade(monthlyRevenue),
         id: row.id,
         monthlyRevenue,
         phone: row.phone || undefined,
@@ -7699,6 +7713,14 @@ export async function recordPermitLeadAction(
 ): Promise<{ action?: PermitLeadActionItem; ok: boolean; status: string }> {
   if (!isProductionStoreConfigured()) return { ok: false, status: "" };
 
+  // lead_actions는 회사별 영업 이력이므로, 전달된 leadId가 요청 회사 소유인지 먼저 확인합니다.
+  // 상태 PATCH만 company_id로 제한하고 이력을 먼저 INSERT하면 다른 회사 리드 ID로 고아 이력이
+  // 생길 수 있으므로 두 쓰기 모두 같은 테넌트 경계 안에서만 진행합니다.
+  const ownedLead = await supabaseRequest<Array<{ id: string }>>(
+    `business_permit_leads?select=id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  );
+  if (!ownedLead.length) throw new Error("리드를 찾을 수 없습니다.");
+
   const actionRows = await supabaseRequest<PermitLeadActionRow[]>("lead_actions?select=id,action_type,result,memo,actor_name,created_at", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -7733,7 +7755,7 @@ export async function listPermitLeadActions(companyId: string, leadId: string, l
     `lead_actions?select=id,action_type,result,memo,actor_name,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(
       leadId
     )}&order=created_at.desc&limit=${safeLimit}`
-  ).catch(() => []);
+  );
 
   return rows.map(toPermitLeadActionItem);
 }
@@ -8716,6 +8738,11 @@ function toVehicleMaster(row: VehicleMasterRow): VehicleMaster {
   };
 }
 
+export const leadActionRepository: LeadActionRepository = {
+  list: listPermitLeadActions,
+  record: recordPermitLeadAction
+};
+
 function isMissingVehicleMasterTableError(error: unknown) {
   return error instanceof Error && error.message.includes("delivery_vehicle_master");
 }
@@ -9367,6 +9394,31 @@ export async function bulkUpdateDeliveryManager(companyId: string, customerIds: 
   );
 
   return { updated: customerIds.length };
+}
+
+/**
+ * 거래처의 수동 등급을 일괄 지정합니다. 모든 변경은 company_id와 선택 id를 함께 조건으로
+ * 제한하며, 실제 반환된 행 수를 사용해 오래된 화면 선택값 등으로 누락된 건을 UI가 알 수 있게 합니다.
+ */
+export async function bulkUpdateCustomerGradeOverride(
+  companyId: string,
+  customerIds: string[],
+  grade: "A" | "B" | "C" | null
+): Promise<{ requested: number; updated: number; updatedIds: string[] }> {
+  const requested = customerIds.length;
+  if (!requested) return { requested: 0, updated: 0, updatedIds: [] };
+  if (!isProductionStoreConfigured()) return { requested, updated: 0, updatedIds: [] };
+
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${customerIds.map((id) => encodeURIComponent(id)).join(",")})`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ grade_override: grade })
+    }
+  );
+
+  return { requested, updated: rows.length, updatedIds: rows.map((row) => row.id) };
 }
 
 /**
@@ -10780,6 +10832,7 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     delivery_zone: asNullableString(row.delivery_zone),
     email: asNullableString(row.email),
     google_map_url: asNullableString(row.google_map_url),
+    grade_override: asNullableString(row.grade_override),
     industry: asNullableString(row.industry),
     kakao_place_url: asNullableString(row.kakao_place_url),
     last_order_days: typeof row.last_order_days === "number" ? row.last_order_days : 0,
@@ -10819,6 +10872,7 @@ function toCustomerMasterItem(
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
+    grade_override?: string | null;
     industry: string | null;
     kakao_place_url?: string | null;
     last_order_days: number | null;
@@ -10865,7 +10919,7 @@ function toCustomerMasterItem(
     deliveryVehicle: row.delivery_vehicle || undefined,
     deliveryZone: row.delivery_zone || undefined,
     email: row.email || undefined,
-    grade: getRevenueGrade(monthlyRevenue),
+    grade: row.grade_override === "A" || row.grade_override === "B" || row.grade_override === "C" ? row.grade_override : getRevenueGrade(monthlyRevenue),
     industry: row.industry || "미분류",
     lastOrderDays: Number(row.last_order_days || 0),
     loadingPosition: row.loading_position || undefined,

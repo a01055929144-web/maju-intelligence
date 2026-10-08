@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { listLeadContacts } from "@/application/lead/manage-lead-actions";
 import { getRequestAuthScope } from "@/lib/auth";
-import { listPermitLeadActions } from "@/lib/store";
+import { leadActionRepository } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
-    const actions = await listPermitLeadActions(scope.companyId!, id);
+    const limit = Number(request.nextUrl.searchParams.get("limit") || "20");
+    const actions = await listLeadContacts(leadActionRepository, scope.companyId!, id, limit);
     return NextResponse.json({ actions });
   } catch (error) {
     console.error("permit lead actions failed:", error);

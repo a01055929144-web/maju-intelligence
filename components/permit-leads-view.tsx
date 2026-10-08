@@ -2807,9 +2807,13 @@ function PermitLeadDetailPanel({
   const [nextActionDate, setNextActionDate] = useState("");
   const [actionHistory, setActionHistory] = useState<PermitLeadActionItem[]>([]);
   const [historyState, setHistoryState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(5);
   const [savingAction, setSavingAction] = useState("");
+  const [detailActionMessage, setDetailActionMessage] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(Boolean(intent));
+  const historySectionRef = useRef<HTMLDivElement>(null);
+  const resultSectionRef = useRef<HTMLDivElement>(null);
   const intentGuide =
     intent === "call"
       ? { description: "통화 후 결과를 바로 남기면 리드 상태와 이력이 함께 갱신됩니다.", title: "추천 작업 · 통화 결과 기록" }
@@ -2827,6 +2831,8 @@ function PermitLeadDetailPanel({
     setInstagramSaveMessage("");
     setSavedInstagramUrl(lead.instagramUrl || "");
     setHistoryOpen(false);
+    setHistoryVisibleCount(5);
+    setDetailActionMessage("");
     setResultOpen(Boolean(intent));
     setExternalSignals({
       googlePlaceUrl: lead.googlePlaceUrl || "",
@@ -2850,7 +2856,7 @@ function PermitLeadDetailPanel({
     setHistoryState("loading");
     setActionHistory([]);
 
-    fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/actions`), { cache: "no-store" }, 12000)
+    fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/actions?limit=50`), { cache: "no-store" }, 12000)
       .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
       .then(({ ok, payload }) => {
         if (cancelled) return;
@@ -2923,10 +2929,15 @@ function PermitLeadDetailPanel({
 
   async function recordAction(actionType: PermitLeadActionKind, result: string): Promise<boolean> {
     const memo = buildActionMemo(result);
+    setDetailActionMessage("");
     setSavingAction(result);
     const saved = await onAction(lead, actionType, result, memo);
     setSavingAction("");
-    if (!saved.ok || actionType === "exclude") return false;
+    if (!saved.ok) {
+      setDetailActionMessage(saved.message || "컨택 이력을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.");
+      return false;
+    }
+    if (actionType === "exclude") return false;
 
     const savedAction: PermitLeadActionItem = saved.action || {
       actionType,
@@ -2940,7 +2951,16 @@ function PermitLeadDetailPanel({
     setNextActionDate("");
     setHistoryState("ready");
     setHistoryOpen(true);
+    setDetailActionMessage(`${result} 이력을 저장했습니다.`);
     return true;
+  }
+
+  function focusMobileSection(section: "history" | "result") {
+    if (section === "history") setHistoryOpen(true);
+    else setResultOpen(true);
+    window.requestAnimationFrame(() => {
+      (section === "history" ? historySectionRef.current : resultSectionRef.current)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function recordQuoteRequest() {
@@ -2951,9 +2971,13 @@ function PermitLeadDetailPanel({
   async function recordQuoteSent() {
     const memo = quoteDraftSavedAt ? `견적 초안 저장본 기준 발송\n${actionMemo.trim()}`.trim() : buildActionMemo("견적 발송");
     setSavingAction("견적 발송");
+    setDetailActionMessage("");
     const saved = await onAction(lead, "quote", "견적 발송", memo);
     setSavingAction("");
-    if (!saved.ok) return;
+    if (!saved.ok) {
+      setDetailActionMessage(saved.message || "견적 발송 이력을 저장하지 못했습니다.");
+      return;
+    }
     const savedAction: PermitLeadActionItem = saved.action || {
       actionType: "quote",
       createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
@@ -2966,14 +2990,19 @@ function PermitLeadDetailPanel({
     setNextActionDate("");
     setHistoryState("ready");
     setHistoryOpen(true);
+    setDetailActionMessage("견적 발송 이력을 저장했습니다.");
   }
 
   async function recordQuoteFollowUp() {
     const memo = buildActionMemo("재연락 예정");
+    setDetailActionMessage("");
     setSavingAction("재연락 예정");
     const saved = await onAction(lead, "quote", "재연락 예정", memo);
     setSavingAction("");
-    if (!saved.ok) return;
+    if (!saved.ok) {
+      setDetailActionMessage(saved.message || "재연락 예정 이력을 저장하지 못했습니다.");
+      return;
+    }
     const savedAction: PermitLeadActionItem = saved.action || {
       actionType: "quote",
       createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
@@ -2986,6 +3015,7 @@ function PermitLeadDetailPanel({
     setNextActionDate("");
     setHistoryState("ready");
     setHistoryOpen(true);
+    setDetailActionMessage("재연락 예정 이력을 저장했습니다.");
   }
 
   function openQuoteDraft() {
@@ -3075,7 +3105,13 @@ function PermitLeadDetailPanel({
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
-      <div className="h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div
+        aria-label={`${lead.businessName} 리드 상세`}
+        aria-modal="true"
+        className="relative h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="min-w-0">
             <span className="flex flex-wrap items-center gap-1.5">
@@ -3101,7 +3137,12 @@ function PermitLeadDetailPanel({
           </button>
         </div>
 
-        <div className="space-y-3 p-4">
+        <div className="space-y-3 p-4 pb-24 sm:pb-4">
+          {detailActionMessage ? (
+            <p aria-live="polite" className={`rounded-lg px-3 py-2 text-xs font-bold ${detailActionMessage.includes("저장했습니다") ? "bg-teal-50 text-teal-800" : "bg-rose-50 text-rose-700"}`}>
+              {detailActionMessage}
+            </p>
+          ) : null}
           <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -3416,8 +3457,8 @@ function PermitLeadDetailPanel({
 
           <p className="text-[11px] font-semibold text-slate-400">현재 상태: {lead.status}</p>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <button className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setHistoryOpen((value) => !value)} type="button">
+          <div className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-3" ref={historySectionRef}>
+            <button aria-expanded={historyOpen} className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setHistoryOpen((value) => !value)} type="button">
               <div>
                 <p className="text-sm font-black text-slate-950">최근 영업 이력</p>
                 <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
@@ -3437,13 +3478,16 @@ function PermitLeadDetailPanel({
                     이력을 불러오는 중입니다.
                   </p>
                 ) : actionHistory.length ? (
-                  actionHistory.slice(0, 5).map((action) => (
+                  actionHistory.slice(0, historyVisibleCount).map((action) => (
                     <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2" key={action.id}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-xs font-black text-slate-950">{action.result || permitLeadActionLabel(action.actionType)}</span>
                         <span className="shrink-0 text-[10px] font-bold text-slate-400">{action.createdAt}</span>
                       </div>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">{action.actorName || "담당자 미기록"}</p>
+                      <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                        <UserCheck className="h-3 w-3 text-teal-600" />
+                        컨택 담당 · {action.actorName || "담당자 미기록"}
+                      </p>
                       {action.memo ? <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-slate-700">{action.memo}</p> : null}
                     </div>
                   ))
@@ -3452,12 +3496,21 @@ function PermitLeadDetailPanel({
                     {historyState === "error" ? "이력을 불러오지 못했습니다." : "아직 기록된 영업 이력이 없습니다."}
                   </p>
                 )}
+                {historyState === "ready" && actionHistory.length > 5 ? (
+                  <button
+                    className="maju-button-secondary h-8 w-full justify-center text-xs"
+                    onClick={() => setHistoryVisibleCount((count) => (count >= actionHistory.length ? 5 : actionHistory.length))}
+                    type="button"
+                  >
+                    {historyVisibleCount >= actionHistory.length ? "최근 5건만 보기" : `전체 ${actionHistory.length.toLocaleString()}건 보기`}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <button className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setResultOpen((value) => !value)} type="button">
+          <div className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-3" ref={resultSectionRef}>
+            <button aria-expanded={resultOpen} className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setResultOpen((value) => !value)} type="button">
               <div>
                 <p className="text-sm font-black text-slate-950">영업 결과 기록</p>
                 <p className="mt-0.5 text-[11px] font-semibold leading-4 text-slate-500">{resultOpen ? "통화, DM, 방문 결과를 저장합니다." : "메모와 다음 액션일을 기록할 때 펼치세요."}</p>
@@ -3501,6 +3554,16 @@ function PermitLeadDetailPanel({
               영업 제외
             </button>
           </div>
+        </div>
+        <div className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur sm:hidden">
+          <button className="maju-button-primary h-11 justify-center" onClick={() => focusMobileSection("result")} type="button">
+            <MessageCircle className="h-4 w-4" />
+            컨택 기록
+          </button>
+          <button className="maju-button-secondary h-11 justify-center" onClick={() => focusMobileSection("history")} type="button">
+            <MessageSquareText className="h-4 w-4" />
+            이력 {actionHistory.length ? `${actionHistory.length}건` : "보기"}
+          </button>
         </div>
       </div>
     </div>

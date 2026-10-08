@@ -134,6 +134,7 @@ create table if not exists public.normalized_customers (
   email text,
   birth_date date,
   industry text,
+  grade_override text check (grade_override is null or grade_override in ('A', 'B', 'C')),
   monthly_revenue numeric not null default 0,
   last_order_days integer not null default 0,
   visit_count integer not null default 0,
