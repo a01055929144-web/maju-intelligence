@@ -1129,39 +1129,6 @@ export default function CrmTimelinePage() {
           title="거래처 관리"
         />
 
-        <div className="mb-3 grid overflow-hidden rounded-lg border border-slate-200 bg-white sm:grid-cols-3">
-          <Link
-            className={`flex min-w-0 items-center gap-2.5 px-3 py-2.5 transition hover:bg-slate-50 ${workspaceSection === "list" ? "bg-teal-50/70" : ""}`}
-            href={withCompanyQuery("/crm/timeline?section=list")}
-          >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-black text-slate-700">1</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-black text-slate-950">대상 찾기</span>
-              <span className="block truncate text-xs font-bold text-slate-500">보완 필요 {businessCheckCount + loadingMissingCount + managerMissingCount}건</span>
-            </span>
-          </Link>
-          <Link
-            className={`flex min-w-0 items-center gap-2.5 border-t border-slate-200 px-3 py-2.5 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "ledger" ? "bg-teal-50/70" : ""}`}
-            href={withCompanyQuery(`/crm/timeline?section=ledger${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
-          >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-100 text-xs font-black text-amber-800">2</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-black text-slate-950">원장 보완</span>
-              <span className="block truncate text-xs font-bold text-slate-500">{selectedCustomer.customerName || "거래처 선택"} · 미완료 {Math.max(0, operationalChecks.length - operationalReadyCount)}건</span>
-            </span>
-          </Link>
-          <Link
-            className={`flex min-w-0 items-center gap-2.5 border-t border-slate-200 px-3 py-2.5 transition hover:bg-slate-50 sm:border-l sm:border-t-0 ${workspaceSection === "history" ? "bg-teal-50/70" : ""}`}
-            href={withCompanyQuery(`/crm/timeline?section=history${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`)}
-          >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-black text-blue-800">3</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-black text-slate-950">기록·다음 행동</span>
-              <span className="block truncate text-xs font-bold text-slate-500">{latestNote?.nextAction || (historyCount ? `기록 ${historyCount}건 확인` : "첫 메모 남기기")}</span>
-            </span>
-          </Link>
-        </div>
-
         <div className="min-w-0 space-y-4">
         <div className={`${workspaceSection === "list" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="customer-ledger-list">
           <SectionHeader

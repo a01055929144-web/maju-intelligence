@@ -1781,16 +1781,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         </div>
       ) : null}
-      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between xl:px-4 xl:py-3">
+      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div>
-            <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em]">오늘의 운영 지도</h2>
-            <p className="mt-0.5 text-xs font-medium text-slate-500">
+            <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em] lg:whitespace-nowrap">오늘의 운영 지도</h2>
+            <p className="mt-0.5 text-xs font-medium text-slate-500 lg:whitespace-nowrap">
               {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
             </p>
           </div>
         </div>
-        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 xl:w-auto xl:gap-2">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 lg:w-auto lg:flex-1 lg:justify-end xl:gap-2">
           <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
@@ -2053,15 +2053,15 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       ) : null}
 
       <section
-        className={`shrink-0 space-y-1.5 border-b border-slate-200/80 bg-white px-4 py-2 ${
+        className={`shrink-0 space-y-1 border-b border-slate-200/80 bg-white px-3 py-1.5 ${
           activeView === "map"
-            ? "lg:absolute lg:inset-x-3 lg:top-3 lg:z-20 lg:space-y-1.5 lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white/95 lg:px-3 lg:py-2.5 lg:shadow-[0_12px_32px_rgba(15,23,42,.12)] lg:backdrop-blur"
+            ? "lg:absolute lg:inset-x-2 lg:top-2 lg:z-20 lg:space-y-1 lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white/95 lg:px-2 lg:py-1.5 lg:shadow-[0_8px_24px_rgba(15,23,42,.10)] lg:backdrop-blur"
             : ""
         }`}
         ref={mapHeaderRef}
       >
-        <div className="grid gap-1.5 lg:grid-cols-[minmax(300px,1fr)_minmax(330px,auto)] lg:items-center xl:grid-cols-[minmax(360px,1fr)_minmax(340px,auto)] xl:gap-2">
-          <label className="maju-search-field relative min-w-0 flex-1">
+        <div className="grid gap-1.5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,auto)] lg:items-center xl:grid-cols-[minmax(320px,1fr)_minmax(0,auto)] xl:gap-2">
+          <label className="maju-search-field relative min-w-0 flex-1 lg:!h-9">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
@@ -2214,7 +2214,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </div>
             ) : null}
           </label>
-          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/80 p-1 sm:p-1.5">
+          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/80 p-1">
             <div className="maju-toolbar-scroll flex min-w-0 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto sm:justify-end">
               <select
                 className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${

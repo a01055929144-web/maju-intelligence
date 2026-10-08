@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
-  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   CalendarDays,
@@ -1439,9 +1438,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         description: "선별된 영업 후보의 접촉·견적·후속 일정을 한곳에서 실행합니다.",
         resultLabel: "영업 후보",
         searchPlaceholder: "상호명·지역·전화·인스타 ID로 영업 후보 검색",
-        role: "배정 후 실행 · 접촉 · 견적",
-        nextHref: "/dashboard?view=leads&leadType=permit",
-        nextLabel: "신규 후보 더 찾기"
+        role: "배정 후 실행 · 접촉 · 견적"
       }
     : {
         eyebrow: "NEW OPENING SIGNALS",
@@ -1449,9 +1446,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         description: "인허가·개업 신호를 수집하고 검증해 영업할 후보를 선별합니다.",
         resultLabel: "신규 개업 후보",
         searchPlaceholder: "상호명·주소·전화로 신규 개업 후보 검색",
-        role: "탐색 · 수집 · 후보 발굴",
-        nextHref: "/dashboard?view=leads&leadType=keyword",
-        nextLabel: "선별 후보 영업 실행"
+        role: "탐색 · 수집 · 후보 발굴"
       };
 
   function LeadSortableHeader({
@@ -1477,37 +1472,33 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   }
 
   return (
-    <section className="flex min-h-[480px] flex-1 flex-col gap-3 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-4 sm:pb-6">
-      <div className={`overflow-hidden rounded-2xl border p-4 shadow-sm sm:p-5 ${isSalesLeadPage ? "border-violet-100 bg-gradient-to-br from-white via-white to-violet-50" : "border-teal-100 bg-gradient-to-br from-white via-white to-teal-50"}`}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="flex min-h-[480px] flex-1 flex-col gap-2 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6">
+      <div className={`overflow-hidden rounded-xl border px-3 py-3 shadow-sm sm:px-4 ${isSalesLeadPage ? "border-violet-100 bg-gradient-to-r from-white via-white to-violet-50" : "border-teal-100 bg-gradient-to-r from-white via-white to-teal-50"}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
-            <p className={`text-[10px] font-black tracking-[0.18em] ${isSalesLeadPage ? "text-violet-600" : "text-teal-600"}`}>{leadPageCopy.eyebrow}</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">{leadPageCopy.title}</h2>
-            <p className="mt-1.5 text-xs font-semibold leading-5 text-slate-600 sm:text-sm">{leadPageCopy.description}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className={`text-[10px] font-black tracking-[0.16em] ${isSalesLeadPage ? "text-violet-600" : "text-teal-600"}`}>{leadPageCopy.eyebrow}</p>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isSalesLeadPage ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"}`}>
+                {leadPageCopy.role}
+              </span>
+            </div>
+            <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950 sm:text-xl">{leadPageCopy.title}</h2>
+            <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">{leadPageCopy.description}</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-            <a className={`rounded-xl border px-3 py-2.5 text-left transition ${!isSalesLeadPage ? "border-teal-600 bg-teal-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-teal-200"}`} href="/dashboard?view=leads&leadType=permit">
-              <span className="block text-xs font-black">신규 개업 탐색</span>
-              <span className={`mt-0.5 block text-[10px] font-semibold ${!isSalesLeadPage ? "text-teal-100" : "text-slate-400"}`}>인허가 신호로 먼저 발견</span>
+          <nav aria-label="리드 업무 화면" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:min-w-[340px]">
+            <a aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/dashboard?view=leads&leadType=permit">
+              <span className="block text-xs font-black">신규 리드</span>
+              <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">발견·검증</span>
             </a>
-            <a className={`rounded-xl border px-3 py-2.5 text-left transition ${isSalesLeadPage ? "border-violet-600 bg-violet-700 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-violet-200"}`} href="/dashboard?view=leads&leadType=keyword">
-              <span className="block text-xs font-black">운영 매장 영업</span>
-              <span className={`mt-0.5 block text-[10px] font-semibold ${isSalesLeadPage ? "text-violet-100" : "text-slate-400"}`}>수요 신호로 우선 접촉</span>
+            <a aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/dashboard?view=leads&leadType=keyword">
+              <span className="block text-xs font-black">영업 리드</span>
+              <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">접촉·견적·후속</span>
             </a>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3">
-          <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isSalesLeadPage ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"}`}>
-            이 화면의 역할 · {leadPageCopy.role}
-          </span>
-          <a className="inline-flex items-center gap-1 text-xs font-black text-slate-600 transition hover:text-slate-950" href={leadPageCopy.nextHref}>
-            {leadPageCopy.nextLabel}
-            <ArrowRight className="h-3.5 w-3.5" />
-          </a>
+          </nav>
         </div>
       </div>
 
-      <div className={`grid gap-2 sm:grid-cols-2 ${isSalesLeadPage ? "xl:grid-cols-6" : "xl:grid-cols-4"}`}>
+      <div className={`grid gap-1.5 sm:grid-cols-2 ${isSalesLeadPage ? "xl:grid-cols-6" : "xl:grid-cols-4"}`}>
         <DirectoryStat
           active
           label={isSalesLeadPage ? "전체 영업 후보" : "전체 신규 개업"}

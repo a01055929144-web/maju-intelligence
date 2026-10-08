@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Building2, Database, FileSpreadsheet, LucideIcon } from "lucide-react";
-import { SectionHeader } from "@/components/section-header";
 
 type WorkspaceTab = {
   readonly href: string;
@@ -40,41 +39,45 @@ export function CustomerWorkspaceTabs() {
   }
 
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <SectionHeader
-        badge={
-          <span className="w-fit shrink-0 rounded-lg bg-lime-100 px-2.5 py-1 text-[11px] font-bold text-slate-900 ring-1 ring-inset ring-lime-200">
-            거래처 작업
-          </span>
-        }
-        description="등록, 원장, 등록 이력 조회를 한 흐름으로 봅니다."
-        title="거래처 관리"
-      />
-      <div className="grid gap-1.5 border-t border-slate-100 bg-slate-50/70 p-1.5 sm:grid-cols-3">
+    <nav
+      aria-label="거래처 작업 이동"
+      className="mb-3 flex items-center gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      <div className="hidden min-w-fit items-center gap-2 border-r border-slate-200 px-2.5 lg:flex">
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-lime-100 text-slate-800 ring-1 ring-inset ring-lime-200">
+          <Building2 className="h-4 w-4" />
+        </span>
+        <span>
+          <span className="block text-xs font-extrabold text-slate-900">거래처 작업</span>
+          <span className="block text-[10px] font-semibold text-slate-400">등록부터 이력까지</span>
+        </span>
+      </div>
+      <div className="flex min-w-max flex-1 gap-1.5 lg:grid lg:min-w-0 lg:grid-cols-3">
         {WORKSPACE_TABS.map((tab, index) => {
           const selected = pathname === tab.href;
           return (
             <Link
-              className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-bold transition ${
+              aria-current={selected ? "page" : undefined}
+              className={`flex h-10 min-w-[148px] items-center gap-2 rounded-lg border px-2.5 text-sm font-bold transition lg:min-w-0 ${
                 selected
-                  ? "border-teal-700 bg-teal-700 text-white"
+                  ? "border-teal-700 bg-teal-700 text-white shadow-sm"
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
               }`}
               href={hrefWithCompany(tab.href)}
               key={tab.href}
             >
-              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-semibold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
+              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md text-[10px] font-bold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
                 {index + 1}
               </span>
-              <tab.icon className={`h-4 w-4 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
+              <tab.icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{tab.label}</span>
-                <span className={`mt-0.5 block truncate text-[11px] font-bold ${selected ? "text-white/70" : "text-slate-400"}`}>{tab.helper}</span>
+                <span className={`hidden truncate text-[10px] font-semibold xl:block ${selected ? "text-white/70" : "text-slate-400"}`}>{tab.helper}</span>
               </span>
             </Link>
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }
