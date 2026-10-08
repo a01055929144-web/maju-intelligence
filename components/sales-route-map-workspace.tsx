@@ -424,12 +424,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [isBulkRegistering, setIsBulkRegistering] = useState(false);
   const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
-  // 지도 우선 화면이라 통계 패널은 기본 접힘 상태를 유지하지만, 왼쪽 배송차량·담당자 필터와 오른쪽
-  // 거래처 필터 패널은 기본으로 펼쳐 둡니다(2026-08-24 피드백: "차량, 매니저 필터랑 거래처 필터가
-  // 안보이네" → 왼쪽은 이미 펼침으로 고쳤는데도 "매장 필터가 안 보이네"가 다시 나와 확인해보니
-  // 거래처 목록은 오른쪽 패널(StoreManagementPanel)이라 rightCollapsed 기본값이 문제였음).
+  // 첫 진입은 담당자 패널 + 지도의 2분할로 시작해 지도를 넓게 확보합니다. 거래처 목록은 상단의
+  // 상시 노출 분할 스위치에서 한 번에 전환할 수 있고, 3분할/지도 전용 화면도 같은 자리에서 선택합니다.
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(true);
   const mapPanelMode = !leftCollapsed && !rightCollapsed
     ? "three"
     : !leftCollapsed && rightCollapsed
@@ -1832,6 +1830,35 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <span className="whitespace-nowrap"><span className="hidden lg:inline">GPS 활성 </span>{liveVehicleSummary.active}건</span>
             {liveVehicleSummary.stale ? <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 sm:inline">지연 {liveVehicleSummary.stale}</span> : null}
           </button>
+          {activeView === "map" ? (
+            <div
+              aria-label="지도 화면 분할 빠른 전환"
+              className="hidden h-10 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 lg:flex"
+              role="group"
+            >
+              {([
+                ["three", "3", "담당자와 거래처를 함께 표시"],
+                ["driver", "2·담당", "담당자와 지도 표시"],
+                ["customer", "2·거래", "거래처와 지도 표시"],
+                ["map", "1", "지도만 표시"]
+              ] as const).map(([mode, label, title]) => (
+                <button
+                  aria-pressed={mapPanelMode === mode}
+                  className={`h-8 rounded-md px-2 text-[11px] font-bold transition ${
+                    mapPanelMode === mode
+                      ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200"
+                      : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  }`}
+                  key={mode}
+                  onClick={() => setMapPanelMode(mode)}
+                  title={title}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <details className="group relative shrink-0">
             <summary
               aria-label="지도 화면 설정"
