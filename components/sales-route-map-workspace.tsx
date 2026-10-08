@@ -647,10 +647,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       createDeliveryVehiclesFromStores(
         applyStoreEditsForVehicleGrouping(routeSeedStores, storeEdits),
         vehicleFuelTypes,
-        Array.from(new Set([...manualVehicles, ...activeVehicleMasterNames])),
+        // 차량 마스터가 있는 회사에서는 과거 브라우저 localStorage의 수동 차량을 다시 합치지
+        // 않습니다. 오래된 수동 항목이 활성 마스터 3대 옆에 빈 4번째 차량으로 재생성되는 원인이
+        // 되므로, 마스터를 등록 차량의 유일한 기준으로 사용합니다.
+        vehicleMasterAvailable ? activeVehicleMasterNames : Array.from(new Set([...manualVehicles, ...activeVehicleMasterNames])),
         manualDrivers
       ),
-    [routeSeedStores, storeEdits, vehicleFuelTypes, manualVehicles, activeVehicleMasterNames, manualDrivers]
+    [routeSeedStores, storeEdits, vehicleFuelTypes, manualVehicles, activeVehicleMasterNames, manualDrivers, vehicleMasterAvailable]
   );
   const deliveryVehicles = useMemo(() => applyVehicleEdits(baseDeliveryVehicles, vehicleEdits), [baseDeliveryVehicles, vehicleEdits]);
   // "미배정" 자동 그룹은 실제로 저장된 배송차가 아니므로, 헤더의 "N대" 배지에는 실제 배송차 수만
