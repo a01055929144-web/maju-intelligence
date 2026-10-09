@@ -172,6 +172,7 @@ body .font-black {
   --mobile-accent: #5eead4;
   --mobile-accent-soft: #153c3b;
   --mobile-accent-text: #ccfbf1;
+  --mobile-on-accent: #062b28;
   --mobile-warning: #f7b955;
   background: var(--mobile-bg);
   color: var(--mobile-text);
@@ -188,6 +189,7 @@ body .font-black {
   --mobile-accent: #087f72;
   --mobile-accent-soft: #d9f3ed;
   --mobile-accent-text: #115e59;
+  --mobile-on-accent: #ffffff;
   --mobile-warning: #c87916;
   background: var(--mobile-bg);
   color: var(--mobile-text);
@@ -218,6 +220,11 @@ body .font-black {
 .mobile-bottom-nav-item.is-active { background: var(--mobile-accent-soft); color: var(--mobile-accent-text); }
 .mobile-route-active-row { background: var(--mobile-accent-soft); color: var(--mobile-text); }
 .mobile-route-active-title { color: var(--mobile-text); }
+.mobile-primary-action { background: var(--mobile-accent) !important; color: var(--mobile-on-accent) !important; }
+.mobile-primary-action:hover { filter: brightness(.94); }
+.mobile-secondary-action { background: var(--mobile-accent-soft) !important; border-color: var(--mobile-border) !important; color: var(--mobile-accent-text) !important; }
+.mobile-input { background: var(--mobile-surface-raised) !important; border-color: var(--mobile-border) !important; color: var(--mobile-text) !important; }
+.mobile-input::placeholder { color: var(--mobile-muted) !important; }
 .mobile-theme-shell input,.mobile-theme-shell textarea,.mobile-theme-shell select { background: var(--mobile-surface-raised); border-color: var(--mobile-border); color: var(--mobile-text); }
 
 button,

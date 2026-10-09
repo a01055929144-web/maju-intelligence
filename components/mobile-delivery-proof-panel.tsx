@@ -344,11 +344,11 @@ export function MobileDeliveryProofPanel({
     <section aria-busy={saving} className={`mobile-card rounded-2xl border p-3 ${files.length ? "has-files" : ""}`} id="delivery-proof">
       <div className="proof-heading flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-400/15 text-amber-400">
+          <span className="mobile-accent-soft grid h-10 w-10 shrink-0 place-items-center rounded-lg">
             <Camera className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <span className="mb-1 inline-flex rounded-full bg-amber-400/10 px-2 py-1 text-[11px] font-black text-amber-400">4 · 완료 저장</span>
+            <span className="mobile-accent-soft mb-1 inline-flex rounded-full px-2 py-1 text-[11px] font-black">4 · 완료 저장</span>
             <p className="truncate font-black">사진 촬영 후 바로 완료</p>
             <p className="mobile-muted mt-1 text-xs font-bold">적재 위치: {loadingPosition || "점주 요청 위치"}</p>
           </div>
@@ -358,7 +358,7 @@ export function MobileDeliveryProofPanel({
         </button>
       </div>
 
-      <label className="proof-capture mt-3 flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#f6a947] px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-[#ffb75b]">
+      <label className="mobile-primary-action proof-capture mt-3 flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition">
         <input
           accept="image/*"
           className="hidden"
@@ -372,11 +372,11 @@ export function MobileDeliveryProofPanel({
         <Plus className="h-4 w-4" />
         {files.length ? `사진 추가 (${files.length}/5)` : "1. 완료 사진 촬영"}
       </label>
-      {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="relative rounded-lg bg-[#111827] p-2 ring-1 ring-inset ring-slate-700" key={fileKey(file)}><ImageIcon className="h-8 w-8 text-teal-400" /><p className="mt-1 truncate pr-7 text-[10px] font-bold text-slate-300">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full text-white" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
+      {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="mobile-card-raised relative rounded-lg border p-2" key={fileKey(file)}><ImageIcon className="mobile-accent h-8 w-8" /><p className="mobile-muted mt-1 truncate pr-7 text-[10px] font-bold">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950 ring-1 ring-slate-200"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
 
       {files.length ? (
-        <div className="mt-3 flex items-center justify-between rounded-xl border border-teal-500/20 bg-teal-500/10 px-3 py-2 text-xs font-bold text-teal-200">
+        <div className="mobile-accent-soft mt-3 flex items-center justify-between rounded-xl border border-teal-200 px-3 py-2 text-xs font-bold">
           <span>사진 {files.length}장 준비됨</span>
           <span>아래 버튼으로 완료</span>
         </div>
@@ -385,15 +385,15 @@ export function MobileDeliveryProofPanel({
       <details className="mobile-card-raised group mt-3 rounded-xl border">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black">
           2. 상태 · 메시지 (선택)
-          <span className="text-blue-700 group-open:hidden">열기</span>
-          <span className="hidden text-blue-700 group-open:inline">닫기</span>
+          <span className="mobile-accent group-open:hidden">열기</span>
+          <span className="mobile-accent hidden group-open:inline">닫기</span>
         </summary>
-        <div className="border-t border-slate-700 p-3">
+        <div className="border-t border-[var(--mobile-border)] p-3">
           <div className="grid grid-cols-3 gap-2">
             {deliveryStatuses.map((item) => (
               <button
                 className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
-                  deliveryStatus === item.value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                  deliveryStatus === item.value ? "mobile-primary-action border-teal-700" : "mobile-card border-slate-200"
                 }`}
                 key={item.value}
                 onClick={() => setDeliveryStatus(item.value)}
@@ -406,7 +406,7 @@ export function MobileDeliveryProofPanel({
 
       <MessageTemplateManager compact mode="driver" onSelect={(body) => setMemo(body.replaceAll("{매장명}", customerName))} />
       <textarea
-        className="mt-3 min-h-[92px] w-full resize-none rounded-xl border border-slate-700 bg-[#151c29] p-3 text-sm font-semibold leading-6 text-white outline-none placeholder:text-slate-500 focus:border-[#9bb4ef] focus:ring-2 focus:ring-[#9bb4ef]/20"
+        className="mobile-input mt-3 min-h-[92px] w-full resize-none rounded-xl border p-3 text-sm font-semibold leading-6 outline-none focus:ring-2 focus:ring-teal-500/20"
         onChange={(event) => {
           setMemo(event.target.value);
           // 저장 성공 직후 버튼이 잠겨 있는 상태에서, 메모를 다시 쓰기 시작하면 새로운 기록임을
@@ -421,7 +421,7 @@ export function MobileDeliveryProofPanel({
         {messageChannels.map((item) => (
           <button
             className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
-              messageChannel === item.value ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "border-slate-200 bg-white text-slate-700"
+              messageChannel === item.value ? "mobile-primary-action border-teal-700 shadow-[0_6px_14px_rgba(15,118,110,0.16)]" : "mobile-card border-slate-200"
             }`}
             key={item.value}
             onClick={() => setMessageChannel(item.value)}
@@ -432,7 +432,7 @@ export function MobileDeliveryProofPanel({
         ))}
       </div>
 
-      <div className="delivery-message-preview mt-3 rounded-lg border border-blue-100 bg-white p-3">
+      <div className="mobile-card delivery-message-preview mt-3 rounded-lg border p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">점주 발송 문구</p>
           <div className="flex shrink-0 gap-1.5">
@@ -450,17 +450,17 @@ export function MobileDeliveryProofPanel({
         {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
       </div>
 
-      <div className="mt-3 rounded-xl border border-slate-700 p-3">
-        <p className="text-xs font-black text-slate-300">☎️ 문의 연락처</p>
+      <div className="mobile-card-raised mt-3 rounded-xl border p-3">
+        <p className="text-xs font-black">☎️ 문의 연락처</p>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <button className={`min-h-11 rounded-lg border px-2 text-xs font-black ${contactMode === "company" ? "border-teal-500 bg-teal-700 text-white" : "border-slate-700 text-slate-300"}`} onClick={() => { setContactMode("company"); window.localStorage.setItem(`maju-contact-mode:${driverName}`, "company"); }} type="button">회사 대표번호</button>
-          <button className={`min-h-11 rounded-lg border px-2 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${contactMode === "driver" ? "border-teal-500 bg-teal-700 text-white" : "border-slate-700 text-slate-300"}`} disabled={!driverPhone} onClick={() => { setContactMode("driver"); window.localStorage.setItem(`maju-contact-mode:${driverName}`, "driver"); }} type="button">배송기사 연락처</button>
+          <button className={`min-h-11 rounded-lg border px-2 text-xs font-black ${contactMode === "company" ? "mobile-primary-action border-teal-700" : "mobile-card border-slate-200"}`} onClick={() => { setContactMode("company"); window.localStorage.setItem(`maju-contact-mode:${driverName}`, "company"); }} type="button">회사 대표번호</button>
+          <button className={`min-h-11 rounded-lg border px-2 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${contactMode === "driver" ? "mobile-primary-action border-teal-700" : "mobile-card border-slate-200"}`} disabled={!driverPhone} onClick={() => { setContactMode("driver"); window.localStorage.setItem(`maju-contact-mode:${driverName}`, "driver"); }} type="button">배송기사 연락처</button>
         </div>
-        <p className="mt-2 text-xs font-bold text-slate-400">{contactMode === "driver" ? driverPhone || "관리자가 기사 계정에 연락처를 등록하면 자동 적용됩니다." : notificationPhone || "회사 설정에서 대표번호를 입력하세요."}</p>
+        <p className="mobile-muted mt-2 text-xs font-bold">{contactMode === "driver" ? driverPhone || "관리자가 기사 계정에 연락처를 등록하면 자동 적용됩니다." : notificationPhone || "회사 설정에서 대표번호를 입력하세요."}</p>
       </div>
         </div>
       </details>
-      <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-800">
+      <p className="mobile-accent mt-2 flex items-center gap-1.5 text-[11px] font-bold">
         <MapPin className="h-3 w-3 shrink-0" />
         {locationStatus === "granted" && location
           ? `위치 준비됨 · ${location.accuracy}m`
@@ -478,12 +478,12 @@ export function MobileDeliveryProofPanel({
         ) : null}
       </p>
 
-      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-2 mt-3 rounded-2xl border border-slate-700 bg-[#111827]/95 p-2 shadow-[0_-8px_28px_rgba(0,0,0,.35)] backdrop-blur">
-      <Button className="h-14 w-full bg-[#FEE500] font-black text-slate-950 hover:bg-[#f5dc00]" disabled={saving || status === "saved"} onClick={submit}>
+      <div className="mobile-card sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-2 mt-3 rounded-2xl border p-2 shadow-[0_-8px_28px_rgba(15,23,42,.14)] backdrop-blur">
+      <Button className="mobile-primary-action h-14 w-full font-black" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
         {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "배송 완료 저장"}
       </Button>
-      {saving ? <p aria-live="polite" className="mt-2 text-center text-[11px] font-bold text-slate-300">화면을 닫지 마세요 · {progressLabel || "처리 중"}</p> : null}
+      {saving ? <p aria-live="polite" className="mobile-muted mt-2 text-center text-[11px] font-bold">화면을 닫지 마세요 · {progressLabel || "처리 중"}</p> : null}
       </div>
 
       {status === "idle" && files.length ? (
@@ -521,7 +521,7 @@ export function MobileDeliveryProofPanel({
       ) : null}
       {status === "saved" && manualRecipientPhone ? (
         <a
-          className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white text-sm font-black text-blue-800 shadow-sm"
+          className="mobile-secondary-action mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-black shadow-sm"
           href={createSmsHref(manualRecipientPhone, resolvedMessage || ownerMessage)}
         >
           <MessageSquareText className="h-4 w-4" />
@@ -534,7 +534,7 @@ export function MobileDeliveryProofPanel({
           이전 배송 기록
           <span>{deliveryProofAttachments.length + deliveryNotes.length}건</span>
         </summary>
-        <div className="border-t border-blue-100 p-3">
+        <div className="border-t border-[var(--mobile-border)] p-3">
       <div className="grid gap-2">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-black text-slate-500">최근 배송완료 증빙</p>

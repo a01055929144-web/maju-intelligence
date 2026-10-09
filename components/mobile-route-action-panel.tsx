@@ -31,7 +31,7 @@ export function MobileRouteActionPanel({
     <section id="contact-actions">
       <div className="grid grid-cols-[1fr_1fr_44px] gap-2">
         <a
-          className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-blue-600 px-2 text-sm font-bold text-white shadow-sm"
+          className="mobile-primary-action flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold shadow-sm"
           href={mapUrl}
           rel="noreferrer"
           target="_blank"
@@ -40,7 +40,7 @@ export function MobileRouteActionPanel({
           지도 열기
         </a>
         <a
-          className={`flex min-h-14 items-center justify-center gap-2 rounded-xl bg-teal-600 px-2 text-sm font-bold text-white shadow-sm ${phone ? "" : "pointer-events-none opacity-45"}`}
+          className={`mobile-primary-action flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold shadow-sm ${phone ? "" : "pointer-events-none opacity-45"}`}
           href={phone ? `tel:${phone}` : "#"}
         >
           <Phone className="h-4 w-4" />
@@ -62,14 +62,14 @@ export function MobileRouteActionPanel({
           적재위치
         </a>
         <a
-          className="col-span-2 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-bold text-white shadow-sm"
+          className="mobile-primary-action col-span-2 flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold shadow-sm"
           href="#delivery-proof"
         >
           <CheckCircle2 className="h-4 w-4" />
           배송 완료
         </a>
       </div>
-      {copyMessage ? <p className="mt-2 text-xs font-bold text-teal-700">{copyMessage}</p> : null}
+      {copyMessage ? <p className="mobile-accent mt-2 text-xs font-bold">{copyMessage}</p> : null}
     </section>
   );
 }

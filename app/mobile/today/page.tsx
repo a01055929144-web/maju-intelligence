@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, History, MessageSquareText, Route, Store } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { MobileBottomNavigation } from "@/components/mobile-bottom-navigation";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
@@ -75,7 +76,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const roleLabel = workspaceRoleLabels[workspaceRole];
 
   return (
-    <main className="min-h-screen bg-[#0b1019] text-white">
+    <main className="min-h-screen bg-slate-100 text-slate-950">
       <MobileThemeShell>
       <section className="mobile-app-frame mx-auto flex min-h-screen w-full max-w-[480px] flex-col shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
         <header className="mobile-card sticky top-0 z-10 shrink-0 border-b px-4 py-3 backdrop-blur">
@@ -172,19 +173,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           ) : null}
         </div>
 
-        <footer aria-label="모바일 보조 메뉴" className="mobile-bottom-nav sticky bottom-0 z-20 grid grid-cols-4 border-t px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5">
-          <FooterItem active href="#route-list" icon={Route} label="오늘 배송" />
-          <FooterItem href="/customers/data" icon={Store} label="전체 거래처" />
-          <FooterItem href="/dashboard/settings#message-templates" icon={MessageSquareText} label="메시지 편집" />
-          <FooterItem href="#delivery-history" icon={History} label="배송 기록" />
-        </footer>
+        <MobileBottomNavigation />
       </section>
       </MobileThemeShell>
     </main>
   );
-}
-function FooterItem({ active, href, icon: Icon, label }: { active?: boolean; href: string; icon: typeof Route; label: string }) {
-  return <Link className={`mobile-bottom-nav-item flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-semibold ${active ? "is-active" : ""}`} href={href}><Icon className="h-4 w-4" />{label}</Link>;
 }
 function MobileOperationalEmptyState() {
   return (
