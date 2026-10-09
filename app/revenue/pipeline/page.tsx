@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Banknote, CircleDollarSign, FileText, Percent, ReceiptText, Route, TrendingUp } from "lucide-react";
+import { ArrowRight, Banknote, CalendarClock, CircleDollarSign, ExternalLink, FileText, Percent, ReceiptText, Route, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { PipelineCandidatesTable } from "@/components/pipeline-candidates-table";
 import { Progress } from "@/components/ui/progress";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
-import { getRevenuePipeline, type RevenuePipeline } from "@/lib/store";
+import { getRevenuePipeline, listSalesQuotes, type RevenuePipeline, type SalesQuoteListItem } from "@/lib/store";
 
 const emptyPipeline: RevenuePipeline = {
   conversionRate: 0,
@@ -30,13 +30,17 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const requestedSection = resolvedSearchParams?.section;
-  const section = requestedSection === "basis" || requestedSection === "status" || requestedSection === "candidates" ? requestedSection : "summary";
+  const section = requestedSection === "basis" || requestedSection === "status" || requestedSection === "candidates" || requestedSection === "quotes" ? requestedSection : "summary";
   const sectionHref = (nextSection: string) => `/revenue/pipeline?section=${nextSection}${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}`;
   let pipeline = emptyPipeline;
+  let savedQuotes: SalesQuoteListItem[] = [];
   let pipelineError = "";
 
   try {
-    pipeline = await getRevenuePipeline(companyId);
+    [pipeline, savedQuotes] = await Promise.all([
+      getRevenuePipeline(companyId),
+      companyId ? listSalesQuotes(companyId) : Promise.resolve([])
+    ]);
   } catch (error) {
     pipelineError = error instanceof Error ? error.message : "매출 파이프라인을 불러오지 못했습니다.";
   }
@@ -83,7 +87,8 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             { active: section === "summary", badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: sectionHref("summary"), icon: TrendingUp, label: "현황" },
             { active: section === "basis", description: "방문·원장 연결", href: sectionHref("basis"), icon: FileText, label: "기준" },
             { active: section === "status", description: "견적·관심·보류", href: sectionHref("status"), icon: Percent, label: "상태" },
-            { active: section === "candidates", description: "후속 영업 대상", href: sectionHref("candidates"), icon: ReceiptText, label: "후보" }
+            { active: section === "candidates", description: "후속 영업 대상", href: sectionHref("candidates"), icon: ReceiptText, label: "후보" },
+            { active: section === "quotes", badge: `${savedQuotes.length}건`, description: "발행·유효기간·공유", href: sectionHref("quotes"), icon: CalendarClock, label: "견적 원장" }
           ]}
           title="영업 관리"
         />
@@ -155,11 +160,101 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
           </section>
 
           {section === "candidates" ? <PipelineCandidatesTable items={pipeline.items} weightedRevenue={pipeline.weightedRevenue} /> : null}
+          {section === "quotes" ? <SalesQuoteLedger quotes={savedQuotes} /> : null}
         </div>
         </div>
       </section>
     </CustomerAppShell>
   );
+}
+
+const quoteStatusPresentation: Record<SalesQuoteListItem["status"], { className: string; label: string }> = {
+  accepted: { className: "bg-emerald-50 text-emerald-800", label: "수락" },
+  cancelled: { className: "bg-slate-100 text-slate-600", label: "취소" },
+  draft: { className: "bg-slate-100 text-slate-700", label: "초안" },
+  expired: { className: "bg-amber-50 text-amber-800", label: "만료" },
+  rejected: { className: "bg-rose-50 text-rose-700", label: "거절" },
+  sent: { className: "bg-blue-50 text-blue-700", label: "발송" }
+};
+
+function SalesQuoteLedger({ quotes }: { quotes: SalesQuoteListItem[] }) {
+  const activeCount = quotes.filter((quote) => quote.status === "sent" && quote.publicEnabled).length;
+  const expiredCount = quotes.filter((quote) => quote.status === "expired").length;
+  const totalSales = quotes.reduce((sum, quote) => sum + quote.totalSales, 0);
+
+  return (
+    <section className="maju-section-card overflow-hidden" id="sales-quote-ledger">
+      <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="maju-section-title">발행 견적 원장</p>
+          <p className="mt-1 text-sm text-slate-500">모바일 영업에서 저장한 견적의 금액·유효기간·고객 링크를 확인합니다.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+          <Badge className="bg-blue-50 text-blue-700">공유 중 {activeCount}건</Badge>
+          <Badge className="bg-amber-50 text-amber-800">만료 {expiredCount}건</Badge>
+          <Badge className="bg-teal-50 text-teal-800">총 {totalSales.toLocaleString()}원</Badge>
+        </div>
+      </div>
+      {quotes.length ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[920px] w-full border-collapse text-left">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+              <tr>
+                <th className="px-4 py-3">견적번호</th>
+                <th className="px-4 py-3">수신처·제목</th>
+                <th className="px-4 py-3">담당자</th>
+                <th className="px-4 py-3 text-right">판매 합계</th>
+                <th className="px-4 py-3">유효기간</th>
+                <th className="px-4 py-3">상태</th>
+                <th className="px-4 py-3 text-right">고객용</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {quotes.map((quote) => {
+                const status = quoteStatusPresentation[quote.status];
+                const publicAvailable = quote.publicEnabled && quote.status !== "expired" && quote.status !== "cancelled";
+                return (
+                  <tr className="align-middle hover:bg-slate-50/70" key={quote.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-mono text-xs font-semibold text-slate-700">{quote.quoteNumber}</p>
+                      <p className="mt-1 text-xs text-slate-400">{formatKoreanDate(quote.createdAt)}</p>
+                    </td>
+                    <td className="max-w-[260px] px-4 py-3">
+                      <p className="truncate text-sm font-semibold text-slate-950">{quote.recipientName || "수신처 미입력"}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{quote.title}</p>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-600">{quote.createdByName || "담당자 미기록"}</td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-slate-950">{quote.totalSales.toLocaleString()}원</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-600">{formatKoreanDate(quote.validUntil)}</td>
+                    <td className="px-4 py-3"><Badge className={status.className}>{status.label}</Badge></td>
+                    <td className="px-4 py-3 text-right">
+                      {publicAvailable ? (
+                        <Link className="maju-button-secondary min-h-9 justify-center" href={`/quote/${quote.publicToken}`} target="_blank">
+                          열기 <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      ) : <span className="text-xs font-semibold text-slate-400">공유 종료</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="px-5 py-12 text-center">
+          <p className="font-semibold text-slate-950">아직 저장된 견적이 없습니다.</p>
+          <p className="mt-1 text-sm text-slate-500">모바일 영업에서 리드를 선택하고 품목·판매가·유효기간을 확정하면 여기에 누적됩니다.</p>
+          <Link className="maju-button-primary mt-5" href="/mobile/sales">모바일 영업 열기 <ArrowRight className="h-4 w-4" /></Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatKoreanDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "확인 필요";
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 function PipelineBasisPanel({

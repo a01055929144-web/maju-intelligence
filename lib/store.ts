@@ -5910,6 +5910,76 @@ export async function createSalesQuote(input: CreateSalesQuoteInput) {
   }
 }
 
+export type SalesQuoteListItem = {
+  createdAt: string;
+  createdByName?: string;
+  id: string;
+  publicEnabled: boolean;
+  publicToken: string;
+  quoteNumber: string;
+  recipientName?: string;
+  status: "accepted" | "cancelled" | "draft" | "expired" | "rejected" | "sent";
+  title: string;
+  totalSales: number;
+  validUntil: string;
+};
+
+export async function listSalesQuotes(companyId: string, limit = 100): Promise<SalesQuoteListItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+  try {
+    const quotes = await supabaseRequest<Array<{
+      created_at: string;
+      created_by_name: string | null;
+      id: string;
+      public_enabled: boolean;
+      public_token: string;
+      quote_number: string;
+      recipient_name: string | null;
+      status: SalesQuoteListItem["status"];
+      title: string;
+      valid_until: string;
+    }>>(
+      `sales_quotes?select=id,quote_number,title,status,valid_until,public_token,public_enabled,recipient_name,created_by_name,created_at&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=${safeLimit}`
+    );
+    if (!quotes.length) return [];
+
+    // 견적당 최대 100개 품목이므로 10개 견적씩 조회하면 Supabase의 일반 1,000행 응답
+    // 상한 안에서 합계가 잘리지 않습니다. 한 번에 모든 품목을 요청해 일부 합계만 표시되는
+    // 조용한 오류를 피합니다.
+    const quoteIds = quotes.map((quote) => quote.id);
+    const quoteIdChunks: string[][] = [];
+    for (let index = 0; index < quoteIds.length; index += 10) quoteIdChunks.push(quoteIds.slice(index, index + 10));
+    const itemBatches = await Promise.all(
+      quoteIdChunks.map((ids) => supabaseRequest<Array<{ quantity: number; quote_id: string; sales_unit_price: number }>>(
+        `sales_quote_items?select=quote_id,quantity,sales_unit_price&company_id=eq.${encodeURIComponent(companyId)}&quote_id=in.(${ids.map((id) => encodeURIComponent(id)).join(",")})&limit=1000`
+      ))
+    );
+    const items = itemBatches.flat();
+    const totalByQuote = new Map<string, number>();
+    for (const item of items) {
+      totalByQuote.set(item.quote_id, (totalByQuote.get(item.quote_id) || 0) + Number(item.quantity) * Number(item.sales_unit_price));
+    }
+
+    return quotes.map((quote) => ({
+      createdAt: quote.created_at,
+      createdByName: quote.created_by_name || undefined,
+      id: quote.id,
+      publicEnabled: Boolean(quote.public_enabled),
+      publicToken: quote.public_token,
+      quoteNumber: quote.quote_number,
+      recipientName: quote.recipient_name || undefined,
+      status: new Date(quote.valid_until).getTime() <= Date.now() && quote.status === "sent" ? "expired" : quote.status,
+      title: quote.title,
+      totalSales: totalByQuote.get(quote.id) || 0,
+      validUntil: quote.valid_until
+    }));
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) return [];
+    throw error;
+  }
+}
+
 export type PublicSalesQuote = {
   companyName: string;
   items: Array<{ amount: number; productName: string; quantity: number; salesUnitPrice: number; specification?: string; unit: string }>;
