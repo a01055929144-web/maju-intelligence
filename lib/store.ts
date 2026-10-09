@@ -6068,6 +6068,80 @@ export async function getSalesKpiSnapshot(companyId: string, staffUserId?: strin
   }
 }
 
+export type CompanySalesKpiMember = SalesKpiSnapshot & {
+  achievementRate: number;
+  name: string;
+  role: string;
+  userId: string;
+};
+
+export async function getCompanySalesKpiOverview(companyId: string): Promise<{ members: CompanySalesKpiMember[]; periodMonth: string }> {
+  const periodMonth = toKstDateKey(new Date().toISOString()).slice(0, 7);
+  if (!isProductionStoreConfigured()) return { members: [], periodMonth };
+
+  const { invitations } = await getCompanyStaffInvitations(companyId);
+  const accepted = invitations.filter((invitation) => invitation.status === "accepted" && invitation.acceptedBy);
+  if (!accepted.length) return { members: [], periodMonth };
+
+  try {
+    const periodStart = `${periodMonth}-01T00:00:00+09:00`;
+    const [targets, actions] = await Promise.all([
+      supabaseRequest<Array<{
+        staff_user_id: string | null;
+        target_contacts: number;
+        target_conversions: number;
+        target_quotes: number;
+      }>>(
+        `sales_kpi_targets?select=staff_user_id,target_contacts,target_quotes,target_conversions&company_id=eq.${encodeURIComponent(companyId)}&period_month=eq.${periodMonth}-01`
+      ),
+      supabaseRequest<Array<{ action_type: string; actor_name: string | null; result: string | null }>>(
+        `lead_actions?select=action_type,actor_name,result&company_id=eq.${encodeURIComponent(companyId)}&created_at=gte.${encodeURIComponent(periodStart)}&limit=5000`
+      )
+    ]);
+    const companyTarget = targets.find((target) => target.staff_user_id === "__company__");
+    return {
+      periodMonth,
+      members: accepted.map((invitation) => {
+        const userId = invitation.acceptedBy as string;
+        const target = targets.find((row) => row.staff_user_id === userId) || companyTarget;
+        const actorKeys = new Set(
+          [invitation.employeeName, invitation.assignedManagerName]
+            .map((value) => value?.trim().toLocaleLowerCase("ko-KR"))
+            .filter(Boolean) as string[]
+        );
+        const memberActions = actions.filter((action) => {
+          const actor = action.actor_name?.trim().toLocaleLowerCase("ko-KR");
+          return Boolean(actor && actorKeys.has(actor));
+        });
+        const actualContacts = memberActions.filter((action) => ["call", "dm", "visit", "quote"].includes(action.action_type)).length;
+        const actualQuotes = memberActions.filter((action) => action.action_type === "quote").length;
+        const actualConversions = memberActions.filter((action) => action.action_type === "convert" || action.result === "거래처 전환").length;
+        const targetContacts = Number(target?.target_contacts) || 0;
+        const targetQuotes = Number(target?.target_quotes) || 0;
+        const targetConversions = Number(target?.target_conversions) || 0;
+        const weightedTarget = targetContacts + targetQuotes + targetConversions;
+        const weightedActual = Math.min(actualContacts, targetContacts) + Math.min(actualQuotes, targetQuotes) + Math.min(actualConversions, targetConversions);
+        return {
+          achievementRate: weightedTarget ? Math.min(100, Math.round((weightedActual / weightedTarget) * 100)) : 0,
+          actualContacts,
+          actualConversions,
+          actualQuotes,
+          name: invitation.employeeName,
+          periodMonth,
+          role: invitation.role,
+          targetContacts,
+          targetConversions,
+          targetQuotes,
+          userId
+        };
+      }).sort((left, right) => right.achievementRate - left.achievementRate || left.name.localeCompare(right.name, "ko-KR"))
+    };
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) return { members: [], periodMonth };
+    throw error;
+  }
+}
+
 export async function updateCompanySalesKpiTarget(companyId: string, input: { targetContacts: number; targetConversions: number; targetQuotes: number }) {
   const periodMonth = `${new Date().toISOString().slice(0, 7)}-01`;
   try {
@@ -8222,6 +8296,77 @@ export async function listPermitLeadActions(companyId: string, leadId: string, l
   );
 
   return rows.map(toPermitLeadActionItem);
+}
+
+export type SalesContactLedgerItem = {
+  id: string;
+  leadId: string;
+  businessName: string;
+  address?: string;
+  phone?: string;
+  leadStatus: string;
+  actionType: string;
+  result?: string;
+  memo?: string;
+  actorName?: string;
+  collateralTypes: string[];
+  followUpAt?: string;
+  createdAt: string;
+};
+
+type SalesContactLedgerRow = {
+  id: string;
+  lead_id: string;
+  action_type: string;
+  result: string | null;
+  memo: string | null;
+  actor_name: string | null;
+  collateral_types: string[] | null;
+  follow_up_at: string | null;
+  created_at: string;
+};
+
+/** 모바일에서 쌓인 회사 전체 컨택 이력과 후속 일정을 PC 원장용으로 조회합니다. */
+export async function listSalesContactLedger(companyId: string, limit = 1000): Promise<SalesContactLedgerItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+
+  const safeLimit = Math.max(1, Math.min(5000, Math.trunc(limit)));
+  const actions = await supabaseRequest<SalesContactLedgerRow[]>(
+    `lead_actions?select=id,lead_id,action_type,result,memo,actor_name,collateral_types,follow_up_at,created_at&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=${safeLimit}`
+  );
+  if (!actions.length) return [];
+
+  const leadIds = Array.from(new Set(actions.map((action) => action.lead_id)));
+  const leadRows: Array<{ id: string; business_name: string; address: string | null; phone: string | null; status: string }> = [];
+  for (let offset = 0; offset < leadIds.length; offset += 100) {
+    const ids = leadIds.slice(offset, offset + 100).map((id) => `"${id.replaceAll('"', '')}"`).join(",");
+    const rows = await supabaseRequest<Array<{ id: string; business_name: string; address: string | null; phone: string | null; status: string }>>(
+      `business_permit_leads?select=id,business_name,address,phone,status&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${encodeURIComponent(ids)})`
+    );
+    leadRows.push(...rows);
+  }
+  const leadById = new Map(leadRows.map((lead) => [lead.id, lead]));
+
+  return actions.flatMap((action) => {
+    const lead = leadById.get(action.lead_id);
+    if (!lead) return [];
+    const memoReminder = action.memo?.match(/\[리마인드:\s*(\d{4}-\d{2}-\d{2})\]/)?.[1];
+    return [{
+      id: action.id,
+      leadId: action.lead_id,
+      businessName: lead.business_name,
+      address: lead.address || undefined,
+      phone: lead.phone || undefined,
+      leadStatus: lead.status,
+      actionType: action.action_type,
+      result: action.result || undefined,
+      memo: action.memo || undefined,
+      actorName: action.actor_name || undefined,
+      collateralTypes: action.collateral_types || [],
+      followUpAt: action.follow_up_at || (memoReminder ? `${memoReminder}T09:00:00+09:00` : undefined),
+      createdAt: action.created_at
+    }];
+  });
 }
 
 function toPermitLeadActionItem(row: PermitLeadActionRow): PermitLeadActionItem {

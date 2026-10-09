@@ -9,6 +9,7 @@ import {
   LucideIcon,
   MapPinned,
   MessageSquareText,
+  PackageSearch,
   ReceiptText,
   Settings,
   Sparkles
@@ -20,6 +21,9 @@ export type CustomerWorkspaceKey =
   | "customers"
   | "routes"
   | "revenue"
+  | "sales-contacts"
+  | "product-catalog"
+  | "sales-performance"
   | "revenue-ledger"
   | "billing"
   | "assistant"
@@ -98,6 +102,27 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
         href: "/revenue/pipeline",
         icon: BarChart3,
         label: "영업 관리"
+      },
+      {
+        active: "sales-contacts",
+        description: "컨택 기록과 후속 연락 일정",
+        href: "/revenue/contacts",
+        icon: MessageSquareText,
+        label: "컨택·리마인드"
+      },
+      {
+        active: "product-catalog",
+        description: "매입·판매 품목 연결과 가격 관리",
+        href: "/revenue/products",
+        icon: PackageSearch,
+        label: "상품 매칭"
+      },
+      {
+        active: "sales-performance",
+        description: "담당자별 목표와 영업 실적",
+        href: "/sales/performance",
+        icon: BarChart3,
+        label: "영업 성과"
       },
       {
         active: "dashboard",
