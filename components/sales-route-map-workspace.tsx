@@ -107,6 +107,7 @@ import {
   gradeBadgeClass,
   haversineKm,
   readLocalJson,
+  resolveRevenueGrade,
   roundToOneDecimal,
   saveLocalJson,
   type RevenueGrade
@@ -9288,7 +9289,9 @@ function createStoreRows(routePlan: RoutePlan, existingMarkers: KakaoMapMarker[]
         // 빈 값 그대로 두고, createDeliveryVehiclesFromStores에서 "미배정" 그룹 하나로 모아 보여줍니다.
         deliveryDriver: (store as RoutePlanStop & { deliveryDriver?: string }).deliveryDriver || "",
         email: store.email || "",
-        grade: getRevenueGrade(store.expectedRevenue),
+        // 지도 전용 경량 조회가 내려준 grade_override를 보존합니다. 여기서 매출 기준 등급을
+        // 다시 계산하면 거래처 관리에서 저장한 수동 A/B/C 등급이 지도에서 사라집니다.
+        grade: resolveRevenueGrade(getRevenueGrade(store.expectedRevenue), marker?.grade),
         industry: store.industry || "미분류",
         markerX: marker?.x ?? 18 + ((index * 13) % 68),
         markerY: marker?.y ?? 20 + ((index * 17) % 58),
@@ -9323,7 +9326,7 @@ function createStoreRowsFromLedgerMarkers(existingMarkers: KakaoMapMarker[]): St
         durationMinutes: 0,
         email: "",
         expectedRevenue,
-        grade: normalizeRevenueGrade(marker.grade) || getRevenueGrade(expectedRevenue),
+        grade: resolveRevenueGrade(getRevenueGrade(expectedRevenue), marker.grade),
         industry: "미분류",
         markerX: marker.x,
         markerY: marker.y,
@@ -9364,7 +9367,8 @@ function createDeliveryStoreRows(vehicles: DeliveryVehicle[], existingMarkers: K
         // 적 없는 거래처는 예전처럼 담당자 기준 자동 그룹명(vehicle.name)을 그대로 보여줍니다.
         deliveryVehicleName: store.deliveryVehicle || vehicle.name,
         email: store.email || details.email || "",
-        grade: getRevenueGrade(store.expectedRevenue),
+        // 배송차 그룹으로 재구성할 때도 원장/지도에서 받은 수동 등급을 우선합니다.
+        grade: resolveRevenueGrade(getRevenueGrade(store.expectedRevenue), marker?.grade, details.grade),
         industry: store.industry || details.industry || "미분류",
         markerX: marker?.x ?? 16 + (((vehicleIndex * 15 + storeIndex) * 7) % 70),
         markerY: marker?.y ?? 18 + (((vehicleIndex * 15 + storeIndex) * 11) % 58),
@@ -9390,11 +9394,6 @@ function parseLedgerMarkerName(value: string) {
 function getRegionFromAddress(address: string) {
   const parts = address.trim().split(/\s+/).filter(Boolean);
   return parts.slice(0, 2).join(" ") || "미분류";
-}
-
-function normalizeRevenueGrade(value: string | undefined): RevenueGrade | undefined {
-  if (value === "A" || value === "B" || value === "C") return value;
-  return undefined;
 }
 
 function findMarkerForStore(existingMarkers: KakaoMapMarker[], store: Pick<RoutePlanStop, "address" | "id" | "name">) {
@@ -9879,7 +9878,8 @@ function applyStoreEdits(stores: StoreRow[], edits: Record<string, StoreEdit>) {
       ...store,
       ...edit,
       expectedRevenue,
-      grade: edit?.grade || getRevenueGrade(expectedRevenue)
+      // 로컬 편집에 등급이 없다는 이유로 서버에서 받은 수동 등급을 매출 등급으로 덮지 않습니다.
+      grade: resolveRevenueGrade(getRevenueGrade(expectedRevenue), edit?.grade, store.grade)
     };
   });
 }

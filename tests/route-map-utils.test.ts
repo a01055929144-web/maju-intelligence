@@ -8,6 +8,7 @@ import {
   formatMinutes,
   getStoreTotals,
   haversineKm,
+  resolveRevenueGrade,
   roundToSix
 } from "../lib/route-map-utils";
 
@@ -28,5 +29,11 @@ describe("route map utilities", () => {
     expect(deliveryWorthLabel(0.1).label).toBe("적정 범위");
     expect(clamp(12, 0, 10)).toBe(10);
     expect(roundToSix(37.12345678)).toBe(37.123457);
+  });
+
+  it("preserves a saved customer grade ahead of the revenue fallback", () => {
+    expect(resolveRevenueGrade("C", "A")).toBe("A");
+    expect(resolveRevenueGrade("B", undefined, "C")).toBe("C");
+    expect(resolveRevenueGrade("B", undefined, null, "unknown")).toBe("B");
   });
 });

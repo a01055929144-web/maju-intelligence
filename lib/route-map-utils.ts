@@ -1,5 +1,10 @@
 export type RevenueGrade = "A" | "B" | "C";
 
+/** Keeps a saved/manual grade ahead of a revenue-derived fallback. */
+export function resolveRevenueGrade(fallback: RevenueGrade, ...values: Array<string | null | undefined>): RevenueGrade {
+  return values.find((value): value is RevenueGrade => value === "A" || value === "B" || value === "C") || fallback;
+}
+
 type RouteTotalRow = {
   distanceKm?: number;
   durationMinutes?: number;
