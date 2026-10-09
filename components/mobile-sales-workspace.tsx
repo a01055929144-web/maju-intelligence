@@ -8,11 +8,12 @@ import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
 import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { buildContactMemo, distanceKm, extractReminderDate, getMobileLeadType, isContactedLead, type MobileLeadSort, type MobileLeadType } from "@/domains/lead/mobile-sales";
-import type { PermitLeadActionItem, PermitLeadItem, PermitLeadQueues } from "@/lib/store";
+import type { PermitLeadActionItem, PermitLeadItem } from "@/lib/store";
 
-type LeadResponse = { leads?: PermitLeadItem[]; queues?: PermitLeadQueues; message?: string };
+type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
 type ViewMode = "all" | MobileLeadType | "contacted" | "reminder";
+type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
 
 const resultOptions = ["통화 성공", "관심 있음", "견적 요청", "재연락 예정", "다음 방문", "보류", "거절"] as const;
 const collateralOptions = ["브로슈어", "견적서", "명함"] as const;
@@ -23,7 +24,6 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
 
 export function MobileSalesWorkspace({ actorName, companyName }: { actorName: string; companyName: string }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
-  const [queues, setQueues] = useState<PermitLeadQueues | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -40,6 +40,7 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
   const [collateral, setCollateral] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [salesKpi, setSalesKpi] = useState<SalesKpi | null>(null);
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -49,7 +50,6 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
       const payload = (await response.json().catch(() => null)) as LeadResponse | null;
       if (!response.ok) throw new Error(payload?.message || "리드를 불러오지 못했습니다.");
       setLeads(payload?.leads || []);
-      setQueues(payload?.queues || null);
       setLoadState("ready");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "리드를 불러오지 못했습니다.");
@@ -58,6 +58,12 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
   }, []);
 
   useEffect(() => { void loadLeads(); }, [loadLeads]);
+  useEffect(() => {
+    void fetch("/api/sales-kpi", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((payload) => { if (payload?.kpi) setSalesKpi(payload.kpi); })
+      .catch(() => undefined);
+  }, []);
 
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -169,9 +175,9 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
 
           <div className="flex-1 space-y-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
             <section className="mobile-card rounded-xl border p-3" aria-label="영업 KPI 현황">
-              <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">오늘의 영업 흐름</p><p className="mobile-muted mt-0.5 text-xs">회사 KPI 목표값은 PC 설정과 연결 예정 · 현재 실적</p></div><Target className="h-5 w-5 text-teal-700" /></div>
+              <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">이번 달 영업 KPI</p><p className="mobile-muted mt-0.5 text-xs">회사 설정 목표 대비 내 영업 실적</p></div><Target className="h-5 w-5 text-teal-700" /></div>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                <Kpi value={queues?.callToday.length || 0} label="오늘 전화" /><Kpi value={contactedCount} label="누적 컨택" /><Kpi value={quoteCount} label="견적 단계" /><Kpi value={reminderCount} label="리마인드" />
+                <Kpi value={salesKpi?.actualContacts ?? contactedCount} target={salesKpi?.targetContacts} label="컨택" /><Kpi value={salesKpi?.actualQuotes ?? quoteCount} target={salesKpi?.targetQuotes} label="견적" /><Kpi value={salesKpi?.actualConversions || 0} target={salesKpi?.targetConversions} label="전환" /><Kpi value={reminderCount} label="리마인드" />
               </div>
             </section>
 
@@ -221,7 +227,7 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
   );
 }
 
-function Kpi({ label, value }: { label: string; value: number }) { return <div className="mobile-card-raised rounded-lg border px-2 py-3"><p className="text-xl font-bold text-teal-700">{value}</p><p className="mobile-muted mt-1 text-[11px] font-semibold">{label}</p></div>; }
+function Kpi({ label, target, value }: { label: string; target?: number; value: number }) { return <div className="mobile-card-raised rounded-lg border px-2 py-3"><p className="text-xl font-bold text-teal-700">{value}{target ? <span className="text-[10px] text-slate-400">/{target}</span> : null}</p><p className="mobile-muted mt-1 text-[11px] font-semibold">{label}</p>{target ? <span className="mt-1 block h-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-teal-600" style={{ width: `${Math.min(100, Math.round((value / target) * 100))}%` }} /></span> : null}</div>; }
 
 function StateMessage({ icon: Icon, spin = false, text }: { icon: typeof MapPin; spin?: boolean; text: string }) { return <div className="mobile-muted mt-3 flex min-h-20 items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--mobile-border)] text-xs font-semibold"><Icon className={`h-4 w-4 ${spin ? "animate-spin" : ""}`} />{text}</div>; }
 

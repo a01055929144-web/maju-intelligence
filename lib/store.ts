@@ -99,6 +99,8 @@ export type CompanySettings = {
   telegramChatId?: string;
   updatedAt: string;
   workspaceType?: "personal" | "company";
+  defaultQuoteMarginPercent?: number;
+  defaultQuoteValidDays?: number;
 };
 export type CompanySettingsInput = {
   businessType?: string;
@@ -114,7 +116,9 @@ export type CompanySettingsInput = {
   ownerName?: string;
   smsSenderPhone?: string;
   telegramChatId?: string;
-  section?: "company" | "messaging" | "telegram";
+  defaultQuoteMarginPercent?: number;
+  defaultQuoteValidDays?: number;
+  section?: "company" | "messaging" | "quotes" | "telegram";
 };
 export type CustomerMasterItem = {
   id: string;
@@ -5932,6 +5936,72 @@ export async function getPublicSalesQuote(publicToken: string): Promise<PublicSa
   }
 }
 
+export type SalesKpiSnapshot = {
+  actualContacts: number;
+  actualConversions: number;
+  actualQuotes: number;
+  periodMonth: string;
+  targetContacts: number;
+  targetConversions: number;
+  targetQuotes: number;
+};
+
+export async function getSalesKpiSnapshot(companyId: string, staffUserId?: string, actorName?: string): Promise<SalesKpiSnapshot> {
+  const periodMonth = new Date().toISOString().slice(0, 7);
+  const periodStart = `${periodMonth}-01T00:00:00.000Z`;
+  const fallback: SalesKpiSnapshot = { actualContacts: 0, actualConversions: 0, actualQuotes: 0, periodMonth, targetContacts: 0, targetConversions: 0, targetQuotes: 0 };
+  if (!isProductionStoreConfigured()) return fallback;
+  try {
+    const targetKeys = [staffUserId, "__company__"].filter(Boolean) as string[];
+    const targets = await supabaseRequest<Array<{ staff_user_id: string | null; target_contacts: number; target_conversions: number; target_quotes: number }>>(
+      `sales_kpi_targets?select=staff_user_id,target_contacts,target_quotes,target_conversions&company_id=eq.${encodeURIComponent(companyId)}&period_month=eq.${periodMonth}-01&staff_user_id=in.(${targetKeys.map((key) => `"${key}"`).join(",")})`
+    );
+    const target = targets.find((row) => row.staff_user_id === staffUserId) || targets.find((row) => row.staff_user_id === "__company__");
+    const actorFilter = actorName ? `&actor_name=eq.${encodeURIComponent(actorName)}` : "";
+    const actions = await supabaseRequest<Array<{ action_type: string; result: string | null }>>(
+      `lead_actions?select=action_type,result&company_id=eq.${encodeURIComponent(companyId)}&created_at=gte.${encodeURIComponent(periodStart)}${actorFilter}&limit=5000`
+    );
+    return {
+      actualContacts: actions.filter((action) => ["call", "dm", "visit", "quote"].includes(action.action_type)).length,
+      actualConversions: actions.filter((action) => action.action_type === "convert" || action.result === "거래처 전환").length,
+      actualQuotes: actions.filter((action) => action.action_type === "quote").length,
+      periodMonth,
+      targetContacts: Number(target?.target_contacts) || 0,
+      targetConversions: Number(target?.target_conversions) || 0,
+      targetQuotes: Number(target?.target_quotes) || 0
+    };
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) return fallback;
+    throw error;
+  }
+}
+
+export async function updateCompanySalesKpiTarget(companyId: string, input: { targetContacts: number; targetConversions: number; targetQuotes: number }) {
+  const periodMonth = `${new Date().toISOString().slice(0, 7)}-01`;
+  try {
+    const rows = await supabaseRequest<Array<{ target_contacts: number; target_conversions: number; target_quotes: number }>>(
+      "sales_kpi_targets?on_conflict=company_id,staff_user_id,period_month",
+      {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify([{
+          company_id: companyId,
+          period_month: periodMonth,
+          staff_name: "회사 공통 목표",
+          staff_user_id: "__company__",
+          target_contacts: input.targetContacts,
+          target_conversions: input.targetConversions,
+          target_quotes: input.targetQuotes
+        }])
+      }
+    );
+    return rows[0];
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) throw new Error("영업 KPI SQL이 아직 적용되지 않았습니다. 견적·영업 운영 SQL을 먼저 실행해주세요.");
+    throw error;
+  }
+}
+
 export async function uploadCustomerAttachmentFile(
   input: {
     attachmentType: string;
@@ -10211,7 +10281,9 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     smsSenderPhone: process.env.SOLAPI_SENDER_PHONE || "",
     status: "fallback",
     updatedAt: "기준 데이터",
-    workspaceType: "company" as const
+    workspaceType: "company" as const,
+    defaultQuoteMarginPercent: 12,
+    defaultQuoteValidDays: 14
   };
 
   if (!isProductionStoreConfigured()) {
@@ -10236,12 +10308,14 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     telegram_chat_id?: string | null;
     updated_at: string;
     workspace_type?: string | null;
+    default_quote_margin_percent?: number | null;
+    default_quote_valid_days?: number | null;
   };
   let rows: CompanyRow[];
 
   try {
     rows = await supabaseRequest<Array<CompanyRow>>(
-      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,origin_lat,origin_lng,sms_sender_phone,status,telegram_chat_id,workspace_type,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,origin_lat,origin_lng,sms_sender_phone,status,telegram_chat_id,workspace_type,default_quote_margin_percent,default_quote_valid_days,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     );
   } catch (error) {
     if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
@@ -10276,7 +10350,9 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
     status: row.status,
     telegramChatId: row.telegram_chat_id || undefined,
     updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-    workspaceType: row.workspace_type === "personal" ? "personal" : "company"
+    workspaceType: row.workspace_type === "personal" ? "personal" : "company",
+    defaultQuoteMarginPercent: row.default_quote_margin_percent == null ? 12 : Number(row.default_quote_margin_percent),
+    defaultQuoteValidDays: row.default_quote_valid_days == null ? 14 : Number(row.default_quote_valid_days)
   };
 }
 
@@ -10299,6 +10375,12 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       }
     : input.section === "telegram"
       ? { ...basePayload, telegram_chat_id: input.telegramChatId?.trim() || null }
+      : input.section === "quotes"
+        ? {
+            ...basePayload,
+            default_quote_margin_percent: input.defaultQuoteMarginPercent,
+            default_quote_valid_days: input.defaultQuoteValidDays
+          }
       : {
           ...basePayload,
           business_type: input.businessType?.trim() || null,
@@ -10328,6 +10410,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
         originLng: typeof payload.origin_lng === "number" ? payload.origin_lng : undefined,
         smsSenderPhone: (payload.sms_sender_phone as string) || "",
         telegramChatId: (payload.telegram_chat_id as string) || undefined,
+        defaultQuoteMarginPercent: typeof payload.default_quote_margin_percent === "number" ? payload.default_quote_margin_percent : 12,
+        defaultQuoteValidDays: typeof payload.default_quote_valid_days === "number" ? payload.default_quote_valid_days : 14,
         status: "active",
         updatedAt: "서버 저장 미확인"
       }
@@ -10349,6 +10433,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     origin_lng?: number | null;
     sms_sender_phone?: string | null;
     telegram_chat_id?: string | null;
+    default_quote_margin_percent?: number | null;
+    default_quote_valid_days?: number | null;
     status: string;
     updated_at: string;
   };
@@ -10380,6 +10466,11 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
     if (payload.telegram_chat_id) {
       throw new Error(
         "텔레그램 chat_id를 저장할 수 없습니다. Supabase에 telegram_chat_id 컬럼이 아직 없습니다. ALTER TABLE companies ADD COLUMN IF NOT EXISTS telegram_chat_id text; 를 먼저 실행하세요."
+      );
+    }
+    if (payload.default_quote_margin_percent != null || payload.default_quote_valid_days != null) {
+      throw new Error(
+        "견적 기본 설정을 저장할 수 없습니다. supabase/migrations/20261009012401_sales_quote_operations.sql을 먼저 실행하세요."
       );
     }
     const {
@@ -10419,6 +10510,8 @@ export async function updateCompanySettings(companyId: string, input: CompanySet
       originLng: row.origin_lng == null ? undefined : Number(row.origin_lng),
       smsSenderPhone: row.sms_sender_phone || "",
       telegramChatId: row.telegram_chat_id || undefined,
+      defaultQuoteMarginPercent: row.default_quote_margin_percent == null ? 12 : Number(row.default_quote_margin_percent),
+      defaultQuoteValidDays: row.default_quote_valid_days == null ? 14 : Number(row.default_quote_valid_days),
       status: row.status,
       updatedAt: new Date(row.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }

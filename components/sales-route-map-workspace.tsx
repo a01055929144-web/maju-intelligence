@@ -6905,6 +6905,23 @@ function QuoteDrawer({
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
   }, [draftKey, subject]);
 
+  useEffect(() => {
+    if (readQuoteDraft(subject)) return;
+    let cancelled = false;
+    void fetch("/api/customer/settings", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (cancelled || !payload?.company) return;
+        const margin = [10, 12, 15].includes(Number(payload.company.defaultQuoteMarginPercent)) ? Number(payload.company.defaultQuoteMarginPercent) : 12;
+        const days = [7, 14, 30].includes(Number(payload.company.defaultQuoteValidDays)) ? Number(payload.company.defaultQuoteValidDays) : 14;
+        setDefaultMarginRate(margin);
+        setValidDays(days);
+        setRows((current) => current.map((row) => ({ ...row, marginRate: margin, unitPrice: calculateSalesPrice(row.purchasePrice, margin) })));
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [draftKey, subject]);
+
   async function loadProductCatalog() {
     setCatalogLoading(true);
     try {

@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { customerHasCapability, getCustomerSession } from "@/lib/auth";
-import { updateCompanySettings } from "@/lib/store";
+import { getCompanySettings, updateCompanySettings } from "@/lib/store";
+
+export async function GET() {
+  const session = await getCustomerSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const company = await getCompanySettings(session.companyId, session.companyName);
+  return NextResponse.json({ company });
+}
 
 export async function PATCH(request: Request) {
   const session = await getCustomerSession();
@@ -15,7 +22,7 @@ export async function PATCH(request: Request) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "저장할 설정값을 확인해주세요." }, { status: 400 });
   }
-  if (!["company", "messaging", "telegram"].includes(body.section)) {
+  if (!["company", "messaging", "quotes", "telegram"].includes(body.section)) {
     return NextResponse.json({ error: "저장할 설정 구역이 올바르지 않습니다." }, { status: 400 });
   }
   if (typeof body.name !== "string" || !body.name.trim()) {
@@ -24,6 +31,9 @@ export async function PATCH(request: Request) {
   if (body.section === "company" && body.originAddress?.trim() && (!Number.isFinite(body.originLat) || !Number.isFinite(body.originLng))) {
     return NextResponse.json({ error: "주소 검색 결과에서 물류 출발지를 선택해주세요." }, { status: 400 });
   }
+  if (body.section === "quotes" && (![10, 12, 15].includes(Number(body.defaultQuoteMarginPercent)) || ![7, 14, 30].includes(Number(body.defaultQuoteValidDays)))) {
+    return NextResponse.json({ error: "견적 기본 마진율과 유효기간을 확인해주세요." }, { status: 400 });
+  }
 
   try {
     const result = await updateCompanySettings(session.companyId, {
@@ -31,6 +41,8 @@ export async function PATCH(request: Request) {
       deliveryCompleteMessage: body.deliveryCompleteMessage,
       deliveryIssueMessage: body.deliveryIssueMessage,
       deliveryPartialMessage: body.deliveryPartialMessage,
+      defaultQuoteMarginPercent: Number(body.defaultQuoteMarginPercent),
+      defaultQuoteValidDays: Number(body.defaultQuoteValidDays),
       name: body.name,
       notificationPhone: body.notificationPhone,
       notificationSenderName: body.notificationSenderName,

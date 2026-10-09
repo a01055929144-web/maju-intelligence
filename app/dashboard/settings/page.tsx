@@ -8,6 +8,7 @@ import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-pane
 import { CompanyClosurePanel } from "./company-closure-panel";
 import { CompanySettingsForm } from "./settings-form";
 import { StaffManagementPanel } from "./staff-management-panel";
+import { SalesKpiSettingsPanel } from "./sales-kpi-settings-panel";
 
 export default async function CompanySettingsPage() {
   const session = await getCustomerSession();
@@ -58,6 +59,7 @@ export default async function CompanySettingsPage() {
           {[
             ["#company-settings", "회사·출발지"],
             ["#staff-settings", "직원·권한"],
+            ["#sales-kpi-settings", "영업 KPI"],
             ["#business-number-settings", "사업자번호 예외"],
             ...(session.workspaceRole === "owner" ? [["#company-closure", "회사 이용 종료"]] : [])
           ].map(([href, label]) => (
@@ -77,6 +79,7 @@ export default async function CompanySettingsPage() {
               vehicleOptions={vehicleOptions}
             />
           </div>
+          <div className="scroll-mt-24" id="sales-kpi-settings"><SalesKpiSettingsPanel canManage={customerHasCapability(session, "manage_company")} /></div>
           <div className="scroll-mt-24" id="business-number-settings"><BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} /></div>
           {session.workspaceRole === "owner" ? <div className="scroll-mt-24" id="company-closure"><CompanyClosurePanel companyName={company.name} /></div> : null}
         </div>

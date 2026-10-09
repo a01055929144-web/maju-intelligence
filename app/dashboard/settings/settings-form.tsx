@@ -3,14 +3,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Bell, Building2, Loader2, MapPin, Route, Save, SendHorizonal } from "lucide-react";
+import { Bell, Building2, FileText, Loader2, MapPin, Route, Save, SendHorizonal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { MessageTemplateManager } from "@/components/message-template-manager";
 import { CompanySettings } from "@/lib/store";
 
-type SettingsSection = "company" | "messaging" | "telegram";
+type SettingsSection = "company" | "messaging" | "quotes" | "telegram";
 type SectionSaveState = { status: "idle" | "saving" | "saved" | "error"; message: string };
 type AddressSearchResult = {
   address: string;
@@ -25,6 +25,7 @@ type AddressSearchResult = {
 const SECTION_LABELS: Record<SettingsSection, string> = {
   company: "회사 기준정보",
   messaging: "문자 발송 설정",
+  quotes: "견적 기본 설정",
   telegram: "텔레그램 알림 설정"
 };
 
@@ -34,6 +35,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     deliveryCompleteMessage: initial.deliveryCompleteMessage || "요청하신 위치에 배송 적재 완료했습니다.",
     deliveryIssueMessage: initial.deliveryIssueMessage || "배송 중 확인이 필요한 사항이 있어 안내드립니다.",
     deliveryPartialMessage: initial.deliveryPartialMessage || "일부 품목은 확인 후 별도 안내드리겠습니다.",
+    defaultQuoteMarginPercent: initial.defaultQuoteMarginPercent || 12,
+    defaultQuoteValidDays: initial.defaultQuoteValidDays || 14,
     name: initial.name,
     notificationPhone: initial.notificationPhone || "",
     notificationSenderName: initial.notificationSenderName || initial.name,
@@ -48,6 +51,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [saveStates, setSaveStates] = useState<Record<SettingsSection, SectionSaveState>>({
     company: { status: "idle", message: "" },
     messaging: { status: "idle", message: "" },
+    quotes: { status: "idle", message: "" },
     telegram: { status: "idle", message: "" }
   });
   const [telegramTestMessage, setTelegramTestMessage] = useState("");
@@ -69,6 +73,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
       form.notificationPhone !== savedForm.notificationPhone ||
       form.notificationSenderName !== savedForm.notificationSenderName ||
       form.smsSenderPhone !== savedForm.smsSenderPhone,
+    quotes: form.defaultQuoteMarginPercent !== savedForm.defaultQuoteMarginPercent || form.defaultQuoteValidDays !== savedForm.defaultQuoteValidDays,
     telegram: form.telegramChatId !== savedForm.telegramChatId
   };
 
@@ -102,7 +107,9 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             notificationSenderName: form.notificationSenderName,
             smsSenderPhone: form.smsSenderPhone
           }
-        : { ...savedForm, telegramChatId: form.telegramChatId };
+        : section === "quotes"
+          ? { ...savedForm, defaultQuoteMarginPercent: form.defaultQuoteMarginPercent, defaultQuoteValidDays: form.defaultQuoteValidDays }
+          : { ...savedForm, telegramChatId: form.telegramChatId };
 
     let response: Response | null = null;
     let requestError = "";
@@ -127,7 +134,9 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
         ? { ...current, businessType: payloadForm.businessType, name: payloadForm.name, originAddress: payloadForm.originAddress, originLat: payloadForm.originLat, originLng: payloadForm.originLng, ownerName: payloadForm.ownerName }
         : section === "messaging"
           ? { ...current, deliveryCompleteMessage: payloadForm.deliveryCompleteMessage, deliveryIssueMessage: payloadForm.deliveryIssueMessage, deliveryPartialMessage: payloadForm.deliveryPartialMessage, notificationPhone: payloadForm.notificationPhone, notificationSenderName: payloadForm.notificationSenderName, smsSenderPhone: payloadForm.smsSenderPhone }
-          : { ...current, telegramChatId: payloadForm.telegramChatId });
+          : section === "quotes"
+            ? { ...current, defaultQuoteMarginPercent: payloadForm.defaultQuoteMarginPercent, defaultQuoteValidDays: payloadForm.defaultQuoteValidDays }
+            : { ...current, telegramChatId: payloadForm.telegramChatId });
     }
     setSaveStates((current) => ({
       ...current,
@@ -275,6 +284,38 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             label="회사 기준정보 저장"
             onSave={() => void saveSection("company")}
             state={saveStates.company}
+          />
+        </section>
+
+        <section className="maju-section-card">
+          <div className="maju-card-header">
+            <Badge className="mb-3 w-fit bg-violet-50 text-violet-800 ring-1 ring-inset ring-violet-100">
+              <FileText className="mr-1 h-3.5 w-3.5" />
+              견적 정책
+            </Badge>
+            <h2 className="text-xl font-black text-slate-950">견적 기본 마진율과 유효기간</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">PC와 모바일에서 새 견적을 만들 때 회사 기본값으로 적용됩니다. 담당자는 견적별로 다시 편집할 수 있습니다.</p>
+          </div>
+          <div className="grid gap-4 p-4 md:grid-cols-2">
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-bold text-muted-foreground">기본 마진율</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {[10, 12, 15].map((value) => <button className={`min-h-11 rounded-lg border text-sm font-black ${form.defaultQuoteMarginPercent === value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={value} onClick={() => updateSection("quotes", { defaultQuoteMarginPercent: value })} type="button">{value}%</button>)}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-bold text-muted-foreground">기본 견적 유효기간</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {[7, 14, 30].map((value) => <button className={`min-h-11 rounded-lg border text-sm font-black ${form.defaultQuoteValidDays === value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={value} onClick={() => updateSection("quotes", { defaultQuoteValidDays: value })} type="button">{value}일</button>)}
+              </div>
+            </fieldset>
+          </div>
+          <SectionSaveFooter
+            disabled={saveStates.quotes.status === "saving" || !sectionDirty.quotes}
+            dirty={sectionDirty.quotes}
+            label="견적 정책 저장"
+            onSave={() => void saveSection("quotes")}
+            state={saveStates.quotes}
           />
         </section>
 
