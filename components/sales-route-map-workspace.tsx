@@ -28,6 +28,7 @@ import {
   GripVertical,
   KeyRound,
   Layers,
+  Link2,
   Loader2,
   Lock,
   Maximize2,
@@ -87,6 +88,7 @@ import {
   calculateQuoteLine,
   calculateQuoteTotals,
   calculateSalesPrice,
+  normalizeProductToken,
   resolveQuoteValidUntil,
   toCustomerQuoteLines,
   type QuoteLine
@@ -6275,7 +6277,7 @@ export function readQuoteDraft(subject: QuoteSubject): QuoteDraft | null {
   const drafts = readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {});
   const draft = drafts[quoteDraftId(subject)];
   if (!draft || !Array.isArray(draft.rows)) return null;
-  return { ...draft, rows: normalizeQuoteRows(draft.rows, draft.defaultMarginRate || 10) };
+  return { ...draft, rows: normalizeQuoteRows(draft.rows, draft.defaultMarginRate || 12) };
 }
 
 function saveQuoteDraftToLocal(subject: QuoteSubject, draft: QuoteDraft) {
@@ -6874,20 +6876,24 @@ function QuoteDrawer({
 }) {
   const draftKey = quoteDraftId(subject);
   const initialDraft = readQuoteDraft(subject);
-  const [defaultMarginRate, setDefaultMarginRate] = useState(initialDraft?.defaultMarginRate || 10);
+  const [defaultMarginRate, setDefaultMarginRate] = useState(initialDraft?.defaultMarginRate || 12);
   const [validDays, setValidDays] = useState(initialDraft?.validDays || 14);
-  const [rows, setRows] = useState<QuoteLine[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry, initialDraft?.defaultMarginRate || 10));
+  const [rows, setRows] = useState<QuoteLine[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry, initialDraft?.defaultMarginRate || 12));
   const [menuNotes, setMenuNotes] = useState(initialDraft?.menuNotes || subject.menuNotes || "");
   const [quoteMessage, setQuoteMessage] = useState("");
   const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
   const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(initialDraft?.recommendationCount || 10);
   const [recommendationBasis, setRecommendationBasis] = useState(initialDraft?.recommendationBasis || "");
   const [isRecommending, setIsRecommending] = useState(false);
+  const [catalog, setCatalog] = useState<Array<{ id: string; matchStatus: QuoteLine["matchStatus"]; name: string; purchasePrice: number; salesName?: string; salesPrice?: number; spec?: string; unit: string }>>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState("");
+  const [publishing, setPublishing] = useState(false);
   const quoteImageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const draft = readQuoteDraft(subject);
-    const nextMarginRate = draft?.defaultMarginRate || 10;
+    const nextMarginRate = draft?.defaultMarginRate || 12;
     setDefaultMarginRate(nextMarginRate);
     setValidDays(draft?.validDays || 14);
     setRows(draft?.rows || buildQuoteDraftRows(subject.industry, nextMarginRate));
@@ -6895,8 +6901,40 @@ function QuoteDrawer({
     setSavedAt(draft?.savedAt || "");
     setRecommendationCount(draft?.recommendationCount || 10);
     setRecommendationBasis(draft?.recommendationBasis || "");
+    setPublishedUrl("");
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
   }, [draftKey, subject]);
+
+  async function loadProductCatalog() {
+    setCatalogLoading(true);
+    try {
+      const response = await fetch("/api/product-catalog", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as { items?: typeof catalog; message?: string } | null;
+      if (!response.ok) throw new Error(payload?.message || "매입 상품 원장을 불러오지 못했습니다.");
+      const items = payload?.items || [];
+      setCatalog(items);
+      setRows((current) => current.map((row) => {
+        const token = normalizeProductToken(row.item);
+        const match = items.find((item) => token && [item.name, item.salesName || ""].some((name) => normalizeProductToken(name) === token));
+        if (!match) return row;
+        return {
+          ...row,
+          catalogProductId: match.id,
+          item: match.salesName || match.name,
+          matchStatus: "matched",
+          purchasePrice: match.purchasePrice,
+          spec: match.spec || row.spec,
+          unit: match.unit || row.unit,
+          unitPrice: match.salesPrice || calculateSalesPrice(match.purchasePrice, row.marginRate)
+        };
+      }));
+      setQuoteMessage(items.length ? `매입 상품 원장 ${items.length}개를 불러와 같은 품목을 자동 매칭했습니다.` : "매입 상품 원장에 등록된 품목이 없습니다.");
+    } catch (error) {
+      setQuoteMessage(error instanceof Error ? error.message : "매입 상품 원장을 불러오지 못했습니다.");
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
 
   async function applyRecommendedProducts(count: 10 | 20 | 30) {
     setRecommendationCount(count);
@@ -6990,6 +7028,51 @@ function QuoteDrawer({
   const total = quoteTotals.salesAmount;
   const validUntil = resolveQuoteValidUntil(validDays);
   const shareText = buildQuoteShareText(companyName, subject, rows, menuNotes, total, validUntil);
+  const customerShareText = publishedUrl ? `${shareText}\n\n견적서 보기: ${publishedUrl}` : shareText;
+
+  async function publishQuoteLink() {
+    if (!customerRows.length) {
+      setQuoteMessage("링크를 만들 견적 품목을 먼저 입력해주세요.");
+      return;
+    }
+    setPublishing(true);
+    setQuoteMessage("");
+    try {
+      const response = await fetch("/api/sales-quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: subject.customerId,
+          defaultMarginPercent: defaultMarginRate,
+          items: rows.filter((row) => row.item.trim()).map((row) => ({
+            isCustomRequest: row.matchStatus === "requested",
+            marginPercent: row.marginRate,
+            productCatalogId: row.catalogProductId,
+            productName: row.item.trim(),
+            purchaseUnitPrice: row.purchasePrice,
+            quantity: row.qty,
+            salesUnitPrice: row.unitPrice,
+            specification: row.spec,
+            unit: row.unit
+          })),
+          leadId: subject.leadId,
+          memo: menuNotes,
+          recipientName: subject.name,
+          recipientPhone: subject.phone,
+          validUntil
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { message?: string; publicUrl?: string } | null;
+      if (!response.ok || !payload?.publicUrl) throw new Error(payload?.message || "견적 링크를 만들지 못했습니다.");
+      setPublishedUrl(payload.publicUrl);
+      await navigator.clipboard.writeText(payload.publicUrl).catch(() => undefined);
+      setQuoteMessage("유효기간이 적용된 거래처용 링크를 만들고 복사했습니다.");
+    } catch (error) {
+      setQuoteMessage(error instanceof Error ? error.message : "견적 링크를 만들지 못했습니다.");
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   async function downloadQuoteExcel() {
     const writeXlsxFileModule = await import("write-excel-file/browser");
@@ -7029,7 +7112,7 @@ function QuoteDrawer({
 
   async function copyQuoteText() {
     try {
-      await navigator.clipboard.writeText(shareText);
+      await navigator.clipboard.writeText(customerShareText);
       setQuoteMessage("제안서 문안을 복사했습니다.");
     } catch {
       setQuoteMessage("복사 권한이 없어 직접 선택해서 복사해주세요.");
@@ -7043,7 +7126,7 @@ function QuoteDrawer({
       return;
     }
     try {
-      await navigator.share({ text: shareText, title: `${subject.name} 견적서` });
+      await navigator.share({ text: customerShareText, title: `${subject.name} 견적서`, url: publishedUrl || undefined });
       setQuoteMessage("공유 화면을 열었습니다. 카카오톡 또는 메시지를 선택하세요.");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -7070,9 +7153,9 @@ function QuoteDrawer({
 
   function resetQuoteDraft() {
     deleteQuoteDraftFromLocal(subject);
-    setDefaultMarginRate(10);
+    setDefaultMarginRate(12);
     setValidDays(14);
-    setRows(buildQuoteDraftRows(subject.industry, 10));
+    setRows(buildQuoteDraftRows(subject.industry, 12));
     setMenuNotes(subject.menuNotes || "");
     setRecommendationCount(10);
     setRecommendationBasis("");
@@ -7210,6 +7293,13 @@ function QuoteDrawer({
           </div>
 
           <div className="rounded-lg border border-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <div><p className="text-xs font-black text-slate-700">실제 매입 상품 연결</p><p className="text-[10px] font-semibold text-slate-400">업로드된 상품명과 일치하는 품목의 매입가를 적용합니다.</p></div>
+              <button className="maju-button-secondary h-8 px-3 text-xs" disabled={catalogLoading} onClick={() => void loadProductCatalog()} type="button">
+                {catalogLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {catalogLoading ? "불러오는 중" : catalog.length ? `원장 ${catalog.length}개 다시 매칭` : "매입 원장 불러오기"}
+              </button>
+            </div>
             <div className="overflow-x-auto">
             <table className="min-w-[920px] w-full border-separate border-spacing-0 text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
@@ -7297,9 +7387,15 @@ function QuoteDrawer({
               className="h-28 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold leading-5 text-slate-700 outline-none focus:border-teal-300"
               onChange={() => undefined}
               readOnly
-              value={shareText}
+              value={customerShareText}
             />
           </div>
+
+          <button className="maju-button-primary w-full disabled:opacity-60" disabled={publishing || !customerRows.length} onClick={() => void publishQuoteLink()} type="button">
+            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+            {publishing ? "안전한 링크 생성 중" : publishedUrl ? "유효기간 링크 다시 생성" : "유효기간 견적 링크 생성"}
+          </button>
+          {publishedUrl ? <a className="block break-all rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs font-bold text-teal-800" href={publishedUrl} rel="noreferrer" target="_blank">{publishedUrl}</a> : null}
 
           <button className="maju-button-primary w-full" onClick={() => void downloadQuoteExcel()} type="button">
             <Download className="h-4 w-4" />

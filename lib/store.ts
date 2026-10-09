@@ -16,7 +16,7 @@ import { sendEmail } from "./email";
 import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "./business-number";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titles";
 import { maskPhoneNumber } from "./phone";
-import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
@@ -5740,6 +5740,195 @@ export async function sendCustomerDeliveryMessage(
       ok: true,
       sent: false
     };
+  }
+}
+
+export type ProductCatalogItem = {
+  id: string;
+  matchStatus: "inactive" | "matched" | "requested" | "unmatched";
+  name: string;
+  purchasePrice: number;
+  salesName?: string;
+  salesPrice?: number;
+  spec?: string;
+  unit: string;
+};
+
+type ProductCatalogRow = {
+  default_sales_price: number | null;
+  id: string;
+  match_status: ProductCatalogItem["matchStatus"];
+  purchase_price: number;
+  purchase_product_name: string;
+  purchase_spec: string | null;
+  purchase_unit: string;
+  sales_product_name: string | null;
+};
+
+function isMissingSalesQuoteSchemaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /product_catalog|sales_quotes|sales_quote_items|PGRST205|42P01|does not exist|schema cache/i.test(message);
+}
+
+export async function listProductCatalog(companyId: string, query = ""): Promise<ProductCatalogItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const token = query.trim();
+  const search = token ? `&purchase_product_name=ilike.*${encodeURIComponent(token)}*` : "";
+  try {
+    const rows = await supabaseRequest<ProductCatalogRow[]>(
+      `product_catalog?select=id,purchase_product_name,purchase_spec,purchase_unit,purchase_price,sales_product_name,default_sales_price,match_status&company_id=eq.${encodeURIComponent(companyId)}&match_status=neq.inactive${search}&order=updated_at.desc&limit=100`
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      matchStatus: row.match_status,
+      name: row.purchase_product_name,
+      purchasePrice: Number(row.purchase_price) || 0,
+      salesName: row.sales_product_name || undefined,
+      salesPrice: row.default_sales_price == null ? undefined : Number(row.default_sales_price),
+      spec: row.purchase_spec || undefined,
+      unit: row.purchase_unit || "EA"
+    }));
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) return [];
+    throw error;
+  }
+}
+
+export type CreateSalesQuoteInput = {
+  companyId: string;
+  createdByName?: string;
+  customerId?: string;
+  defaultMarginPercent: number;
+  leadId?: string;
+  memo?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  title?: string;
+  validUntil: string;
+  items: Array<{
+    isCustomRequest?: boolean;
+    marginPercent: number;
+    photoUrl?: string;
+    productCatalogId?: string;
+    productName: string;
+    purchaseUnitPrice: number;
+    quantity: number;
+    salesUnitPrice: number;
+    specification?: string;
+    unit?: string;
+  }>;
+};
+
+export async function createSalesQuote(input: CreateSalesQuoteInput) {
+  if (!isProductionStoreConfigured()) throw new Error("견적서 서버 저장 환경이 준비되지 않았습니다.");
+  if (!input.leadId && !input.customerId) throw new Error("리드 또는 거래처 정보가 필요합니다.");
+  const publicToken = randomUUID();
+  const quoteNumber = `Q-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${randomBytes(2).toString("hex").toUpperCase()}`;
+  try {
+    const quoteRows = await supabaseRequest<Array<{ id: string; public_token: string; valid_until: string }>>(
+      "sales_quotes?select=id,public_token,valid_until",
+      {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify([{
+          company_id: input.companyId,
+          created_by_name: input.createdByName || null,
+          customer_id: input.customerId || null,
+          default_margin_percent: input.defaultMarginPercent,
+          lead_id: input.leadId || null,
+          memo: input.memo || null,
+          public_enabled: true,
+          public_token: publicToken,
+          quote_number: quoteNumber,
+          recipient_name: input.recipientName || null,
+          recipient_phone: input.recipientPhone || null,
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          title: input.title || "식자재 납품 견적서",
+          valid_until: input.validUntil
+        }])
+      }
+    );
+    const quote = quoteRows[0];
+    if (!quote) throw new Error("견적서를 저장하지 못했습니다.");
+    try {
+      await supabaseRequest("sales_quote_items", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(input.items.map((item, index) => ({
+          company_id: input.companyId,
+          is_custom_request: Boolean(item.isCustomRequest),
+          margin_percent: item.marginPercent,
+          photo_url: item.photoUrl || null,
+          product_catalog_id: item.productCatalogId || null,
+          product_name: item.productName,
+          purchase_unit_price: item.purchaseUnitPrice,
+          quantity: item.quantity,
+          quote_id: quote.id,
+          sales_unit_price: item.salesUnitPrice,
+          sort_order: index,
+          specification: item.specification || null,
+          unit: item.unit || "EA"
+        })))
+      });
+    } catch (error) {
+      await supabaseRequest(`sales_quotes?id=eq.${encodeURIComponent(quote.id)}&company_id=eq.${encodeURIComponent(input.companyId)}`, { method: "DELETE" }).catch(() => null);
+      throw error;
+    }
+    return { id: quote.id, publicToken: quote.public_token, quoteNumber, validUntil: quote.valid_until };
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) {
+      throw new Error("견적서 원장 SQL이 아직 적용되지 않았습니다. 20261009012401_sales_quote_operations.sql을 먼저 실행해주세요.");
+    }
+    throw error;
+  }
+}
+
+export type PublicSalesQuote = {
+  companyName: string;
+  items: Array<{ amount: number; productName: string; quantity: number; salesUnitPrice: number; specification?: string; unit: string }>;
+  quoteNumber: string;
+  recipientName?: string;
+  title: string;
+  total: number;
+  validUntil: string;
+};
+
+export async function getPublicSalesQuote(publicToken: string): Promise<PublicSalesQuote | null> {
+  if (!isProductionStoreConfigured() || !/^[0-9a-f-]{36}$/i.test(publicToken)) return null;
+  try {
+    const quotes = await supabaseRequest<Array<{ company_id: string; id: string; quote_number: string; recipient_name: string | null; title: string; valid_until: string }>>(
+      `sales_quotes?select=id,company_id,quote_number,recipient_name,title,valid_until&public_token=eq.${encodeURIComponent(publicToken)}&public_enabled=eq.true&valid_until=gt.${encodeURIComponent(new Date().toISOString())}&limit=1`
+    );
+    const quote = quotes[0];
+    if (!quote) return null;
+    const [companies, items] = await Promise.all([
+      supabaseRequest<Array<{ name: string }>>(`companies?select=name&id=eq.${encodeURIComponent(quote.company_id)}&limit=1`),
+      // 고객 공개 응답에서는 내부 원가와 마진 컬럼을 SELECT 자체에서 제외합니다.
+      supabaseRequest<Array<{ product_name: string; quantity: number; sales_unit_price: number; specification: string | null; unit: string }>>(
+        `sales_quote_items?select=product_name,specification,unit,quantity,sales_unit_price&company_id=eq.${encodeURIComponent(quote.company_id)}&quote_id=eq.${encodeURIComponent(quote.id)}&order=sort_order.asc`
+      )
+    ]);
+    const publicItems = items.map((item) => ({
+      amount: Number(item.quantity) * Number(item.sales_unit_price),
+      productName: item.product_name,
+      quantity: Number(item.quantity),
+      salesUnitPrice: Number(item.sales_unit_price),
+      specification: item.specification || undefined,
+      unit: item.unit
+    }));
+    return {
+      companyName: companies[0]?.name || "MAJU 파트너",
+      items: publicItems,
+      quoteNumber: quote.quote_number,
+      recipientName: quote.recipient_name || undefined,
+      title: quote.title,
+      total: publicItems.reduce((sum, item) => sum + item.amount, 0),
+      validUntil: quote.valid_until
+    };
+  } catch (error) {
+    if (isMissingSalesQuoteSchemaError(error)) return null;
+    throw error;
   }
 }
 
