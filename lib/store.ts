@@ -4121,11 +4121,13 @@ export async function getCustomerMaster(
   ];
   let lastFetchError: unknown;
   let fetched: CustomerMasterRow[] | null = null;
+  let fetchedGradeOverride = false;
   for (const select of CUSTOMER_MASTER_SELECT_TIERS) {
     try {
       fetched = await supabaseRequest<Array<CustomerMasterRow>>(
         `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
+      fetchedGradeOverride = select.includes("grade_override");
       break;
     } catch (error) {
       if (!isMissingColumnError(error)) throw error;
@@ -4133,6 +4135,24 @@ export async function getCustomerMaster(
     }
   }
   if (!fetched) throw lastFetchError instanceof Error ? lastFetchError : new Error(String(lastFetchError));
+  // grade_override는 비교적 최근에 추가된 컬럼입니다. 이전 구현은 access_method_type,
+  // updated_at 같은 서로 무관한 선택 컬럼 하나라도 없는 환경에서 하위 select 티어로
+  // 내려가며 grade_override까지 함께 버렸습니다. 그 결과 PATCH는 성공했는데 새로고침하면
+  // 자동 등급으로 되돌아온 것처럼 보였습니다. 등급은 별도 최소 select로 다시 읽어 다른
+  // 선택 마이그레이션의 적용 여부와 독립적으로 복원합니다.
+  if (!fetchedGradeOverride && fetched.length) {
+    try {
+      const gradeRows = await supabaseRequest<Array<{ grade_override: string | null; id: string }>>(
+        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+      );
+      const gradeById = new Map(gradeRows.map((row) => [row.id, row.grade_override]));
+      fetched = fetched.map((row) => ({ ...row, grade_override: gradeById.get(row.id) ?? null }));
+    } catch (error) {
+      // 등급 마이그레이션 자체가 아직 없는 환경은 기존 자동 등급으로 안전하게 동작합니다.
+      // 그 외의 연결/권한 오류는 숨기지 않아 운영 장애와 스키마 미적용을 구분합니다.
+      if (!isMissingColumnError(error)) throw error;
+    }
+  }
   const rows = fetched;
 
   const customers = rows.map((row, index) => toCustomerMasterItem(row, offset + index));

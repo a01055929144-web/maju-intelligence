@@ -406,8 +406,9 @@ export default function CrmTimelinePage() {
         setBulkGradeMessage(
           bulkGradeInput === "AUTO"
             ? `${updated.toLocaleString()}곳을 매출 자동 등급으로 전환했습니다.`
-            : `${updated.toLocaleString()}곳을 ${bulkGradeInput}등급으로 변경했습니다.`
+            : `${updated.toLocaleString()}곳을 ${bulkGradeInput}등급으로 저장했습니다.`
         );
+        setBulkSelectedIds(new Set());
       }
     } catch (error) {
       setBulkGradeMessage(error instanceof Error ? error.message : "등급 일괄 변경에 실패했습니다.");
