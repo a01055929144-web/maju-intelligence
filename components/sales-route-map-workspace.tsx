@@ -82,6 +82,15 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import {
+  QUOTE_MARGIN_PRESETS,
+  calculateQuoteLine,
+  calculateQuoteTotals,
+  calculateSalesPrice,
+  resolveQuoteValidUntil,
+  toCustomerQuoteLines,
+  type QuoteLine
+} from "@/domains/quote/quote";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -6163,14 +6172,16 @@ export type QuoteSubject = {
   reviewSummary?: string;
   instagramUrl?: string;
 };
-type QuoteRow = { id: string; item: string; qty: number; unitPrice: number };
 export type QuoteDraft = {
+  defaultMarginRate?: number;
   menuNotes: string;
   recommendationBasis?: string;
   recommendationCount?: 10 | 20 | 30;
-  rows: QuoteRow[];
+  rows: QuoteLine[];
   savedAt: string;
   subject: QuoteSubject;
+  validDays?: number;
+  validUntil?: string;
 };
 
 // 업종별로 식자재 유통사가 통상 공급하는 품목 카테고리를 초안으로 깔아줍니다. 단가는 거래처마다
@@ -6226,9 +6237,34 @@ function resolveDisplayIndustry(store: {
   return inferred || store.industry || "미분류";
 }
 
-function buildQuoteDraftRows(industry?: string): QuoteRow[] {
+function buildQuoteDraftRows(industry?: string, marginRate = 10): QuoteLine[] {
   const items = (industry && INDUSTRY_QUOTE_TEMPLATES[industry]) || [];
-  return items.map((item, index) => ({ id: `draft-${index}`, item, qty: 1, unitPrice: 0 }));
+  return items.map((item, index) => ({
+    id: `draft-${index}`,
+    item,
+    marginRate,
+    matchStatus: "unmatched",
+    purchasePrice: 0,
+    qty: 1,
+    spec: "",
+    unit: "",
+    unitPrice: 0
+  }));
+}
+
+function normalizeQuoteRows(rows: QuoteDraft["rows"] | Array<Partial<QuoteLine> & { id: string; item: string }>, marginRate = 10): QuoteLine[] {
+  return rows.map((row) => ({
+    id: row.id,
+    item: row.item,
+    marginRate: typeof row.marginRate === "number" ? row.marginRate : marginRate,
+    matchStatus: row.matchStatus || "unmatched",
+    purchasePrice: typeof row.purchasePrice === "number" ? row.purchasePrice : 0,
+    qty: typeof row.qty === "number" ? row.qty : 1,
+    requestPhotoName: row.requestPhotoName,
+    spec: row.spec || "",
+    unit: row.unit || "",
+    unitPrice: typeof row.unitPrice === "number" ? row.unitPrice : 0
+  }));
 }
 
 export function quoteDraftId(subject: QuoteSubject) {
@@ -6239,7 +6275,7 @@ export function readQuoteDraft(subject: QuoteSubject): QuoteDraft | null {
   const drafts = readLocalJson<Record<string, QuoteDraft>>(localStoreKeys.quoteDrafts, {});
   const draft = drafts[quoteDraftId(subject)];
   if (!draft || !Array.isArray(draft.rows)) return null;
-  return draft;
+  return { ...draft, rows: normalizeQuoteRows(draft.rows, draft.defaultMarginRate || 10) };
 }
 
 function saveQuoteDraftToLocal(subject: QuoteSubject, draft: QuoteDraft) {
@@ -6405,14 +6441,14 @@ export function buildLeadDmScript(lead: PermitLeadItem) {
   return `안녕하세요, ${lead.businessName} 대표님. 식자재 납품/단가 비교 제안드리고 싶어 연락드립니다. ${lead.industryPrimary} 업종 기준으로 ${items} 품목을 먼저 맞춰보고, 현재 사용 중인 품목과 비교 견적을 간단히 정리해드릴 수 있습니다. 괜찮으시면 메뉴판이나 주력 메뉴 기준으로 1차 제안서 보내드리겠습니다.`;
 }
 
-function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteRow[], menuNotes: string, total: number) {
-  const items = rows
-    .filter((row) => row.item.trim())
+function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteLine[], menuNotes: string, total: number, validUntil?: string) {
+  const items = toCustomerQuoteLines(rows)
     .slice(0, 8)
     .map((row, index) => {
-      const qtyText = row.qty > 1 ? ` ${row.qty}개` : "";
+      const detailText = [row.spec, row.unit].filter(Boolean).join(" / ");
+      const qtyText = row.qty > 1 ? ` · ${row.qty}${row.unit || "개"}` : "";
       const priceText = row.unitPrice ? ` · ${row.unitPrice.toLocaleString()}원` : "";
-      return `${index + 1}. ${row.item}${qtyText}${priceText}`;
+      return `${index + 1}. ${row.item}${detailText ? ` (${detailText})` : ""}${qtyText}${priceText}`;
     })
     .join("\n");
   return [
@@ -6426,6 +6462,7 @@ function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: Q
     items || "- 품목을 추가해주세요.",
     "",
     total ? `합계 약 ${total.toLocaleString()}원` : "단가는 상담 후 안내드립니다.",
+    validUntil ? `견적 유효기간: ${new Date(validUntil).toLocaleDateString("ko-KR")}까지` : "",
     "",
     "확인해보시고 편하게 연락 주세요."
   ]
@@ -6837,7 +6874,9 @@ function QuoteDrawer({
 }) {
   const draftKey = quoteDraftId(subject);
   const initialDraft = readQuoteDraft(subject);
-  const [rows, setRows] = useState<QuoteRow[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry));
+  const [defaultMarginRate, setDefaultMarginRate] = useState(initialDraft?.defaultMarginRate || 10);
+  const [validDays, setValidDays] = useState(initialDraft?.validDays || 14);
+  const [rows, setRows] = useState<QuoteLine[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry, initialDraft?.defaultMarginRate || 10));
   const [menuNotes, setMenuNotes] = useState(initialDraft?.menuNotes || subject.menuNotes || "");
   const [quoteMessage, setQuoteMessage] = useState("");
   const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
@@ -6848,7 +6887,10 @@ function QuoteDrawer({
 
   useEffect(() => {
     const draft = readQuoteDraft(subject);
-    setRows(draft?.rows || buildQuoteDraftRows(subject.industry));
+    const nextMarginRate = draft?.defaultMarginRate || 10;
+    setDefaultMarginRate(nextMarginRate);
+    setValidDays(draft?.validDays || 14);
+    setRows(draft?.rows || buildQuoteDraftRows(subject.industry, nextMarginRate));
     setMenuNotes(draft?.menuNotes || subject.menuNotes || "");
     setSavedAt(draft?.savedAt || "");
     setRecommendationCount(draft?.recommendationCount || 10);
@@ -6886,7 +6928,12 @@ function QuoteDrawer({
         payload.recommendations.map((recommendation, index) => ({
           id: `recommended-${Date.now()}-${index}`,
           item: recommendation.item || "",
+          marginRate: defaultMarginRate,
+          matchStatus: "unmatched",
+          purchasePrice: 0,
           qty: 1,
+          spec: "",
+          unit: "",
           unitPrice: 0
         }))
       );
@@ -6900,31 +6947,63 @@ function QuoteDrawer({
     }
   }
 
-  function updateRow(id: string, patch: Partial<QuoteRow>) {
+  function updateRow(id: string, patch: Partial<QuoteLine>) {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
+  function updateRowPurchasePrice(id: string, purchasePrice: number) {
+    setRows((current) => current.map((row) => row.id === id
+      ? { ...row, purchasePrice, unitPrice: calculateSalesPrice(purchasePrice, row.marginRate) }
+      : row));
+  }
+  function updateRowMargin(id: string, marginRate: number) {
+    setRows((current) => current.map((row) => row.id === id
+      ? { ...row, marginRate, unitPrice: calculateSalesPrice(row.purchasePrice, marginRate) }
+      : row));
+  }
+  function applyDefaultMargin(marginRate: number) {
+    setDefaultMarginRate(marginRate);
+    setRows((current) => current.map((row) => ({
+      ...row,
+      marginRate,
+      unitPrice: calculateSalesPrice(row.purchasePrice, marginRate)
+    })));
+  }
   function addRow() {
-    setRows((current) => [...current, { id: `row-${Date.now()}`, item: "", qty: 1, unitPrice: 0 }]);
+    setRows((current) => [...current, {
+      id: `row-${Date.now()}`,
+      item: "",
+      marginRate: defaultMarginRate,
+      matchStatus: "requested",
+      purchasePrice: 0,
+      qty: 1,
+      spec: "",
+      unit: "",
+      unitPrice: 0
+    }]);
   }
   function removeRow(id: string) {
     setRows((current) => current.filter((row) => row.id !== id));
   }
 
-  const total = rows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0);
-  const shareText = buildQuoteShareText(companyName, subject, rows, menuNotes, total);
+  const quoteTotals = calculateQuoteTotals(rows);
+  const customerRows = toCustomerQuoteLines(rows);
+  const total = quoteTotals.salesAmount;
+  const validUntil = resolveQuoteValidUntil(validDays);
+  const shareText = buildQuoteShareText(companyName, subject, rows, menuNotes, total, validUntil);
 
   async function downloadQuoteExcel() {
     const writeXlsxFileModule = await import("write-excel-file/browser");
     const headerRow = ["품목명·규격", "수량", "단가", "공급가액"].map((value) => ({ fontWeight: "bold" as const, value }));
-    const dataRows = rows.map((row) => [
+    const dataRows = customerRows.map((row) => [
       { value: row.item },
+      { value: `${row.spec}${row.unit ? ` / ${row.unit}` : ""}`.trim() },
       { value: row.qty },
       { value: row.unitPrice },
-      { value: row.qty * row.unitPrice }
+      { value: row.amount }
     ]);
-    const totalRow = [{ value: "합계" }, { value: "" }, { value: "" }, { value: total }];
+    const totalRow = [{ value: "합계" }, { value: "" }, { value: "" }, { value: "" }, { value: total }];
     await writeXlsxFileModule
-      .default([headerRow, ...dataRows, totalRow], { sheet: "견적서" })
+      .default([[...headerRow.slice(0, 1), { fontWeight: "bold" as const, value: "규격·단위" }, ...headerRow.slice(1)], ...dataRows, totalRow], { sheet: "견적서" })
       .toFile(`${subject.name}_견적서.xlsx`);
   }
 
@@ -6957,6 +7036,21 @@ function QuoteDrawer({
     }
   }
 
+  async function shareQuote() {
+    if (!navigator.share) {
+      await copyQuoteText();
+      setQuoteMessage("공유 기능을 지원하지 않는 환경이라 거래처용 문안을 복사했습니다.");
+      return;
+    }
+    try {
+      await navigator.share({ text: shareText, title: `${subject.name} 견적서` });
+      setQuoteMessage("공유 화면을 열었습니다. 카카오톡 또는 메시지를 선택하세요.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setQuoteMessage("공유 화면을 열지 못했습니다. 문안 복사를 이용해주세요.");
+    }
+  }
+
   function saveQuoteDraft() {
     const nextSavedAt = new Date().toISOString();
     saveQuoteDraftToLocal(subject, {
@@ -6965,7 +7059,10 @@ function QuoteDrawer({
       recommendationCount,
       rows,
       savedAt: nextSavedAt,
-      subject
+      subject,
+      defaultMarginRate,
+      validDays,
+      validUntil
     });
     setSavedAt(nextSavedAt);
     setQuoteMessage("이 브라우저에 제안서 초안을 저장했습니다.");
@@ -6973,7 +7070,9 @@ function QuoteDrawer({
 
   function resetQuoteDraft() {
     deleteQuoteDraftFromLocal(subject);
-    setRows(buildQuoteDraftRows(subject.industry));
+    setDefaultMarginRate(10);
+    setValidDays(14);
+    setRows(buildQuoteDraftRows(subject.industry, 10));
     setMenuNotes(subject.menuNotes || "");
     setRecommendationCount(10);
     setRecommendationBasis("");
@@ -6982,11 +7081,10 @@ function QuoteDrawer({
   }
 
   function printQuoteDraft() {
-    const printableRows = rows
-      .filter((row) => row.item.trim())
+    const printableRows = customerRows
       .map(
         (row) =>
-          `<tr><td>${escapeHtml(row.item)}</td><td>${row.qty}</td><td>${row.unitPrice ? row.unitPrice.toLocaleString() : "-"}</td><td>${(row.qty * row.unitPrice).toLocaleString()}</td></tr>`
+          `<tr><td>${escapeHtml(row.item)}</td><td>${escapeHtml([row.spec, row.unit].filter(Boolean).join(" / ") || "-")}</td><td>${row.qty}</td><td>${row.unitPrice ? row.unitPrice.toLocaleString() : "-"}</td><td>${row.amount.toLocaleString()}</td></tr>`
       )
       .join("");
     const printWindow = window.open("", "_blank", "width=860,height=1000");
@@ -7005,9 +7103,9 @@ function QuoteDrawer({
       <h1>${escapeHtml(subject.name)} 제안서</h1>
       <div class="meta">${subject.industry ? `업종: ${escapeHtml(subject.industry)}<br/>` : ""}${subject.address ? `주소: ${escapeHtml(subject.address)}<br/>` : ""}${subject.phone ? `연락처: ${escapeHtml(subject.phone)}<br/>` : ""}</div>
       <div class="box"><strong>메뉴/리뷰 메모</strong><br/>${escapeHtml(menuNotes || "현장 확인 후 업데이트")}</div>
-      <table><thead><tr><th>품목명·규격</th><th>수량</th><th>단가</th><th>공급가액</th></tr></thead><tbody>${printableRows || "<tr><td colspan='4'>추천 품목을 추가하세요.</td></tr>"}</tbody></table>
+      <table><thead><tr><th>상품명</th><th>규격·단위</th><th>수량</th><th>판매단가</th><th>금액</th></tr></thead><tbody>${printableRows || "<tr><td colspan='5'>추천 품목을 추가하세요.</td></tr>"}</tbody></table>
       <p class="total">합계 ${total.toLocaleString()}원</p>
-      <p class="footer">MAJU Intelligence · 현장 상담용 초안입니다. 실제 단가와 납품 조건은 협의 후 확정합니다.</p>
+      <p class="footer">견적 유효기간: ${new Date(validUntil).toLocaleDateString("ko-KR")}까지 · 실제 납품 조건은 협의 후 확정합니다.</p>
     </body></html>`);
     printWindow.document.close();
     printWindow.focus();
@@ -7084,13 +7182,46 @@ function QuoteDrawer({
             </div>
           </div>
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black text-slate-800">내부 가격 설정</p>
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">매입가와 이익 정보는 거래처용 파일·공유 문안에서 제외됩니다.</p>
+              </div>
+              <div className="flex gap-1.5">
+                {QUOTE_MARGIN_PRESETS.map((rate) => (
+                  <button
+                    className={`h-8 rounded-md border px-3 text-xs font-black ${defaultMarginRate === rate ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`}
+                    key={rate}
+                    onClick={() => applyDefaultMargin(rate)}
+                    type="button"
+                  >
+                    {rate}%
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
+              견적 유효기간
+              <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-800" onChange={(event) => setValidDays(Number(event.target.value))} value={validDays}>
+                <option value={7}>7일</option><option value={14}>14일</option><option value={30}>30일</option>
+              </select>
+            </label>
+          </div>
+
           <div className="rounded-lg border border-slate-200">
-            <table className="w-full border-separate border-spacing-0 text-left text-xs">
+            <div className="overflow-x-auto">
+            <table className="min-w-[920px] w-full border-separate border-spacing-0 text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
                 <tr>
-                  <th className="border-b border-slate-200 px-2 py-2">품목명·규격</th>
+                  <th className="border-b border-slate-200 px-2 py-2">상품명</th>
+                  <th className="w-24 border-b border-slate-200 px-2 py-2">규격</th>
+                  <th className="w-16 border-b border-slate-200 px-2 py-2">단위</th>
                   <th className="w-14 border-b border-slate-200 px-2 py-2">수량</th>
-                  <th className="w-24 border-b border-slate-200 px-2 py-2">단가</th>
+                  <th className="w-24 border-b border-slate-200 px-2 py-2">매입가</th>
+                  <th className="w-20 border-b border-slate-200 px-2 py-2">마진율</th>
+                  <th className="w-24 border-b border-slate-200 px-2 py-2">판매가</th>
+                  <th className="w-24 border-b border-slate-200 px-2 py-2">예상 이익</th>
                   <th className="w-10 border-b border-slate-200 px-2 py-2" />
                 </tr>
               </thead>
@@ -7104,7 +7235,20 @@ function QuoteDrawer({
                         placeholder="예: 쌀 20kg"
                         value={row.item}
                       />
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                          {row.matchStatus === "matched" ? "원장 매칭" : row.matchStatus === "requested" ? "추가 의뢰" : "매칭 필요"}
+                        </span>
+                        {row.matchStatus === "requested" ? (
+                          <label className="cursor-pointer text-[9px] font-black text-teal-700">
+                            {row.requestPhotoName || "사진 첨부"}
+                            <input accept="image/*" className="sr-only" onChange={(event) => updateRow(row.id, { requestPhotoName: event.target.files?.[0]?.name || "" })} type="file" />
+                          </label>
+                        ) : null}
+                      </div>
                     </td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs font-bold" onChange={(event) => updateRow(row.id, { spec: event.target.value })} placeholder="18L" value={row.spec} /></td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs font-bold" onChange={(event) => updateRow(row.id, { unit: event.target.value })} placeholder="통" value={row.unit} /></td>
                     <td className="px-2 py-1.5">
                       <input
                         className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold outline-none focus:border-teal-300"
@@ -7113,6 +7257,8 @@ function QuoteDrawer({
                         value={row.qty}
                       />
                     </td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} /></td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowMargin(row.id, Number(event.target.value) || 0)} type="number" value={row.marginRate} /></td>
                     <td className="px-2 py-1.5">
                       <input
                         className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold outline-none focus:border-teal-300"
@@ -7121,6 +7267,7 @@ function QuoteDrawer({
                         value={row.unitPrice}
                       />
                     </td>
+                    <td className="px-2 py-1.5 text-right font-black text-slate-700">{calculateQuoteLine(row).expectedProfit.toLocaleString()}원</td>
                     <td className="px-2 py-1.5 text-center">
                       <button aria-label="삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => removeRow(row.id)} type="button">
                         <X className="h-3.5 w-3.5" />
@@ -7130,15 +7277,18 @@ function QuoteDrawer({
                 ))}
               </tbody>
             </table>
+            </div>
             <button className="flex w-full items-center justify-center gap-1.5 border-t border-slate-200 py-2 text-xs font-black text-teal-700 hover:bg-teal-50/50" onClick={addRow} type="button">
               <Plus className="h-3.5 w-3.5" />
               품목 추가
             </button>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-            <span className="text-xs font-black text-slate-600">합계</span>
-            <span className="text-sm font-black text-slate-950">{total.toLocaleString()}원</span>
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 text-xs sm:grid-cols-4">
+            <p><span className="block font-bold text-slate-400">총 매입가</span><strong className="mt-1 block text-slate-800">{quoteTotals.purchaseAmount.toLocaleString()}원</strong></p>
+            <p><span className="block font-bold text-slate-400">총 판매가</span><strong className="mt-1 block text-slate-950">{quoteTotals.salesAmount.toLocaleString()}원</strong></p>
+            <p><span className="block font-bold text-slate-400">예상 이익</span><strong className="mt-1 block text-teal-800">{quoteTotals.expectedProfit.toLocaleString()}원</strong></p>
+            <p><span className="block font-bold text-slate-400">전체 이익률</span><strong className="mt-1 block text-teal-800">{quoteTotals.marginRate.toFixed(1)}%</strong></p>
           </div>
 
           <div>
@@ -7160,6 +7310,10 @@ function QuoteDrawer({
               <Copy className="h-4 w-4" />
               문안 복사
             </button>
+            <button className="maju-button-secondary justify-center text-xs" onClick={() => void shareQuote()} type="button">
+              <MessageCircle className="h-4 w-4" />
+              카카오톡·메시지 공유
+            </button>
             <button className="maju-button-secondary justify-center text-xs" onClick={saveQuoteDraft} type="button">
               <CheckCircle2 className="h-4 w-4" />
               초안 저장
@@ -7178,7 +7332,7 @@ function QuoteDrawer({
           </button>
           {quoteMessage ? <p className="rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{quoteMessage}</p> : null}
           <p className="text-[11px] font-semibold text-slate-400">
-            단가는 자동으로 채워지지 않습니다 — 실제 협상가를 직접 입력한 뒤 다운로드하거나 PDF로 저장하세요.
+            매입 상품 원장이 연결되면 매입가를 불러오고, 미매칭 품목은 직접 편집합니다. 거래처용 결과에는 판매가만 표시됩니다.
           </p>
 
           <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[760px] bg-white p-10 text-slate-950" ref={quoteImageRef}>
@@ -7198,23 +7352,26 @@ function QuoteDrawer({
               <p>연락처: {subject.phone || "확인 필요"}</p>
               <p className="col-span-2">주소: {subject.address || "확인 필요"}</p>
               <p className="col-span-2">메뉴·리뷰 메모: {menuNotes || "현장 확인 후 업데이트"}</p>
+              <p className="col-span-2">견적 유효기간: {new Date(validUntil).toLocaleDateString("ko-KR")}까지</p>
             </div>
             <table className="mt-6 w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <th className="p-3">품목명·규격</th>
+                  <th className="p-3">상품명</th>
+                  <th className="w-28 p-3">규격·단위</th>
                   <th className="w-20 p-3 text-right">수량</th>
                   <th className="w-28 p-3 text-right">단가</th>
                   <th className="w-32 p-3 text-right">공급가액</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.filter((row) => row.item.trim()).map((row) => (
+                {customerRows.map((row) => (
                   <tr className="border-b border-slate-200" key={`image-${row.id}`}>
                     <td className="p-3 font-bold">{row.item}</td>
+                    <td className="p-3">{[row.spec, row.unit].filter(Boolean).join(" / ") || "-"}</td>
                     <td className="p-3 text-right">{row.qty.toLocaleString()}</td>
                     <td className="p-3 text-right">{row.unitPrice ? `${row.unitPrice.toLocaleString()}원` : "협의"}</td>
-                    <td className="p-3 text-right font-black">{row.unitPrice ? `${(row.qty * row.unitPrice).toLocaleString()}원` : "-"}</td>
+                    <td className="p-3 text-right font-black">{row.unitPrice ? `${row.amount.toLocaleString()}원` : "-"}</td>
                   </tr>
                 ))}
               </tbody>

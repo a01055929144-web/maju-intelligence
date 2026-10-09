@@ -39,6 +39,7 @@ import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { readLocalJson } from "@/lib/route-map-utils";
 import { InlineLoading } from "@/components/inline-loading";
+import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -1253,20 +1254,21 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     }
   }
 
-  async function convertToCustomer(lead: PermitLeadItem) {
+  async function convertToCustomer(lead: PermitLeadItem): Promise<{ customerId?: string; ok: boolean }> {
     setActionMessage("");
     try {
       const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" }, 15000);
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setActionMessage(payload?.message || "거래처 전환에 실패했습니다.");
-        return;
+        return { ok: false };
       }
       setActionMessage(`${lead.businessName}을(를) 거래처로 전환했습니다.`);
-      setSelectedLead(null);
-      loadLeads();
+      void loadLeads();
+      return { customerId: payload?.customerId, ok: true };
     } catch {
       setActionMessage("네트워크 오류로 처리하지 못했습니다.");
+      return { ok: false };
     }
   }
 
@@ -2754,7 +2756,7 @@ function PermitLeadDetailPanel({
   readonly lead: PermitLeadItem;
   readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string) => Promise<PermitLeadActionResult>;
   readonly onClose: () => void;
-  readonly onConvert: (lead: PermitLeadItem) => void;
+  readonly onConvert: (lead: PermitLeadItem) => Promise<{ customerId?: string; ok: boolean }>;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
   readonly onOpenQuote: (lead: PermitLeadItem) => void;
 }) {
@@ -2782,6 +2784,8 @@ function PermitLeadDetailPanel({
     [lead, savedInstagramUrl]
   );
   const [copyMessage, setCopyMessage] = useState("");
+  const [convertedCustomerId, setConvertedCustomerId] = useState("");
+  const [converting, setConverting] = useState(false);
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
   const [externalInfoSaving, setExternalInfoSaving] = useState(false);
@@ -3194,11 +3198,53 @@ function PermitLeadDetailPanel({
               <PermitLeadActionRailButton icon={Instagram} label="DM" onClick={() => void copyDmScript()} primary={intent === "dm"} />
               <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} />
             </div>
-            <button className="maju-button-secondary mt-2 h-8 w-full justify-center text-xs" onClick={() => onConvert(lead)} type="button">
-              <UserCheck className="h-3.5 w-3.5" />
-              거래처로 전환
+            <button
+              className="maju-button-secondary mt-2 h-10 w-full justify-center text-xs disabled:opacity-50"
+              disabled={converting || Boolean(convertedCustomerId)}
+              onClick={async () => {
+                setConverting(true);
+                const result = await onConvert(lead);
+                if (result.ok && result.customerId) setConvertedCustomerId(result.customerId);
+                setConverting(false);
+              }}
+              type="button"
+            >
+              {converting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+              {convertedCustomerId ? "거래처 전환 완료" : converting ? "전환 중..." : "거래처로 전환"}
             </button>
           </div>
+
+          {convertedCustomerId ? (
+            <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black text-slate-950">거래처 등록 이어서 완료</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                    {[
+                      !lead.businessNumber ? "사업자등록번호" : "",
+                      !lead.representativeName ? "대표자명" : "",
+                      !lead.phone ? "연락처" : "",
+                      !lead.address ? "배송주소" : ""
+                    ].filter(Boolean).length
+                      ? `기본정보 보완 필요 · ${[
+                          !lead.businessNumber ? "사업자등록번호" : "",
+                          !lead.representativeName ? "대표자명" : "",
+                          !lead.phone ? "연락처" : "",
+                          !lead.address ? "배송주소" : ""
+                        ].filter(Boolean).join(", ")}`
+                      : "리드의 기본정보를 거래처 원장에 반영했습니다."}
+                  </p>
+                </div>
+                <a className="maju-button-primary h-9 justify-center px-3 text-xs" href={`/crm/timeline?customerId=${encodeURIComponent(convertedCustomerId)}`}>
+                  원장 정보 편집
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              <div className="mt-3">
+                <CustomerAttachmentUploadPanel customerId={convertedCustomerId} customerName={lead.businessName} />
+              </div>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-pink-100 bg-pink-50/50 p-3">
             <div className="flex items-start justify-between gap-3">

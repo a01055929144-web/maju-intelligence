@@ -5510,6 +5510,7 @@ export async function addCustomerAttachment(
 }
 
 export type CustomerMessageLogItem = {
+  attachmentId?: string;
   id: string;
   channel: string;
   createdAt: string;
@@ -5521,9 +5522,11 @@ export type CustomerMessageLogItem = {
   sentAt?: string;
   status: "failed" | "queued" | "sent";
   triggerType: string;
+  noteId?: string;
 };
 
 type CustomerMessageLogRow = {
+  attachment_id?: string | null;
   id: string;
   channel: string;
   created_at: string;
@@ -5535,6 +5538,7 @@ type CustomerMessageLogRow = {
   sent_at: string | null;
   status: "failed" | "queued" | "sent";
   trigger_type: string;
+  note_id?: string | null;
 };
 
 function isMissingCustomerMessageLogsTableError(error: unknown) {
@@ -5543,6 +5547,7 @@ function isMissingCustomerMessageLogsTableError(error: unknown) {
 
 function toCustomerMessageLogItem(row: CustomerMessageLogRow): CustomerMessageLogItem {
   return {
+    attachmentId: row.attachment_id || undefined,
     id: row.id,
     channel: row.channel,
     createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
@@ -5553,8 +5558,23 @@ function toCustomerMessageLogItem(row: CustomerMessageLogRow): CustomerMessageLo
     recipientPhone: row.recipient_phone || undefined,
     sentAt: row.sent_at ? new Date(row.sent_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : undefined,
     status: row.status,
-    triggerType: row.trigger_type
+    triggerType: row.trigger_type,
+    noteId: row.note_id || undefined
   };
+}
+
+export async function getCustomerMessageLogs(customerId: string, companyId?: string): Promise<CustomerMessageLogItem[]> {
+  const id = companyId || getDefaultCompanyId();
+  if (!isProductionStoreConfigured() || customerId.startsWith("sample-") || customerId.startsWith("local-")) return [];
+  try {
+    const rows = await supabaseRequest<CustomerMessageLogRow[]>(
+      `customer_message_logs?select=id,attachment_id,note_id,channel,created_at,error_message,message_body,provider,recipient_name,recipient_phone,sent_at,status,trigger_type&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(customerId)}&order=created_at.desc&limit=20`
+    );
+    return rows.map(toCustomerMessageLogItem);
+  } catch (error) {
+    if (isMissingCustomerMessageLogsTableError(error)) return [];
+    throw error;
+  }
 }
 
 export async function sendCustomerDeliveryMessage(
@@ -5564,6 +5584,7 @@ export async function sendCustomerDeliveryMessage(
     customerId: string;
     message: string;
     noteId?: string;
+    retryLogId?: string;
     triggerType?: "delivery_complete" | "delivery_issue" | "manual";
     triggeredByName?: string;
   },
@@ -5588,6 +5609,22 @@ export async function sendCustomerDeliveryMessage(
       ok: true,
       sent: false
     };
+  }
+
+  let retryLog: CustomerMessageLogRow | undefined;
+  if (input.retryLogId) {
+    const retryRows = await supabaseRequest<CustomerMessageLogRow[]>(
+      `customer_message_logs?select=id,attachment_id,note_id,channel,created_at,error_message,message_body,provider,recipient_name,recipient_phone,sent_at,status,trigger_type&id=eq.${encodeURIComponent(input.retryLogId)}&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(input.customerId)}&limit=1`
+    );
+    retryLog = retryRows[0];
+    if (!retryLog) throw new Error("다시 보낼 알림 기록을 찾을 수 없습니다.");
+    if (retryLog.status === "sent") throw new Error("이미 발송 완료된 알림입니다.");
+    if (retryLog.status !== "failed") throw new Error("실패한 알림만 다시 보낼 수 있습니다.");
+    message = retryLog.message_body.replace(/\n증빙자료 보기\(7일\):\s+\S+$/, "");
+    input.attachmentId = retryLog.attachment_id || undefined;
+    input.noteId = retryLog.note_id || undefined;
+    input.channel = retryLog.channel as CustomerMessageChannel;
+    input.triggerType = retryLog.trigger_type as "delivery_complete" | "delivery_issue" | "manual";
   }
 
   const customerRows = await supabaseRequest<
@@ -5623,44 +5660,52 @@ export async function sendCustomerDeliveryMessage(
   const normalizedRecipientPhone = sendResult.recipientPhone || recipientPhone;
 
   try {
-    const rows = await supabaseRequest<CustomerMessageLogRow[]>("customer_message_logs", {
-      method: "POST",
-      body: JSON.stringify([
-        {
-          attachment_id: input.attachmentId || null,
-          channel: input.channel,
-          company_id: id,
-          contact_id: primaryContact?.id || null,
-          customer_id: input.customerId,
-          error_message: sendResult.reason || null,
-          message_body: message,
-          note_id: input.noteId || null,
-          provider: sendResult.provider,
-          provider_message_id: sendResult.providerMessageId || null,
-          recipient_name: recipientName || null,
-          recipient_phone: normalizedRecipientPhone || null,
-          sent_at: sendResult.status === "sent" ? new Date().toISOString() : null,
-          status: sendResult.status,
-          trigger_type: input.triggerType || "delivery_complete",
-          triggered_by_name: input.triggeredByName || "현장 사용자"
-        }
-      ])
-    });
+    const logPayload = {
+      attachment_id: input.attachmentId || null,
+      channel: input.channel,
+      company_id: id,
+      contact_id: primaryContact?.id || null,
+      customer_id: input.customerId,
+      error_message: sendResult.reason || null,
+      message_body: message,
+      note_id: input.noteId || null,
+      provider: sendResult.provider,
+      provider_message_id: sendResult.providerMessageId || null,
+      recipient_name: recipientName || null,
+      recipient_phone: normalizedRecipientPhone || null,
+      sent_at: sendResult.status === "sent" ? new Date().toISOString() : null,
+      status: sendResult.status,
+      trigger_type: input.triggerType || "delivery_complete",
+      triggered_by_name: input.triggeredByName || "현장 사용자"
+    };
+    const rows = retryLog
+      ? await supabaseRequest<CustomerMessageLogRow[]>(
+          `customer_message_logs?id=eq.${encodeURIComponent(retryLog.id)}&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(input.customerId)}`,
+          { method: "PATCH", body: JSON.stringify(logPayload) }
+        )
+      : await supabaseRequest<CustomerMessageLogRow[]>("customer_message_logs", {
+          method: "POST",
+          body: JSON.stringify([logPayload])
+        });
     const log = toCustomerMessageLogItem(rows[0]);
 
-    await addCustomerNote(
-      {
-        customerId: input.customerId,
-        createdByName: input.triggeredByName || "현장 사용자",
-        memo:
-          sendResult.status === "sent"
-            ? `[알림 발송 완료]\n${message}`
-            : `[알림 발송 대기]\n${message}\n${sendResult.reason || "발송 설정 확인 필요"}`,
-        nextAction: sendResult.status === "sent" ? "거래처 알림 발송 완료" : "거래처 알림 수동 확인",
-        noteType: "delivery_message"
-      },
-      id
-    ).catch(() => null);
+    // 재전송은 기존 배송완료/알림 기록을 그대로 유지하고 메시지 로그만 갱신합니다.
+    // 이 조건이 없으면 통신 장애 뒤 재시도할 때 거래처 타임라인에 같은 완료 기록이 누적됩니다.
+    if (!retryLog) {
+      await addCustomerNote(
+        {
+          customerId: input.customerId,
+          createdByName: input.triggeredByName || "현장 사용자",
+          memo:
+            sendResult.status === "sent"
+              ? `[알림 발송 완료]\n${message}`
+              : `[알림 발송 대기]\n${message}\n${sendResult.reason || "발송 설정 확인 필요"}`,
+          nextAction: sendResult.status === "sent" ? "거래처 알림 발송 완료" : "거래처 알림 수동 확인",
+          noteType: "delivery_message"
+        },
+        id
+      ).catch(() => null);
+    }
 
     return {
       log,

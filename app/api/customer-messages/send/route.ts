@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
         customerId?: string;
         message?: string;
         noteId?: string;
+        retryLogId?: string;
         triggerType?: "delivery_complete" | "delivery_issue" | "manual";
       }
     | null;
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
         customerId: body.customerId,
         message: body.message,
         noteId: body.noteId,
+        retryLogId: body.retryLogId,
         triggerType: body.triggerType || "delivery_complete",
         triggeredByName: scope.customerSession?.name || scope.adminSession?.name
       },

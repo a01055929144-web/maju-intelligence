@@ -31,6 +31,14 @@ type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
 type DeliverySaveProgress = { attachments: Record<string, Attachment>; key: string; noteId?: string };
 type MessageOutcome = "failed" | "idle" | "pending" | "sent";
+type MessageLog = {
+  createdAt: string;
+  errorMessage?: string;
+  id: string;
+  messageBody: string;
+  recipientPhone?: string;
+  status: "failed" | "queued" | "sent";
+};
 
 const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
   { label: "도착완료", value: "arrived" },
@@ -88,6 +96,8 @@ export function MobileDeliveryProofPanel({
   const [messageChannel, setMessageChannel] = useState<MessageChannel>("kakao");
   const [messageResult, setMessageResult] = useState("");
   const [messageOutcome, setMessageOutcome] = useState<MessageOutcome>("idle");
+  const [messageLogs, setMessageLogs] = useState<MessageLog[]>([]);
+  const [retryingMessageId, setRetryingMessageId] = useState("");
   const [resolvedMessage, setResolvedMessage] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
   const [saving, setSaving] = useState(false);
@@ -152,9 +162,10 @@ export function MobileDeliveryProofPanel({
     setLoadingProofs(true);
     setLoadProofsError("");
     const response = await fetchWithTimeout(`/api/customer-operations?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000).catch(() => null);
-    const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[]; notes?: OperationNote[] } | null) : null;
+    const payload = response?.ok ? ((await response.json().catch(() => null)) as { attachments?: Attachment[]; messageLogs?: MessageLog[]; notes?: OperationNote[] } | null) : null;
     if (payload) {
       setAttachments(payload.attachments || []);
+      setMessageLogs(payload.messageLogs || []);
       setNotes(payload.notes || []);
     } else {
       setLoadProofsError("기록을 불러오지 못했습니다. 연결을 확인하고 다시 눌러주세요.");
@@ -291,6 +302,29 @@ export function MobileDeliveryProofPanel({
     }
   }
 
+  async function retryMessage(log: MessageLog) {
+    if (retryingMessageId || log.status === "sent") return;
+    setRetryingMessageId(log.id);
+    setMessageResult("");
+    const response = await fetchWithTimeout("/api/customer-messages/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerId, message: log.messageBody, retryLogId: log.id })
+    }, 12000).catch(() => null);
+    const payload = (await response?.json().catch(() => null)) as
+      | { log?: MessageLog; message?: string; sent?: boolean }
+      | null;
+    if (!response?.ok || !payload?.log) {
+      setMessageOutcome("failed");
+      setMessageResult(payload?.message || "알림을 다시 보내지 못했습니다. 연결 상태를 확인해주세요.");
+    } else {
+      setMessageLogs((current) => current.map((item) => (item.id === log.id ? payload.log! : item)));
+      setMessageOutcome(payload.sent ? "sent" : "pending");
+      setMessageResult(payload.sent ? "저장된 배송 사진은 그대로 두고 알림만 다시 보냈습니다." : payload.log.errorMessage || "알림 재전송 요청을 저장했습니다.");
+    }
+    setRetryingMessageId("");
+  }
+
   function removeFile(index: number) {
     setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
     setStatus("idle");
@@ -335,6 +369,7 @@ export function MobileDeliveryProofPanel({
 
   useEffect(() => {
     requestLocation();
+    void loadProofs();
     const savedContactMode = window.localStorage.getItem(`maju-contact-mode:${driverName}`);
     if (savedContactMode === "driver" && driverPhone) setContactMode("driver");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -604,6 +639,39 @@ export function MobileDeliveryProofPanel({
             ))}
           </div>
         ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-black text-slate-500">점주 알림 상태</p>
+          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">{messageLogs.length}건</span>
+        </div>
+        {!loadingProofs && !messageLogs.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">저장된 알림 기록이 없습니다.</p> : null}
+        {messageLogs.map((log) => (
+          <div className="rounded-lg border border-slate-200 bg-white p-3" key={log.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${log.status === "sent" ? "bg-emerald-50 text-emerald-700" : log.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>
+                  {log.status === "sent" ? "발송 완료" : log.status === "failed" ? "발송 실패" : "발송 대기"}
+                </span>
+                <p className="mt-1 truncate text-xs font-bold text-slate-600">{log.recipientPhone || "수신번호 확인 필요"} · {log.createdAt}</p>
+              </div>
+              {log.status === "failed" ? (
+                <button
+                  className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-800 disabled:opacity-50"
+                  disabled={Boolean(retryingMessageId)}
+                  onClick={() => void retryMessage(log)}
+                  type="button"
+                >
+                  {retryingMessageId === log.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  알림만 재전송
+                </button>
+              ) : null}
+            </div>
+            {log.errorMessage ? <p className="mt-2 text-xs font-bold leading-5 text-rose-600">{log.errorMessage}</p> : null}
+            {log.status === "failed" ? <p className="mt-1 text-[11px] font-semibold text-slate-500">사진과 배송완료 기록은 다시 저장하지 않습니다.</p> : null}
+          </div>
+        ))}
       </div>
         </div>
       </details>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
-import { addCustomerAttachment, addCustomerNote, canAccessAssignedCustomer, getCustomerOperations } from "@/lib/store";
+import { addCustomerAttachment, addCustomerNote, canAccessAssignedCustomer, getCustomerMessageLogs, getCustomerOperations } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,11 @@ export async function GET(request: NextRequest) {
 
   const attachmentOffset = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("attachmentOffset") || "0", 10) || 0);
   const noteOffset = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("noteOffset") || "0", 10) || 0);
-  const result = await getCustomerOperations(customerId, scope.companyId, { attachmentOffset, noteOffset });
-  return NextResponse.json(result);
+  const [result, messageLogs] = await Promise.all([
+    getCustomerOperations(customerId, scope.companyId, { attachmentOffset, noteOffset }),
+    attachmentOffset || noteOffset ? Promise.resolve([]) : getCustomerMessageLogs(customerId, scope.companyId)
+  ]);
+  return NextResponse.json({ ...result, messageLogs });
 }
 
 export async function POST(request: NextRequest) {

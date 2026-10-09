@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2 } from "lucide-react";
+import { Building2, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileBottomNavigation } from "@/components/mobile-bottom-navigation";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
@@ -86,6 +86,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <p className="mobile-muted mt-0.5 truncate text-xs font-bold">{driverName} · {session.companyName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <Link className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-teal-700 px-3 text-xs font-semibold text-white" href="/mobile/sales"><Target className="h-4 w-4" />영업</Link>
               <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
               <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
             </div>
