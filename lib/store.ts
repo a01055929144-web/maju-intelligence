@@ -4028,6 +4028,8 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("auth_credentials", "로그인 저장 정보", "관리자/고객 로그인 정보를 관리할 때 사용하는 테이블입니다."),
     countTableRows("excel_mapping_presets", "엑셀 매핑 프리셋", "ERP/유통사별로 저장해둔 엑셀 헤더 매핑 프리셋입니다."),
     countTableRows("login_throttle_attempts", "로그인 시도 제한", "로그인·공개 조회 요청 제한을 서버 인스턴스 간 공유하는 테이블입니다.", "identifier"),
+    checkCustomerGradeOverrideSchema(),
+    checkSalesQuoteOperationsSchema(),
     checkVisitLeadRelationship(),
     checkCustomerPlaceLinkColumns(),
     checkDefaultCompany()
@@ -6171,6 +6173,74 @@ async function checkCustomerPlaceLinkColumns(): Promise<DatabaseCheck> {
       count: null,
       description: isMissingCustomerPlaceLinksColumnError(error)
         ? "20260725_customer_place_links.sql 마이그레이션을 Supabase SQL Editor에서 실행해야 링크가 서버에 저장됩니다."
+        : getErrorMessage(error)
+    };
+  }
+}
+
+async function checkCustomerGradeOverrideSchema(): Promise<DatabaseCheck> {
+  try {
+    await supabaseRequest<Array<{ grade_override: string | null }>>(
+      "normalized_customers?select=grade_override&limit=1"
+    );
+
+    return {
+      name: "거래처 수동 등급 저장",
+      status: "ready",
+      count: null,
+      description: "거래처별 A/B/C 수동 등급과 매출 자동 등급 복귀 컬럼이 적용되어 있습니다."
+    };
+  } catch (error) {
+    return {
+      name: "거래처 수동 등급 저장",
+      status: "missing",
+      count: null,
+      description: isMissingColumnError(error)
+        ? "supabase/migrations/20261008_customer_grade_override.sql을 Supabase SQL Editor에서 실행해야 등급 변경이 유지됩니다."
+        : getErrorMessage(error)
+    };
+  }
+}
+
+async function checkSalesQuoteOperationsSchema(): Promise<DatabaseCheck> {
+  try {
+    await Promise.all([
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "companies?select=default_quote_margin_percent,default_quote_valid_days&limit=1"
+      ),
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "lead_actions?select=collateral_types,follow_up_at,metadata&limit=1"
+      ),
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "product_catalog?select=id,company_id,match_status&limit=1"
+      ),
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "sales_quotes?select=id,company_id,public_token,public_enabled,valid_until&limit=1"
+      ),
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "sales_quote_items?select=id,company_id,quote_id,purchase_unit_price,sales_unit_price&limit=1"
+      ),
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "sales_kpi_targets?select=id,company_id,period_month&limit=1"
+      ),
+      supabaseRequest<Array<Record<string, unknown>>>(
+        "delivery_notification_jobs?select=id,company_id,status,attempt_count&limit=1"
+      )
+    ]);
+
+    return {
+      name: "영업 견적·KPI 운영 스키마",
+      status: "ready",
+      count: null,
+      description: "상품 매칭, 견적/공개 링크, 영업 KPI, 배송 알림 재시도 저장소가 적용되어 있습니다."
+    };
+  } catch (error) {
+    return {
+      name: "영업 견적·KPI 운영 스키마",
+      status: "missing",
+      count: null,
+      description: isMissingColumnError(error) || isMissingSalesQuoteSchemaError(error)
+        ? "supabase/migrations/20261009012401_sales_quote_operations.sql을 Supabase SQL Editor에서 실행해야 영업·견적 저장 기능이 동작합니다."
         : getErrorMessage(error)
     };
   }

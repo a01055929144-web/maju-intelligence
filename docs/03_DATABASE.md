@@ -6,6 +6,7 @@
 
 ### customer
 - `normalized_customers` — 거래처 마스터. `grade_override`가 있으면 월 매출 자동 등급보다 우선하며, `20261008_customer_grade_override.sql` 적용이 필요하다.
+- 운영 진단(`/admin/system`, `/api/health`)은 `grade_override`와 `20261009012401_sales_quote_operations.sql`의 상품·견적·KPI·알림 재시도 스키마를 각각 독립적으로 검사한다.
 - `raw_customer_rows`, `customer_imports`, `column_mappings`, `excel_mapping_presets` — 엑셀/원본 데이터 적재 파이프라인
 - `customer_contacts` — 거래처 담당자 연락처
 - `customer_attachments` — 사업자등록증/신분증/적재위치 사진 등
