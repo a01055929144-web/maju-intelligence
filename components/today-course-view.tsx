@@ -333,7 +333,7 @@ export function TodayCourseView({
     }
   };
 
-  const saveDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
+  const persistDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
     let persisted = false;
     // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임): 실패 시 조용히 "로컬 기록"으로만
     // 남기지 않고, 별도 오류 상태로 기록해 화면에 명확한 배너 + 재시도 버튼을 보여줍니다.
@@ -383,6 +383,12 @@ export function TodayCourseView({
       failureReason = "네트워크 오류로 서버에 연결하지 못했습니다.";
     }
 
+    return { failureReason, persisted };
+  };
+
+  const saveDeliveryProof = async (storeId: string, proof: DeliveryProofInput) => {
+    const { failureReason, persisted } = await persistDeliveryProof(storeId, proof);
+    const recordedAt = new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
     setDeliveryProofs((current) => ({
       ...current,
       [storeId]: [
@@ -390,13 +396,26 @@ export function TodayCourseView({
           ...proof,
           persisted,
           failureReason: persisted ? undefined : failureReason,
-          recordedAt: new Date().toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }),
+          recordedAt,
           storeId
         },
         ...(current[storeId] || [])
       ]
     }));
 
+    return persisted;
+  };
+
+  const retryDeliveryProof = async (storeId: string, recordedAt: string, proof: DeliveryProofInput) => {
+    const { failureReason, persisted } = await persistDeliveryProof(storeId, proof);
+    setDeliveryProofs((current) => ({
+      ...current,
+      [storeId]: (current[storeId] || []).map((item) =>
+        item.recordedAt === recordedAt
+          ? { ...item, ...proof, failureReason: persisted ? undefined : failureReason, persisted }
+          : item
+      )
+    }));
     return persisted;
   };
 
@@ -707,6 +726,7 @@ export function TodayCourseView({
                 {routeSelectedStore ? (
                   <DeliveryProofPanel
                     onSave={(proof) => saveDeliveryProof(routeSelectedStore.id, proof)}
+                    onRetry={(recordedAt, proof) => retryDeliveryProof(routeSelectedStore.id, recordedAt, proof)}
                     proofs={deliveryProofs[routeSelectedStore.id] || []}
                     store={routeSelectedStore}
                   />
@@ -1027,10 +1047,12 @@ export function TodayCourseView({
 
 function DeliveryProofPanel({
   onSave,
+  onRetry,
   proofs,
   store
 }: {
   readonly onSave: (proof: DeliveryProofInput) => Promise<boolean>;
+  readonly onRetry: (recordedAt: string, proof: DeliveryProofInput) => Promise<boolean>;
   readonly proofs: DeliveryProof[];
   readonly store: StoreRow;
 }) {
@@ -1043,6 +1065,9 @@ function DeliveryProofPanel({
   const [memo, setMemo] = useState("");
   const [messageChannel, setMessageChannel] = useState<DeliveryProof["messageChannel"]>("kakao");
   const [copyMessage, setCopyMessage] = useState("");
+  const [retryFiles, setRetryFiles] = useState<Record<string, File>>({});
+  const [retryingProof, setRetryingProof] = useState("");
+  const [retryMessages, setRetryMessages] = useState<Record<string, string>>({});
   const ownerMessage = createDeliveryOwnerMessage(store, memo, deliveryStatus, fileName);
 
   // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임): 서버 저장이 실패하면 성공 메시지 대신
@@ -1076,6 +1101,20 @@ function DeliveryProofPanel({
     } catch {
       setCopyMessage("복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
     }
+  };
+  const retrySavedProof = async (proof: DeliveryProof) => {
+    const key = deliveryProofSessionKey(proof);
+    const needsFile = proof.fileName !== "현장 사진 미첨부";
+    const retryFile = retryFiles[key] || null;
+    if (needsFile && !retryFile) {
+      setRetryMessages((current) => ({ ...current, [key]: "새로고침 후에는 사진을 다시 선택해야 합니다." }));
+      return;
+    }
+    setRetryingProof(key);
+    setRetryMessages((current) => ({ ...current, [key]: "재전송 중입니다." }));
+    const persisted = await onRetry(proof.recordedAt, { ...proof, file: retryFile });
+    setRetryingProof("");
+    setRetryMessages((current) => ({ ...current, [key]: persisted ? "서버 저장을 완료했습니다." : "재전송에 실패했습니다. 연결 상태를 확인하세요." }));
   };
 
   return (
@@ -1192,6 +1231,34 @@ function DeliveryProofPanel({
               <p className="mt-1 text-xs font-semibold text-slate-700">{deliveryStatusLabel(proof.deliveryStatus)}</p>
               <p className="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{proof.memo}</p>
               <p className="mt-1 text-xs font-medium text-slate-400">{proof.recordedAt}</p>
+              {!proof.persisted ? (
+                <div className="mt-2 border-t border-slate-100 pt-2">
+                  <p className="text-xs font-bold leading-5 text-red-600">{proof.failureReason || "서버에 저장되지 않았습니다."}</p>
+                  {proof.fileName !== "현장 사진 미첨부" ? (
+                    <label className="maju-button-secondary mt-2 flex cursor-pointer justify-center">
+                      사진 다시 선택
+                      <input
+                        accept="image/*,video/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const nextFile = event.target.files?.[0];
+                          if (nextFile) setRetryFiles((current) => ({ ...current, [deliveryProofSessionKey(proof)]: nextFile }));
+                        }}
+                        type="file"
+                      />
+                    </label>
+                  ) : null}
+                  <button
+                    className="maju-button-primary mt-2 w-full disabled:cursor-not-allowed disabled:bg-slate-300"
+                    disabled={retryingProof === deliveryProofSessionKey(proof)}
+                    onClick={() => void retrySavedProof(proof)}
+                    type="button"
+                  >
+                    {retryingProof === deliveryProofSessionKey(proof) ? "재전송 중" : "서버로 다시 전송"}
+                  </button>
+                  {retryMessages[deliveryProofSessionKey(proof)] ? <p aria-live="polite" className="mt-1 text-xs font-bold text-slate-600">{retryMessages[deliveryProofSessionKey(proof)]}</p> : null}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -1229,6 +1296,10 @@ function deliveryStatusLabel(status: DeliveryProof["deliveryStatus"]) {
   if (status === "partial") return "부분배송";
   if (status === "issue") return "이슈발생";
   return "도착완료";
+}
+
+function deliveryProofSessionKey(proof: Pick<DeliveryProof, "fileName" | "recordedAt">) {
+  return `${proof.recordedAt}-${proof.fileName}`;
 }
 
 function countFiniteRoutePoints(path: RouteSequence["path"]) {

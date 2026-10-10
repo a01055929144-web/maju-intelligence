@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
+import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
 import { getAdminSession, getCustomerSession, customerHasCapability, resolvePageCompanyId } from "@/lib/auth";
 
 export default async function ProductCatalogPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
@@ -14,7 +13,6 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const pipelineHref = `/revenue/pipeline${isAdminPreview ? `?companyId=${encodeURIComponent(companyId)}` : ""}`;
 
   return (
     <CustomerAppShell
@@ -28,10 +26,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
-        <Link className="maju-button-secondary inline-flex items-center gap-2" href={pipelineHref}>
-          <ArrowLeft className="h-4 w-4" />
-          영업 관리로 돌아가기
-        </Link>
+        <SalesWorkspaceNav active="products" companyId={companyId} />
         <ProductCatalogAdmin companyId={isAdminPreview ? companyId : ""} />
       </section>
     </CustomerAppShell>

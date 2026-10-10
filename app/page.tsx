@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -36,6 +36,7 @@ import { SortableTh } from "@/components/sortable-th";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { reportClientRenderTiming } from "@/lib/performance-timing";
 
 // Report is only shown after analysis finishes, so load it on demand instead
 // of shipping it in the data registration page's initial JS bundle.
@@ -129,6 +130,11 @@ function getUploadTypeFromUrl(): UploadTemplateType {
 }
 
 export default function Home() {
+  const initialRenderStartedAt = useRef(typeof performance === "undefined" ? 0 : performance.now());
+  useEffect(() => {
+    reportClientRenderTiming("/", initialRenderStartedAt.current);
+  }, []);
+
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
   const { companyName: sessionCompanyName, userName: sessionUserName, workspaceRole: sessionWorkspaceRole } = useCustomerIdentity(isAdminPreview);

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Banknote, CalendarClock, CircleDollarSign, ExternalLink, FileText, Percent, ReceiptText, Route, Search, TrendingUp } from "lucide-react";
+import { ArrowRight, Banknote, CircleDollarSign, ExternalLink, FileText, Percent, ReceiptText, Route, Search, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { PipelineCandidatesTable } from "@/components/pipeline-candidates-table";
 import { Progress } from "@/components/ui/progress";
-import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
-import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
+import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getRevenuePipeline, listSalesQuotes, type RevenuePipeline, type SalesQuoteListItem } from "@/lib/store";
 
 const emptyPipeline: RevenuePipeline = {
@@ -102,15 +102,12 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
-        <WorkspaceSectionNav
-          items={[
-            { active: section === "summary", badge: `${pipeline.items.length}건`, description: "예상매출과 전환율", href: sectionHref("summary"), icon: TrendingUp, label: "현황" },
-            { active: section === "basis", description: "방문·원장 연결", href: sectionHref("basis"), icon: FileText, label: "기준" },
-            { active: section === "status", description: "견적·관심·보류", href: sectionHref("status"), icon: Percent, label: "상태" },
-            { active: section === "candidates", description: "후속 영업 대상", href: sectionHref("candidates"), icon: ReceiptText, label: "후보" },
-            { active: section === "quotes", badge: `${savedQuotes.length}건`, description: "발행·유효기간·공유", href: sectionHref("quotes"), icon: CalendarClock, label: "견적 원장" }
-          ]}
-          title="영업 관리"
+        <SalesWorkspaceNav
+          active={section}
+          companyId={companyId}
+          pipelineCount={pipeline.items.length}
+          quoteCount={savedQuotes.length}
+          showProducts={Boolean(adminSession || (customerSession && customerHasCapability(customerSession, "manage_sales")))}
         />
 
         <div className="min-w-0 space-y-4">
@@ -221,6 +218,7 @@ function SalesQuoteLedger({
   const hasFilters = Boolean(filters.query || filters.status || filters.validity);
   const resetParams = new URLSearchParams({ section: "quotes" });
   if (companyId) resetParams.set("companyId", companyId);
+  const mobileSalesHref = companyId ? `/mobile/sales?companyId=${encodeURIComponent(companyId)}` : "/mobile/sales";
 
   return (
     <section className="maju-section-card overflow-hidden" id="sales-quote-ledger">
@@ -335,7 +333,7 @@ function SalesQuoteLedger({
           {hasFilters ? (
             <Link className="maju-button-secondary mt-5" href={`/revenue/pipeline?${resetParams.toString()}`}>필터 초기화</Link>
           ) : (
-            <Link className="maju-button-primary mt-5" href="/mobile/sales">모바일 영업 열기 <ArrowRight className="h-4 w-4" /></Link>
+            <Link className="maju-button-primary mt-5" href={mobileSalesHref}>모바일 영업 열기 <ArrowRight className="h-4 w-4" /></Link>
           )}
         </div>
       )}

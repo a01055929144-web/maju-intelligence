@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BellRing, CalendarClock, FileText, History, Phone, Search, Smartphone, UserRound } from "lucide-react";
+import { BellRing, CalendarClock, History, Phone, Search, Smartphone, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
-import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
+import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { listSalesContactLedger, type SalesContactLedgerItem } from "@/lib/store";
 
 type DueFilter = "all" | "overdue" | "today" | "upcoming" | "none";
@@ -64,13 +64,11 @@ export default async function SalesContactsPage({
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
-        <WorkspaceSectionNav
-          items={[
-            { description: "예상매출과 전환", href: scoped("/revenue/pipeline"), icon: FileText, label: "영업 현황" },
-            { active: true, badge: `${items.length}건`, description: "컨택·후속 일정", href: scoped("/revenue/contacts"), icon: History, label: "컨택 원장" },
-            { description: "발행·유효기간·공유", href: scoped("/revenue/pipeline?section=quotes"), icon: CalendarClock, label: "견적 원장" }
-          ]}
-          title="영업 관리"
+        <SalesWorkspaceNav
+          active="contacts"
+          companyId={companyId}
+          contactCount={items.length}
+          showProducts={Boolean(adminSession || (customerSession && customerHasCapability(customerSession, "manage_sales")))}
         />
 
         <section className="grid gap-3 md:grid-cols-3">
@@ -85,7 +83,7 @@ export default async function SalesContactsPage({
               <p className="maju-section-title">모바일 컨택 전체 흐름</p>
               <p className="mt-1 text-sm text-slate-500">리마인드 {reminderCount.toLocaleString()}건 · 만료 일정은 붉은색으로 우선 표시합니다.</p>
             </div>
-            <Link className="maju-button-secondary min-h-10" href="/mobile/sales"><Smartphone className="h-4 w-4" />모바일 영업</Link>
+            <Link className="maju-button-secondary min-h-10" href={scoped("/mobile/sales")}><Smartphone className="h-4 w-4" />모바일 영업</Link>
           </div>
 
           <form className="grid gap-3 border-b border-slate-200 bg-slate-50/70 p-4 lg:grid-cols-[minmax(260px,1fr)_180px_180px_auto] lg:items-end" method="get">

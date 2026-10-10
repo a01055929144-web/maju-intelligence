@@ -4,35 +4,42 @@ import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-l
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
+import { RequestTiming } from "@/lib/performance-timing";
 import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
-  const resolvedSearchParams = await searchParams;
-  const customerSession = await getCustomerSession();
-  const adminSession = await getAdminSession();
+  const timing = new RequestTiming();
+  const resolvedSearchParams = await timing.measure("search_params", async () => searchParams);
+  const [customerSession, adminSession] = await timing.measure("auth", () => Promise.all([getCustomerSession(), getAdminSession()]));
 
-  if (!customerSession && !adminSession) redirect("/dashboard/login");
-  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) redirect("/admin/companies");
+  if (!customerSession && !adminSession) {
+    timing.log("/dashboard", "redirect");
+    redirect("/dashboard/login");
+  }
+  if (!customerSession && adminSession && !resolvedSearchParams?.companyId) {
+    timing.log("/dashboard", "redirect");
+    redirect("/admin/companies");
+  }
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
-  const [company, routePlan, customerMaster, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult, vehicleMasterResult] = await Promise.all([
-    getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
-    getTodayRoutePlan(companyId, { assignmentKeys }),
-    getCustomerMapSummaries(companyId, { assignmentKeys }),
-    getChurnRiskCustomers(companyId).catch(() => []),
-    getDeliveryVehicleFuelTypes(companyId).catch(() => ({})),
+  const [company, routePlan, customerMaster, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult, vehicleMasterResult] = await timing.measure("db_parallel_total", () => Promise.all([
+    timing.measure("db_company", () => getCompanySettings(companyId, customerSession?.companyName || "선택 고객사")),
+    timing.measure("db_route_plan", () => getTodayRoutePlan(companyId, { assignmentKeys })),
+    timing.measure("db_map_customers", () => getCustomerMapSummaries(companyId, { assignmentKeys })),
+    timing.measure("db_churn_risk", () => getChurnRiskCustomers(companyId).catch(() => [])),
+    timing.measure("db_vehicle_fuel", () => getDeliveryVehicleFuelTypes(companyId).catch(() => ({}))),
     isScopedStaffView && !customerSession?.userId
       ? Promise.resolve([])
-      : getStaffVehicleLocations(companyId, { userId: isScopedStaffView ? customerSession?.userId : undefined }).catch(() => []),
-    canManageStaff && companyId ? getCompanyStaffInvitations(companyId).catch(() => ({ invitations: [], persisted: false })) : Promise.resolve({ invitations: [], persisted: false }),
-    companyId ? listVehicleMaster(vehicleMasterRepository, companyId).catch(() => ({ available: false, vehicles: [] })) : Promise.resolve({ available: false, vehicles: [] })
-  ]);
+      : timing.measure("db_staff_locations", () => getStaffVehicleLocations(companyId, { userId: isScopedStaffView ? customerSession?.userId : undefined }).catch(() => [])),
+    canManageStaff && companyId ? timing.measure("db_staff_invitations", () => getCompanyStaffInvitations(companyId).catch(() => ({ invitations: [], persisted: false }))) : Promise.resolve({ invitations: [], persisted: false }),
+    companyId ? timing.measure("db_vehicle_master", () => listVehicleMaster(vehicleMasterRepository, companyId).catch(() => ({ available: false, vehicles: [] }))) : Promise.resolve({ available: false, vehicles: [] })
+  ]));
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   // getCompanyOriginAddress()는 내부에서 getCompanySettings()를 다시 호출합니다. 지도 첫 요청에서
   // 같은 회사 행을 두 번 조회하지 않고, 위에서 이미 받은 설정의 정규화된 출발지 주소를 재사용합니다.
@@ -55,6 +62,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       : marker
   );
   const timelineHref = isAdminPreview && companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline";
+  timing.log("/dashboard");
 
   return (
     <CustomerAppShell

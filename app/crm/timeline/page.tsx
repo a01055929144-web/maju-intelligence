@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getCustomerRevenueGrade } from "@/lib/customer/domain/customer-grade";
+import { reportClientRenderTiming } from "@/lib/performance-timing";
 
 type TimelineItem = {
   id: string;
@@ -177,6 +178,11 @@ function syncSelectedCustomerUrl(customerId: string | undefined) {
 }
 
 export default function CrmTimelinePage() {
+  const initialRenderStartedAt = useRef(typeof performance === "undefined" ? 0 : performance.now());
+  useEffect(() => {
+    reportClientRenderTiming("/crm/timeline", initialRenderStartedAt.current);
+  }, []);
+
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
   const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);

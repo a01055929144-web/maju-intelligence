@@ -4,6 +4,7 @@ import { ArrowRight, Target, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { Progress } from "@/components/ui/progress";
+import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getCompanySalesKpiOverview } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
@@ -24,6 +25,9 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
   const actualQuotes = overview.members.reduce((sum, member) => sum + member.actualQuotes, 0);
   const targetConversions = overview.members.reduce((sum, member) => sum + member.targetConversions, 0);
   const actualConversions = overview.members.reduce((sum, member) => sum + member.actualConversions, 0);
+  const settingsHref = companyId
+    ? `/dashboard/settings?companyId=${encodeURIComponent(companyId)}#sales-policy`
+    : "/dashboard/settings#sales-policy";
 
   return (
     <CustomerAppShell
@@ -36,6 +40,7 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-4 sm:px-4">
+        <SalesWorkspaceNav active="performance" companyId={companyId} />
         <div className="maju-section-card overflow-hidden">
           <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -57,7 +62,7 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
               <p className="maju-section-title">담당자별 달성 현황</p>
               <p className="mt-1 text-sm text-slate-500">컨택·견적·거래처 전환을 같은 기준으로 비교합니다.</p>
             </div>
-            <Link className="maju-button-secondary" href="/dashboard/settings#sales-policy">목표 설정 <ArrowRight className="h-4 w-4" /></Link>
+            <Link className="maju-button-secondary" href={settingsHref}>목표 설정 <ArrowRight className="h-4 w-4" /></Link>
           </div>
           {overview.members.length ? (
             <div className="divide-y divide-slate-100">
