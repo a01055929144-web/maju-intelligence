@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         attachmentType?: string;
         customerId?: string;
         fileUrl?: string;
+        idempotencyKey?: string;
         memo?: string;
         mimeType?: string;
         nextAction?: string;
@@ -86,9 +87,15 @@ export async function POST(request: NextRequest) {
       memo: body.memo || "",
       nextAction: body.nextAction,
       noteType: body.noteType || "general",
-      createdByName: scope.customerSession?.name || scope.adminSession?.name
+      createdByName: scope.customerSession?.name || scope.adminSession?.name,
+      idempotencyKey: normalizeIdempotencyKey(body.idempotencyKey)
     },
     scope.companyId
   );
   return NextResponse.json(result);
+}
+
+function normalizeIdempotencyKey(value?: string) {
+  const key = value?.trim();
+  return key && /^[a-zA-Z0-9:_-]{8,160}$/.test(key) ? key : undefined;
 }

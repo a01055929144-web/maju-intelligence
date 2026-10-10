@@ -29,7 +29,7 @@ type OperationNote = {
 };
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
-type DeliverySaveProgress = { attachments: Record<string, Attachment>; key: string; noteId?: string };
+type DeliverySaveProgress = { attachments: Record<string, Attachment>; attemptId: string; key: string; noteId?: string };
 type MessageOutcome = "failed" | "idle" | "pending" | "sent";
 type MessageLog = {
   createdAt: string;
@@ -101,6 +101,7 @@ export function MobileDeliveryProofPanel({
   const [resolvedMessage, setResolvedMessage] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
   const [saving, setSaving] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const [progressLabel, setProgressLabel] = useState("");
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [errorDetail, setErrorDetail] = useState("");
@@ -191,7 +192,9 @@ export function MobileDeliveryProofPanel({
       memoText,
       files.map(fileKey)
     ]);
-    const progress = saveProgressRef.current?.key === attemptKey ? saveProgressRef.current : { attachments: {}, key: attemptKey };
+    const progress = saveProgressRef.current?.key === attemptKey
+      ? saveProgressRef.current
+      : { attachments: {}, attemptId: `delivery:${crypto.randomUUID()}`, key: attemptKey };
     const isNotificationRetry = Boolean(progress.noteId) && files.every((file) => Boolean(progress.attachments[fileKey(file)]));
 
     setSaving(true);
@@ -215,11 +218,12 @@ export function MobileDeliveryProofPanel({
         customerId,
         memo: memoText,
         nextAction: messageChannel === "kakao" ? "카카오 알림톡 또는 수동 공유" : "SMS 자동 발송 또는 수동 문자",
-        noteType: "delivery"
+        noteType: "delivery",
+        idempotencyKey: `${progress.attemptId}:note`
       })
     }, 15000).catch(() => null);
     const pendingFiles = files.filter((file) => !progress.attachments[fileKey(file)]);
-    const attachmentRequests = pendingFiles.map(async (file) => ({ file, response: await uploadDeliveryProof(customerId, file, file.name).catch(() => null) }));
+    const attachmentRequests = pendingFiles.map(async (file) => ({ file, response: await uploadDeliveryProof(customerId, file, file.name, `${progress.attemptId}:file:${files.indexOf(file)}`).catch(() => null) }));
     const [noteResponse, attachmentResponses] = await Promise.all([noteRequest, Promise.all(attachmentRequests)]);
 
     const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
@@ -233,7 +237,7 @@ export function MobileDeliveryProofPanel({
     }
     const noteOk = Boolean(noteId);
     const attachmentOk = files.every((file) => Boolean(uploadedAttachments[fileKey(file)]));
-    saveProgressRef.current = { attachments: uploadedAttachments, key: attemptKey, noteId };
+    saveProgressRef.current = { attachments: uploadedAttachments, attemptId: progress.attemptId, key: attemptKey, noteId };
     if (!noteOk || !attachmentOk) {
       // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임/부분 실패 시 재시도하면 중복 업로드됨):
       // 메모는 성공했는데 사진 업로드만 실패한 경우, 재시도 시 메모가 또 한 번 저장되지 않도록 사진만
@@ -264,6 +268,7 @@ export function MobileDeliveryProofPanel({
         attachmentId: savedAttachments[0]?.id,
         channel: messageChannel,
         customerId,
+        idempotencyKey: `${progress.attemptId}:message`,
         message: ownerMessage,
         noteId,
         triggerType: deliveryStatus === "issue" ? "delivery_issue" : "delivery_complete"
@@ -374,6 +379,14 @@ export function MobileDeliveryProofPanel({
     if (savedContactMode === "driver" && driverPhone) setContactMode("driver");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
+
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
 
   return (
     <section aria-busy={saving} className={`mobile-card rounded-2xl border p-3 ${files.length ? "has-files" : ""}`} id="delivery-proof">
@@ -514,6 +527,7 @@ export function MobileDeliveryProofPanel({
       </p>
 
       <div className="mobile-card sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-2 mt-3 rounded-2xl border p-2 shadow-[0_-8px_28px_rgba(15,23,42,.14)] backdrop-blur">
+      {!isOnline ? <p aria-live="assertive" className="mb-2 rounded-lg bg-amber-100 px-3 py-2 text-center text-xs font-black text-amber-900">오프라인입니다. 사진은 그대로 유지됩니다. 연결 후 같은 버튼을 다시 누르세요.</p> : null}
       <Button className="mobile-primary-action h-14 w-full font-black" disabled={saving || status === "saved"} onClick={submit}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
         {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "배송 완료 저장"}
@@ -679,11 +693,12 @@ export function MobileDeliveryProofPanel({
   );
 }
 
-async function uploadDeliveryProof(customerId: string, file: File, title: string) {
+async function uploadDeliveryProof(customerId: string, file: File, title: string, idempotencyKey: string) {
   const formData = new FormData();
   formData.append("attachmentType", "delivery_proof");
   formData.append("customerId", customerId);
   formData.append("file", file);
+  formData.append("idempotencyKey", idempotencyKey);
   formData.append("title", title);
 
   return fetchWithTimeout("/api/customer-attachments/upload", {

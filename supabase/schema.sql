@@ -171,6 +171,8 @@ create table if not exists public.customer_notes (
   created_at timestamptz not null default now()
 );
 
+alter table public.customer_notes add column if not exists idempotency_key text;
+
 create table if not exists public.customer_attachments (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -184,6 +186,8 @@ create table if not exists public.customer_attachments (
   created_by_name text,
   created_at timestamptz not null default now()
 );
+
+alter table public.customer_attachments add column if not exists idempotency_key text;
 
 create table if not exists public.route_distance_cache (
   id uuid primary key default gen_random_uuid(),

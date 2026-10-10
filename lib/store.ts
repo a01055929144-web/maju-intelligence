@@ -909,6 +909,11 @@ function isMissingColumnError(error: unknown) {
   return message.includes("42703") || message.includes("does not exist") || message.includes("PGRST204") || message.includes("schema cache");
 }
 
+function isMissingDeliveryIdempotencyColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("idempotency_key") && isMissingColumnError(error);
+}
+
 function removePasswordHashFromBody(body: BodyInit | null | undefined) {
   if (!body || typeof body !== "string" || !body.includes("password_hash")) return body;
   try {
@@ -5413,7 +5418,7 @@ export async function getCustomerOperationsSummary(
 }
 
 export async function addCustomerNote(
-  input: { customerId: string; memo: string; nextAction?: string; noteType?: string; createdByName?: string },
+  input: { customerId: string; memo: string; nextAction?: string; noteType?: string; createdByName?: string; idempotencyKey?: string },
   companyId?: string
 ) {
   const memo = input.memo.trim();
@@ -5433,6 +5438,33 @@ export async function addCustomerNote(
     };
   }
 
+  const companyIdValue = companyId || getDefaultCompanyId();
+  if (input.idempotencyKey) {
+    const existing = await supabaseRequest<Array<{ id: string; created_at: string; created_by_name: string | null; memo: string; next_action: string | null; note_type: string }>>(
+      `customer_notes?select=id,created_at,created_by_name,memo,next_action,note_type&company_id=eq.${encodeURIComponent(companyIdValue)}&customer_id=eq.${encodeURIComponent(input.customerId)}&idempotency_key=eq.${encodeURIComponent(input.idempotencyKey)}&limit=1`
+    ).catch((error) => {
+      if (isMissingDeliveryIdempotencyColumnError(error)) return [];
+      throw error;
+    });
+    if (existing[0]) return { note: toCustomerNoteItem(existing[0]), persisted: true, reused: true };
+  }
+
+  type NoteRow = {
+    id: string;
+    created_at: string;
+    created_by_name: string | null;
+    memo: string;
+    next_action: string | null;
+    note_type: string;
+  };
+  const notePayload = {
+    company_id: companyIdValue,
+    customer_id: input.customerId,
+    created_by_name: input.createdByName || "현장 사용자",
+    memo,
+    next_action: input.nextAction || null,
+    note_type: input.noteType || "general"
+  };
   const rows = await supabaseRequest<
     Array<{
       id: string;
@@ -5444,16 +5476,10 @@ export async function addCustomerNote(
     }>
   >("customer_notes", {
     method: "POST",
-    body: JSON.stringify([
-      {
-        company_id: companyId || getDefaultCompanyId(),
-        customer_id: input.customerId,
-        created_by_name: input.createdByName || "현장 사용자",
-        memo,
-        next_action: input.nextAction || null,
-        note_type: input.noteType || "general"
-      }
-    ])
+    body: JSON.stringify([{ ...notePayload, idempotency_key: input.idempotencyKey || null }])
+  }).catch((error) => {
+    if (!input.idempotencyKey || !isMissingDeliveryIdempotencyColumnError(error)) throw error;
+    return supabaseRequest<NoteRow[]>("customer_notes", { method: "POST", body: JSON.stringify([notePayload]) });
   });
   const note = toCustomerNoteItem(rows[0]);
 
@@ -5486,6 +5512,7 @@ export async function addCustomerAttachment(
     storagePath?: string;
     title: string;
     createdByName?: string;
+    idempotencyKey?: string;
   },
   companyId?: string
 ) {
@@ -5507,6 +5534,28 @@ export async function addCustomerAttachment(
     };
   }
 
+  const companyIdValue = companyId || getDefaultCompanyId();
+  if (input.idempotencyKey) {
+    const existing = await supabaseRequest<Array<{ id: string; attachment_type: string; created_at: string; file_url: string | null; mime_type: string | null; storage_path: string | null; title: string }>>(
+      `customer_attachments?select=id,attachment_type,created_at,file_url,mime_type,storage_path,title&company_id=eq.${encodeURIComponent(companyIdValue)}&customer_id=eq.${encodeURIComponent(input.customerId)}&idempotency_key=eq.${encodeURIComponent(input.idempotencyKey)}&limit=1`
+    ).catch((error) => {
+      if (isMissingDeliveryIdempotencyColumnError(error)) return [];
+      throw error;
+    });
+    if (existing[0]) return { attachment: toCustomerAttachmentItem(existing[0]), persisted: true, reused: true };
+  }
+
+  type AttachmentRow = { id: string; attachment_type: string; created_at: string; file_url: string | null; mime_type: string | null; storage_path: string | null; title: string };
+  const attachmentPayload = {
+    attachment_type: input.attachmentType || "etc",
+    company_id: companyIdValue,
+    created_by_name: input.createdByName || "현장 사용자",
+    customer_id: input.customerId,
+    file_url: input.fileUrl || null,
+    mime_type: input.mimeType || null,
+    storage_path: input.storagePath || null,
+    title
+  };
   const rows = await supabaseRequest<
     Array<{
       id: string;
@@ -5519,18 +5568,10 @@ export async function addCustomerAttachment(
     }>
   >("customer_attachments", {
     method: "POST",
-    body: JSON.stringify([
-      {
-        attachment_type: input.attachmentType || "etc",
-        company_id: companyId || getDefaultCompanyId(),
-        created_by_name: input.createdByName || "현장 사용자",
-        customer_id: input.customerId,
-        file_url: input.fileUrl || null,
-        mime_type: input.mimeType || null,
-        storage_path: input.storagePath || null,
-        title
-      }
-    ])
+    body: JSON.stringify([{ ...attachmentPayload, idempotency_key: input.idempotencyKey || null }])
+  }).catch((error) => {
+    if (!input.idempotencyKey || !isMissingDeliveryIdempotencyColumnError(error)) throw error;
+    return supabaseRequest<AttachmentRow[]>("customer_attachments", { method: "POST", body: JSON.stringify([attachmentPayload]) });
   });
   const attachment = toCustomerAttachmentItem(rows[0]);
 
@@ -5629,6 +5670,7 @@ export async function sendCustomerDeliveryMessage(
     channel: CustomerMessageChannel;
     customerId: string;
     message: string;
+    idempotencyKey?: string;
     noteId?: string;
     retryLogId?: string;
     triggerType?: "delivery_complete" | "delivery_issue" | "manual";
@@ -5655,6 +5697,19 @@ export async function sendCustomerDeliveryMessage(
       ok: true,
       sent: false
     };
+  }
+
+  if (input.idempotencyKey && !input.retryLogId) {
+    const existingRows = await supabaseRequest<CustomerMessageLogRow[]>(
+      `customer_message_logs?select=id,attachment_id,note_id,channel,created_at,error_message,message_body,provider,recipient_name,recipient_phone,sent_at,status,trigger_type&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(input.customerId)}&idempotency_key=eq.${encodeURIComponent(input.idempotencyKey)}&limit=1`
+    ).catch((error) => {
+      if (isMissingDeliveryIdempotencyColumnError(error)) return [];
+      throw error;
+    });
+    if (existingRows[0]) {
+      const log = toCustomerMessageLogItem(existingRows[0]);
+      return { log, ok: true, reused: true, sent: log.status === "sent" };
+    }
   }
 
   let retryLog: CustomerMessageLogRow | undefined;
@@ -5713,6 +5768,7 @@ export async function sendCustomerDeliveryMessage(
       contact_id: primaryContact?.id || null,
       customer_id: input.customerId,
       error_message: sendResult.reason || null,
+      ...(input.idempotencyKey ? { idempotency_key: input.idempotencyKey } : {}),
       message_body: message,
       note_id: input.noteId || null,
       provider: sendResult.provider,
@@ -5724,15 +5780,26 @@ export async function sendCustomerDeliveryMessage(
       trigger_type: input.triggerType || "delivery_complete",
       triggered_by_name: input.triggeredByName || "현장 사용자"
     };
-    const rows = retryLog
-      ? await supabaseRequest<CustomerMessageLogRow[]>(
-          `customer_message_logs?id=eq.${encodeURIComponent(retryLog.id)}&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(input.customerId)}`,
-          { method: "PATCH", body: JSON.stringify(logPayload) }
-        )
-      : await supabaseRequest<CustomerMessageLogRow[]>("customer_message_logs", {
+    let rows: CustomerMessageLogRow[];
+    if (retryLog) {
+      rows = await supabaseRequest<CustomerMessageLogRow[]>(
+        `customer_message_logs?id=eq.${encodeURIComponent(retryLog.id)}&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(input.customerId)}`,
+        { method: "PATCH", body: JSON.stringify(logPayload) }
+      );
+    } else {
+      rows = await supabaseRequest<CustomerMessageLogRow[]>("customer_message_logs", {
+        method: "POST",
+        body: JSON.stringify([logPayload])
+      }).catch((error) => {
+        if (!input.idempotencyKey || !isMissingDeliveryIdempotencyColumnError(error)) throw error;
+        const legacyLogPayload: Record<string, unknown> = { ...logPayload };
+        delete legacyLogPayload.idempotency_key;
+        return supabaseRequest<CustomerMessageLogRow[]>("customer_message_logs", {
           method: "POST",
-          body: JSON.stringify([logPayload])
+          body: JSON.stringify([legacyLogPayload])
         });
+      });
+    }
     const log = toCustomerMessageLogItem(rows[0]);
 
     // 재전송은 기존 배송완료/알림 기록을 그대로 유지하고 메시지 로그만 갱신합니다.
@@ -6238,6 +6305,7 @@ export async function uploadCustomerAttachmentFile(
     createdByName?: string;
     customerId: string;
     filename: string;
+    idempotencyKey?: string;
     title: string;
   }
 ) {
@@ -6260,7 +6328,17 @@ export async function uploadCustomerAttachmentFile(
     };
   }
 
-  const storagePath = `${companyId}/${input.customerId}/${Date.now()}-${sanitizeStorageFilename(input.filename)}`;
+  if (input.idempotencyKey) {
+    const existing = await supabaseRequest<Array<{ id: string; attachment_type: string; created_at: string; file_url: string | null; mime_type: string | null; storage_path: string | null; title: string }>>(
+      `customer_attachments?select=id,attachment_type,created_at,file_url,mime_type,storage_path,title&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(input.customerId)}&idempotency_key=eq.${encodeURIComponent(input.idempotencyKey)}&limit=1`
+    ).catch((error) => {
+      if (isMissingDeliveryIdempotencyColumnError(error)) return [];
+      throw error;
+    });
+    if (existing[0]) return { attachment: toCustomerAttachmentItem(existing[0]), persisted: true, reused: true, uploaded: true };
+  }
+  const stablePrefix = input.idempotencyKey ? sanitizeStorageFilename(input.idempotencyKey) : String(Date.now());
+  const storagePath = `${companyId}/${input.customerId}/${stablePrefix}-${sanitizeStorageFilename(input.filename)}`;
   await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
     method: "POST",
     headers: {
@@ -6275,6 +6353,7 @@ export async function uploadCustomerAttachmentFile(
       attachmentType: input.attachmentType || "etc",
       createdByName: input.createdByName,
       customerId: input.customerId,
+      idempotencyKey: input.idempotencyKey,
       fileUrl: `/api/customer-attachments/file?path=${encodeURIComponent(storagePath)}`,
       mimeType: input.contentType,
       storagePath,
@@ -8373,6 +8452,9 @@ export type SalesContactLedgerItem = {
   collateralTypes: string[];
   followUpAt?: string;
   createdAt: string;
+  customerId?: string;
+  quoteIssuedAt?: string;
+  quoteStatus?: SalesQuoteListItem["status"];
 };
 
 type SalesContactLedgerRow = {
@@ -8398,19 +8480,35 @@ export async function listSalesContactLedger(companyId: string, limit = 1000): P
   if (!actions.length) return [];
 
   const leadIds = Array.from(new Set(actions.map((action) => action.lead_id)));
-  const leadRows: Array<{ id: string; business_name: string; address: string | null; phone: string | null; status: string }> = [];
+  const leadRows: Array<{ id: string; business_name: string; address: string | null; matched_customer_id: string | null; phone: string | null; status: string }> = [];
   for (let offset = 0; offset < leadIds.length; offset += 100) {
     const ids = leadIds.slice(offset, offset + 100).map((id) => `"${id.replaceAll('"', '')}"`).join(",");
-    const rows = await supabaseRequest<Array<{ id: string; business_name: string; address: string | null; phone: string | null; status: string }>>(
-      `business_permit_leads?select=id,business_name,address,phone,status&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${encodeURIComponent(ids)})`
+    const rows = await supabaseRequest<Array<{ id: string; business_name: string; address: string | null; matched_customer_id: string | null; phone: string | null; status: string }>>(
+      `business_permit_leads?select=id,business_name,address,phone,status,matched_customer_id&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${encodeURIComponent(ids)})`
     );
     leadRows.push(...rows);
   }
   const leadById = new Map(leadRows.map((lead) => [lead.id, lead]));
+  const quoteRows: Array<{ created_at: string; lead_id: string; status: SalesQuoteListItem["status"]; valid_until: string }> = [];
+  for (let offset = 0; offset < leadIds.length; offset += 100) {
+    const ids = leadIds.slice(offset, offset + 100).map((id) => `"${id.replaceAll('"', '')}"`).join(",");
+    const rows = await supabaseRequest<Array<{ created_at: string; lead_id: string; status: SalesQuoteListItem["status"]; valid_until: string }>>(
+      `sales_quotes?select=lead_id,status,valid_until,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=in.(${encodeURIComponent(ids)})&order=created_at.desc&limit=5000`
+    ).catch((error) => {
+      if (isMissingSalesQuoteSchemaError(error)) return [];
+      throw error;
+    });
+    quoteRows.push(...rows);
+  }
+  const latestQuoteByLead = new Map<string, (typeof quoteRows)[number]>();
+  for (const quote of quoteRows) {
+    if (!latestQuoteByLead.has(quote.lead_id)) latestQuoteByLead.set(quote.lead_id, quote);
+  }
 
   return actions.flatMap((action) => {
     const lead = leadById.get(action.lead_id);
     if (!lead) return [];
+    const quote = latestQuoteByLead.get(action.lead_id);
     const memoReminder = action.memo?.match(/\[리마인드:\s*(\d{4}-\d{2}-\d{2})\]/)?.[1];
     return [{
       id: action.id,
@@ -8425,7 +8523,12 @@ export async function listSalesContactLedger(companyId: string, limit = 1000): P
       actorName: action.actor_name || undefined,
       collateralTypes: action.collateral_types || [],
       followUpAt: action.follow_up_at || (memoReminder ? `${memoReminder}T09:00:00+09:00` : undefined),
-      createdAt: action.created_at
+      createdAt: action.created_at,
+      customerId: lead.matched_customer_id || undefined,
+      quoteIssuedAt: quote?.created_at,
+      quoteStatus: quote
+        ? (new Date(quote.valid_until).getTime() <= Date.now() && quote.status === "sent" ? "expired" : quote.status)
+        : undefined
     }];
   });
 }

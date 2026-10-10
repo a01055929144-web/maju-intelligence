@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Download, ExternalLink, LoaderCircle, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -22,12 +23,27 @@ const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
 export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[] }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<UploadStatusFilter>("all");
-  const [companyId, setCompanyId] = useState("all");
-  const [issueReason, setIssueReason] = useState<IssueReasonFilter>("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<ListPageSize>(30);
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") || "");
+  const [status, setStatus] = useState<UploadStatusFilter>(() => parseUploadStatus(searchParams.get("status")));
+  const [companyId, setCompanyId] = useState(() => searchParams.get("companyId") || "all");
+  const [issueReason, setIssueReason] = useState<IssueReasonFilter>(() => parseIssueReason(searchParams.get("issue")));
+  const [page, setPage] = useState(() => parsePositiveInteger(searchParams.get("page"), 1));
+  const [pageSize, setPageSize] = useState<ListPageSize>(() => parseListPageSize(searchParams.get("pageSize")));
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    setOrDelete(nextParams, "q", query.trim());
+    setOrDelete(nextParams, "status", status === "all" ? "" : status);
+    setOrDelete(nextParams, "companyId", companyId === "all" ? "" : companyId);
+    setOrDelete(nextParams, "issue", issueReason === "all" ? "" : issueReason);
+    setOrDelete(nextParams, "page", page > 1 ? String(page) : "");
+    setOrDelete(nextParams, "pageSize", pageSize === 30 ? "" : String(pageSize));
+    const nextQuery = nextParams.toString();
+    if (nextQuery !== searchParams.toString()) router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }, [companyId, issueReason, page, pageSize, pathname, query, router, searchParams, status]);
 
   const companyOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; total: number; issues: number }>();
@@ -491,4 +507,27 @@ function toCsv(rows: Record<string, string | number>[]) {
 function csvCell(value: string | number) {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function parseUploadStatus(value: string | null): UploadStatusFilter {
+  return value && value in statusCopy ? value as UploadStatusFilter : "all";
+}
+
+function parseIssueReason(value: string | null): IssueReasonFilter {
+  return value === "failed" || value === "lowQuality" || value === "duplicates" || value === "missingReport" ? value : "all";
+}
+
+function parsePositiveInteger(value: string | null, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseListPageSize(value: string | null): ListPageSize {
+  const parsed = Number(value);
+  return LIST_PAGE_SIZE_OPTIONS.includes(parsed as ListPageSize) ? parsed as ListPageSize : 30;
+}
+
+function setOrDelete(params: URLSearchParams, key: string, value: string) {
+  if (value) params.set(key, value);
+  else params.delete(key);
 }

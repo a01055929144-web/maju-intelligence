@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
         companyId?: string;
         customerId?: string;
         message?: string;
+        idempotencyKey?: string;
         noteId?: string;
         retryLogId?: string;
         triggerType?: "delivery_complete" | "delivery_issue" | "manual";
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
         channel: body.channel || "sms",
         customerId: body.customerId,
         message: body.message,
+        idempotencyKey: normalizeIdempotencyKey(body.idempotencyKey),
         noteId: body.noteId,
         retryLogId: body.retryLogId,
         triggerType: body.triggerType || "delivery_complete",
@@ -53,4 +55,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "메시지 발송 처리 중 오류가 발생했습니다." }, { status: 500 });
   }
+}
+
+function normalizeIdempotencyKey(value?: string) {
+  const key = value?.trim();
+  return key && /^[a-zA-Z0-9:_-]{8,160}$/.test(key) ? key : undefined;
 }

@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       createdByName: scope.customerSession?.name || scope.adminSession?.name,
       customerId,
       filename: file.name,
+      idempotencyKey: normalizeIdempotencyKey(String(formData?.get("idempotencyKey") || "")),
       title: title || file.name
     });
   } catch (error) {
@@ -90,6 +91,11 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(result);
+}
+
+function normalizeIdempotencyKey(value: string) {
+  const key = value.trim();
+  return key && /^[a-zA-Z0-9:_-]{8,160}$/.test(key) ? key : undefined;
 }
 
 function normalizeAttachmentUploadError(error: unknown) {
