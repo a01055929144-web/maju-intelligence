@@ -1363,6 +1363,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         name: lead.businessName,
         address: lead.address!,
         label: lead.leadPeriod === "today" ? "오늘" : lead.grade || "신규",
+        leadType: "new" as const,
         tone: "lead" as const,
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         // 2026-09-07 피드백("신규 리드가 의정부쪽으로 모여져있어서 확인이 필요해") 대응: 서울/카카오

@@ -1148,6 +1148,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
         label: `${getPermitLeadType(lead) === "new" ? "신규" : "영업"} ${lead.distanceKm}km`,
+        leadType: getPermitLeadType(lead),
         markerColor: getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
         name: lead.businessName,
         tone: "lead" as const,
@@ -1229,6 +1230,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
         label: getPermitLeadType(lead) === "new" ? "신규" : "영업",
+        leadType: getPermitLeadType(lead),
         markerColor: getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
         // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
         // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
@@ -2587,7 +2589,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
-                    controlsOffsetClassName={rightCollapsed ? "lg:right-24" : "lg:right-[304px] xl:right-[328px]"}
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 lg:min-h-0"
@@ -2664,7 +2665,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     12시간 GPS 경로를 분석 모달을 열지 않고 메인 지도 위에 바로 그려줍니다. 로딩/에러/
                     표시 상태를 알려주는 배너를 지도 우상단에 띄우고, 닫기를 누르면 경로를 지웁니다. */}
                 {mainMapRouteVehicleId ? (
-                  <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-xs lg:left-auto lg:right-3">
+                  <div
+                    className="pointer-events-none absolute left-3 z-10 max-w-xs lg:left-auto lg:right-3"
+                    style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx + 12}px` : "0.75rem" }}
+                  >
                     <div className="pointer-events-auto rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -2728,7 +2732,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   <StoreQuickCard
                     driverOptions={deliveryDefaults.drivers}
                     headerOffsetPx={mapHeaderHeightPx}
-                    leftPanelCollapsed={leftCollapsed}
+                    leftPanelCollapsed={mapPanelMode === "map"}
                     onAddDriver={addManualDriver}
                     onAddVehicle={addManualVehicle}
                     onAddToRoute={() => {
@@ -2772,7 +2776,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       allLeadsForMap.find((lead) => lead.id === previewLeadId) ||
                       null
                     }
-                    leftPanelCollapsed={leftCollapsed}
+                    leftPanelCollapsed={mapPanelMode === "map"}
                     onClose={() => setPreviewLeadId("")}
                     onConverted={() => {
                       setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((lead) => lead.id !== previewLeadId) } : current));
@@ -4483,7 +4487,7 @@ export function StoreQuickCard({
     variant === "grid"
       ? "left-4 w-[min(300px,calc(100%-32px))]"
       : `left-4 w-[min(300px,calc(100%-32px))] ${
-          leftPanelCollapsed ? "lg:left-[84px] lg:w-[min(300px,calc(100%-100px))]" : "lg:left-[336px] lg:w-[min(300px,calc(100%-352px))]"
+          leftPanelCollapsed ? "lg:left-3 lg:w-[min(300px,calc(100%-24px))]" : "lg:left-[384px] lg:w-[min(300px,calc(100%-408px))] xl:left-[424px] xl:w-[min(300px,calc(100%-448px))]"
         }`;
   const topClassName = variant === "grid" ? "top-4" : "top-4 lg:top-[var(--quick-card-top,5rem)]";
 
@@ -6667,7 +6671,7 @@ function PermitLeadMapQuickCard({
   }
 
   const positionClassName = `left-4 w-[min(320px,calc(100%-32px))] ${
-    leftPanelCollapsed ? "lg:left-[84px] lg:w-[min(320px,calc(100%-100px))]" : "lg:left-[336px] lg:w-[min(320px,calc(100%-352px))]"
+    leftPanelCollapsed ? "lg:left-3 lg:w-[min(320px,calc(100%-24px))]" : "lg:left-[384px] lg:w-[min(320px,calc(100%-408px))] xl:left-[424px] xl:w-[min(320px,calc(100%-448px))]"
   }`;
 
   return (

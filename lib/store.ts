@@ -4249,10 +4249,12 @@ export async function getCustomerMapSummaries(
   };
   const baseSelect = "id,customer_name,region,address,monthly_revenue,delivery_manager,email,phone";
   let rows: CustomerMapRow[];
+  let fetchedGradeOverride = false;
   try {
     rows = await supabaseRequest<CustomerMapRow[]>(
       `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
+    fetchedGradeOverride = true;
   } catch (error) {
     if (!isMissingColumnError(error)) throw error;
     try {
@@ -4264,6 +4266,23 @@ export async function getCustomerMapSummaries(
       rows = await supabaseRequest<CustomerMapRow[]>(
         `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
+    }
+  }
+
+  // delivery_vehicle처럼 지도 조회에 함께 포함된 선택 컬럼이 아직 없는 환경에서도
+  // 이미 적용된 grade_override를 잃지 않도록 등급만 최소 select로 독립 복원합니다.
+  // 회사 조건과 동일한 정렬/limit을 유지해 현재 지도 행과 정확히 같은 범위만 병합합니다.
+  if (!fetchedGradeOverride && rows.length) {
+    try {
+      const gradeRows = await supabaseRequest<Array<{ grade_override: string | null; id: string }>>(
+        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+      const gradeById = new Map(gradeRows.map((row) => [row.id, row.grade_override]));
+      rows = rows.map((row) => ({ ...row, grade_override: gradeById.get(row.id) ?? null }));
+    } catch (error) {
+      // 등급 컬럼 자체가 아직 없는 환경만 자동 매출 등급으로 폴백합니다.
+      // 연결/권한 오류는 숨기지 않아 운영 장애를 스키마 미적용으로 오인하지 않게 합니다.
+      if (!isMissingColumnError(error)) throw error;
     }
   }
 

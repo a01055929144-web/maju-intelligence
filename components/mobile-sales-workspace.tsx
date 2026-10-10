@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, Phone, RefreshCw, Search, Send, Target } from "lucide-react";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
+import { MobileQuoteBuilder } from "@/components/mobile-quote-builder";
 import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { buildContactMemo, distanceKm, extractReminderDate, getMobileLeadType, isContactedLead, type MobileLeadSort, type MobileLeadType } from "@/domains/lead/mobile-sales";
 import type { PermitLeadActionItem, PermitLeadItem } from "@/lib/store";
@@ -41,6 +42,8 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [salesKpi, setSalesKpi] = useState<SalesKpi | null>(null);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [issuedQuoteUrl, setIssuedQuoteUrl] = useState("");
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -105,6 +108,7 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
     address: lead.address || lead.jurisdiction || lead.businessName,
     id: lead.id,
     label: getMobileLeadType(lead) === "new" ? "신규" : "영업",
+    leadType: getMobileLeadType(lead),
     lat: lead.latitude,
     lng: lead.longitude,
     markerColor: getMobileLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
@@ -119,6 +123,8 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
     setSaveMessage("");
     setHistory([]);
     setHistoryLoading(true);
+    setQuoteOpen(false);
+    setIssuedQuoteUrl("");
     try {
       const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/actions?limit=20`, { cache: "no-store" });
       const payload = (await response.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
@@ -144,7 +150,7 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
       const response = await fetch(`/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType, memo: buildContactMemo({ collateral, memo, reminderDate }), result })
+        body: JSON.stringify({ actionType, memo: buildContactMemo({ collateral, memo: issuedQuoteUrl ? `${memo.trim()}\n[고객용 견적: ${issuedQuoteUrl}]` : memo, reminderDate }), result })
       });
       const payload = (await response.json().catch(() => null)) as { action?: PermitLeadActionItem; message?: string; status?: string } | null;
       if (!response.ok) throw new Error(payload?.message || "컨택 기록을 저장하지 못했습니다.");
@@ -217,8 +223,10 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-result">컨택 결과</label><select className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="contact-result" onChange={(event) => setResult(event.target.value as (typeof resultOptions)[number])} value={result}>{resultOptions.map((option) => <option key={option}>{option}</option>)}</select></div>
           <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-3 gap-2">{collateralOptions.map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "견적서" ? <FileText className="h-4 w-4" /> : item === "브로슈어" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-memo">컨택 메모 <span className="text-rose-600">필수</span></label><textarea className="mobile-input mt-1 min-h-24 w-full rounded-lg border p-3 text-sm" id="contact-memo" onChange={(event) => setMemo(event.target.value)} placeholder="반응, 필요한 품목, 다음 행동을 기록하세요." value={memo} /></div>
+          <button className="mobile-secondary-action mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold" onClick={() => { setQuoteOpen((current) => !current); setCollateral((current) => current.includes("견적서") ? current : [...current, "견적서"]); }} type="button"><FileText className="h-4 w-4" />{quoteOpen ? "견적 작성 닫기" : "품목 선택·견적 작성"}</button>
+          {quoteOpen ? <MobileQuoteBuilder contactMemo={memo} leadId={selected.id} onIssued={({ publicUrl }) => { setIssuedQuoteUrl(publicUrl); setResult("견적 요청"); setSaveMessage("견적서가 발행되었습니다. 컨택 기록 저장을 눌러 이력에 남겨주세요."); }} recipientName={selected.businessName} recipientPhone={selected.phone} /> : null}
           {result === "재연락 예정" ? <div className="mt-4"><label className="text-xs font-semibold" htmlFor="reminder-date">다음 연락일 <span className="text-rose-600">필수</span></label><input className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="reminder-date" min={new Date().toISOString().slice(0,10)} onChange={(event) => setReminderDate(event.target.value)} type="date" value={reminderDate} /></div> : null}
-          {saveMessage ? <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${saveMessage.includes("저장되었습니다") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{saveMessage}</p> : null}
+          {saveMessage ? <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${/실패|입력해|필수/.test(saveMessage) ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{saveMessage}</p> : null}
           <button className="mobile-primary-action mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void saveContact()} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{saving ? "저장 중" : "컨택 기록 저장"}</button>
           <div className="mt-5 border-t border-[var(--mobile-border)] pt-4"><p className="text-sm font-semibold">과거 컨택 전체 흐름</p>{historyLoading ? <StateMessage icon={Loader2} text="이력을 불러오는 중입니다." spin /> : <div className="mt-2 space-y-2">{history.map((item) => <div className="mobile-card-raised rounded-lg border p-3" key={item.id}><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{item.result || item.actionType}</span><span className="mobile-muted text-[11px]">{item.createdAt}</span></div><p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.memo || "메모 없음"}</p>{extractReminderDate(item.memo) ? <p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700"><CalendarClock className="h-3.5 w-3.5" />{extractReminderDate(item.memo)} 재연락</p> : null}<p className="mobile-muted mt-1 text-[11px]">{item.actorName || "담당자 미확인"}</p></div>)}{history.length === 0 ? <p className="mobile-muted py-4 text-center text-xs">아직 저장된 컨택 이력이 없습니다.</p> : null}</div>}</div>
         </div></div> : null}

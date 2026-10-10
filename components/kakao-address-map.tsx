@@ -22,6 +22,8 @@ export type KakaoMapMarker = {
   readonly grade?: "A" | "B" | "C";
   readonly id?: string;
   readonly label: string;
+  /** 리드 마커의 업무 구분. 색상에만 의존하지 않고 모양·보조 라벨도 함께 구분할 때 사용합니다. */
+  readonly leadType?: "new" | "sales";
   readonly lat?: number;
   readonly lng?: number;
   readonly markerColor?: string;
@@ -1232,9 +1234,10 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
     // 임박=로즈, 인스타=핑크, A등급=보라)과 안 겹치는 청록으로 골랐습니다.
     const nearAnchorHaloShadow = marker.nearAnchor ? "0 0 0 3px #0891b2," : "";
     const nearAnchorTitleSuffix = marker.nearAnchor ? " · 기거래처 인근" : "";
+    const leadShapeStyle = marker.leadType === "new" ? "border-radius:5px;transform:rotate(45deg);" : "border-radius:999px;";
     if (compactLead) {
       return htmlToElement(`
-        <button type="button" title="${label} · ${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid #ffffff;border-radius:999px;box-shadow:${nearAnchorHaloShadow}0 4px 10px rgba(15,23,42,.32);"></button>
+        <button type="button" title="${label} · ${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}width:14px;height:14px;padding:0;border:2px solid #ffffff;${leadShapeStyle}box-shadow:${nearAnchorHaloShadow}0 4px 10px rgba(15,23,42,.32);"></button>
       `);
     }
     const gradeBadge = marker.grade
@@ -1245,9 +1248,12 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
     const nearAnchorBadge = marker.nearAnchor
       ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:999px;background:#ffffff;color:#0891b2;font-size:9px;margin-right:4px;flex-shrink:0;">★</span>`
       : "";
+    const leadTypeBadge = marker.leadType
+      ? `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:16px;border-radius:${marker.leadType === "new" ? "4px" : "999px"};background:rgba(255,255,255,.92);color:${marker.markerColor || "#059669"};font-size:9px;margin-right:5px;padding:0 4px;flex-shrink:0;">${marker.leadType === "new" ? "N" : "S"}</span>`
+      : "";
     return htmlToElement(`
-      <button type="button" title="${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}border:0;border-radius:8px;padding:6px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;">
-        ${nearAnchorBadge}${gradeBadge}${label} · ${name}
+      <button type="button" title="${label} · ${name}${nearAnchorTitleSuffix}" style="cursor:pointer;${toneClass}border:0;border-radius:${marker.leadType === "new" ? "8px" : "999px"};padding:6px 9px;box-shadow:0 8px 18px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;">
+        ${leadTypeBadge}${nearAnchorBadge}${gradeBadge}${label} · ${name}
       </button>
     `);
   }
@@ -1422,7 +1428,7 @@ function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarke
               }
               style={marker.markerColor ? { backgroundColor: marker.markerColor, color: "#fff" } : undefined}
             >
-              {marker.grade ? `${marker.grade}등급` : marker.tone === "origin" ? "출발지" : marker.tone === "lead" ? "신규" : "거래처"}
+              {marker.grade ? `${marker.grade}등급` : marker.tone === "origin" ? "출발지" : marker.tone === "lead" ? marker.leadType === "sales" ? "영업 리드" : "신규 리드" : "거래처"}
             </Badge>
           </div>
           <p className="mt-2 flex gap-1 text-xs leading-5 text-muted-foreground">
