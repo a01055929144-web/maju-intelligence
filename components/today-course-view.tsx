@@ -1174,10 +1174,10 @@ function DeliveryProofPanel({
         type="button"
       >
         <MessageSquareText className="h-3.5 w-3.5" />
-        {isSaving ? "저장 중" : "배송완료 저장"}
+        {isSaving ? "사진·메모 전송 중" : saveFailed ? "사진·메모 다시 전송" : "배송완료 저장"}
       </button>
       {saveMessage ? (
-        <p className={`mt-2 rounded-md px-2 py-1.5 text-xs font-bold leading-5 ${saveFailed ? "bg-destructive/10 text-destructive" : "text-slate-700"}`}>{saveMessage}</p>
+        <p aria-live="polite" className={`mt-2 rounded-md px-2 py-1.5 text-xs font-bold leading-5 ${saveFailed ? "bg-destructive/10 text-destructive" : "text-slate-700"}`}>{saveMessage}</p>
       ) : null}
       {proofs.length ? (
         <div className="mt-3 space-y-2">

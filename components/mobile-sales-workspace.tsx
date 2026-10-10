@@ -234,5 +234,28 @@ function StateMessage({ icon: Icon, spin = false, text }: { icon: typeof MapPin;
 function LeadCard({ lead, location, onOpen }: { lead: PermitLeadItem; location: LocationPoint | null; onOpen: () => void }) {
   const type = getMobileLeadType(lead);
   const leadDistance = distanceKm(location, lead);
-  return <button className="mobile-card-raised w-full rounded-lg border p-3 text-left" onClick={onOpen} type="button"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${type === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{type === "new" ? "신규" : "영업"}</span><span className="mobile-muted text-[11px]">{lead.status}</span></div><p className="mt-1.5 truncate text-sm font-semibold">{lead.businessName}</p><p className="mobile-muted mt-1 truncate text-xs">{lead.address || lead.jurisdiction || "주소 확인 필요"}</p></div><span className="shrink-0 rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{leadDistance == null ? `${lead.scoreTotal}점` : `${leadDistance.toFixed(1)}km`}</span></div><div className="mobile-muted mt-2 flex items-center justify-between text-[11px]"><span>{lead.industryPrimary} · {lead.grade || "미채점"}</span><span className="inline-flex items-center gap-1 text-teal-700">영업 기록 <ChevronRight className="h-3.5 w-3.5" /></span></div></button>;
+  const reasons = lead.nextActionReasons.slice(0, 2);
+  return (
+    <button className="mobile-card-raised w-full rounded-lg border p-3 text-left" onClick={onOpen} type="button">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${type === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{type === "new" ? "신규" : "영업"}</span>
+            <span className="mobile-muted text-[11px]">{lead.status}</span>
+          </div>
+          <p className="mt-1.5 truncate text-sm font-semibold">{lead.businessName}</p>
+          <p className="mobile-muted mt-1 truncate text-xs">{lead.address || lead.jurisdiction || "주소 확인 필요"}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="block rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{lead.scoreTotal}점</span>
+          {leadDistance != null ? <span className="mobile-muted mt-1 block text-[10px] font-semibold">{leadDistance.toFixed(1)}km</span> : null}
+        </div>
+      </div>
+      {reasons.length ? <p className="mt-2 line-clamp-2 rounded-md bg-teal-50 px-2 py-1.5 text-[11px] font-semibold leading-4 text-teal-800">추천 이유 · {reasons.join(" · ")}</p> : null}
+      <div className="mobile-muted mt-2 flex items-center justify-between text-[11px]">
+        <span>{lead.industryPrimary} · {lead.grade || "미채점"}</span>
+        <span className="inline-flex items-center gap-1 text-teal-700">영업 기록 <ChevronRight className="h-3.5 w-3.5" /></span>
+      </div>
+    </button>
+  );
 }
