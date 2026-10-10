@@ -134,23 +134,24 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
     }
   }, []);
 
-  async function saveContact() {
+  async function saveContact(quoteUrl = issuedQuoteUrl, resultOverride?: (typeof resultOptions)[number]) {
     if (!selected || !memo.trim()) {
       setSaveMessage("컨택 메모를 입력해야 저장할 수 있습니다.");
       return;
     }
-    if (result === "재연락 예정" && !reminderDate) {
+    const contactResult = resultOverride || result;
+    if (contactResult === "재연락 예정" && !reminderDate) {
       setSaveMessage("재연락 날짜를 선택해 주세요.");
       return;
     }
     setSaving(true);
     setSaveMessage("");
-    const actionType = result === "견적 요청" ? "quote" : result === "다음 방문" ? "visit" : result === "보류" ? "hold" : result === "거절" ? "exclude" : "call";
+    const actionType = contactResult === "견적 요청" ? "quote" : contactResult === "다음 방문" ? "visit" : contactResult === "보류" ? "hold" : contactResult === "거절" ? "exclude" : "call";
     try {
       const response = await fetch(`/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType, memo: buildContactMemo({ collateral, memo: issuedQuoteUrl ? `${memo.trim()}\n[고객용 견적: ${issuedQuoteUrl}]` : memo, reminderDate }), result })
+        body: JSON.stringify({ actionType, memo: buildContactMemo({ collateral, memo: quoteUrl ? `${memo.trim()}\n[고객용 견적: ${quoteUrl}]` : memo, reminderDate }), result: contactResult })
       });
       const payload = (await response.json().catch(() => null)) as { action?: PermitLeadActionItem; message?: string; status?: string } | null;
       if (!response.ok) throw new Error(payload?.message || "컨택 기록을 저장하지 못했습니다.");
@@ -158,7 +159,7 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
       setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: payload?.status || lead.status } : lead));
       setSelected((current) => current ? { ...current, status: payload?.status || current.status } : current);
       setMemo(""); setCollateral([]); setReminderDate("");
-      setSaveMessage("컨택 기록과 후속 일정이 저장되었습니다.");
+      setSaveMessage(quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "컨택 기록과 후속 일정이 저장되었습니다.");
     } catch (saveError) {
       setSaveMessage(saveError instanceof Error ? saveError.message : "컨택 기록을 저장하지 못했습니다.");
     } finally { setSaving(false); }
@@ -224,7 +225,7 @@ export function MobileSalesWorkspace({ actorName, companyName }: { actorName: st
           <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-3 gap-2">{collateralOptions.map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "견적서" ? <FileText className="h-4 w-4" /> : item === "브로슈어" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-memo">컨택 메모 <span className="text-rose-600">필수</span></label><textarea className="mobile-input mt-1 min-h-24 w-full rounded-lg border p-3 text-sm" id="contact-memo" onChange={(event) => setMemo(event.target.value)} placeholder="반응, 필요한 품목, 다음 행동을 기록하세요." value={memo} /></div>
           <button className="mobile-secondary-action mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold" onClick={() => { setQuoteOpen((current) => !current); setCollateral((current) => current.includes("견적서") ? current : [...current, "견적서"]); }} type="button"><FileText className="h-4 w-4" />{quoteOpen ? "견적 작성 닫기" : "품목 선택·견적 작성"}</button>
-          {quoteOpen ? <MobileQuoteBuilder contactMemo={memo} leadId={selected.id} onIssued={({ publicUrl }) => { setIssuedQuoteUrl(publicUrl); setResult("견적 요청"); setSaveMessage("견적서가 발행되었습니다. 컨택 기록 저장을 눌러 이력에 남겨주세요."); }} recipientName={selected.businessName} recipientPhone={selected.phone} /> : null}
+          {quoteOpen ? <MobileQuoteBuilder contactMemo={memo} leadId={selected.id} onIssued={({ publicUrl }) => { setIssuedQuoteUrl(publicUrl); setResult("견적 요청"); void saveContact(publicUrl, "견적 요청"); }} recipientName={selected.businessName} recipientPhone={selected.phone} /> : null}
           {result === "재연락 예정" ? <div className="mt-4"><label className="text-xs font-semibold" htmlFor="reminder-date">다음 연락일 <span className="text-rose-600">필수</span></label><input className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="reminder-date" min={new Date().toISOString().slice(0,10)} onChange={(event) => setReminderDate(event.target.value)} type="date" value={reminderDate} /></div> : null}
           {saveMessage ? <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${/실패|입력해|필수/.test(saveMessage) ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{saveMessage}</p> : null}
           <button className="mobile-primary-action mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void saveContact()} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{saving ? "저장 중" : "컨택 기록 저장"}</button>

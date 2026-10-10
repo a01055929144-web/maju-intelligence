@@ -23,5 +23,13 @@ export async function bulkUpdateCustomerGrade(
   if (!customerIds.length) throw new Error("선택된 거래처가 없습니다.");
 
   const grade = requireCustomerGradeOverride(input.grade);
-  return repository.bulkUpdateGrade(companyId, customerIds, grade);
+  const result = await repository.bulkUpdateGrade(companyId, customerIds, grade);
+  const requestedIdSet = new Set(customerIds);
+  const updatedIds = Array.from(
+    new Set(result.updatedIds.filter((id) => typeof id === "string" && requestedIdSet.has(id)))
+  );
+
+  // 저장소 응답을 그대로 신뢰하면 다른 회사/다른 요청의 id가 섞인 잘못된 응답으로 화면 상태가
+  // 갱신될 수 있습니다. 요청한 id의 교집합만 반환하고 개수도 그 결과에서 다시 계산합니다.
+  return { requested: customerIds.length, updated: updatedIds.length, updatedIds };
 }

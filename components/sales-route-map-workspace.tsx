@@ -136,7 +136,7 @@ export {
 } from "@/lib/route-map-utils";
 
 type GradeFilter = "all" | RevenueGrade;
-type MapPanelMode = "driver" | "customer" | "newLead" | "salesLead" | "map";
+type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
@@ -375,6 +375,7 @@ const workspaceViewDescriptions: Record<WorkspaceView, string> = {
 };
 const originMarkerId = "origin-hub";
 export const tmapWaypointLimit = 15;
+const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v1";
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
 const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
@@ -446,6 +447,19 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 함께 표시 중일 때(반경 검색 또는 "리드" 전체 표시 토글), 오른쪽 패널에서 거래처 목록과 리드
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
   const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
+  useEffect(() => {
+    const savedMode = window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY);
+    if (
+      savedMode === "split" ||
+      savedMode === "driver" ||
+      savedMode === "customer" ||
+      savedMode === "newLead" ||
+      savedMode === "salesLead" ||
+      savedMode === "map"
+    ) {
+      setMapPanelMode(savedMode);
+    }
+  }, []);
   const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
   const [vehicleMasterRecords, setVehicleMasterRecords] = useState<VehicleMaster[]>(vehicleMasterVehicles);
   const [liveVehicleConnectionError, setLiveVehicleConnectionError] = useState("");
@@ -618,6 +632,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 거치지 않고 리드 데이터를 불러오고, 신규/영업 구분과 지도 마커·목록을 같은 기준으로 맞춥니다.
   function setMapPanelMode(mode: MapPanelMode) {
     setMapPanelModeState(mode);
+    window.localStorage.setItem(MAP_PANEL_MODE_STORAGE_KEY, mode);
+    if (mode === "split") {
+      setLeftCollapsed(false);
+      setRightCollapsed(false);
+      return;
+    }
     if (mode === "driver") {
       setLeftCollapsed(false);
       setRightCollapsed(true);
@@ -1142,6 +1162,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const leadRadiusMapMarkers: KakaoMapMarker[] = useMemo(() => {
     if (!leadRadiusOpen || !leadRadiusResult) return [];
     return leadRadiusResult.leads
+      .filter((lead) => mapLeadTypeFilter === "all" || getPermitLeadType(lead) === mapLeadTypeFilter)
       .filter((lead) => lead.address)
       .map((lead) => ({
         address: lead.address!,
@@ -1160,7 +1181,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         x: 0,
         y: 0
       }));
-  }, [leadRadiusOpen, leadRadiusResult]);
+  }, [leadRadiusOpen, leadRadiusResult, mapLeadTypeFilter]);
   // "활성/숨김" 토글의 1차 분리 — 숨김 보기에서는 status가 "제외"인 것만, 활성 보기에서는 그 외
   // 전부를 보여줍니다(2026-08-24 피드백: 숨김 리드도 별도로 조회 가능해야 함).
   const statusScopedLeadsForMap = useMemo(
@@ -1868,6 +1889,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               role="group"
             >
               {([
+                ["split", "3분할", "담당자·지도·업무 목록 함께 보기"],
                 ["driver", "담당자", "담당자·차량 목록 열기"],
                 ["customer", "거래처", "전체 거래처 목록 열기"],
                 ["newLead", "신규", "신규 리드 목록과 마커 열기"],
@@ -1965,8 +1987,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 </div>
           ) : null}
               {activeView === "map" ? (
-                <div className="grid grid-cols-5 gap-1.5 border-t border-slate-100 pt-2" aria-label="지도 업무 패널">
+                <div className="grid grid-cols-6 gap-1.5 border-t border-slate-100 pt-2" aria-label="지도 업무 패널">
                   {([
+                    ["split", "3분할"],
                     ["driver", "담당자"],
                     ["customer", "거래처"],
                     ["newLead", "신규"],
@@ -2130,6 +2153,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                           setSelectedId("");
                           setPreviewStoreId(store.id || "");
                           setRightPanelTab("stores");
+                          setMapPanelMode("customer");
                           setShowExternalResults(false);
                         }}
                         onMouseDown={(event) => event.preventDefault()}
@@ -2161,6 +2185,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                           // 가리키도록 전체 리드 레이어를 함께 켭니다. 이미 켜져 있으면 변화가 없습니다.
                           setShowAllLeadsOnMap(true);
                           setRightPanelTab("leads");
+                          setMapPanelMode(getPermitLeadType(lead) === "new" ? "newLead" : "salesLead");
                           setShowExternalResults(false);
                         }}
                         onMouseDown={(event) => event.preventDefault()}
@@ -2489,8 +2514,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   key={option.value}
                   onClick={() => {
                     setMapLeadTypeFilter(option.value);
-                    if (option.value === "new") setMapPanelModeState("newLead");
-                    if (option.value === "sales") setMapPanelModeState("salesLead");
+                    if (mapPanelMode !== "split" && option.value === "new") setMapPanelMode("newLead");
+                    if (mapPanelMode !== "split" && option.value === "sales") setMapPanelMode("salesLead");
                   }}
                   type="button"
                 >
@@ -2606,11 +2631,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         // 2026-08-31 피드백 대응: 우측 패널이 "거래처" 탭에 머물러 있으면 리드
                         // 마커를 클릭해도 그 항목이 아예 목록에 없어 우측 패널이 안 바뀝니다.
                         setRightPanelTab("leads");
-                        setLeftCollapsed(true);
+                        if (mapPanelMode !== "split") setLeftCollapsed(true);
                         setRightCollapsed(false);
                         const selectedLead = [...(leadRadiusResult?.leads || []), ...allLeadsForMap].find((lead) => lead.id === marker.id);
                         const selectedLeadType = selectedLead ? getPermitLeadType(selectedLead) : mapLeadTypeFilter;
-                        setMapPanelModeState(selectedLeadType === "new" ? "newLead" : "salesLead");
+                        setMapLeadTypeFilter(selectedLeadType === "new" ? "new" : "sales");
+                        if (mapPanelMode !== "split") setMapPanelMode(selectedLeadType === "new" ? "newLead" : "salesLead");
                         return;
                       }
                       if (marker.tone === "vehicle") {
@@ -2634,9 +2660,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       // 위와 대칭으로, 리드 탭에 머물러 있는 상태에서 기거래처 마커를 클릭해도
                       // 우측 패널이 그 거래처를 보여주도록 거래처 탭으로 전환합니다.
                       setRightPanelTab("stores");
-                      setLeftCollapsed(true);
                       setRightCollapsed(false);
-                      setMapPanelModeState("customer");
+                      if (mapPanelMode !== "split") setMapPanelMode("customer");
                     }}
                     leadSearch={{
                       active: leadRadiusOpen && leadRadiusAnchorMode === "point" && !leadRadiusPoint,
@@ -2808,7 +2833,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               스타일로 반영합니다. */}
           <div
             className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              mapPanelMode !== "driver" ? "hidden" : "flex lg:bottom-3 lg:w-[360px] xl:w-[400px]"
+              mapPanelMode !== "driver" && mapPanelMode !== "split" ? "hidden" : "flex lg:bottom-3 lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -2883,8 +2908,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
           <div
             className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
-                ? "flex lg:bottom-3 lg:w-[360px] xl:w-[400px]"
+              mapPanelMode === "split" || mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
+                ? `flex lg:bottom-3 lg:w-[320px] xl:w-[360px] 2xl:w-[400px] ${mapPanelMode === "split" ? "lg:left-auto lg:right-3" : ""}`
                 : "hidden"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
@@ -2909,6 +2934,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   setPreviewStoreId("");
                   setSelectedId("");
                   setPreviewLeadId(leadId);
+                  const selectedLead = leadsForRightPanel.find((lead) => lead.id === leadId);
+                  if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
                 }}
                 onRetry={() => void loadAllLeadsForMap()}
                 onToggleCollapsed={() => setMapPanelMode(rightCollapsed ? (mapLeadTypeFilter === "new" ? "newLead" : "salesLead") : "map")}

@@ -22,7 +22,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     if (!result.ok) {
-      return NextResponse.json({ message: result.message || "거래처 전환에 실패했습니다." }, { status: 400 });
+      return NextResponse.json(
+        { customerId: result.customerId, existingCustomer: Boolean(result.customerId), message: result.message || "거래처 전환에 실패했습니다." },
+        { status: result.customerId ? 409 : 400 }
+      );
     }
 
     return NextResponse.json(result);

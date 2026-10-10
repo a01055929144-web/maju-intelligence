@@ -54,4 +54,21 @@ describe("bulkUpdateCustomerGrade", () => {
 
     expect(bulkUpdateGrade).toHaveBeenCalledWith("company-1", ["customer-1"], null);
   });
+
+  it("only returns unique ids that belonged to the company-scoped request", async () => {
+    const bulkUpdateGrade = vi.fn().mockResolvedValue({
+      requested: 99,
+      updated: 4,
+      updatedIds: ["customer-1", "customer-1", "customer-other", "customer-2"]
+    });
+    const repository: CustomerGradeRepository = { bulkUpdateGrade };
+
+    await expect(
+      bulkUpdateCustomerGrade(repository, {
+        companyId: "company-1",
+        customerIds: ["customer-1", "customer-2"],
+        grade: "C"
+      })
+    ).resolves.toEqual({ requested: 2, updated: 2, updatedIds: ["customer-1", "customer-2"] });
+  });
 });

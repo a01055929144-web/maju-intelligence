@@ -12,8 +12,17 @@ export type QuoteLine = {
   unitPrice: number;
   marginRate: number;
   matchStatus: "matched" | "unmatched" | "requested";
+  priceLocked?: boolean;
   requestPhotoName?: string;
 };
+
+export function applyDefaultMargin(lines: QuoteLine[], marginRate: number) {
+  return lines.map((line) => line.priceLocked ? line : {
+    ...line,
+    marginRate,
+    unitPrice: calculateSalesPrice(line.purchasePrice, marginRate)
+  });
+}
 
 export type CustomerQuoteLine = Pick<QuoteLine, "id" | "item" | "qty" | "spec" | "unit" | "unitPrice"> & {
   amount: number;

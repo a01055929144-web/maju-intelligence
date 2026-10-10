@@ -1254,14 +1254,20 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     }
   }
 
-  async function convertToCustomer(lead: PermitLeadItem): Promise<{ customerId?: string; ok: boolean }> {
+  async function convertToCustomer(lead: PermitLeadItem): Promise<{ customerId?: string; existingCustomer?: boolean; message?: string; ok: boolean }> {
     setActionMessage("");
     try {
       const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" }, 15000);
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        setActionMessage(payload?.message || "거래처 전환에 실패했습니다.");
-        return { ok: false };
+        const message = payload?.message || "거래처 전환에 실패했습니다.";
+        setActionMessage(message);
+        return {
+          customerId: typeof payload?.customerId === "string" ? payload.customerId : undefined,
+          existingCustomer: Boolean(payload?.existingCustomer),
+          message,
+          ok: false
+        };
       }
       setActionMessage(`${lead.businessName}을(를) 거래처로 전환했습니다.`);
       void loadLeads();
@@ -2757,7 +2763,7 @@ function PermitLeadDetailPanel({
   readonly lead: PermitLeadItem;
   readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string) => Promise<PermitLeadActionResult>;
   readonly onClose: () => void;
-  readonly onConvert: (lead: PermitLeadItem) => Promise<{ customerId?: string; ok: boolean }>;
+  readonly onConvert: (lead: PermitLeadItem) => Promise<{ customerId?: string; existingCustomer?: boolean; message?: string; ok: boolean }>;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
   readonly onOpenQuote: (lead: PermitLeadItem) => void;
 }) {
@@ -2786,6 +2792,7 @@ function PermitLeadDetailPanel({
   );
   const [copyMessage, setCopyMessage] = useState("");
   const [convertedCustomerId, setConvertedCustomerId] = useState("");
+  const [matchedExistingCustomer, setMatchedExistingCustomer] = useState(false);
   const [converting, setConverting] = useState(false);
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
@@ -3205,13 +3212,16 @@ function PermitLeadDetailPanel({
               onClick={async () => {
                 setConverting(true);
                 const result = await onConvert(lead);
-                if (result.ok && result.customerId) setConvertedCustomerId(result.customerId);
+                if (result.customerId) {
+                  setConvertedCustomerId(result.customerId);
+                  setMatchedExistingCustomer(Boolean(result.existingCustomer));
+                }
                 setConverting(false);
               }}
               type="button"
             >
               {converting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
-              {convertedCustomerId ? "거래처 전환 완료" : converting ? "전환 중..." : "거래처로 전환"}
+              {convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처 확인" : "거래처 전환 완료") : converting ? "전환 중..." : "거래처로 전환"}
             </button>
           </div>
 
@@ -3219,7 +3229,7 @@ function PermitLeadDetailPanel({
             <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-black text-slate-950">거래처 등록 이어서 완료</p>
+                  <p className="text-sm font-black text-slate-950">{matchedExistingCustomer ? "기존 거래처 정보 이어서 보완" : "거래처 등록 이어서 완료"}</p>
                   <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
                     {[
                       !lead.businessNumber ? "사업자등록번호" : "",
@@ -3233,10 +3243,12 @@ function PermitLeadDetailPanel({
                           !lead.phone ? "연락처" : "",
                           !lead.address ? "배송주소" : ""
                         ].filter(Boolean).join(", ")}`
-                      : "리드의 기본정보를 거래처 원장에 반영했습니다."}
+                      : matchedExistingCustomer
+                        ? "동일한 거래처가 이미 등록되어 있습니다. 기존 원장에서 정보와 첨부자료를 확인하세요."
+                        : "리드의 기본정보를 거래처 원장에 반영했습니다."}
                   </p>
                 </div>
-                <a className="maju-button-primary h-9 justify-center px-3 text-xs" href={`/crm/timeline?customerId=${encodeURIComponent(convertedCustomerId)}`}>
+                <a className="maju-button-primary h-9 justify-center px-3 text-xs" href={withPermitLeadCompanyQuery(`/crm/timeline?section=ledger&customerId=${encodeURIComponent(convertedCustomerId)}`)}>
                   원장 정보 편집
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>

@@ -775,6 +775,7 @@ type SupabaseConfig = {
 type SupabaseRow = Record<string, unknown>;
 const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
+const SALES_QUOTE_PHOTO_BUCKET = CUSTOMER_ATTACHMENT_BUCKET;
 const AUTH_CREDENTIALS_ID = "maju-default";
 const CUSTOMER_MASTER_SELECT =
   "id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url";
@@ -5864,9 +5865,49 @@ export type CreateSalesQuoteInput = {
   }>;
 };
 
+export async function uploadSalesQuotePhoto(input: {
+  bytes: ArrayBuffer;
+  companyId: string;
+  contentType: string;
+  filename: string;
+  leadId: string;
+}) {
+  if (!isProductionStoreConfigured()) throw new Error("견적 사진 저장 환경이 준비되지 않았습니다.");
+  const leads = await supabaseRequest<Array<{ id: string }>>(
+    `business_permit_leads?select=id&id=eq.${encodeURIComponent(input.leadId)}&company_id=eq.${encodeURIComponent(input.companyId)}&limit=1`
+  );
+  if (!leads[0]) throw new Error("이 회사에서 접근할 수 있는 리드가 아닙니다.");
+  const storagePath = `${input.companyId}/sales-quotes/${input.leadId}/${randomUUID()}-${sanitizeStorageFilename(input.filename)}`;
+  await supabaseStorageRequest(`object/${SALES_QUOTE_PHOTO_BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: { "Content-Type": input.contentType, "x-upsert": "false" },
+    body: input.bytes
+  });
+  return storagePath;
+}
+
+function isCompanySalesQuotePhotoPath(companyId: string, path: string) {
+  const cleanPath = path.replace(/^\/+/, "");
+  return cleanPath.startsWith(`${companyId}/sales-quotes/`) && !cleanPath.includes("..") && !cleanPath.includes("\\");
+}
+
+async function createSalesQuotePhotoSignedUrl(companyId: string, storagePath: string) {
+  if (!isCompanySalesQuotePhotoPath(companyId, storagePath)) return undefined;
+  const result = await supabaseStorageRequest<{ signedURL: string }>(
+    `object/sign/${SALES_QUOTE_PHOTO_BUCKET}/${encodeStoragePath(storagePath)}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 600 }) }
+  );
+  const config = getSupabaseConfig();
+  if (!config) return undefined;
+  return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
+}
+
 export async function createSalesQuote(input: CreateSalesQuoteInput) {
   if (!isProductionStoreConfigured()) throw new Error("견적서 서버 저장 환경이 준비되지 않았습니다.");
   if (!input.leadId && !input.customerId) throw new Error("리드 또는 거래처 정보가 필요합니다.");
+  if (input.items.some((item) => item.photoUrl && !isCompanySalesQuotePhotoPath(input.companyId, item.photoUrl))) {
+    throw new Error("회사 범위를 벗어난 견적 사진은 사용할 수 없습니다.");
+  }
   const publicToken = randomUUID();
   const quoteNumber = `Q-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${randomBytes(2).toString("hex").toUpperCase()}`;
   try {
@@ -6001,7 +6042,7 @@ export async function listSalesQuotes(companyId: string, limit = 100): Promise<S
 
 export type PublicSalesQuote = {
   companyName: string;
-  items: Array<{ amount: number; productName: string; quantity: number; salesUnitPrice: number; specification?: string; unit: string }>;
+  items: Array<{ amount: number; photoUrl?: string; productName: string; quantity: number; salesUnitPrice: number; specification?: string; unit: string }>;
   quoteNumber: string;
   recipientName?: string;
   title: string;
@@ -6020,18 +6061,19 @@ export async function getPublicSalesQuote(publicToken: string): Promise<PublicSa
     const [companies, items] = await Promise.all([
       supabaseRequest<Array<{ name: string }>>(`companies?select=name&id=eq.${encodeURIComponent(quote.company_id)}&limit=1`),
       // 고객 공개 응답에서는 내부 원가와 마진 컬럼을 SELECT 자체에서 제외합니다.
-      supabaseRequest<Array<{ product_name: string; quantity: number; sales_unit_price: number; specification: string | null; unit: string }>>(
-        `sales_quote_items?select=product_name,specification,unit,quantity,sales_unit_price&company_id=eq.${encodeURIComponent(quote.company_id)}&quote_id=eq.${encodeURIComponent(quote.id)}&order=sort_order.asc`
+      supabaseRequest<Array<{ photo_url: string | null; product_name: string; quantity: number; sales_unit_price: number; specification: string | null; unit: string }>>(
+        `sales_quote_items?select=product_name,specification,unit,quantity,sales_unit_price,photo_url&company_id=eq.${encodeURIComponent(quote.company_id)}&quote_id=eq.${encodeURIComponent(quote.id)}&order=sort_order.asc`
       )
     ]);
-    const publicItems = items.map((item) => ({
+    const publicItems = await Promise.all(items.map(async (item) => ({
       amount: Number(item.quantity) * Number(item.sales_unit_price),
+      photoUrl: item.photo_url ? await createSalesQuotePhotoSignedUrl(quote.company_id, item.photo_url).catch(() => undefined) : undefined,
       productName: item.product_name,
       quantity: Number(item.quantity),
       salesUnitPrice: Number(item.sales_unit_price),
       specification: item.specification || undefined,
       unit: item.unit
-    }));
+    })));
     return {
       companyName: companies[0]?.name || "MAJU 파트너",
       items: publicItems,
@@ -10037,14 +10079,30 @@ export async function bulkUpdateCustomerGradeOverride(
   if (!requested) return { requested: 0, updated: 0, updatedIds: [] };
   if (!isProductionStoreConfigured()) return { requested, updated: 0, updatedIds: [] };
 
-  const rows = await supabaseRequest<Array<{ id: string }>>(
-    `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${customerIds.map((id) => encodeURIComponent(id)).join(",")})`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ grade_override: grade })
+  // 필터 전체 선택은 수천 건이 될 수 있습니다. id를 한 URL에 모두 넣으면 프록시/플랫폼의
+  // request-target 제한을 넘겨 저장이 통째로 실패하므로 작은 묶음으로 나눕니다. 일부 묶음만
+  // 성공한 경우 성공 id를 반환해 화면이 실패한 거래처만 그대로 선택해 재시도할 수 있게 합니다.
+  const chunkSize = 100;
+  const rows: Array<{ id: string }> = [];
+  let firstError: unknown = null;
+  for (let start = 0; start < customerIds.length; start += chunkSize) {
+    const chunk = customerIds.slice(start, start + chunkSize);
+    try {
+      const updatedRows = await supabaseRequest<Array<{ id: string }>>(
+        `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${chunk.map((id) => encodeURIComponent(id)).join(",")})`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify({ grade_override: grade })
+        }
+      );
+      rows.push(...updatedRows);
+    } catch (error) {
+      firstError ??= error;
     }
-  );
+  }
+
+  if (!rows.length && firstError) throw firstError;
 
   return { requested, updated: rows.length, updatedIds: rows.map((row) => row.id) };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyDefaultMargin,
   calculateQuoteTotals,
   calculateSalesPrice,
   findCatalogMatch,
@@ -48,5 +49,14 @@ describe("quote domain", () => {
 
   it("sets and bounds a quote validity date", () => {
     expect(resolveQuoteValidUntil(14, new Date("2026-10-09T00:00:00.000Z"))).toBe("2026-10-23T00:00:00.000Z");
+  });
+
+  it("recalculates only unlocked prices when the default margin changes", () => {
+    const unlocked = { ...line, id: "unlocked", priceLocked: false };
+    const locked = { ...line, id: "locked", priceLocked: true };
+    const result = applyDefaultMargin([unlocked, locked], 10);
+    expect(result[0].unitPrice).toBe(8_890);
+    expect(result[0].marginRate).toBe(10);
+    expect(result[1]).toEqual(locked);
   });
 });
