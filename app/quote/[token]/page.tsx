@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PublicQuoteActions } from "@/components/public-quote-actions";
 import { getPublicSalesQuote } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,8 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
         <div className="mt-6 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-sm"><thead><tr className="bg-slate-900 text-white"><th className="p-3 text-left">상품명</th><th className="p-3 text-left">규격·단위</th><th className="p-3 text-right">수량</th><th className="p-3 text-right">판매단가</th><th className="p-3 text-right">금액</th></tr></thead><tbody>{quote.items.map((item, index) => <tr className="border-b border-slate-200" key={`${item.productName}-${index}`}><td className="p-3 font-bold">{item.productName}</td><td className="p-3">{[item.specification, item.unit].filter(Boolean).join(" / ")}</td><td className="p-3 text-right">{item.quantity.toLocaleString()}</td><td className="p-3 text-right">{item.salesUnitPrice.toLocaleString()}원</td><td className="p-3 text-right font-bold">{item.amount.toLocaleString()}원</td></tr>)}</tbody></table></div>
         <div className="mt-6 flex justify-end"><p className="text-xl font-black">합계 {quote.total.toLocaleString()}원</p></div>
         <p className="mt-8 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">본 견적은 표시된 유효기간 동안 확인할 수 있습니다. 실제 납품 조건과 재고는 담당자와 최종 협의 후 확정됩니다.</p>
-        <p className="mt-6 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-bold text-teal-800 print:hidden">브라우저 메뉴의 인쇄 기능에서 PDF로 저장할 수 있습니다.</p>
+        <PublicQuoteActions quote={quote} />
+        <p className="mt-3 text-center text-xs font-medium text-slate-500 print:hidden">공유 파일에는 판매단가와 판매금액만 포함되며 내부 매입가·마진 정보는 제외됩니다.</p>
       </article>
     </main>
   );
