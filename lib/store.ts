@@ -4036,6 +4036,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     countTableRows("login_throttle_attempts", "로그인 시도 제한", "로그인·공개 조회 요청 제한을 서버 인스턴스 간 공유하는 테이블입니다.", "identifier"),
     checkCustomerGradeOverrideSchema(),
     checkSalesQuoteOperationsSchema(),
+    checkDeliveryProofIdempotencySchema(),
     checkVisitLeadRelationship(),
     checkCustomerPlaceLinkColumns(),
     checkDefaultCompany()
@@ -6525,6 +6526,38 @@ async function checkSalesQuoteOperationsSchema(): Promise<DatabaseCheck> {
       count: null,
       description: isMissingColumnError(error) || isMissingSalesQuoteSchemaError(error)
         ? "supabase/migrations/20261009012401_sales_quote_operations.sql을 Supabase SQL Editor에서 실행해야 영업·견적 저장 기능이 동작합니다."
+        : getErrorMessage(error)
+    };
+  }
+}
+
+async function checkDeliveryProofIdempotencySchema(): Promise<DatabaseCheck> {
+  try {
+    await Promise.all([
+      supabaseRequest<Array<{ idempotency_key: string | null }>>(
+        "customer_notes?select=idempotency_key&limit=1"
+      ),
+      supabaseRequest<Array<{ idempotency_key: string | null }>>(
+        "customer_attachments?select=idempotency_key&limit=1"
+      ),
+      supabaseRequest<Array<{ idempotency_key: string | null }>>(
+        "customer_message_logs?select=idempotency_key&limit=1"
+      )
+    ]);
+
+    return {
+      name: "배송완료 재시도 중복 방지",
+      status: "ready",
+      count: null,
+      description: "배송 메모·사진·알림에 재시도 식별자가 적용되어 부분 실패 후 다시 눌러도 중복 저장되지 않습니다."
+    };
+  } catch (error) {
+    return {
+      name: "배송완료 재시도 중복 방지",
+      status: "missing",
+      count: null,
+      description: isMissingDeliveryIdempotencyColumnError(error)
+        ? "supabase/migrations/20261010_delivery_proof_idempotency.sql을 Supabase SQL Editor에서 실행해야 배송완료 재시도 중복 방지가 활성화됩니다. 적용 전에도 기존 저장은 정상 동작합니다."
         : getErrorMessage(error)
     };
   }
