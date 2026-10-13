@@ -32,7 +32,7 @@ order by created_at;
 --   lead_id,
 --   'legacy_unknown', -- 기존 행은 cron/manual 출처를 DB 값만으로 구분할 수 없음
 --   created_at,
---   true,
+--   null, -- 기존 기술 기록만으로는 보강 성공 여부를 판정할 수 없음
 --   memo,
 --   jsonb_build_object('legacy_action_id', id, 'legacy_actor_name', actor_name)
 -- from public.lead_actions

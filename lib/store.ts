@@ -8465,7 +8465,7 @@ export async function listPermitLeadActions(companyId: string, leadId: string, l
   const rows = await supabaseRequest<PermitLeadActionRow[]>(
     `lead_actions?select=id,action_type,result,memo,actor_name,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(
       leadId
-    )}&order=created_at.desc&limit=${safeLimit}`
+    )}&or=(action_type.neq.hold,result.is.null,result.not.in.("외부 정보 보강","인스타 정보 수정"))&order=created_at.desc&limit=${safeLimit}`
   );
 
   return rows.map(toPermitLeadActionItem);
@@ -8508,7 +8508,7 @@ export async function listSalesContactLedger(companyId: string, limit = 1000): P
 
   const safeLimit = Math.max(1, Math.min(5000, Math.trunc(limit)));
   const actions = await supabaseRequest<SalesContactLedgerRow[]>(
-    `lead_actions?select=id,lead_id,action_type,result,memo,actor_name,collateral_types,follow_up_at,created_at&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=${safeLimit}`
+    `lead_actions?select=id,lead_id,action_type,result,memo,actor_name,collateral_types,follow_up_at,created_at&company_id=eq.${encodeURIComponent(companyId)}&or=(action_type.neq.hold,result.is.null,result.not.in.("외부 정보 보강","인스타 정보 수정"))&order=created_at.desc&limit=${safeLimit}`
   );
   if (!actions.length) return [];
 

@@ -3096,17 +3096,6 @@ function PermitLeadDetailPanel({
               ? "외부 정보 확인 이력을 저장했습니다."
               : "외부 정보를 확인했지만 저장된 값은 없습니다.")
       );
-      setActionHistory((items) => [
-        {
-          actionType: "hold",
-          actorName: "MAJU",
-          createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-          id: `local-enrich-${Date.now()}`,
-          memo: confirmedSources.length ? `${confirmedSources.join(", ")} 보강 실행` : "외부 정보 보강 실행",
-          result: "외부 정보 보강"
-        },
-        ...items
-      ]);
       setHistoryState("ready");
     } catch {
       setExternalInfoMessage("외부 정보 보강 중 오류가 발생했습니다.");
