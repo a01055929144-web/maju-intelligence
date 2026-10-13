@@ -22,6 +22,8 @@
 
 ### 2-1. CI 보안 게이트가 실제로 실패 중 (`check:auth-boundaries`)
 
+> **해결 확인 (2026-10-13)**: 공개 견적 라우트를 사유와 함께 명시적 허용 목록에 등록하고 보안 게이트 통과를 확인했습니다.
+
 - **증상**: `node scripts/check-api-auth-boundaries.mjs` 로컬 실행 시 `API authentication boundary missing: - app/api/public/quotes/[token]/route.ts` 로 실패.
 - **원인**: 신규 라우트 `app/api/public/quotes/[token]/route.ts`가 `scripts/check-api-auth-boundaries.mjs`의 `publicRoutes` 허용목록(Map, 14개 항목)에 등록되지 않음.
 - **실제 보안 상태는 정상**: `lib/store.ts`의 `getPublicSalesQuote()`를 직접 읽어 확인 — UUID 토큰 형식 검증, `public_enabled=true` + `valid_until` 만료 체크, 원가/마진 컬럼은 SELECT 자체에서 제외(주석: "고객 공개 응답에서는 내부 원가와 마진 컬럼을 SELECT 자체에서 제외합니다"). 즉 **코드는 안전하지만 CI 게이트 등록만 빠진 상태**이고, 현재 이 게이트가 빨간불이면 이후 다른 라우트의 실제 인증 누락도 묻힐 수 있어 선조치가 필요합니다.
@@ -43,6 +45,8 @@
 - **Codex Task**: Owner Domain: route(지도 워크스페이스) / Related Domain: lead. 1) 자동화 도구 없이 수동으로 재현 여부부터 확인 → 2) 재현되면 프로파일링으로 원인 확정 후 수정 → 3) "지도→리드 3회 이상 왕복" 수동 회귀 테스트로 완료 기준 확인.
 
 ### 2-3. "컨택·리마인드"(`/revenue/contacts`) 화면이 현재 완전히 열리지 않음 (신규, 2026-10-11 라이브 재현 확인 — 도구 아티팩트 아님)
+
+> **코드 개선 완료 (2026-10-13)**: 리드/견적 배치를 `Promise.all`로 병렬 조회하도록 변경했습니다. 운영 배포 후 실제 계정 재접속 검증을 남겨둡니다.
 
 - **증상**: 사이드바 "컨택·리마인드"를 클릭해 `/revenue/contacts`에 들어가면 "작업 진행 중입니다 → 데이터를 안전하게 불러오고 있습니다" 로딩 화면이 뜬 뒤, 몇 초 후 **"화면을 표시하는 중 오류가 발생했습니다. 서버에 저장된 내용은 유지됩니다. 다시 시도해도 같은 문제가 반복되면 잠시 후 다시 접속해주세요."** 에러 화면으로 전환됩니다. **새로 접속·재시도 2회 모두 동일하게 재현**되어, 이번엔 §2-2처럼 도구 아티팩트가 아니라 **실제 기능 장애**로 확인됩니다.
 - **콘솔 에러**: `Error: Connection closed.`가 두 번 찍힙니다(`Unhandled render error`로 기록) — 네트워크 요청이 완전히 끊기는 패턴입니다.

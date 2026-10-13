@@ -8513,26 +8513,32 @@ export async function listSalesContactLedger(companyId: string, limit = 1000): P
   if (!actions.length) return [];
 
   const leadIds = Array.from(new Set(actions.map((action) => action.lead_id)));
-  const leadRows: Array<{ id: string; business_name: string; address: string | null; matched_customer_id: string | null; phone: string | null; status: string }> = [];
+  const leadIdChunks: string[][] = [];
   for (let offset = 0; offset < leadIds.length; offset += 100) {
-    const ids = leadIds.slice(offset, offset + 100).map((id) => `"${id.replaceAll('"', '')}"`).join(",");
-    const rows = await supabaseRequest<Array<{ id: string; business_name: string; address: string | null; matched_customer_id: string | null; phone: string | null; status: string }>>(
-      `business_permit_leads?select=id,business_name,address,phone,status,matched_customer_id&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${encodeURIComponent(ids)})`
-    );
-    leadRows.push(...rows);
+    leadIdChunks.push(leadIds.slice(offset, offset + 100));
   }
+  // 리드 원장과 견적은 서로 독립적인 조회입니다. 배치별 요청까지 직렬로 기다리면
+  // 컨택 기록이 많은 회사에서 서버 렌더링 연결이 먼저 종료될 수 있어 동시에 조회합니다.
+  const [leadBatches, quoteBatches] = await Promise.all([
+    Promise.all(leadIdChunks.map((chunk) => {
+      const ids = chunk.map((id) => `"${id.replaceAll('"', '')}"`).join(",");
+      return supabaseRequest<Array<{ id: string; business_name: string; address: string | null; matched_customer_id: string | null; phone: string | null; status: string }>>(
+        `business_permit_leads?select=id,business_name,address,phone,status,matched_customer_id&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${encodeURIComponent(ids)})`
+      );
+    })),
+    Promise.all(leadIdChunks.map((chunk) => {
+      const ids = chunk.map((id) => `"${id.replaceAll('"', '')}"`).join(",");
+      return supabaseRequest<Array<{ created_at: string; lead_id: string; status: SalesQuoteListItem["status"]; valid_until: string }>>(
+        `sales_quotes?select=lead_id,status,valid_until,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=in.(${encodeURIComponent(ids)})&order=created_at.desc&limit=5000`
+      ).catch((error) => {
+        if (isMissingSalesQuoteSchemaError(error)) return [];
+        throw error;
+      });
+    }))
+  ]);
+  const leadRows = leadBatches.flat();
   const leadById = new Map(leadRows.map((lead) => [lead.id, lead]));
-  const quoteRows: Array<{ created_at: string; lead_id: string; status: SalesQuoteListItem["status"]; valid_until: string }> = [];
-  for (let offset = 0; offset < leadIds.length; offset += 100) {
-    const ids = leadIds.slice(offset, offset + 100).map((id) => `"${id.replaceAll('"', '')}"`).join(",");
-    const rows = await supabaseRequest<Array<{ created_at: string; lead_id: string; status: SalesQuoteListItem["status"]; valid_until: string }>>(
-      `sales_quotes?select=lead_id,status,valid_until,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=in.(${encodeURIComponent(ids)})&order=created_at.desc&limit=5000`
-    ).catch((error) => {
-      if (isMissingSalesQuoteSchemaError(error)) return [];
-      throw error;
-    });
-    quoteRows.push(...rows);
-  }
+  const quoteRows = quoteBatches.flat();
   const latestQuoteByLead = new Map<string, (typeof quoteRows)[number]>();
   for (const quote of quoteRows) {
     if (!latestQuoteByLead.has(quote.lead_id)) latestQuoteByLead.set(quote.lead_id, quote);
