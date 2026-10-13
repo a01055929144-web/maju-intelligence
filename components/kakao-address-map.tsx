@@ -85,6 +85,8 @@ type FullscreenMapPayload = {
   routePath: ReadonlyArray<KakaoRoutePoint>;
 };
 
+const KAKAO_MAP_USER_FALLBACK_MESSAGE = "지도를 불러오지 못했습니다. 잠시 후 다시 시도해주세요. 문제가 계속되면 관리자에게 문의해주세요.";
+
 type KakaoLatLng = {
   getLat: () => number;
   getLng: () => number;
@@ -355,7 +357,8 @@ export function KakaoAddressMap({
       setFallbackReason("");
 
       if (!canUseKakao || !mapRef.current) {
-        setFallbackReason(`카카오맵 JavaScript 키가 현재 배포 런타임에 없습니다. Vercel Production에 NEXT_PUBLIC_KAKAO_MAP_APP_KEY를 다시 등록하고 재배포하세요.${getKakaoDomainHint()}`);
+        console.error(`[KakaoAddressMap] 카카오맵 JavaScript 키가 현재 배포 런타임에 없습니다. Vercel Production에 NEXT_PUBLIC_KAKAO_MAP_APP_KEY를 다시 등록하고 재배포하세요.${getKakaoDomainHint()}`);
+        setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
         setStatus("fallback");
         return;
       }
@@ -533,7 +536,8 @@ export function KakaoAddressMap({
         if (ignore) return;
 
         if (found === 0 && !hasRoadPath) {
-          setFallbackReason(`카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
+          console.error(`[KakaoAddressMap] 카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
+          setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
           setStatus("fallback");
           return;
         }
@@ -569,7 +573,8 @@ export function KakaoAddressMap({
       } catch (error) {
         if (!ignore) {
           const message = error instanceof Error ? error.message : "카카오맵 로딩에 실패했습니다.";
-          setFallbackReason(`${message}${getKakaoDomainHint()}`);
+          console.error(`[KakaoAddressMap] ${message}${getKakaoDomainHint()}`, error);
+          setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
           setStatus("fallback");
         }
       }
@@ -1342,7 +1347,7 @@ function FallbackAddressMap({
             <p className="text-sm font-black text-slate-950">지도 연결 확인 필요</p>
             <p className="mt-2 text-xs font-bold leading-5 text-slate-600">{fallbackReason}</p>
             <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold leading-5 text-amber-900">
-              현재 배포 URL이 바뀌면 Vercel Production 환경변수와 Kakao Developers Web 도메인을 함께 맞춰야 실제 지도가 표시됩니다.
+              페이지를 새로고침해 다시 시도해보세요. 같은 문제가 반복되면 관리자에게 알려주세요.
             </p>
           </div>
         ) : null}
