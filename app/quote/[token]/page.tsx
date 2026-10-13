@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { PublicQuoteActions } from "@/components/public-quote-actions";
 import { getPublicSalesQuote } from "@/lib/store";
 
@@ -7,7 +6,25 @@ export const dynamic = "force-dynamic";
 export default async function PublicQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const quote = await getPublicSalesQuote(token);
-  if (!quote) notFound();
+  if (!quote) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-100 px-4 py-10 text-slate-950">
+        <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm sm:px-10">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-teal-700 text-lg font-black text-white" aria-hidden="true">
+            M
+          </div>
+          <p className="mt-4 text-sm font-bold tracking-wide text-teal-700">MAJU Intelligence</p>
+          <h1 className="mt-5 text-2xl font-black tracking-tight">견적서를 확인할 수 없습니다</h1>
+          <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
+            이 견적 링크가 만료되었거나 더 이상 유효하지 않습니다.<br className="hidden sm:block" /> 담당 영업사원에게 새 견적을 요청해주세요.
+          </p>
+          <div className="mt-7 rounded-xl bg-slate-50 px-4 py-3 text-xs font-semibold leading-5 text-slate-500">
+            견적 링크는 발행 시 설정된 유효기간 동안만 열람할 수 있습니다.
+          </div>
+        </section>
+      </main>
+    );
+  }
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950 print:bg-white print:p-0">
       <article className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-0 print:shadow-none sm:p-10">
