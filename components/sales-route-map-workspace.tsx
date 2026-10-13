@@ -6906,10 +6906,16 @@ function QuoteDrawer({
 }) {
   const draftKey = quoteDraftId(subject);
   const initialDraft = readQuoteDraft(subject);
+  const initialRows = initialDraft?.rows || buildQuoteDraftRows(subject.industry, initialDraft?.defaultMarginRate || 12);
+  const initialMenuNotes = initialDraft?.menuNotes || subject.menuNotes || "";
+  const initialMarginRate = initialDraft?.defaultMarginRate || 12;
+  const initialValidDays = initialDraft?.validDays || 14;
+  const initialRecommendationCount = initialDraft?.recommendationCount || 10;
+  const initialRecommendationBasis = initialDraft?.recommendationBasis || "";
   const [defaultMarginRate, setDefaultMarginRate] = useState(initialDraft?.defaultMarginRate || 12);
   const [validDays, setValidDays] = useState(initialDraft?.validDays || 14);
-  const [rows, setRows] = useState<QuoteLine[]>(() => initialDraft?.rows || buildQuoteDraftRows(subject.industry, initialDraft?.defaultMarginRate || 12));
-  const [menuNotes, setMenuNotes] = useState(initialDraft?.menuNotes || subject.menuNotes || "");
+  const [rows, setRows] = useState<QuoteLine[]>(initialRows);
+  const [menuNotes, setMenuNotes] = useState(initialMenuNotes);
   const [quoteMessage, setQuoteMessage] = useState("");
   const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
   const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(initialDraft?.recommendationCount || 10);
@@ -6919,18 +6925,39 @@ function QuoteDrawer({
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [savedEditorSnapshot, setSavedEditorSnapshot] = useState(() =>
+    JSON.stringify({ defaultMarginRate: initialMarginRate, menuNotes: initialMenuNotes, recommendationBasis: initialRecommendationBasis, recommendationCount: initialRecommendationCount, rows: initialRows, validDays: initialValidDays })
+  );
   const quoteImageRef = useRef<HTMLDivElement>(null);
+  const editorSnapshot = useMemo(
+    () => JSON.stringify({ defaultMarginRate, menuNotes, recommendationBasis, recommendationCount, rows, validDays }),
+    [defaultMarginRate, menuNotes, recommendationBasis, recommendationCount, rows, validDays]
+  );
+  const isQuoteDirty = editorSnapshot !== savedEditorSnapshot;
+  useUnsavedChangesWarning(isQuoteDirty);
+
+  function requestClose() {
+    if (isQuoteDirty && !window.confirm("저장하지 않은 변경사항이 있습니다. 나가시겠습니까?")) return;
+    onClose();
+  }
 
   useEffect(() => {
     const draft = readQuoteDraft(subject);
     const nextMarginRate = draft?.defaultMarginRate || 12;
+    const nextRows = draft?.rows || buildQuoteDraftRows(subject.industry, nextMarginRate);
+    const nextMenuNotes = draft?.menuNotes || subject.menuNotes || "";
+    const nextValidDays = draft?.validDays || 14;
+    const nextRecommendationCount = draft?.recommendationCount || 10;
+    const nextRecommendationBasis = draft?.recommendationBasis || "";
     setDefaultMarginRate(nextMarginRate);
-    setValidDays(draft?.validDays || 14);
-    setRows(draft?.rows || buildQuoteDraftRows(subject.industry, nextMarginRate));
-    setMenuNotes(draft?.menuNotes || subject.menuNotes || "");
+    setValidDays(nextValidDays);
+    setRows(nextRows);
+    setMenuNotes(nextMenuNotes);
     setSavedAt(draft?.savedAt || "");
-    setRecommendationCount(draft?.recommendationCount || 10);
-    setRecommendationBasis(draft?.recommendationBasis || "");
+    setRecommendationCount(nextRecommendationCount);
+    setRecommendationBasis(nextRecommendationBasis);
+    setSavedEditorSnapshot(JSON.stringify({ defaultMarginRate: nextMarginRate, menuNotes: nextMenuNotes, recommendationBasis: nextRecommendationBasis, recommendationCount: nextRecommendationCount, rows: nextRows, validDays: nextValidDays }));
     setPublishedUrl("");
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
   }, [draftKey, subject]);
@@ -6946,7 +6973,11 @@ function QuoteDrawer({
         const days = [7, 14, 30].includes(Number(payload.company.defaultQuoteValidDays)) ? Number(payload.company.defaultQuoteValidDays) : 14;
         setDefaultMarginRate(margin);
         setValidDays(days);
-        setRows((current) => current.map((row) => ({ ...row, marginRate: margin, unitPrice: calculateSalesPrice(row.purchasePrice, margin) })));
+        setRows((current) => {
+          const nextRows = current.map((row) => ({ ...row, marginRate: margin, unitPrice: calculateSalesPrice(row.purchasePrice, margin) }));
+          setSavedEditorSnapshot(JSON.stringify({ defaultMarginRate: margin, menuNotes: subject.menuNotes || "", recommendationBasis: "", recommendationCount: 10, rows: nextRows, validDays: days }));
+          return nextRows;
+        });
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -7195,18 +7226,22 @@ function QuoteDrawer({
       validUntil
     });
     setSavedAt(nextSavedAt);
+    setSavedEditorSnapshot(editorSnapshot);
     setQuoteMessage("이 브라우저에 제안서 초안을 저장했습니다.");
   }
 
   function resetQuoteDraft() {
+    const nextRows = buildQuoteDraftRows(subject.industry, 12);
+    const nextMenuNotes = subject.menuNotes || "";
     deleteQuoteDraftFromLocal(subject);
     setDefaultMarginRate(12);
     setValidDays(14);
-    setRows(buildQuoteDraftRows(subject.industry, 12));
-    setMenuNotes(subject.menuNotes || "");
+    setRows(nextRows);
+    setMenuNotes(nextMenuNotes);
     setRecommendationCount(10);
     setRecommendationBasis("");
     setSavedAt("");
+    setSavedEditorSnapshot(JSON.stringify({ defaultMarginRate: 12, menuNotes: nextMenuNotes, recommendationBasis: "", recommendationCount: 10, rows: nextRows, validDays: 14 }));
     setQuoteMessage("저장된 초안을 지우고 추천 품목으로 다시 시작합니다.");
   }
 
@@ -7244,17 +7279,23 @@ function QuoteDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
-      <div className="h-full w-full max-w-lg overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+    <div className={`fixed inset-0 z-40 flex bg-slate-950/45 ${isExpanded ? "items-stretch justify-center p-3 sm:p-6" : "justify-end"}`} onClick={requestClose}>
+      <div className={`h-full w-full overflow-y-auto bg-white shadow-2xl ${isExpanded ? "max-w-[1440px] rounded-2xl" : "max-w-lg"}`} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="min-w-0">
             <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">견적서 초안</p>
             <h3 className="mt-1 truncate text-lg font-black text-slate-950">{subject.name}</h3>
             {subject.industry ? <p className="mt-0.5 text-xs font-bold text-slate-500">{subject.industry} 업종 추천 품목으로 초안을 채웠습니다.</p> : null}
           </div>
-          <button aria-label="닫기" className="maju-button-secondary h-8 w-8 shrink-0 px-0" onClick={onClose} type="button">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button className="maju-button-secondary h-8 px-2.5 text-[11px]" onClick={() => setIsExpanded((current) => !current)} type="button">
+              {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {isExpanded ? "좁게 보기" : "확장해서 보기"}
+            </button>
+            <button aria-label="닫기" className="maju-button-secondary h-8 w-8 px-0" onClick={requestClose} type="button">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3 p-4">
@@ -7347,7 +7388,7 @@ function QuoteDrawer({
                 {catalogLoading ? "불러오는 중" : catalog.length ? `원장 ${catalog.length}개 다시 매칭` : "매입 원장 불러오기"}
               </button>
             </div>
-            <div className="overflow-x-auto">
+            {isExpanded ? <div className="overflow-x-auto">
             <table className="min-w-[920px] w-full border-separate border-spacing-0 text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
                 <tr>
@@ -7414,7 +7455,48 @@ function QuoteDrawer({
                 ))}
               </tbody>
             </table>
-            </div>
+            </div> : (
+              <div className="divide-y divide-slate-100">
+                {rows.map((row) => (
+                  <div className="space-y-2.5 p-3" key={row.id}>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <label className="text-[10px] font-black text-slate-500">상품명</label>
+                        <input
+                          className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs font-bold outline-none focus:border-teal-300"
+                          onChange={(event) => updateRow(row.id, { item: event.target.value })}
+                          placeholder="예: 쌀 20kg"
+                          value={row.item}
+                        />
+                      </div>
+                      <button aria-label={`${row.item || "품목"} 삭제`} className="mt-5 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => removeRow(row.id)} type="button">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="text-[10px] font-black text-slate-500">
+                        수량
+                        <input className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold" onChange={(event) => updateRow(row.id, { qty: Number(event.target.value) || 0 })} type="number" value={row.qty} />
+                      </label>
+                      <label className="text-[10px] font-black text-slate-500">
+                        판매가
+                        <input className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold" onChange={(event) => updateRow(row.id, { unitPrice: Number(event.target.value) || 0 })} type="number" value={row.unitPrice} />
+                      </label>
+                      <div className="text-[10px] font-black text-slate-500">
+                        금액
+                        <p className="mt-1 flex h-8 items-center justify-end rounded-md bg-slate-50 px-2 text-xs text-slate-800">{(row.qty * row.unitPrice).toLocaleString()}원</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                      <span>{[row.spec, row.unit].filter(Boolean).join(" · ") || "규격·단위는 확장 보기에서 편집"}</span>
+                      <span className={`rounded px-1.5 py-0.5 font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                        {row.matchStatus === "matched" ? "원장 매칭" : row.matchStatus === "requested" ? "추가 의뢰" : "매칭 필요"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <button className="flex w-full items-center justify-center gap-1.5 border-t border-slate-200 py-2 text-xs font-black text-teal-700 hover:bg-teal-50/50" onClick={addRow} type="button">
               <Plus className="h-3.5 w-3.5" />
               품목 추가
