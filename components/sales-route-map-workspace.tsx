@@ -5712,6 +5712,7 @@ function CustomerDirectoryView({
   type DirectorySortKey = "businessStatus" | "deliveryDriver" | "deliveryVehicleName" | "distanceKm" | "expectedRevenue" | "grade" | "industry" | "logisticsCost" | "name";
   const [sortKey, setSortKey] = useState<DirectorySortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [showMoreDirectoryColumns, setShowMoreDirectoryColumns] = useState(false);
   function toggleSort(key: DirectorySortKey) {
     if (sortKey === key) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -5758,24 +5759,32 @@ function CustomerDirectoryView({
     className = "",
     label,
     sortKeyValue,
-    title
+    helpText
   }: {
     className?: string;
     label: string;
     sortKeyValue: DirectorySortKey;
-    title?: string;
+    helpText?: string;
   }) {
     const isActive = sortKey === sortKeyValue;
     return (
-      <th className={`border-r border-slate-200 px-4 py-3 ${className}`} title={title}>
-        <button
-          className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`}
-          onClick={() => toggleSort(sortKeyValue)}
-          type="button"
-        >
-          {label}
-          {isActive ? sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
-        </button>
+      <th className={`border-r border-slate-200 px-4 py-3 ${className}`}>
+        <span className="inline-flex items-center gap-1">
+          <button
+            className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`}
+            onClick={() => toggleSort(sortKeyValue)}
+            type="button"
+          >
+            {label}
+            {isActive ? sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
+          </button>
+          {helpText ? (
+            <details className="group relative" onClick={(event) => event.stopPropagation()}>
+              <summary aria-label={`${label} 설명`} className="grid h-5 w-5 cursor-pointer list-none place-items-center rounded-full text-[11px] font-black text-slate-400 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">ⓘ</summary>
+              <span className="absolute left-0 top-6 z-30 block w-64 rounded-lg border border-slate-200 bg-white p-3 text-left text-[11px] font-semibold leading-5 text-slate-600 shadow-xl">{helpText}</span>
+            </details>
+          ) : null}
+        </span>
       </th>
     );
   }
@@ -6049,6 +6058,14 @@ function CustomerDirectoryView({
       ) : null}
 
       <div className="maju-section-card mt-4 !overflow-visible">
+        {sourceReady && stores.length ? (
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
+            <p className="text-xs font-semibold text-slate-500">기본 화면은 업무에 필요한 핵심 정보만 표시합니다.</p>
+            <button className="maju-button-secondary h-8 px-3 text-xs" onClick={() => setShowMoreDirectoryColumns((current) => !current)} type="button">
+              {showMoreDirectoryColumns ? "핵심 컬럼만" : "컬럼 더보기"}
+            </button>
+          </div>
+        ) : null}
         {!sourceReady ? (
           <OperationalEmptyState
             actionHref={dataRegistrationHref}
@@ -6060,7 +6077,7 @@ function CustomerDirectoryView({
         {sourceReady ? (
           stores.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1520px] border-separate border-spacing-0 text-left text-sm">
+              <table className={`w-full border-separate border-spacing-0 text-left text-sm ${showMoreDirectoryColumns ? "min-w-[1520px]" : "min-w-[760px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
                     <th className="w-[36px] border-r border-slate-200 px-3 py-3">
@@ -6076,32 +6093,32 @@ function CustomerDirectoryView({
                       />
                     </th>
                     <SortableHeader className="w-[28%]" label="거래처" sortKeyValue="name" />
-                    <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" />
-                    <SortableHeader className="w-[96px]" label="매출등급" sortKeyValue="grade" />
+                    {showMoreDirectoryColumns ? <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" /> : null}
+                    <SortableHeader className="w-[96px]" helpText="거래처의 매출 규모와 중요도를 기준으로 관리하는 등급입니다." label="매출등급" sortKeyValue="grade" />
                     <SortableHeader className="w-[130px]" label="담당자" sortKeyValue="deliveryDriver" />
-                    <SortableHeader
+                    {showMoreDirectoryColumns ? <SortableHeader
                       className="w-[130px]"
+                      helpText="담당자와 배송차는 독립적으로 지정할 수 있으며 지도 필터는 이 값을 기준으로 동작합니다."
                       label="배송차"
                       sortKeyValue="deliveryVehicleName"
-                      title="담당자와 배송차는 서로 독립적으로 지정할 수 있습니다(같은 배송차를 여러 담당자가 나눠 쓰는 경우 포함). 지도 필터가 이 값 기준으로 동작합니다."
-                    />
-                    <SortableHeader className="w-[120px] text-right" label="예상매출" sortKeyValue="expectedRevenue" />
-                    <SortableHeader className="w-[120px] text-right" label="출발지 거리" sortKeyValue="distanceKm" />
-                    <SortableHeader
+                    /> : null}
+                    {showMoreDirectoryColumns ? <SortableHeader className="w-[120px] text-right" label="예상매출" sortKeyValue="expectedRevenue" /> : null}
+                    {showMoreDirectoryColumns ? <SortableHeader className="w-[120px] text-right" label="출발지 거리" sortKeyValue="distanceKm" /> : null}
+                    {showMoreDirectoryColumns ? <SortableHeader
                       className="w-[150px] text-right"
+                      helpText="출발지에서 이 거래처까지 왕복했을 때의 예상 유류비로, 참고용 추정치입니다."
                       label="예산 물류비"
                       sortKeyValue="logisticsCost"
-                      title="출발지에서 이 거래처까지 왕복했을 때 예상 유류비입니다(참고용 추정치)."
-                    />
+                    /> : null}
                     <SortableHeader className="w-[120px]" label="사업자 상태" sortKeyValue="businessStatus" />
-                    <th className="w-[110px] border-r border-slate-200 px-4 py-3">출입 방법</th>
-                    <th
+                    {showMoreDirectoryColumns ? <th className="w-[110px] border-r border-slate-200 px-4 py-3">출입 방법</th> : null}
+                    {showMoreDirectoryColumns ? <th
                       className="w-[90px] border-r border-slate-200 px-4 py-3"
                       title="보안을 위해 실제 비밀번호 값은 목록에 노출하지 않습니다. 거래처를 눌러 상세 패널에서 확인하세요."
                     >
                       비밀번호
-                    </th>
-                    <th className="w-[150px] px-4 py-3">적재 위치</th>
+                    </th> : null}
+                    {showMoreDirectoryColumns ? <th className="w-[150px] px-4 py-3">적재 위치</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -6130,28 +6147,28 @@ function CustomerDirectoryView({
                         <p className="truncate font-black text-slate-950">{store.name}</p>
                         <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
                       </td>
-                      <td className="max-w-[96px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.industry || "미분류"}</td>
+                      {showMoreDirectoryColumns ? <td className="max-w-[96px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.industry || "미분류"}</td> : null}
                       <td className="border-r border-slate-100 px-4 py-3">
                         <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                       </td>
                       <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
-                      <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryVehicleName || "미지정"}</td>
-                      <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td>
-                      <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td>
-                      <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">
+                      {showMoreDirectoryColumns ? <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryVehicleName || "미지정"}</td> : null}
+                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td> : null}
+                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td> : null}
+                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">
                         {(() => {
                           const roundTripCost = estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2;
                           return roundTripCost ? `왕복 ${roundTripCost.toLocaleString()}원` : <span className="text-slate-400">확인 필요</span>;
                         })()}
-                      </td>
+                      </td> : null}
                       <td className="border-r border-slate-100 px-4 py-3">
                         <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
                         {store.relationshipStatus === "거래종료" ? (
                           <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
                         ) : null}
                       </td>
-                      <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td>
-                      <td className="border-r border-slate-100 px-4 py-3">
+                      {showMoreDirectoryColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td> : null}
+                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3">
                         {store.accessPassword ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
                             <Lock className="h-3 w-3" /> 등록됨
@@ -6159,8 +6176,8 @@ function CustomerDirectoryView({
                         ) : (
                           <span className="text-xs font-bold text-slate-400">미등록</span>
                         )}
-                      </td>
-                      <td className="max-w-[150px] truncate px-4 py-3 font-bold text-slate-500">{store.loadingPosition || "미등록"}</td>
+                      </td> : null}
+                      {showMoreDirectoryColumns ? <td className="max-w-[150px] truncate px-4 py-3 font-bold text-slate-500">{store.loadingPosition || "미등록"}</td> : null}
                     </tr>
                   ))}
                 </tbody>

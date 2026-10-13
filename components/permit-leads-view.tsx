@@ -161,6 +161,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [bulkNextActionDate, setBulkNextActionDate] = useState("");
   const [leadPage, setLeadPage] = useState(1);
   const [leadPageSize, setLeadPageSize] = useState<ListPageSize>(30);
+  const [showMoreLeadColumns, setShowMoreLeadColumns] = useState(false);
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -1462,20 +1463,28 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     className = "",
     label,
     sortKeyValue,
-    title
+    helpText
   }: {
     className?: string;
     label: string;
     sortKeyValue: LeadTableSortKey;
-    title?: string;
+    helpText?: string;
   }) {
     const isActive = tableSortKey === sortKeyValue;
     return (
-      <th className={`border-r border-slate-200 px-3 py-2 ${className}`} title={title}>
-        <button className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`} onClick={() => toggleTableSort(sortKeyValue)} type="button">
-          {label}
-          {isActive ? tableSortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
-        </button>
+      <th className={`border-r border-slate-200 px-3 py-2 ${className}`}>
+        <span className="inline-flex items-center gap-1">
+          <button className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`} onClick={() => toggleTableSort(sortKeyValue)} type="button">
+            {label}
+            {isActive ? tableSortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
+          </button>
+          {helpText ? (
+            <details className="group relative" onClick={(event) => event.stopPropagation()}>
+              <summary aria-label={`${label} 설명`} className="grid h-5 w-5 cursor-pointer list-none place-items-center rounded-full text-[11px] font-black text-slate-400 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">ⓘ</summary>
+              <span className="absolute left-0 top-6 z-30 block w-64 rounded-lg border border-slate-200 bg-white p-3 text-left text-[11px] font-semibold leading-5 text-slate-600 shadow-xl">{helpText}</span>
+            </details>
+          ) : null}
+        </span>
       </th>
     );
   }
@@ -2392,6 +2401,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500">
                       {leadPageStart.toLocaleString()}-{leadPageEnd.toLocaleString()} / {sortedLeads.length.toLocaleString()}곳
                     </span>
+                    <button className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={() => setShowMoreLeadColumns((current) => !current)} type="button">
+                      {showMoreLeadColumns ? "핵심 컬럼만" : "컬럼 더보기"}
+                    </button>
                     <button
                       className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={leadPage <= 1}
@@ -2499,7 +2511,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 ) : null}
               </div>
               <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-left text-sm">
+              <table className={`w-full border-separate border-spacing-0 text-left text-sm ${showMoreLeadColumns ? "min-w-[1220px]" : "min-w-[760px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
                     {isSalesLeadPage ? <th className="w-[40px] border-r border-slate-200 px-2 py-2">
@@ -2513,33 +2525,33 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
                     <LeadSortableHeader
                       className="w-[150px]"
+                      helpText="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다."
                       label="우선순위"
                       sortKeyValue="priority"
-                      title="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다. 처음 누르면 높은 점수부터 정렬합니다."
                     />
-                    <LeadSortableHeader className="w-[84px]" label="업종" sortKeyValue="industryPrimary" />
-                    <LeadSortableHeader
+                    {showMoreLeadColumns ? <LeadSortableHeader className="w-[84px]" label="업종" sortKeyValue="industryPrimary" /> : null}
+                    {showMoreLeadColumns ? <LeadSortableHeader
                       className="w-[92px]"
+                      helpText="공공데이터의 인허가 신청일입니다. 영업 리드는 이미 운영 중인 매장이라 값이 없을 수 있습니다."
                       label="개시일"
                       sortKeyValue="openDate"
-                      title="인허가(개업) 신청일입니다. 공공데이터 소스에는 실제 개업일과 별도로 관리되는 값이 없어 인허가일과 같습니다. 영업리드(키워드 탐색)는 이미 운영 중인 매장이라 이 값이 없습니다."
-                    />
-                    <LeadSortableHeader
+                    /> : null}
+                    {showMoreLeadColumns ? <LeadSortableHeader
                       className="w-[64px]"
+                      helpText="신선도·업종 적합도·리뷰·연락처 확보 여부를 합산한 리드 등급이며 거래처 매출등급과는 별개입니다."
                       label="등급"
                       sortKeyValue="grade"
-                      title="인허가 신선도·업종 적합도·리뷰활동·연락처 확보 여부를 합산한 리드 우선순위 등급입니다(A 85점↑ · B 70점↑ · C 55점↑). 거래처 매출등급과는 별개 기준입니다."
-                    />
-                    <LeadSortableHeader className="w-[110px]" label="인스타" sortKeyValue="instagram" />
+                    /> : null}
+                    {showMoreLeadColumns ? <LeadSortableHeader className="w-[110px]" label="인스타" sortKeyValue="instagram" /> : null}
                     <LeadSortableHeader className="w-[118px]" label="전화" sortKeyValue="phone" />
-                    <LeadSortableHeader
+                    {showMoreLeadColumns ? <LeadSortableHeader
                       className="w-[110px] text-right"
+                      helpText="네이버·카카오·구글에서 확보한 평점과 리뷰 수이며 영업 리드에서는 검색량 기반 매력도도 함께 표시합니다."
                       label="리뷰"
                       sortKeyValue="review"
-                      title="네이버·카카오·구글에서 확보한 평점·리뷰수입니다. '영업리드' 모드에서는 검색량 지수까지 합친 매력도 점수도 함께 봅니다."
-                    />
-                    <LeadSortableHeader className="w-[110px]" label="다음 액션" sortKeyValue="nextAction" />
-                    {showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
+                    /> : null}
+                    {showMoreLeadColumns ? <LeadSortableHeader className="w-[110px]" label="다음 액션" sortKeyValue="nextAction" /> : null}
+                    {showMoreLeadColumns && showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
                     <LeadSortableHeader className="w-[140px]" label="상태" sortKeyValue="status" />
                     <th className="w-[164px] px-3 py-2">작업</th>
                   </tr>
@@ -2609,14 +2621,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                             {confidence.reasons[0] || "근거 확인 필요"}
                           </p>
                         </td>
-                        <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
-                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                        {showMoreLeadColumns ? <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td> : null}
+                        {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
                           {getPermitLeadOpenDate(lead) || <span className="text-slate-300">미확인</span>}
-                        </td>
-                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
+                        </td> : null}
+                        {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
-                        </td>
-                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
+                        </td> : null}
+                        {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <a
                             className={`inline-flex max-w-[96px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-black transition ${
                               instagramHandle ? "bg-pink-50 text-pink-800 hover:bg-pink-100" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
@@ -2630,7 +2642,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                             <Instagram className="h-3 w-3 shrink-0" />
                             <span className="truncate">{instagramHandle || "검색 필요"}</span>
                           </a>
-                        </td>
+                        </td> : null}
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 font-bold text-slate-700">
                           {lead.phone ? (
                             <a className="inline-flex rounded-md px-1 py-0.5 transition hover:bg-teal-50 hover:text-teal-700" href={`tel:${lead.phone.replace(/[^0-9+]/g, "")}`} onClick={(event) => event.stopPropagation()}>
@@ -2640,7 +2652,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                             "미확인"
                           )}
                         </td>
-                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right">
+                        {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right">
                           {lead.rating || lead.reviewCount ? (
                             <>
                               <p className="font-black text-teal-700">{lead.rating ? `★${lead.rating.toFixed(1)}` : "평점 미확인"}</p>
@@ -2654,9 +2666,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           ) : (
                             <span className="font-bold text-slate-400">{leadQualityMode === "keyword" && keywordVolumeLoading ? "조회 중..." : "확인 필요"}</span>
                           )}
-                        </td>
-                        <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.nextAction || "-"}</td>
-                        {showNearbyOnly && nearbyResult ? (
+                        </td> : null}
+                        {showMoreLeadColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.nextAction || "-"}</td> : null}
+                        {showMoreLeadColumns && showNearbyOnly && nearbyResult ? (
                           <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right font-black text-teal-700">
                             {nearbyDistanceById.get(lead.id)?.toLocaleString() ?? "-"}km
                           </td>
