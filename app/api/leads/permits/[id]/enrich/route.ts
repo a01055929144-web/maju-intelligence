@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { resolveLeadContactActorName } from "@/domains/lead/lead-action";
 import { enrichPermitLeadExternalInfo } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const result = await enrichPermitLeadExternalInfo(scope.companyId!, id);
+    const result = await enrichPermitLeadExternalInfo(scope.companyId!, id, {
+      actorName: resolveLeadContactActorName([
+        getCustomerOperationalName(scope.customerSession),
+        scope.customerSession?.name,
+        scope.adminSession?.name
+      ]),
+      actorUserId: scope.customerSession?.userId,
+      source: "manual"
+    });
     return NextResponse.json(result);
   } catch (error) {
     console.error("permit lead enrich failed:", error);

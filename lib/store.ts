@@ -8596,10 +8596,56 @@ export async function deletePermitLead(companyId: string, leadId: string): Promi
   return { ok: true };
 }
 
+type LeadEnrichmentEventSource = "cron" | "manual" | "legacy_unknown";
+
+type LeadEnrichmentEventContext = {
+  actorName?: string;
+  actorUserId?: string;
+  source: LeadEnrichmentEventSource;
+};
+
+function isMissingLeadEnrichmentEventStoreError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /lead_enrichment_events|list_leads_due_for_enrichment/i.test(message) &&
+    /PGRST202|PGRST205|42P01|42883|does not exist|schema cache/i.test(message);
+}
+
+async function recordLeadEnrichmentEvent(input: {
+  companyId: string;
+  context: LeadEnrichmentEventContext;
+  leadId: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+  succeeded: boolean | null;
+}) {
+  try {
+    await supabaseRequest("lead_enrichment_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        actor_name: input.context.actorName || null,
+        actor_user_id: input.context.actorUserId || null,
+        company_id: input.companyId,
+        lead_id: input.leadId,
+        message: input.message || null,
+        metadata: input.metadata || {},
+        source: input.context.source,
+        succeeded: input.succeeded
+      })
+    });
+  } catch (error) {
+    // 배포 순서는 마이그레이션 → 코드지만, 롤백/스키마 캐시 지연 중에도 실제 보강은 계속됩니다.
+    if (!isMissingLeadEnrichmentEventStoreError(error)) {
+      console.error("lead enrichment event write failed:", error);
+    }
+  }
+}
+
 export async function updatePermitLeadProfile(
   companyId: string,
   leadId: string,
-  input: { instagramUrl?: string | null }
+  input: { instagramUrl?: string | null },
+  eventContext: LeadEnrichmentEventContext = { source: "manual" }
 ): Promise<{ lead?: PermitLeadItem; ok: boolean; message?: string }> {
   if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
 
@@ -8615,18 +8661,17 @@ export async function updatePermitLeadProfile(
     }
   );
 
-  await supabaseRequest("lead_actions", {
-    method: "POST",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      company_id: companyId,
-      lead_id: leadId,
-      action_type: "hold",
-      result: "인스타 정보 수정",
-      memo: input.instagramUrl ? `인스타: ${input.instagramUrl}` : "인스타 정보 삭제",
-      actor_name: "MAJU"
-    })
-  }).catch(() => null);
+  await recordLeadEnrichmentEvent({
+    companyId,
+    context: eventContext,
+    leadId,
+    message: input.instagramUrl ? "인스타그램 정보 수정" : "인스타그램 정보 삭제",
+    metadata: {
+      event_type: "instagram_profile_update",
+      instagram_url_present: Boolean(input.instagramUrl)
+    },
+    succeeded: true
+  });
 
   return { lead: updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined, ok: true };
 }
@@ -8728,6 +8773,48 @@ export type PermitLeadExternalEnrichmentResult = {
   };
 };
 
+type PermitLeadExternalEnrichmentAttemptResult = PermitLeadExternalEnrichmentResult & {
+  enrichmentEvent?: {
+    message: string;
+    metadata: Record<string, unknown>;
+    operationSucceeded: boolean;
+    retrySucceeded: boolean;
+  };
+};
+
+export function buildLeadEnrichmentEventOutcome(input: {
+  afterAddress?: string;
+  afterPhone?: string;
+  beforeAddress?: string;
+  beforePhone?: string;
+  persisted: boolean;
+  skippedFields: string[];
+  sources: PermitLeadExternalEnrichmentResult["sources"];
+}) {
+  const contactFieldsFilled = [
+    !input.beforePhone && Boolean(input.afterPhone),
+    !input.beforeAddress && Boolean(input.afterAddress)
+  ].filter(Boolean).length;
+  const sourceNames = [
+    input.sources.placeLinks ? "플레이스 링크" : "",
+    input.sources.googleReviews ? "구글 리뷰/평점" : "",
+    input.sources.keywordVolume ? "키워드 검색량" : ""
+  ].filter(Boolean);
+
+  return {
+    message: sourceNames.length ? `${sourceNames.join(", ")} 확인` : "외부 정보 확인 결과 없음",
+    metadata: {
+      contact_fields_filled: contactFieldsFilled,
+      event_type: "external_info_enrichment",
+      persisted: input.persisted,
+      skipped_fields: input.skippedFields,
+      sources: input.sources
+    },
+    operationSucceeded: input.persisted && (contactFieldsFilled > 0 || sourceNames.length > 0),
+    retrySucceeded: contactFieldsFilled > 0
+  };
+}
+
 /**
  * 신규 리드의 영업 전 확인값을 외부 API로 보강합니다.
  * - 카카오/네이버/구글 검색 링크는 resolvePlaceLinks()의 graceful fallback을 그대로 사용합니다.
@@ -8735,7 +8822,7 @@ export type PermitLeadExternalEnrichmentResult = {
  * - 네이버 검색량 API가 연결되어 있으면 keyword_volume을 저장합니다.
  * 어떤 API가 실패해도 나머지 값은 저장하고, DB 컬럼이 아직 없으면 실패 메시지만 돌려줍니다.
  */
-export async function enrichPermitLeadExternalInfo(companyId: string, leadId: string): Promise<PermitLeadExternalEnrichmentResult> {
+async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId: string): Promise<PermitLeadExternalEnrichmentAttemptResult> {
   const emptySources = { googleReviews: false, keywordVolume: false, placeLinks: false };
   if (!isProductionStoreConfigured()) {
     return { ok: false, persisted: false, sources: emptySources, message: "데이터베이스가 연결되어 있지 않습니다." };
@@ -8747,7 +8834,7 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
   const row = rows[0];
   if (!row) return { ok: false, persisted: false, sources: emptySources, message: "리드를 찾을 수 없습니다." };
 
-  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const payload: Record<string, unknown> = {};
   const sources = { ...emptySources };
 
   const placeLinks = await resolvePlaceLinks(
@@ -8787,6 +8874,13 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
     }
   }
 
+  // 외부 조회에서 실제 확인된 정보가 있을 때만 리드의 업무 수정 시각을 갱신합니다. 모든 외부
+  // 조회가 실패한 시도는 전용 이벤트의 attempted_at으로 추적하며, 리드 자체 updated_at은 건드리지
+  // 않아 사용자 수정/실데이터 변경 시각과 기술적 재시도 시각이 섞이지 않게 합니다.
+  if (sources.placeLinks || sources.googleReviews || sources.keywordVolume || "phone" in payload || "address" in payload || "industry_primary" in payload) {
+    payload.updated_at = new Date().toISOString();
+  }
+
   // 방금 보강한 값(payload)을 기존 값(row)에 덮어써서 점수를 다시 계산합니다 — "영업리드는
   // 영업이 잘되는지·리뷰가 좋은지가 중요하다"는 피드백(2026-08-24)을 반영해 keyword_demand_score/
   // place_activity_score가 이 시점부터 실제 값을 반영하게 됩니다.
@@ -8823,9 +8917,9 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
   const payloadTiers = [
     Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)),
     Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key))),
-    Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key) && !profileFieldKeys.includes(key))),
-    { updated_at: payload.updated_at }
+    Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key) && !profileFieldKeys.includes(key)))
   ];
+  if (payload.updated_at) payloadTiers.push({ updated_at: payload.updated_at });
 
   let updatedRows: PermitLeadRow[] | undefined;
   let persisted = false;
@@ -8851,25 +8945,20 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
     }
   }
 
-  await supabaseRequest("lead_actions", {
-    method: "POST",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      company_id: companyId,
-      lead_id: leadId,
-      action_type: "hold",
-      result: "외부 정보 보강",
-      memo: [
-        sources.placeLinks ? "플레이스 링크 확인" : "",
-        sources.googleReviews ? "구글 리뷰/평점 확인" : "",
-        sources.keywordVolume ? "키워드 검색량 확인" : ""
-      ].filter(Boolean).join("\n") || "외부 정보 확인 시도",
-      actor_name: "MAJU"
-    })
-  }).catch(() => null);
+  const updatedLead = updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined;
+  const enrichmentEvent = buildLeadEnrichmentEventOutcome({
+    afterAddress: updatedLead?.address,
+    afterPhone: updatedLead?.phone,
+    beforeAddress: row.address || undefined,
+    beforePhone: row.phone || undefined,
+    persisted,
+    skippedFields,
+    sources
+  });
 
   return {
-    lead: updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined,
+    enrichmentEvent,
+    lead: updatedLead,
     ok: true,
     persisted,
     skippedFields,
@@ -8878,6 +8967,37 @@ export async function enrichPermitLeadExternalInfo(companyId: string, leadId: st
       ? "외부 정보 일부는 DB 컬럼이 아직 반영되지 않아 저장하지 못했습니다. 링크 확인 이력은 남겼습니다."
       : undefined
   };
+}
+
+export async function enrichPermitLeadExternalInfo(
+  companyId: string,
+  leadId: string,
+  eventContext: LeadEnrichmentEventContext = { source: "manual" }
+): Promise<PermitLeadExternalEnrichmentResult> {
+  try {
+    const { enrichmentEvent, ...result } = await performPermitLeadExternalInfoEnrichment(companyId, leadId);
+    if (enrichmentEvent) {
+      await recordLeadEnrichmentEvent({
+        companyId,
+        context: eventContext,
+        leadId,
+        message: enrichmentEvent.message,
+        metadata: enrichmentEvent.metadata,
+        succeeded: eventContext.source === "cron" ? enrichmentEvent.retrySucceeded : enrichmentEvent.operationSucceeded
+      });
+    }
+    return result;
+  } catch (error) {
+    await recordLeadEnrichmentEvent({
+      companyId,
+      context: eventContext,
+      leadId,
+      message: error instanceof Error ? error.message : "외부 정보 보강 실패",
+      metadata: { event_type: "external_info_enrichment" },
+      succeeded: false
+    });
+    throw error;
+  }
 }
 
 export type LeadContactInfoBackfillResult = {
@@ -8900,14 +9020,25 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
   const empty: LeadContactInfoBackfillResult = { addressFilled: 0, phoneFilled: 0, processed: 0 };
   if (!isProductionStoreConfigured()) return empty;
 
-  const rows = await supabaseRequest<Array<{ id: string }>>(
-    `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=updated_at.asc&limit=${limit}`
-  ).catch(() => []);
+  let rows: Array<{ id: string }>;
+  try {
+    const dueRows = await supabaseRequest<Array<{ lead_id: string }>>("rpc/list_leads_due_for_enrichment", {
+      method: "POST",
+      body: JSON.stringify({ p_company_id: companyId, p_limit: limit })
+    });
+    rows = dueRows.map((row) => ({ id: row.lead_id }));
+  } catch (error) {
+    if (!isMissingLeadEnrichmentEventStoreError(error)) throw error;
+    // 마이그레이션 적용 전/롤백 중에는 기존 후보 조회로 폴백해 보강 자체가 중단되지 않게 합니다.
+    rows = await supabaseRequest<Array<{ id: string }>>(
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
+    ).catch(() => []);
+  }
 
   // 2026-08-26 효율화: 리드를 한 건씩 순차로 보강하던 것을 findNearbyPermitLeads와 동일한
   // mapWithConcurrency 패턴으로 묶어 동시에 처리합니다(카카오 로컬 검색 호출 자체는 그대로 유지).
   const outcomes = await mapWithConcurrency(rows, LEAD_CONTACT_BACKFILL_CONCURRENCY, (row) =>
-    enrichPermitLeadExternalInfo(companyId, row.id).catch(() => null)
+    enrichPermitLeadExternalInfo(companyId, row.id, { source: "cron" }).catch(() => null)
   );
   const phoneFilled = outcomes.filter((result) => result?.lead?.phone).length;
   const addressFilled = outcomes.filter((result) => result?.lead?.address).length;

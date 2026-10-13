@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { resolveLeadContactActorName } from "@/domains/lead/lead-action";
 import { deletePermitLead, updatePermitLeadProfile } from "@/lib/store";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,9 +16,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   try {
-    const result = await updatePermitLeadProfile(scope.companyId!, id, {
-      instagramUrl: typeof body?.instagramUrl === "string" ? body.instagramUrl.trim() : body?.instagramUrl ?? null
-    });
+    const result = await updatePermitLeadProfile(
+      scope.companyId!,
+      id,
+      { instagramUrl: typeof body?.instagramUrl === "string" ? body.instagramUrl.trim() : body?.instagramUrl ?? null },
+      {
+        actorName: resolveLeadContactActorName([
+          getCustomerOperationalName(scope.customerSession),
+          scope.customerSession?.name,
+          scope.adminSession?.name
+        ]),
+        actorUserId: scope.customerSession?.userId,
+        source: "manual"
+      }
+    );
     return NextResponse.json(result);
   } catch (error) {
     console.error("permit lead update failed:", error);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeCustomerKey, normalizeBusinessNumber, normalizeNameForDuplicateCheck } from "../lib/store";
+import { buildLeadEnrichmentEventOutcome, makeCustomerKey, normalizeBusinessNumber, normalizeNameForDuplicateCheck } from "../lib/store";
 
 describe("normalizeBusinessNumber", () => {
   it("strips all non-digit characters", () => {
@@ -42,5 +42,49 @@ describe("normalizeNameForDuplicateCheck", () => {
 
   it("treats genuinely different names as different", () => {
     expect(normalizeNameForDuplicateCheck("성수 온반")).not.toBe(normalizeNameForDuplicateCheck("성수 국밥집"));
+  });
+});
+
+describe("buildLeadEnrichmentEventOutcome", () => {
+  const emptySources = { googleReviews: false, keywordVolume: false, placeLinks: false };
+
+  it("marks a cron retry successful only when a previously missing contact field is filled", () => {
+    const outcome = buildLeadEnrichmentEventOutcome({
+      afterAddress: "서울 강남구 테헤란로 1",
+      afterPhone: "02-1234-5678",
+      beforeAddress: "서울 강남구 테헤란로 1",
+      persisted: true,
+      skippedFields: [],
+      sources: { ...emptySources, placeLinks: true }
+    });
+
+    expect(outcome.retrySucceeded).toBe(true);
+    expect(outcome.operationSucceeded).toBe(true);
+    expect(outcome.metadata.contact_fields_filled).toBe(1);
+    expect(outcome.metadata.event_type).toBe("external_info_enrichment");
+  });
+
+  it("records the required event type but treats an attempt with no newly filled contact as retry failure", () => {
+    const outcome = buildLeadEnrichmentEventOutcome({
+      persisted: true,
+      skippedFields: [],
+      sources: { ...emptySources, googleReviews: true }
+    });
+
+    expect(outcome.retrySucceeded).toBe(false);
+    expect(outcome.operationSucceeded).toBe(true);
+    expect(outcome.metadata.contact_fields_filled).toBe(0);
+    expect(outcome.metadata.event_type).toBe("external_info_enrichment");
+  });
+
+  it("marks an attempt with no saved external signal as failed", () => {
+    const outcome = buildLeadEnrichmentEventOutcome({
+      persisted: true,
+      skippedFields: [],
+      sources: emptySources
+    });
+
+    expect(outcome.retrySucceeded).toBe(false);
+    expect(outcome.operationSucceeded).toBe(false);
   });
 });
