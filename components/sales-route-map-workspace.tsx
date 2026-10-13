@@ -6098,7 +6098,7 @@ function CustomerDirectoryView({
                     <SortableHeader className="w-[130px]" label="담당자" sortKeyValue="deliveryDriver" />
                     {showMoreDirectoryColumns ? <SortableHeader
                       className="w-[130px]"
-                      helpText="담당자와 배송차는 독립적으로 지정할 수 있으며 지도 필터는 이 값을 기준으로 동작합니다."
+                      helpText="담당자와 배송차는 독립적으로 지정할 수 있으며 같은 배송차를 여러 담당자가 나눠 쓰는 경우도 포함합니다. 지도 필터는 이 값을 기준으로 동작합니다."
                       label="배송차"
                       sortKeyValue="deliveryVehicleName"
                     /> : null}
@@ -7160,6 +7160,7 @@ function QuoteDrawer({
       const payload = (await response.json().catch(() => null)) as { message?: string; publicUrl?: string } | null;
       if (!response.ok || !payload?.publicUrl) throw new Error(payload?.message || "견적 링크를 만들지 못했습니다.");
       setPublishedUrl(payload.publicUrl);
+      setSavedEditorSnapshot(editorSnapshot);
       await navigator.clipboard.writeText(payload.publicUrl).catch(() => undefined);
       setQuoteMessage("유효기간이 적용된 거래처용 링크를 만들고 복사했습니다.");
     } catch (error) {

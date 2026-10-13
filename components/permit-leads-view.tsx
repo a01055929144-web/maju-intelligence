@@ -2525,7 +2525,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
                     <LeadSortableHeader
                       className="w-[150px]"
-                      helpText="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다."
+                      helpText="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다. 처음 누르면 높은 점수부터 정렬합니다."
                       label="우선순위"
                       sortKeyValue="priority"
                     />
@@ -2538,7 +2538,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                     /> : null}
                     {showMoreLeadColumns ? <LeadSortableHeader
                       className="w-[64px]"
-                      helpText="신선도·업종 적합도·리뷰·연락처 확보 여부를 합산한 리드 등급이며 거래처 매출등급과는 별개입니다."
+                      helpText="신선도·업종 적합도·리뷰·연락처 확보 여부를 합산한 리드 등급입니다(A 85점↑ · B 70점↑ · C 55점↑). 거래처 매출등급과는 별개 기준입니다."
                       label="등급"
                       sortKeyValue="grade"
                     /> : null}
@@ -2551,7 +2551,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                       sortKeyValue="review"
                     /> : null}
                     {showMoreLeadColumns ? <LeadSortableHeader className="w-[110px]" label="다음 액션" sortKeyValue="nextAction" /> : null}
-                    {showMoreLeadColumns && showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
+                    {showNearbyOnly && nearbyResult ? <th className="w-[80px] border-r border-slate-200 px-3 py-2 text-right">거리</th> : null}
                     <LeadSortableHeader className="w-[140px]" label="상태" sortKeyValue="status" />
                     <th className="w-[164px] px-3 py-2">작업</th>
                   </tr>
@@ -2668,7 +2668,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                           )}
                         </td> : null}
                         {showMoreLeadColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.nextAction || "-"}</td> : null}
-                        {showMoreLeadColumns && showNearbyOnly && nearbyResult ? (
+                        {showNearbyOnly && nearbyResult ? (
                           <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right font-black text-teal-700">
                             {nearbyDistanceById.get(lead.id)?.toLocaleString() ?? "-"}km
                           </td>

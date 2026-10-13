@@ -298,6 +298,8 @@ export function MobileDeliveryProofPanel({
     setMessageOutcome(messagePayload?.sent ? "sent" : "pending");
     setFiles([]);
     setMemo("");
+    setDeliveryStatus("arrived");
+    setManualRecipientPhone("");
     saveProgressRef.current = null;
     setSaving(false);
     setProgressLabel("");

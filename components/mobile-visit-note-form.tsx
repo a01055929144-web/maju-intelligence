@@ -50,6 +50,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
 
     setMemo("");
     setNextAction("");
+    setNoteType("delivery");
     setStatus("saved");
   }
 
