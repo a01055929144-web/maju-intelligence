@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type ExternalBusinessResult = {
   address: string;
@@ -68,6 +69,8 @@ export function MobileRegisterWorkspace() {
   // 바로 저장하지 않고 여기 담아 확인을 받습니다. "그래도 등록"을 눌러야 confirmDuplicate: true로
   // 다시 저장을 시도합니다.
   const [duplicateMatches, setDuplicateMatches] = useState<Array<{ customerName: string; address: string }> | null>(null);
+  const hasUnsavedDraft = showForm && !createdCustomer && Object.values(draft).some((value) => value.trim());
+  useUnsavedChangesWarning(hasUnsavedDraft);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -148,6 +151,7 @@ export function MobileRegisterWorkspace() {
       if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리 화면에서 확인해주세요.");
 
       setDuplicateMatches(null);
+      setDraft(emptyDraft);
       setCreatedCustomer({ id: customerId, customerName: draft.customerName });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");

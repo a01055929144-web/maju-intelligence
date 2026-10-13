@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UploadTemplateField } from "@/lib/sample-data";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type RawRow = Record<string, string | number | boolean | null | undefined>;
 type FieldMap = Record<string, string>;
@@ -29,6 +30,8 @@ export function ExcelHeaderMappingPreview({
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [cardQuery, setCardQuery] = useState("");
   const [cardFilter, setCardFilter] = useState<"all" | "mapped" | "unmapped">("all");
+  const initialFieldMapRef = useRef(JSON.stringify(fieldMap));
+  useUnsavedChangesWarning(JSON.stringify(fieldMap) !== initialFieldMapRef.current);
 
   if (!headers.length) return null;
 
@@ -222,6 +225,7 @@ export function ExcelHeaderMappingPreview({
           rows={rows}
           onClose={() => setIsWorkspaceOpen(false)}
           onDone={() => {
+            initialFieldMapRef.current = JSON.stringify(fieldMap);
             setIsWorkspaceOpen(false);
             onRequestQualityReview?.();
           }}

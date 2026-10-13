@@ -8,6 +8,7 @@ import { LinkifiedText } from "@/components/linkified-text";
 import { MessageTemplateManager } from "@/components/message-template-manager";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type DeliveryStatus = "arrived" | "partial" | "issue";
 type MessageChannel = "kakao" | "sms";
@@ -118,6 +119,7 @@ export function MobileDeliveryProofPanel({
       partial: deliveryPartialMessage
     }
   });
+  useUnsavedChangesWarning(Boolean(files.length || memo.trim() || manualRecipientPhone.trim() || deliveryStatus !== "arrived"));
 
   function handleFileSelect(selected: File[]) {
     const oversized = selected.find((file) => file.size > MAX_UPLOAD_SIZE_BYTES);

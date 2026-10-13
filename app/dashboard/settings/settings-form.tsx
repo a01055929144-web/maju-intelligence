@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { MessageTemplateManager } from "@/components/message-template-manager";
 import { CompanySettings } from "@/lib/store";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type SettingsSection = "company" | "messaging" | "quotes" | "telegram";
 type SectionSaveState = { status: "idle" | "saving" | "saved" | "error"; message: string };
@@ -76,6 +77,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     quotes: form.defaultQuoteMarginPercent !== savedForm.defaultQuoteMarginPercent || form.defaultQuoteValidDays !== savedForm.defaultQuoteValidDays,
     telegram: form.telegramChatId !== savedForm.telegramChatId
   };
+  useUnsavedChangesWarning(Object.values(sectionDirty).some(Boolean));
 
   function updateSection(section: SettingsSection, patch: Partial<typeof form>) {
     setForm((current) => ({ ...current, ...patch }));

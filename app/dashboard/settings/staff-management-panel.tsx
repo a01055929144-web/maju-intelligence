@@ -10,6 +10,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatPhoneNumber } from "@/lib/phone";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "@/lib/staff-job-titles";
 import type { StaffInvitation } from "@/lib/store";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
@@ -820,6 +821,7 @@ function StaffAssignmentEditor({
   const [managerName, setManagerName] = useState(invitation.assignedManagerName || "");
   const [vehicle, setVehicle] = useState(invitation.assignedVehicle || "");
   const dirty = employeeName !== (invitation.employeeName || "") || managerName !== (invitation.assignedManagerName || "") || vehicle !== (invitation.assignedVehicle || "");
+  useUnsavedChangesWarning(dirty);
 
   if (!canEdit) {
     return invitation.employeeName || invitation.assignedManagerName || invitation.assignedVehicle ? (

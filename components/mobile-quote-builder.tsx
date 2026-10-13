@@ -9,6 +9,7 @@ import {
   resolveQuoteValidUntil,
   type QuoteLine
 } from "@/domains/quote/quote";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type CatalogItem = {
   id: string;
@@ -51,6 +52,8 @@ export function MobileQuoteBuilder({
   const [photos, setPhotos] = useState<Record<string, File>>({});
   const [photoStates, setPhotoStates] = useState<Record<string, "idle" | "uploading" | "uploaded" | "error">>({});
   const [uploadedPhotoPaths, setUploadedPhotoPaths] = useState<Record<string, string>>({});
+  const [savedPreferences, setSavedPreferences] = useState({ margin: 12, validDays: 14 });
+  const [savedDraftSignature, setSavedDraftSignature] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -81,14 +84,25 @@ export function MobileQuoteBuilder({
         if (!active) return;
         const nextMargin = Number(payload?.company?.defaultQuoteMarginPercent);
         const nextValidDays = Number(payload?.company?.defaultQuoteValidDays);
-        if ([10, 12, 15].includes(nextMargin)) setMargin(nextMargin);
-        if ([7, 14, 30].includes(nextValidDays)) setValidDays(nextValidDays);
+        const resolvedMargin = [10, 12, 15].includes(nextMargin) ? nextMargin : 12;
+        const resolvedValidDays = [7, 14, 30].includes(nextValidDays) ? nextValidDays : 14;
+        setMargin(resolvedMargin);
+        setValidDays(resolvedValidDays);
+        setSavedPreferences({ margin: resolvedMargin, validDays: resolvedValidDays });
       })
       .catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "견적 기본 설정을 불러오지 못했습니다."); });
     return () => { active = false; };
   }, []);
 
   const totals = useMemo(() => calculateQuoteTotals(lines), [lines]);
+  const draftSignature = useMemo(() => JSON.stringify({
+    lines,
+    margin,
+    photos: Object.entries(photos).map(([id, file]) => [id, file.name, file.size, file.lastModified]),
+    validDays
+  }), [lines, margin, photos, validDays]);
+  const hasDraftInput = lines.length > 0 || Object.keys(photos).length > 0 || margin !== savedPreferences.margin || validDays !== savedPreferences.validDays;
+  useUnsavedChangesWarning(savedDraftSignature ? draftSignature !== savedDraftSignature : hasDraftInput);
   const candidates = useMemo(() => {
     const token = query.trim().toLocaleLowerCase("ko-KR");
     return catalog.filter((item) => !token || [item.name, item.salesName, item.spec, item.salesSpec].some((value) => value?.toLocaleLowerCase("ko-KR").includes(token))).slice(0, 20);
@@ -191,6 +205,7 @@ export function MobileQuoteBuilder({
       if (!response.ok || !payload?.publicUrl) throw new Error(payload?.message || "견적서를 발행하지 못했습니다.");
       const next = { publicUrl: payload.publicUrl, quoteNumber: payload.quoteNumber };
       setIssued(next);
+      setSavedDraftSignature(draftSignature);
       setMessage("견적서가 저장되었습니다. 고객용 링크에는 원가와 마진이 표시되지 않습니다.");
       onIssued(next);
     } catch (error) {

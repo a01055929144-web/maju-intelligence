@@ -11,6 +11,7 @@ import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getCustomerRevenueGrade } from "@/lib/customer/domain/customer-grade";
 import { reportClientRenderTiming } from "@/lib/performance-timing";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type TimelineItem = {
   id: string;
@@ -463,6 +464,10 @@ export default function CrmTimelinePage() {
   const deliveryManagerInputRef = useRef<HTMLInputElement | null>(null);
   const loadingPositionInputRef = useRef<HTMLInputElement | null>(null);
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
+  const customerFormDirty = Boolean(draftCustomer && selectedCustomer && JSON.stringify(draftCustomer) !== JSON.stringify(selectedCustomer));
+  const activityFormDirty = Boolean(newMemo.trim() || newNextAction.trim());
+  const attachmentFormDirty = Boolean(newAttachmentFiles.length || newAttachmentUrl.trim());
+  useUnsavedChangesWarning(customerFormDirty || activityFormDirty || attachmentFormDirty);
 
   useEffect(() => {
     setDraftCustomer(selectedCustomer ? { ...selectedCustomer } : null);

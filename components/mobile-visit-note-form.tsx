@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, Loader2, MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 const noteTypes = [
   { label: "배송 특이사항", value: "delivery" },
@@ -19,6 +20,7 @@ export function MobileVisitNoteForm({ customerId, customerName }: { customerId: 
   const [noteType, setNoteType] = useState("delivery");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  useUnsavedChangesWarning(Boolean(memo.trim() || nextAction.trim() || noteType !== "delivery"));
 
   async function submit() {
     const trimmedMemo = memo.trim();
