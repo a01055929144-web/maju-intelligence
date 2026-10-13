@@ -12,6 +12,7 @@ import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type Props = {
+  defaultCompanyId: string;
   initialCompanies: ManagedCompanyAccount[];
   source: "empty" | "supabase";
 };
@@ -49,7 +50,7 @@ const emptyCompany: ManagedCompanyAccountInput = {
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
-export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
+export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, source }: Props) {
   const [companies, setCompanies] = useState(initialCompanies);
   const [selectedId, setSelectedId] = useState(initialCompanies[0]?.id || "new");
   const [query, setQuery] = useState("");
@@ -74,6 +75,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const [creatingDirect, setCreatingDirect] = useState(false);
   const [directResult, setDirectResult] = useState<DirectStaffAccountResult | null>(null);
   const [copiedField, setCopiedField] = useState<"email" | "password" | "">("");
+  const [copiedCompanyId, setCopiedCompanyId] = useState("");
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
@@ -304,6 +306,16 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
     }
   }
 
+  async function copyCompanyId(companyId: string) {
+    try {
+      await navigator.clipboard.writeText(companyId);
+      setCopiedCompanyId(companyId);
+      window.setTimeout(() => setCopiedCompanyId((current) => (current === companyId ? "" : current)), 1800);
+    } catch {
+      setMessage("회사 ID를 복사하지 못했습니다. 회사 정보 하단의 ID를 직접 선택해 복사해주세요.");
+    }
+  }
+
   async function updateStaffInvitation(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
     if (!selectedCompany) return;
 
@@ -430,6 +442,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
   const activeCompanies = companies.filter((company) => company.status === "active").length;
   const needsSetupCompanies = companies.filter((company) => getCompanyReadiness(company).score < 80).length;
   const pausedCompanies = companies.filter((company) => company.status !== "active").length;
+  const defaultCompany = companies.find((company) => company.id === defaultCompanyId);
   const adminActionQueue = companies
     .map((company) => ({ company, missingCheck: getFirstMissingCheck(company), readiness: getCompanyReadiness(company) }))
     .filter((item) => item.missingCheck)
@@ -438,6 +451,35 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
 
   return (
     <div className="space-y-5">
+      {!defaultCompany ? (
+        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+              <div>
+                <p className="font-black">기본 고객사 연결이 필요합니다</p>
+                <p className="mt-1 text-sm font-bold leading-6 text-amber-800">
+                  Vercel Production의 CUSTOMER_COMPANY_ID가 현재 고객사 목록과 일치하지 않습니다. 실제 기본 로그인 대상으로 사용할 회사를 선택하고 회사 ID를 복사해 환경변수에 저장한 뒤 재배포하세요.
+                </p>
+              </div>
+            </div>
+            {selectedCompany ? (
+              <button className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-amber-900 px-4 text-sm font-black text-white hover:bg-amber-950" onClick={() => void copyCompanyId(selectedCompany.id)} type="button">
+                {copiedCompanyId === selectedCompany.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copiedCompanyId === selectedCompany.id ? "회사 ID 복사됨" : `${selectedCompany.name} ID 복사`}
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : (
+        <section className="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+            <p className="font-black">기본 로그인 고객사 · {defaultCompany.name}</p>
+          </div>
+          <span className="text-xs font-bold text-emerald-700">CUSTOMER_COMPANY_ID 연결됨</span>
+        </section>
+      )}
       <div className="grid gap-3 md:grid-cols-4">
         <AdminSummaryCard icon={Building2} label="운영 고객사" value={`${activeCompanies.toLocaleString()}곳`} helper={`전체 ${companies.length.toLocaleString()}곳`} />
         <AdminSummaryCard icon={Users} label="총 거래처" value={`${totalCustomers.toLocaleString()}곳`} helper="회사별 분리 저장" />
@@ -588,7 +630,7 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-black">{company.name}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-black">{company.name}{company.id === defaultCompanyId ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">기본 로그인</span> : null}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{company.customerEmail || "로그인 계정 미등록"}</p>
                 </div>
                 <Badge
@@ -642,7 +684,10 @@ export function AdminCompaniesWorkspace({ initialCompanies, source }: Props) {
       <section className="rounded-lg border border-slate-200 bg-white">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <div>
-            <Badge className="mb-2 bg-slate-100 text-slate-700">{selectedCompany ? "선택 고객사" : "신규 고객사"}</Badge>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge className="bg-slate-100 text-slate-700">{selectedCompany ? "선택 고객사" : "신규 고객사"}</Badge>
+              {selectedCompany?.id === defaultCompanyId ? <Badge className="bg-emerald-100 text-emerald-800">기본 로그인 연결</Badge> : null}
+            </div>
             <h2 className="text-2xl font-black">{selectedCompany?.name || "새 고객사 등록"}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {selectedCompany ? `목록에서 선택한 ${selectedCompany.name}의 이상 상태와 다음 조치를 확인합니다.` : "필수 정보를 입력하고 신규 고객사를 저장합니다."}

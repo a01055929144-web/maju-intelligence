@@ -27,7 +27,11 @@ export default async function AdminCompaniesPage() {
           </CardContent>
         </Card>
 
-        <AdminCompaniesWorkspace initialCompanies={payload.companies} source={payload.source} />
+        <AdminCompaniesWorkspace
+          defaultCompanyId={process.env.CUSTOMER_COMPANY_ID || ""}
+          initialCompanies={payload.companies}
+          source={payload.source}
+        />
       </section>
     </main>
   );

@@ -6429,7 +6429,7 @@ async function checkDefaultCompany(): Promise<DatabaseCheck> {
       count: rows.length,
       description: rows.length
         ? "CUSTOMER_COMPANY_ID와 Supabase companies.id가 연결되어 있습니다."
-        : "seed.sql을 실행했거나 CUSTOMER_COMPANY_ID가 실제 companies.id와 일치하는지 확인해야 합니다."
+        : "관리자 > 고객사 관리에서 기본 로그인 대상으로 사용할 회사 ID를 복사한 뒤, Vercel Production의 CUSTOMER_COMPANY_ID에 저장하고 재배포하세요. 기존 고객사 데이터는 변경하지 않습니다."
     };
   } catch (error) {
     return {
