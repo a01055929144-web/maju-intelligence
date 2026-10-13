@@ -15,7 +15,8 @@
 **책임**: 인허가 기반 신규/영업 리드 수집·분류·추천, 카카오 키워드 리드, 리드 액션 이력.
 
 - 함수: `getLatestLeads`, `getLeadSyncStatus`, `listPermitLeads`, `getPermitLeadQueues`, `findNearbyPermitLeads`, `ingestPermitLeadRows`, `updatePermitLeadProfile`, `deletePermitLead`, `convertPermitLeadToCustomer`, `classifyPermitLeadIndustry`, `computePermitLeadPeriod`, `enrichPermitLeadExternalInfo`, `enrichPermitLeadKeywordVolume`, `enrichLeadsMissingContactInfo`, `enrichAllCompaniesLeadsMissingContactInfo`, `recordPermitLeadAction`, `listPermitLeadActions`, `leadActionRepository`, `refreshPermitLeadRecommendationScores`, `refreshAllCompaniesRecommendationScores`, `updateLeadStatus`, `syncGovRestaurantLeads`, `syncAllCompaniesGovRestaurantLeads`, `syncSeoulRestaurantLeads`, `syncAllCompaniesSeoulRestaurantLeads`, `runKakaoKeywordLeadSweep`, `syncAllCompaniesKakaoKeywordLeads`, `getCompanyLeadSearchRegions`, `addCompanyLeadSearchRegion`, `removeCompanyLeadSearchRegion`
-- 테이블: `business_permit_leads`, `lead_recommendations`, `lead_actions`, `company_lead_search_regions`
+- 테이블: `business_permit_leads`, `lead_recommendations`, `lead_actions`, `lead_enrichment_events`, `company_lead_search_regions`
+- 액션 확장 필드: `lead_actions.collateral_types`(전달 자료), `lead_actions.follow_up_at`(후속 일정), `lead_actions.metadata`(채널·컨텍스트 확장값). 자동·수동 외부정보 보강과 인스타 정보 수정 같은 기술 이벤트는 영업 액션과 분리해 `lead_enrichment_events`에 기록한다.
 - 관련 파일: `lib/gov-restaurant.ts`, `lib/seoul-restaurant.ts`, `lib/kakao-keyword-leads.ts`, `lib/leads.ts`
 - 알려진 이슈: 없음(이번 세션에서 신규리드/영업리드 분류 버그, 개시일 미확인 리드 필터 우회 버그 모두 수정 완료 — Task #45, #49, #73, #78).
 
@@ -26,6 +27,15 @@
 - 함수: `getSalesTransactions`, `matchSalesTransactionsToCustomer`, `getRevenuePipeline`, `getSalesAssistantDrafts`, `saveAnalysis`, `getLatestReport`, `getReportById`, `getLatestBriefing`
 - 테이블: `sales_transactions`, `ai_reports`
 - 관련 파일: `lib/analysis.ts`
+
+## quote
+
+**책임**: 매입 상품과 판매 품목의 매칭, 마진 기반 판매가 계산, 견적 발행·유효기간·공개 링크, 고객용 원가 비노출 응답.
+
+- 함수: `listProductCatalog`, `uploadSalesQuotePhoto`, `createSalesQuote`, `listSalesQuotes`, `getPublicSalesQuote`, `applyDefaultMargin`, `calculateQuoteLine`, `calculateQuoteTotals`, `toCustomerQuoteLines`, `resolveQuoteValidUntil`, `normalizeProductToken`
+- 테이블: `product_catalog`, `sales_quotes`, `sales_quote_items`
+- 관련 파일: `domains/quote/quote.ts`, `components/mobile-quote-builder.tsx`, `app/api/product-catalog/route.ts`, `app/api/sales-quotes/route.ts`, `app/api/public/quotes/[token]/route.ts`, `app/quote/[token]/page.tsx`
+- 경계 규칙: 매입가·마진율은 회사 내부 편집 화면에서만 사용한다. 공개 견적 조회는 UUID 토큰과 유효기간을 검증하고 고객 응답에서 원가·마진 컬럼을 SELECT 단계부터 제외한다.
 
 ## route
 
