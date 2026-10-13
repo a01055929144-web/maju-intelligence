@@ -22,8 +22,9 @@ const emptyPipeline: RevenuePipeline = {
 
 type QuoteStatusFilter = "accepted" | "cancelled" | "draft" | "expired" | "rejected" | "sent";
 type QuoteValidityFilter = "active" | "expired" | "expiring";
+type CandidateStatusFilter = "failed" | "interested" | "pending" | "quote-requested" | "unresolved";
 
-export default async function RevenuePipelinePage({ searchParams }: { searchParams?: Promise<{ companyId?: string; q?: string; quoteStatus?: string; quoteValidity?: string; section?: string }> }) {
+export default async function RevenuePipelinePage({ searchParams }: { searchParams?: Promise<{ companyId?: string; q?: string; quoteStatus?: string; quoteValidity?: string; section?: string; status?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const customerSession = await getCustomerSession();
   const adminSession = await getAdminSession();
@@ -37,9 +38,11 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   const quoteQuery = resolvedSearchParams?.q?.trim() || "";
   const quoteStatus = isQuoteStatusFilter(resolvedSearchParams?.quoteStatus) ? resolvedSearchParams.quoteStatus : "";
   const quoteValidity = isQuoteValidityFilter(resolvedSearchParams?.quoteValidity) ? resolvedSearchParams.quoteValidity : "";
-  const sectionHref = (nextSection: string) => {
+  const candidateStatus = isCandidateStatusFilter(resolvedSearchParams?.status) ? resolvedSearchParams.status : "";
+  const sectionHref = (nextSection: string, nextCandidateStatus?: CandidateStatusFilter) => {
     const params = new URLSearchParams({ section: nextSection });
     if (companyId) params.set("companyId", companyId);
+    if (nextSection === "candidates" && nextCandidateStatus) params.set("status", nextCandidateStatus);
     if (nextSection === "quotes") {
       if (quoteQuery) params.set("q", quoteQuery);
       if (quoteStatus) params.set("quoteStatus", quoteStatus);
@@ -69,21 +72,21 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
   const pipelineActions = [
     {
       description: "보류·실패 사유를 확인하고 재연락 일정을 잡으세요.",
-      href: sectionHref("candidates"),
+      href: sectionHref("candidates", "unresolved"),
       label: "미처리 우선",
       tone: "amber" as const,
       value: `${pipeline.pending + pipeline.failed}건`
     },
     {
       description: "단가와 조건을 확정해 견적을 마무리하세요.",
-      href: sectionHref("candidates"),
+      href: sectionHref("candidates", "quote-requested"),
       label: "견적 요청",
       tone: "teal" as const,
       value: `${pipeline.quoteRequests}건`
     },
     {
       description: "관심 품목을 제안하고 샘플 일정을 확인하세요.",
-      href: sectionHref("candidates"),
+      href: sectionHref("candidates", "interested"),
       label: "관심 있음",
       tone: "emerald" as const,
       value: `${pipeline.interested}건`
@@ -176,7 +179,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
             </div>
           </section>
 
-          {section === "candidates" ? <PipelineCandidatesTable items={pipeline.items} weightedRevenue={pipeline.weightedRevenue} /> : null}
+          {section === "candidates" ? <PipelineCandidatesTable initialResultFilter={candidateStatus} items={pipeline.items} weightedRevenue={pipeline.weightedRevenue} /> : null}
           {section === "quotes" ? (
             <SalesQuoteLedger
               companyId={companyId}
@@ -343,6 +346,10 @@ function SalesQuoteLedger({
 
 function isQuoteStatusFilter(value?: string): value is QuoteStatusFilter {
   return value === "accepted" || value === "cancelled" || value === "draft" || value === "expired" || value === "rejected" || value === "sent";
+}
+
+function isCandidateStatusFilter(value?: string): value is CandidateStatusFilter {
+  return value === "failed" || value === "interested" || value === "pending" || value === "quote-requested" || value === "unresolved";
 }
 
 function isQuoteValidityFilter(value?: string): value is QuoteValidityFilter {

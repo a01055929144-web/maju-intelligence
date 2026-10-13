@@ -14,6 +14,11 @@ const resultLabels: Record<string, string> = {
   failed: "실패"
 };
 
+const resultFilterOptions = [
+  ...Object.entries(resultLabels).map(([value, label]) => ({ label, value })),
+  { label: "보류·실패", value: "unresolved" }
+];
+
 const nextActionLabels: Record<string, string> = {
   interested: "품목 제안",
   "quote-requested": "견적 확정",
@@ -35,13 +40,14 @@ type PipelineItem = RevenuePipeline["items"][number];
 // 필요해 클라이언트 컴포넌트로 분리했습니다(서버 컴포넌트 안에서 훅을 쓸 수 없음 — 2026-08-31
 // 배포 장애의 원인이 바로 이 서버/클라이언트 경계를 잘못 다룬 것이었어서, 이번엔 처음부터 별도
 // "use client" 파일로 뽑았습니다).
-export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly items: PipelineItem[]; readonly weightedRevenue: number }) {
+export function PipelineCandidatesTable({ initialResultFilter = "", items, weightedRevenue }: { readonly initialResultFilter?: string; readonly items: PipelineItem[]; readonly weightedRevenue: number }) {
   const [query, setQuery] = useState("");
-  const [resultFilter, setResultFilter] = useState("all");
+  const [resultFilter, setResultFilter] = useState(initialResultFilter || "all");
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko");
     return items.filter((item) => {
-      if (resultFilter !== "all" && item.result !== resultFilter) return false;
+      if (resultFilter === "unresolved" && item.result !== "pending" && item.result !== "failed") return false;
+      if (resultFilter !== "all" && resultFilter !== "unresolved" && item.result !== resultFilter) return false;
       if (!normalizedQuery) return true;
       return [item.leadName, item.memo, item.region, resultLabels[item.result] || item.result]
         .filter(Boolean)
@@ -53,6 +59,7 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
     counts[item.result] = (counts[item.result] || 0) + 1;
     return counts;
   }, {}), [items]);
+  const unresolvedCount = (resultCounts.pending || 0) + (resultCounts.failed || 0);
   type PipelineSortKey = "leadName" | "probability" | "region" | "result" | "weightedRevenue";
   const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<PipelineItem, PipelineSortKey>(filteredItems, {
     leadName: (a, b) => a.leadName.localeCompare(b.leadName, "ko"),
@@ -91,7 +98,7 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
           value={resultFilter}
         >
           <option value="all">전체 상태</option>
-          {Object.entries(resultLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {resultFilterOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
         </select>
         {hasActiveFilters ? (
           <button className="maju-button-secondary min-h-11 justify-center" onClick={() => { setQuery(""); setResultFilter("all"); }} type="button">
@@ -109,6 +116,9 @@ export function PipelineCandidatesTable({ items, weightedRevenue }: { readonly i
               {label} {(resultCounts[value] || 0).toLocaleString()}
             </button>
           ))}
+          <button className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${resultFilter === "unresolved" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setResultFilter("unresolved")} type="button">
+            보류·실패 {unresolvedCount.toLocaleString()}
+          </button>
         </div>
       </div>
       <p className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 sm:hidden">표를 좌우로 밀어 전체 항목을 확인하세요.</p>
