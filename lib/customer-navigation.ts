@@ -101,70 +101,106 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
         description: "견적, 후속 영업, 전환 파이프라인",
         href: "/revenue/pipeline",
         icon: BarChart3,
-        label: "영업 관리"
-      },
-      {
-        active: "sales-contacts",
-        description: "컨택 기록과 후속 연락 일정",
-        href: "/revenue/contacts",
-        icon: MessageSquareText,
-        label: "컨택·리마인드"
-      },
-      {
-        active: "product-catalog",
-        description: "매입·판매 품목 연결과 가격 관리",
-        href: "/revenue/products",
-        icon: PackageSearch,
-        label: "상품 매칭"
-      },
-      {
-        active: "sales-performance",
-        description: "담당자별 목표와 영업 실적",
-        href: "/sales/performance",
-        icon: BarChart3,
-        label: "영업 성과"
+        label: "영업 관리",
+        children: [
+          {
+            active: "revenue",
+            description: "견적, 후속 영업, 전환 파이프라인",
+            href: "/revenue/pipeline",
+            icon: BarChart3,
+            label: "현황"
+          },
+          {
+            active: "sales-contacts",
+            description: "컨택 기록과 후속 연락 일정",
+            href: "/revenue/contacts",
+            icon: MessageSquareText,
+            label: "컨택·리마인드"
+          },
+          {
+            active: "product-catalog",
+            description: "매입·판매 품목 연결과 가격 관리",
+            href: "/revenue/products",
+            icon: PackageSearch,
+            label: "상품 매칭"
+          },
+          {
+            active: "sales-performance",
+            description: "담당자별 목표와 영업 실적",
+            href: "/sales/performance",
+            icon: BarChart3,
+            label: "영업 성과"
+          }
+        ]
       },
       {
         active: "dashboard",
         description: "최근 개업·인허가 기반 신규 매장",
         href: "/dashboard?view=leads&leadType=permit",
         icon: Building2,
-        label: "신규 리드"
-      },
-      {
-        active: "dashboard",
-        description: "검색량·리뷰 기반 영업 후보",
-        href: "/dashboard?view=leads&leadType=keyword",
-        icon: Sparkles,
-        label: "영업 리드"
+        label: "리드",
+        children: [
+          {
+            active: "dashboard",
+            description: "최근 개업·인허가 기반 신규 매장",
+            href: "/dashboard?view=leads&leadType=permit",
+            icon: Building2,
+            label: "신규 리드"
+          },
+          {
+            active: "dashboard",
+            description: "검색량·리뷰 기반 영업 후보",
+            href: "/dashboard?view=leads&leadType=keyword",
+            icon: Sparkles,
+            label: "영업 리드"
+          }
+        ]
       },
       {
         active: "revenue-ledger",
         description: "ERP 매출 원장 조회",
         href: "/revenue/transactions",
         icon: ReceiptText,
-        label: "거래내역"
-      },
-      {
-        active: "billing",
-        description: "카드 자동결제, 이용료 청구 이력",
-        href: "/revenue/billing",
-        icon: CreditCard,
-        label: "결제 관리"
+        label: "매출",
+        children: [
+          {
+            active: "revenue-ledger",
+            description: "ERP 매출 원장 조회",
+            href: "/revenue/transactions",
+            icon: ReceiptText,
+            label: "거래내역"
+          },
+          {
+            active: "billing",
+            description: "카드 자동결제, 이용료 청구 이력",
+            href: "/revenue/billing",
+            icon: CreditCard,
+            label: "결제 관리"
+          }
+        ]
       },
       {
         active: "assistant",
         description: "견적, 메모, 후속 액션",
         href: "/assistant",
         icon: Sparkles,
-        label: "AI 영업"
-      },
-      {
-        active: "report",
-        description: "회사 건강도와 실행 제안",
-        href: "/reports/latest",
-        icon: HeartPulse,
-        label: "AI 리포트"
+        label: "AI",
+        children: [
+          {
+            active: "assistant",
+            description: "견적, 메모, 후속 액션",
+            href: "/assistant",
+            icon: Sparkles,
+            label: "AI 영업"
+          },
+          {
+            active: "report",
+            description: "회사 건강도와 실행 제안",
+            href: "/reports/latest",
+            icon: HeartPulse,
+            label: "AI 리포트"
+          }
+        ]
       }
     ]
   }
