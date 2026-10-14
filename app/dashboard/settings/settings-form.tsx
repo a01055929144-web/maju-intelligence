@@ -58,6 +58,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   const [telegramTestMessage, setTelegramTestMessage] = useState("");
   const [telegramTesting, setTelegramTesting] = useState(false);
   const [telegramConnectionCode, setTelegramConnectionCode] = useState("");
+  const [telegramConnectionCommand, setTelegramConnectionCommand] = useState("");
   const [telegramDiscovering, setTelegramDiscovering] = useState(false);
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
@@ -179,7 +180,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
     }
     if (method === "GET") {
       setTelegramConnectionCode(String(payload?.connectionCode || ""));
-      setTelegramTestMessage("아래 연결 코드를 텔레그램 그룹에 보낸 뒤 자동 가져오기를 다시 눌러주세요.");
+      setTelegramConnectionCommand(String(payload?.connectionCommand || ""));
+      setTelegramTestMessage("아래 명령을 텔레그램 그룹에 보낸 직후 자동 가져오기를 눌러주세요.");
       return;
     }
     const chatId = String(payload?.chatId || "");
@@ -467,8 +469,9 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             </label>
             {telegramConnectionCode ? (
               <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2.5">
-                <p className="text-xs font-bold text-teal-900">텔레그램 그룹에 아래 코드를 메시지로 보내세요.</p>
-                <code className="mt-1.5 block select-all rounded bg-white px-3 py-2 text-sm font-black tracking-wide text-slate-950 ring-1 ring-inset ring-teal-100">{telegramConnectionCode}</code>
+                <p className="text-xs font-bold text-teal-900">텔레그램 그룹에 아래 명령을 메시지로 보내세요.</p>
+                <code className="mt-1.5 block select-all rounded bg-white px-3 py-2 text-sm font-black tracking-wide text-slate-950 ring-1 ring-inset ring-teal-100">{telegramConnectionCommand || telegramConnectionCode}</code>
+                <p className="mt-1.5 text-[11px] font-semibold text-teal-800">명령을 보낸 직후 자동 가져오기를 눌러주세요. 최근 24시간 안에 보낸 명령만 확인합니다.</p>
               </div>
             ) : null}
             <details className="group rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold leading-5 text-slate-500">
@@ -480,8 +483,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <div className="border-t border-slate-200 px-3 pb-3 pt-2">
               <ol className="mt-1.5 list-decimal space-y-1 pl-4">
                 <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
-                <li>&quot;연결 코드 받기&quot;를 누르고 표시된 코드를 텔레그램 그룹에 메시지로 보냅니다.</li>
-                <li>&quot;자동 가져오기&quot;를 누르면 그룹 정보가 입력됩니다. 아래 저장 버튼을 누른 뒤 테스트 발송으로 도착을 확인합니다.</li>
+                <li>&quot;연결 코드 받기&quot;를 누르고 표시된 <code className="rounded bg-white px-1 py-0.5">/connect@봇이름 MAJU-연결코드</code> 명령을 텔레그램 그룹에 보냅니다.</li>
+                <li>명령을 보낸 직후 &quot;자동 가져오기&quot;를 누르면 그룹 정보가 입력됩니다. 아래 저장 버튼을 누른 뒤 테스트 발송으로 도착을 확인합니다.</li>
               </ol>
               <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 연결 정보가 바뀌어 발송이 중단되면 시스템 로그와 등록 이메일로 안내합니다.</p>
               </div>
