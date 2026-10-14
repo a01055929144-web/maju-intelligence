@@ -7,11 +7,14 @@ export const metadata = {
 export default function PrivacyPolicyPage() {
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-12 text-sm leading-7 text-slate-800">
-      <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-6 text-amber-900">
-        이 개인정보처리방침은 서비스 가입 및 OAuth(카카오·네이버·구글) 로그인 심사에 필요한 최소 요건을 충족하기 위한 기본
-        템플릿입니다. 실제 서비스 운영 전 개인정보보호법 등 관련 법령에 맞춰 법률 전문가의 검토를 받고, 사업자 정보와
-        개인정보보호책임자 연락처를 실제 값으로 채워 넣으시기 바랍니다.
-      </p>
+      <dl className="mb-6 grid gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-xs sm:grid-cols-2">
+        <OperatorInfo label="상호" value="비브(BIV)" />
+        <OperatorInfo label="대표자" value="정두영" />
+        <OperatorInfo label="사업장 주소" value="경기도 의정부시 경의로 132" />
+        <OperatorInfo label="사업자등록번호" value="사업자 등록 준비 중" />
+        <OperatorInfo label="통신판매업 신고번호" value="신고 준비 중" />
+        <OperatorInfo label="고객센터" value="010-5592-9144" />
+      </dl>
 
       <h1 className="mb-6 text-2xl font-black text-slate-950">MAJU Intelligence 개인정보처리방침</h1>
 
@@ -46,8 +49,8 @@ export default function PrivacyPolicyPage() {
       </Section>
 
       <Section title="6. 이용자의 권리">
-        이용자(고객사 및 소속 직원)는 언제든지 자신의 개인정보 열람, 정정, 삭제, 처리정지를 요청할 수 있으며, [고객센터
-        이메일]로 연락하면 지체 없이 조치합니다.
+        이용자(고객사 및 소속 직원)는 언제든지 자신의 개인정보 열람, 정정, 삭제, 처리정지를 요청할 수 있으며,
+        고객센터(010-5592-9144)로 연락하면 지체 없이 조치합니다.
       </Section>
 
       <Section title="7. 개인정보의 안전성 확보 조치">
@@ -56,7 +59,7 @@ export default function PrivacyPolicyPage() {
       </Section>
 
       <Section title="8. 개인정보보호책임자">
-        성명: [담당자명] · 이메일: [고객센터 이메일] · 개인정보 관련 문의는 위 연락처로 접수해주시기 바랍니다.
+        성명: 정두영 · 연락처: 010-5592-9144 · 개인정보 관련 문의는 위 연락처로 접수해주시기 바랍니다.
       </Section>
 
       <p className="mt-8 text-xs font-bold text-slate-400">시행일: 2026-08-26</p>
@@ -65,6 +68,15 @@ export default function PrivacyPolicyPage() {
         가입 화면으로 돌아가기
       </Link>
     </main>
+  );
+}
+
+function OperatorInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[7.5rem_1fr] gap-2">
+      <dt className="font-bold text-slate-500">{label}</dt>
+      <dd className="font-semibold text-slate-800">{value}</dd>
+    </div>
   );
 }
 

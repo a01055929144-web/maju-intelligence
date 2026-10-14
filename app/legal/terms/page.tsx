@@ -7,16 +7,19 @@ export const metadata = {
 export default function TermsOfServicePage() {
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-12 text-sm leading-7 text-slate-800">
-      <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-6 text-amber-900">
-        이 약관은 서비스 가입을 위한 최소 요건을 충족하기 위해 작성한 기본 템플릿입니다. 실제 서비스 운영 전 반드시 변호사 등 법률
-        전문가의 검토를 받아 사업자 정보([사업자명], [사업자등록번호], [대표자], [주소], [고객센터 연락처] 등)를 실제 값으로
-        채워 넣으시기 바랍니다.
-      </p>
+      <dl className="mb-6 grid gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-xs sm:grid-cols-2">
+        <OperatorInfo label="상호" value="비브(BIV)" />
+        <OperatorInfo label="대표자" value="정두영" />
+        <OperatorInfo label="사업장 주소" value="경기도 의정부시 경의로 132" />
+        <OperatorInfo label="사업자등록번호" value="사업자 등록 준비 중" />
+        <OperatorInfo label="통신판매업 신고번호" value="신고 준비 중" />
+        <OperatorInfo label="고객센터" value="010-5592-9144" />
+      </dl>
 
       <h1 className="mb-6 text-2xl font-black text-slate-950">MAJU Intelligence 이용약관</h1>
 
       <Section title="제1조 (목적)">
-        이 약관은 [사업자명](이하 &ldquo;회사&rdquo;)가 제공하는 MAJU Intelligence 서비스(이하 &ldquo;서비스&rdquo;)의 이용과
+        이 약관은 비브(BIV)(이하 &ldquo;회사&rdquo;)가 제공하는 MAJU Intelligence 서비스(이하 &ldquo;서비스&rdquo;)의 이용과
         관련하여 회사와 이용 고객사(이하 &ldquo;고객사&rdquo;) 간의 권리, 의무 및 책임 사항을 정함을 목적으로 합니다.
       </Section>
 
@@ -58,7 +61,7 @@ export default function TermsOfServicePage() {
       </Section>
 
       <Section title="제9조 (문의)">
-        약관에 대한 문의는 [고객센터 이메일]로 연락해주시기 바랍니다.
+        약관에 대한 문의는 고객센터(010-5592-9144)로 연락해주시기 바랍니다.
       </Section>
 
       <p className="mt-8 text-xs font-bold text-slate-400">시행일: 2026-08-26</p>
@@ -67,6 +70,15 @@ export default function TermsOfServicePage() {
         가입 화면으로 돌아가기
       </Link>
     </main>
+  );
+}
+
+function OperatorInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[7.5rem_1fr] gap-2">
+      <dt className="font-bold text-slate-500">{label}</dt>
+      <dd className="font-semibold text-slate-800">{value}</dd>
+    </div>
   );
 }
 
