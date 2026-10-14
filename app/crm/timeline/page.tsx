@@ -42,6 +42,9 @@ type CustomerView = {
   customerName: string;
   deliveryKm: number;
   deliveryManager?: string;
+  assignedStaffMemberId?: string;
+  deliveryTerritoryId?: string;
+  deliveryTerritoryName?: string;
   email?: string;
   grade: "A" | "B" | "C";
   industry: string;
@@ -58,6 +61,7 @@ type CustomerView = {
   representativeName?: string;
   visitCount: number;
 };
+type TerritoryOption = { id: string; name: string; isActive: boolean; areas: string[]; defaultStaff: Array<{ staffMemberId: string; staffName: string; priority: number }> };
 type CustomerNoteView = {
   id: string;
   createdAt: string;
@@ -235,6 +239,7 @@ export default function CrmTimelinePage() {
 
   const [customers, setCustomers] = useState<CustomerView[]>([]);
   const [customersTruncated, setCustomersTruncated] = useState(false);
+  const [territories, setTerritories] = useState<TerritoryOption[]>([]);
   const [isLoadingMoreCustomers, setIsLoadingMoreCustomers] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
   // 2026-09-11 버그 수정: 이전에는 401/5xx/타임아웃 등 API 실패가 전부 "진짜 0건"과
@@ -301,6 +306,15 @@ export default function CrmTimelinePage() {
     const cancel = loadCustomers();
     return cancel;
   }, [loadCustomers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchWithTimeout(withCompanyQuery("/api/customer/territories"), { cache: "no-store" }, 12000)
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => { if (!cancelled && Array.isArray(payload?.territories)) setTerritories(payload.territories); })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, []);
 
   const loadMoreCustomers = async () => {
     if (isLoadingMoreCustomers || !customersTruncated) return;
@@ -425,6 +439,14 @@ export default function CrmTimelinePage() {
     }
   }
   const [draftCustomer, setDraftCustomer] = useState<CustomerView | null>(null);
+  const recommendedTerritory = useMemo(() => {
+    const address = (draftCustomer?.address || selectedCustomer.address || "").replace(/\s+/g, " ").trim();
+    if (!address) return undefined;
+    return territories.find((territory) => territory.isActive && territory.areas.some((area) => {
+      const parts = area.trim().split(/\s+/);
+      return parts.length >= 2 && address.includes(parts[parts.length - 1]);
+    }));
+  }, [draftCustomer?.address, selectedCustomer.address, territories]);
   const [customerAttachments, setCustomerAttachments] = useState<CustomerAttachmentView[]>([]);
   const [previewAttachment, setPreviewAttachment] = useState<{ mimeType: string; title: string; url: string } | null>(null);
   const [customerNotes, setCustomerNotes] = useState<CustomerNoteView[]>([]);
@@ -921,6 +943,8 @@ export default function CrmTimelinePage() {
             customerName: draftCustomer.customerName,
             deliveryKm: draftCustomer.deliveryKm,
             deliveryManager: draftCustomer.deliveryManager,
+            assignedStaffMemberId: draftCustomer.assignedStaffMemberId,
+            deliveryTerritoryId: draftCustomer.deliveryTerritoryId,
             email: draftCustomer.email,
             industry: draftCustomer.industry,
             lastOrderDays: draftCustomer.lastOrderDays,
@@ -1889,6 +1913,39 @@ export default function CrmTimelinePage() {
                         onChange={(value) => updateDraft("deliveryManager", value)}
                         value={draftCustomer.deliveryManager || ""}
                       />
+                      <label className="flex flex-col gap-1.5 text-sm font-bold text-slate-700">
+                        배송 권역
+                        <select
+                          className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800"
+                          onChange={(event) => {
+                            const territory = territories.find((item) => item.id === event.target.value);
+                            const firstStaff = territory?.defaultStaff.slice().sort((a, b) => a.priority - b.priority)[0];
+                            setDraftCustomer((current) => current ? {
+                              ...current,
+                              deliveryTerritoryId: territory?.id,
+                              deliveryTerritoryName: territory?.name,
+                              assignedStaffMemberId: current.assignedStaffMemberId || firstStaff?.staffMemberId,
+                              deliveryManager: current.deliveryManager || firstStaff?.staffName
+                            } : current);
+                          }}
+                          value={draftCustomer.deliveryTerritoryId || ""}
+                        >
+                          <option value="">권역 미지정</option>
+                          {territories.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        </select>
+                        {!draftCustomer.deliveryTerritoryId && recommendedTerritory ? (
+                          <button
+                            className="w-fit text-xs font-black text-teal-700 underline underline-offset-2"
+                            onClick={() => {
+                              const firstStaff = recommendedTerritory.defaultStaff.slice().sort((a, b) => a.priority - b.priority)[0];
+                              setDraftCustomer((current) => current ? { ...current, deliveryTerritoryId: recommendedTerritory.id, deliveryTerritoryName: recommendedTerritory.name, assignedStaffMemberId: current.assignedStaffMemberId || firstStaff?.staffMemberId, deliveryManager: current.deliveryManager || firstStaff?.staffName } : current);
+                            }}
+                            type="button"
+                          >
+                            주소 추천: {recommendedTerritory.name} · 확인 후 적용
+                          </button>
+                        ) : null}
+                      </label>
                       <EditableField label="출발지 거리(km)" value={String(draftCustomer.deliveryKm)} onChange={(value) => updateDraft("deliveryKm", value)} />
                       <EditableField label="최근 주문일" value={String(draftCustomer.lastOrderDays)} onChange={(value) => updateDraft("lastOrderDays", value)} />
                       <EditableField label="방문횟수" value={String(draftCustomer.visitCount)} onChange={(value) => updateDraft("visitCount", value)} />
@@ -1914,6 +1971,7 @@ export default function CrmTimelinePage() {
                       <DetailRow label="지역" value={selectedCustomer.region} />
                       <DetailRow label="주소" value={selectedCustomer.address} />
                       <DetailRow label="담당자" value={selectedCustomer.assignmentDisplayManager || selectedCustomer.deliveryManager} />
+                      <DetailRow label="배송 권역" value={selectedCustomer.deliveryTerritoryName || "권역 미지정"} />
                       <DetailRow label="출발지 거리" value={`${selectedCustomer.deliveryKm}km`} />
                       <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
                     </div>

@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLeadEnrichmentEventOutcome,
+  extractCustomerAdministrativeArea,
   filterCustomersByAssignment,
   makeCustomerKey,
   normalizeBusinessNumber,
   normalizeNameForDuplicateCheck
 } from "../lib/store";
+
+describe("extractCustomerAdministrativeArea", () => {
+  it("normalizes province aliases and excludes the detailed address", () => {
+    expect(extractCustomerAdministrativeArea("서울 강남구 테헤란로 25길 34")).toBe("서울특별시 강남구");
+    expect(extractCustomerAdministrativeArea("경기도 의정부시 시민로 122")).toBe("경기도 의정부시");
+  });
+
+  it("returns empty when a sigungu cannot be identified", () => {
+    expect(extractCustomerAdministrativeArea("주소 미확인")).toBe("");
+  });
+});
 
 describe("normalizeBusinessNumber", () => {
   it("strips all non-digit characters", () => {

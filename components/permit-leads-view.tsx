@@ -1258,7 +1258,25 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   async function convertToCustomer(lead: PermitLeadItem): Promise<{ customerId?: string; existingCustomer?: boolean; message?: string; ok: boolean }> {
     setActionMessage("");
     try {
-      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { method: "POST" }, 15000);
+      const previewResponse = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { cache: "no-store" }, 12000);
+      const preview = previewResponse.ok ? await previewResponse.json().catch(() => null) : null;
+      const territoryStaff = preview?.recommendation?.assignedStaffName as string | undefined;
+      const leadStaff = preview?.leadStaff?.staffName as string | undefined;
+      let assignedStaffMemberId = preview?.recommendation?.assignedStaffMemberId as string | undefined;
+      if (leadStaff && territoryStaff && preview?.leadStaff?.staffMemberId !== assignedStaffMemberId) {
+        const useTerritory = window.confirm(
+          `거래처 담당자를 확인해주세요.\n\n권역 기본 담당자: ${territoryStaff} (기본 선택)\n리드 영업 담당자: ${leadStaff}\n\n[확인] 권역 담당자 / [취소] 영업 담당자 선택으로 이동`
+        );
+        if (!useTerritory) {
+          if (!window.confirm(`${leadStaff}님을 거래처 담당자로 선택할까요?`)) return { ok: false, message: "전환을 취소했습니다." };
+          assignedStaffMemberId = preview.leadStaff.staffMemberId;
+        }
+      }
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedStaffMemberId, deliveryTerritoryId: preview?.recommendation?.territoryId })
+      }, 15000);
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         const message = payload?.message || "거래처 전환에 실패했습니다.";

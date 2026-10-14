@@ -3,23 +3,26 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { customerHasCapability, getCustomerSession } from "@/lib/auth";
-import { getBusinessNumberExceptions, getCompanyJobTitles, getCompanySettings, getCompanyStaffInvitations, getCustomerMaster } from "@/lib/store";
+import { getBusinessNumberExceptions, getCompanyJobTitles, getCompanySettings, getCompanyStaffInvitations, getCompanyStaffMemberOptions, getCustomerMaster, getDeliveryTerritories } from "@/lib/store";
 import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-panel";
 import { CompanyClosurePanel } from "./company-closure-panel";
 import { CompanySettingsForm } from "./settings-form";
 import { StaffManagementPanel } from "./staff-management-panel";
 import { SalesKpiSettingsPanel } from "./sales-kpi-settings-panel";
+import { TerritoryManagementPanel } from "./territory-management-panel";
 
 export default async function CompanySettingsPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
 
-  const [company, staff, businessNumberExceptions, customerMaster, jobTitles] = await Promise.all([
+  const [company, staff, businessNumberExceptions, customerMaster, jobTitles, territories, territoryStaff] = await Promise.all([
     getCompanySettings(session.companyId, session.companyName),
     getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false })),
     getBusinessNumberExceptions(session.companyId).catch(() => ({ exceptions: [], persisted: false })),
     getCustomerMaster(session.companyId).catch(() => ({ customers: [], source: "empty" as const, truncated: false })),
-    getCompanyJobTitles(session.companyId).catch(() => ({ jobTitles: [], persisted: false }))
+    getCompanyJobTitles(session.companyId).catch(() => ({ jobTitles: [], persisted: false })),
+    getDeliveryTerritories(session.companyId).catch(() => []),
+    getCompanyStaffMemberOptions(session.companyId).catch(() => [])
   ]);
 
   // 직원 배정 기준(담당자명/배송차량)을 자유 입력이 아니라 실제 거래처에 등록된 값 중에서
@@ -59,6 +62,7 @@ export default async function CompanySettingsPage() {
           {[
             ["#company-settings", "회사·출발지"],
             ["#staff-settings", "직원·권한"],
+            ["#territory-settings", "배송 권역"],
             ["#sales-kpi-settings", "영업 KPI"],
             ["#business-number-settings", "사업자번호 예외"],
             ...(session.workspaceRole === "owner" ? [["#company-closure", "회사 이용 종료"]] : [])
@@ -77,6 +81,13 @@ export default async function CompanySettingsPage() {
               initialJobTitles={jobTitles.jobTitles}
               managerOptions={managerOptions}
               vehicleOptions={vehicleOptions}
+            />
+          </div>
+          <div className="scroll-mt-24" id="territory-settings">
+            <TerritoryManagementPanel
+              canManage={customerHasCapability(session, "manage_company")}
+              initialStaff={territoryStaff}
+              initialTerritories={territories}
             />
           </div>
           <div className="scroll-mt-24" id="sales-kpi-settings"><SalesKpiSettingsPanel canManage={customerHasCapability(session, "manage_company")} /></div>

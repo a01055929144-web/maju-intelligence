@@ -140,6 +140,8 @@ export type CustomerMasterItem = {
   deliveryVehicleId?: string;
   deliveryVehicleName?: string;
   deliveryVehicleTerritory?: string;
+  deliveryTerritoryId?: string;
+  deliveryTerritoryName?: string;
   deliveryZone?: string;
   email?: string;
   grade: "A" | "B" | "C";
@@ -191,6 +193,8 @@ export type CustomerMasterInput = {
   deliveryManager?: string;
   deliveryMinutes?: number;
   deliveryVehicle?: string;
+  assignedStaffMemberId?: string;
+  deliveryTerritoryId?: string;
   deliveryZone?: string;
   email?: string;
   industry?: string;
@@ -216,6 +220,31 @@ export type CustomerMasterInput = {
   // 편집 화면이 마지막으로 읽은 updated_at(동시 편집 감지용). 기존 거래처를 수정하는 요청에서만
   // 의미가 있고, 값이 없으면(레거시 호출부 등) 동시성 검사를 건너뛰고 기존처럼 동작합니다.
   expectedUpdatedAt?: string;
+};
+export type DeliveryTerritoryStaffAssignment = {
+  staffMemberId: string;
+  staffName: string;
+  priority: number;
+};
+export type DeliveryTerritoryItem = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  areas: string[];
+  defaultStaff: DeliveryTerritoryStaffAssignment[];
+};
+export type CompanyStaffMemberOption = {
+  id: string;
+  name: string;
+  role: string;
+};
+export type CustomerTerritoryRecommendation = {
+  administrativeArea?: string;
+  territoryId?: string;
+  territoryName?: string;
+  assignedStaffMemberId?: string;
+  assignedStaffName?: string;
+  status: "matched" | "unassigned";
 };
 export type CustomerMasterAuditContext = {
   actorName?: string;
@@ -813,7 +842,7 @@ const CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY = `${CUSTOMER_MASTER_SELECT_WITH_A
 const CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE = `${CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY},grade_override`;
 // PHASE 1 assignment IDs are the authoritative references once populated. This remains the
 // outermost tier so older/local databases can still fall back to the legacy text-only model.
-const CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS = `${CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE},assigned_staff_member_id,delivery_vehicle_id`;
+const CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS = `${CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE},assigned_staff_member_id,delivery_vehicle_id,delivery_territory_id`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -868,6 +897,133 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
   const text = await response.text();
   if (!text) return undefined as T;
   return JSON.parse(text) as T;
+}
+
+const PROVINCE_ALIASES: Record<string, string> = {
+  서울: "서울특별시", 부산: "부산광역시", 대구: "대구광역시", 인천: "인천광역시",
+  광주: "광주광역시", 대전: "대전광역시", 울산: "울산광역시", 세종: "세종특별자치시",
+  경기: "경기도", 강원: "강원특별자치도", 충북: "충청북도", 충남: "충청남도",
+  전북: "전북특별자치도", 전남: "전라남도", 경북: "경상북도", 경남: "경상남도", 제주: "제주특별자치도"
+};
+
+/** 주소에서 권역 매칭에 쓰는 시·군·구 키를 추출합니다. 상세주소는 의도적으로 제외합니다. */
+export function extractCustomerAdministrativeArea(address?: string | null) {
+  const tokens = (address || "").replace(/[(),]/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return "";
+  const first = PROVINCE_ALIASES[tokens[0]] || tokens[0];
+  const localIndex = tokens.findIndex((token, index) => index > 0 && /(?:시|군|구)$/.test(token));
+  if (localIndex < 0) return "";
+  return `${first} ${tokens[localIndex]}`;
+}
+
+function normalizeAdministrativeArea(value?: string | null) {
+  const extracted = extractCustomerAdministrativeArea(value);
+  if (extracted) return extracted.replace(/\s+/g, " ").trim();
+  const tokens = (value || "").trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return "";
+  tokens[0] = PROVINCE_ALIASES[tokens[0]] || tokens[0];
+  return tokens.join(" ");
+}
+
+type TerritoryResolutionContext = {
+  territories: DeliveryTerritoryItem[];
+};
+
+async function loadTerritoryResolutionContext(companyId: string): Promise<TerritoryResolutionContext> {
+  return { territories: await getDeliveryTerritories(companyId) };
+}
+
+function assignCustomerByTerritoryFromContext(address: string, context: TerritoryResolutionContext): CustomerTerritoryRecommendation {
+  const administrativeArea = normalizeAdministrativeArea(address);
+  const territory = context.territories.find(
+    (item) => item.isActive && item.areas.some((area) => normalizeAdministrativeArea(area) === administrativeArea)
+  );
+  if (!territory) return { administrativeArea: administrativeArea || undefined, status: "unassigned" };
+  const firstStaff = territory.defaultStaff.slice().sort((a, b) => a.priority - b.priority)[0];
+  return {
+    administrativeArea: administrativeArea || undefined,
+    territoryId: territory.id,
+    territoryName: territory.name,
+    assignedStaffMemberId: firstStaff?.staffMemberId,
+    assignedStaffName: firstStaff?.staffName,
+    status: "matched"
+  };
+}
+
+/** 신규 거래처 등록 시에만 호출하는 공통 권역 추천 함수입니다. 이 함수 자체는 DB를 수정하지 않습니다. */
+export async function assignCustomerByTerritory(companyId: string, address: string): Promise<CustomerTerritoryRecommendation> {
+  return assignCustomerByTerritoryFromContext(address, await loadTerritoryResolutionContext(companyId));
+}
+
+export async function getCompanyStaffMemberOptions(companyId: string): Promise<CompanyStaffMemberOption[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<Array<{ id: string; role: string; app_users: { name: string | null } | null }>>(
+    `company_members?select=id,role,app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active&order=created_at.asc`
+  );
+  return rows.map((row) => ({ id: row.id, name: row.app_users?.name?.trim() || "이름 미등록 직원", role: row.role }));
+}
+
+export async function getDeliveryTerritories(companyId: string): Promise<DeliveryTerritoryItem[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const [territories, areas, assignments, staff] = await Promise.all([
+    supabaseRequest<Array<{ id: string; name: string; is_active: boolean }>>(
+      `delivery_territories?select=id,name,is_active&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.asc`
+    ),
+    supabaseRequest<Array<{ territory_id: string; administrative_area: string }>>(
+      `delivery_territory_areas?select=territory_id,administrative_area&company_id=eq.${encodeURIComponent(companyId)}&order=administrative_area.asc`
+    ),
+    supabaseRequest<Array<{ territory_id: string; staff_member_id: string; priority: number; is_active: boolean }>>(
+      `territory_staff_assignments?select=territory_id,staff_member_id,priority,is_active&company_id=eq.${encodeURIComponent(companyId)}&assignment_role=eq.customer_default&order=priority.asc`
+    ),
+    getCompanyStaffMemberOptions(companyId)
+  ]);
+  const staffById = new Map(staff.map((item) => [item.id, item]));
+  return territories.map((territory) => ({
+    id: territory.id,
+    name: territory.name,
+    isActive: territory.is_active,
+    areas: areas.filter((area) => area.territory_id === territory.id).map((area) => area.administrative_area),
+    defaultStaff: assignments
+      .filter((assignment) => assignment.territory_id === territory.id && assignment.is_active)
+      .map((assignment) => ({
+        staffMemberId: assignment.staff_member_id,
+        staffName: staffById.get(assignment.staff_member_id)?.name || "퇴사·미확인 직원",
+        priority: assignment.priority
+      }))
+  }));
+}
+
+export async function saveDeliveryTerritory(companyId: string, input: {
+  id?: string; name: string; isActive?: boolean; areas: string[]; staffMemberIds: string[];
+}): Promise<string> {
+  const name = input.name.trim();
+  if (!name) throw new Error("권역명을 입력해주세요.");
+  const areas = Array.from(new Set(input.areas.map(normalizeAdministrativeArea).filter(Boolean)));
+  let territoryId = input.id;
+  if (territoryId) {
+    await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, {
+      method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name, is_active: input.isActive !== false, updated_at: new Date().toISOString() })
+    });
+  } else {
+    const created = await supabaseRequest<Array<{ id: string }>>("delivery_territories?select=id", {
+      method: "POST", body: JSON.stringify({ company_id: companyId, name, is_active: input.isActive !== false })
+    });
+    territoryId = created[0]?.id;
+  }
+  if (!territoryId) throw new Error("권역 저장 결과를 확인하지 못했습니다.");
+  await supabaseRequest(`delivery_territory_areas?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  await supabaseRequest(`territory_staff_assignments?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  if (input.isActive !== false && areas.length) {
+    await supabaseRequest("delivery_territory_areas", { method: "POST", body: JSON.stringify(areas.map((area) => ({ company_id: companyId, territory_id: territoryId, administrative_area: area }))) });
+  }
+  const staffMemberIds = Array.from(new Set(input.staffMemberIds.filter(Boolean)));
+  if (input.isActive !== false && staffMemberIds.length) {
+    await supabaseRequest("territory_staff_assignments", {
+      method: "POST",
+      body: JSON.stringify(staffMemberIds.map((staffMemberId, index) => ({ company_id: companyId, territory_id: territoryId, staff_member_id: staffMemberId, assignment_role: "customer_default", priority: index + 1, is_active: true })))
+    });
+  }
+  return territoryId;
 }
 
 function isMissingStaffInvitationTableError(error: unknown) {
@@ -4106,6 +4262,8 @@ export async function getCustomerMaster(
     delivery_vehicle?: string | null;
     delivery_vehicle_id?: string | null;
     delivery_vehicle_name?: string | null;
+    delivery_territory_id?: string | null;
+    delivery_territory_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
@@ -4192,9 +4350,11 @@ export async function getCustomerMaster(
   if (fetchedAssignmentIds && fetched.length) {
     const staffMemberIds = Array.from(new Set(fetched.map((row) => row.assigned_staff_member_id).filter((value): value is string => Boolean(value))));
     const vehicleIds = Array.from(new Set(fetched.map((row) => row.delivery_vehicle_id).filter((value): value is string => Boolean(value))));
+    const territoryIds = Array.from(new Set(fetched.map((row) => row.delivery_territory_id).filter((value): value is string => Boolean(value))));
     const staffMemberIdFilter = staffMemberIds.map((value) => encodeURIComponent(value)).join(",");
     const vehicleIdFilter = vehicleIds.map((value) => encodeURIComponent(value)).join(",");
-    const [staffRows, vehicleRows] = await Promise.all([
+    const territoryIdFilter = territoryIds.map((value) => encodeURIComponent(value)).join(",");
+    const [staffRows, vehicleRows, territoryRows] = await Promise.all([
       staffMemberIds.length
         ? supabaseRequest<Array<{ app_users: { name: string | null } | null; id: string }>>(
             `company_members?select=id,app_users(name)&company_id=eq.${encodeURIComponent(id)}&id=in.(${staffMemberIdFilter})`
@@ -4204,14 +4364,21 @@ export async function getCustomerMaster(
         ? supabaseRequest<Array<{ id: string; name: string | null }>>(
             `delivery_vehicle_master?select=id,name&company_id=eq.${encodeURIComponent(id)}&id=in.(${vehicleIdFilter})`
           )
+        : Promise.resolve([]),
+      territoryIds.length
+        ? supabaseRequest<Array<{ id: string; name: string | null }>>(
+            `delivery_territories?select=id,name&company_id=eq.${encodeURIComponent(id)}&id=in.(${territoryIdFilter})`
+          )
         : Promise.resolve([])
     ]);
     const staffNameByMemberId = new Map(staffRows.map((row) => [row.id, row.app_users?.name?.trim() || null]));
     const vehicleNameById = new Map(vehicleRows.map((row) => [row.id, row.name?.trim() || null]));
+    const territoryNameById = new Map(territoryRows.map((row) => [row.id, row.name?.trim() || null]));
     fetched = fetched.map((row) => ({
       ...row,
       assigned_staff_name: row.assigned_staff_member_id ? staffNameByMemberId.get(row.assigned_staff_member_id) || null : null,
-      delivery_vehicle_name: row.delivery_vehicle_id ? vehicleNameById.get(row.delivery_vehicle_id) || null : null
+      delivery_vehicle_name: row.delivery_vehicle_id ? vehicleNameById.get(row.delivery_vehicle_id) || null : null,
+      delivery_territory_name: row.delivery_territory_id ? territoryNameById.get(row.delivery_territory_id) || null : null
     }));
   }
   const rows = fetched;
@@ -4580,6 +4747,14 @@ export async function upsertCustomerMaster(
       };
     }
   }
+  // 자동 권역 배정은 신규 거래처 생성 시점에만 수행합니다. 기존 거래처 27곳은 주소 추천을
+  // 사용자가 확인한 뒤 명시적으로 저장해야 하며, 수정 요청만으로 조용히 백필하지 않습니다.
+  const territoryRecommendation = !existingRows.length
+    ? await assignCustomerByTerritory(id, input.address || "").catch((): CustomerTerritoryRecommendation => ({ status: "unassigned" }))
+    : undefined;
+  const resolvedAssignedStaffMemberId = input.assignedStaffMemberId || territoryRecommendation?.assignedStaffMemberId;
+  const resolvedDeliveryTerritoryId = input.deliveryTerritoryId || territoryRecommendation?.territoryId;
+  const resolvedDeliveryManager = deliveryManager || (!existingRows.length ? territoryRecommendation?.assignedStaffName || "" : "");
   const placeLinks = {
     google_map_url: resolvedPlaceLinks.googleMapUrl || null,
     kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
@@ -4599,7 +4774,7 @@ export async function upsertCustomerMaster(
     company_id: id,
     customer_name: customerName,
     delivery_km: input.deliveryKm || 0,
-    delivery_manager: deliveryManager || null,
+    delivery_manager: resolvedDeliveryManager || null,
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
@@ -4622,6 +4797,13 @@ export async function upsertCustomerMaster(
   const deliveryVehicleField = {
     delivery_vehicle: deliveryVehicle || null
   };
+  const territoryAssignmentFields: Record<string, unknown> = {};
+  if (!existingRows.length || input.assignedStaffMemberId !== undefined) {
+    territoryAssignmentFields.assigned_staff_member_id = resolvedAssignedStaffMemberId || null;
+  }
+  if (!existingRows.length || input.deliveryTerritoryId !== undefined) {
+    territoryAssignmentFields.delivery_territory_id = resolvedDeliveryTerritoryId || null;
+  }
   // 리뷰 요약/키워드는 아직 자동 수집 파이프라인이 없어 수동 입력값만 반영합니다.
   // undefined면(즉 이 저장 요청에서 손대지 않은 값이면) 기존 값을 덮어쓰지 않도록 payload에서 뺍니다.
   const reviewFields: Record<string, unknown> = {};
@@ -4654,6 +4836,7 @@ export async function upsertCustomerMaster(
   const UPSERT_PAYLOAD_TIERS = [
     {
       ...customerPayload,
+      ...territoryAssignmentFields,
       ...placeLinks,
       ...hoursMenuFields,
       ...deliveryVehicleField,
@@ -4729,6 +4912,7 @@ export async function upsertCustomerMaster(
 
   return {
     customer: savedCustomer,
+    territoryRecommendation,
     persisted: true
   };
 }
@@ -6816,7 +7000,7 @@ export async function saveAnalysis(
   // 저장 경로(saveAnalysis)는 이 확인 없이 normalized_key가 다르면 그냥 새 행으로 병합-삽입해
   // 왔습니다. 기존 거래처 목록을 한 번에 가져와 이름이 겹치는 행을 사전에 걸러내기 위해 함께
   // 조회합니다(회사당 최대 5000곳까지).
-  const [, , , exemptBusinessNumbers, existingCustomersForDuplicateCheck] = await Promise.all([
+  const [, , , exemptBusinessNumbers, existingCustomersForDuplicateCheck, territoryContext] = await Promise.all([
     mappingRows.length
       ? supabaseRequest("column_mappings", {
           method: "POST",
@@ -6845,7 +7029,10 @@ export async function saveAnalysis(
       ? supabaseRequest<Array<{ id: string; customer_name: string; address: string | null; normalized_key: string }>>(
           `normalized_customers?select=id,customer_name,address,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
         ).catch(() => [])
-      : Promise.resolve([] as Array<{ id: string; customer_name: string; address: string | null; normalized_key: string }>)
+      : Promise.resolve([] as Array<{ id: string; customer_name: string; address: string | null; normalized_key: string }>),
+    options.uploadType !== "sales-analysis"
+      ? loadTerritoryResolutionContext(companyId).catch(() => ({ territories: [] }))
+      : Promise.resolve({ territories: [] } as TerritoryResolutionContext)
   ]);
 
   const existingByNameLower = new Map<string, Array<{ id: string; customerName: string; address: string; normalizedKey: string }>>();
@@ -6903,6 +7090,15 @@ export async function saveAnalysis(
         normalized_key: normalizedKey,
         duplicate_of: null
       };
+
+      // 기존 행은 손대지 않고, 이번 업로드로 새로 생기는 거래처만 메모리에서 일괄 매칭합니다.
+      // 권역/담당자 조회는 위 Promise.all에서 회사당 한 번만 수행하므로 행별 DB 왕복이 없습니다.
+      if (!isExactUpdate) {
+        const recommendation = assignCustomerByTerritoryFromContext(row.address, territoryContext);
+        baseRow.delivery_territory_id = recommendation.territoryId || null;
+        baseRow.assigned_staff_member_id = recommendation.assignedStaffMemberId || null;
+        baseRow.delivery_manager = recommendation.assignedStaffName || null;
+      }
 
       if (options.uploadType !== "sales-analysis" || row.deliveryKm > 0) {
         baseRow.delivery_km = row.deliveryKm;
@@ -9165,7 +9361,8 @@ export async function enrichAllCompaniesLeadsMissingContactInfo(): Promise<LeadC
 export async function convertPermitLeadToCustomer(
   companyId: string,
   leadId: string,
-  auditContext: CustomerMasterAuditContext = {}
+  auditContext: CustomerMasterAuditContext = {},
+  assignment?: { assignedStaffMemberId?: string; deliveryTerritoryId?: string }
 ): Promise<{ ok: boolean; customerId?: string; message?: string }> {
   if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
 
@@ -9213,6 +9410,14 @@ export async function convertPermitLeadToCustomer(
     };
   }
 
+  let selectedStaffName: string | undefined;
+  if (assignment?.assignedStaffMemberId) {
+    const selectedStaff = await supabaseRequest<Array<{ app_users: { name: string | null } | null }>>(
+      `company_members?select=app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(assignment.assignedStaffMemberId)}&status=eq.active&limit=1`
+    ).catch(() => []);
+    selectedStaffName = selectedStaff[0]?.app_users?.name?.trim() || undefined;
+  }
+
   const created = await upsertCustomerMaster(
     {
       customerName: lead.business_name,
@@ -9223,7 +9428,10 @@ export async function convertPermitLeadToCustomer(
       industry: lead.industry_primary || undefined,
       openingDate: lead.open_date || undefined,
       naverPlaceUrl: lead.naver_place_url || undefined,
-      kakaoPlaceUrl: lead.kakao_place_url || undefined
+      kakaoPlaceUrl: lead.kakao_place_url || undefined,
+      assignedStaffMemberId: assignment?.assignedStaffMemberId,
+      deliveryTerritoryId: assignment?.deliveryTerritoryId,
+      deliveryManager: selectedStaffName
     },
     companyId,
     auditContext,
@@ -9252,6 +9460,25 @@ export async function convertPermitLeadToCustomer(
   }).catch(() => null);
 
   return { ok: true, customerId: created.customer.id };
+}
+
+export async function getPermitLeadConversionPreview(companyId: string, leadId: string) {
+  const leads = await supabaseRequest<Array<{ address: string | null }>>(
+    `business_permit_leads?select=address&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  );
+  if (!leads[0]) throw new Error("리드를 찾을 수 없습니다.");
+  const recommendation = await assignCustomerByTerritory(companyId, leads[0].address || "");
+  const actions = await supabaseRequest<Array<{ actor_user_id: string | null; actor_name: string | null }>>(
+    `lead_actions?select=actor_user_id,actor_name&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&actor_user_id=not.is.null&order=created_at.desc&limit=1`
+  ).catch(() => []);
+  let leadStaff: { staffMemberId: string; staffName: string } | undefined;
+  if (actions[0]?.actor_user_id) {
+    const members = await supabaseRequest<Array<{ id: string; app_users: { name: string | null } | null }>>(
+      `company_members?select=id,app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&user_id=eq.${encodeURIComponent(actions[0].actor_user_id)}&status=eq.active&limit=1`
+    ).catch(() => []);
+    if (members[0]) leadStaff = { staffMemberId: members[0].id, staffName: members[0].app_users?.name?.trim() || actions[0].actor_name || "리드 담당자" };
+  }
+  return { recommendation, leadStaff };
 }
 
 export type PermitLeadAnchor = {
@@ -11983,6 +12210,8 @@ function toCustomerMasterItem(
     delivery_vehicle?: string | null;
     delivery_vehicle_id?: string | null;
     delivery_vehicle_name?: string | null;
+    delivery_territory_id?: string | null;
+    delivery_territory_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
@@ -12037,6 +12266,8 @@ function toCustomerMasterItem(
     deliveryVehicleId: row.delivery_vehicle_id || undefined,
     deliveryVehicleName: row.delivery_vehicle_name || undefined,
     deliveryVehicleTerritory: row.delivery_vehicle || undefined,
+    deliveryTerritoryId: row.delivery_territory_id || undefined,
+    deliveryTerritoryName: row.delivery_territory_name || undefined,
     deliveryZone: row.delivery_zone || undefined,
     email: row.email || undefined,
     grade: row.grade_override === "A" || row.grade_override === "B" || row.grade_override === "C" ? row.grade_override : getRevenueGrade(monthlyRevenue),
