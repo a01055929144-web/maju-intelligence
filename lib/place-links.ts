@@ -1,7 +1,11 @@
 export type PlaceLinkInput = {
   address?: string;
   customerName: string;
+  latitude?: number;
+  longitude?: number;
 };
+
+export type KakaoQueryVariant = "existing" | "name_only" | "region" | "region_detail" | "none";
 
 export type PlaceLinks = {
   googleMapUrl: string;
@@ -12,6 +16,12 @@ export type PlaceLinks = {
   enrichedPhone: string;
   enrichedIndustry: string;
   enrichedAddress: string;
+  kakaoMatched: boolean;
+  kakaoQueryVariant: KakaoQueryVariant;
+  kakaoDocumentCount: number;
+  kakaoPhoneFound: boolean;
+  kakaoMatchDistanceM: number | null;
+  naverMatched: boolean;
 };
 
 type ExistingPlaceLinks = Partial<Pick<PlaceLinks, "googleMapUrl" | "kakaoPlaceUrl" | "naverPlaceUrl">>;
@@ -19,9 +29,14 @@ type ExistingPlaceLinks = Partial<Pick<PlaceLinks, "googleMapUrl" | "kakaoPlaceU
 export async function resolvePlaceLinks(input: PlaceLinkInput, existing: ExistingPlaceLinks = {}): Promise<PlaceLinks> {
   const query = buildPlaceSearchQuery(input);
   const fallbackLinks = buildPlaceSearchLinks(input);
-  const kakaoResult = await resolveKakaoPlace(query);
-  const kakaoPlaceUrl = existing.kakaoPlaceUrl?.trim() || kakaoResult.placeUrl || fallbackLinks.kakaoPlaceUrl;
-  const naverPlaceUrl = existing.naverPlaceUrl?.trim() || (await resolveNaverPlaceUrl(query)) || fallbackLinks.naverPlaceUrl;
+  const existingKakaoUrl = existing.kakaoPlaceUrl?.trim() || "";
+  const existingKakaoMatched = isActualKakaoPlaceUrl(existingKakaoUrl);
+  const freshKakaoResult = await resolveKakaoPlace(input);
+  const kakaoResult = freshKakaoResult.matched ? freshKakaoResult : existingKakaoMatched ? existingKakaoPlaceResult(existingKakaoUrl) : freshKakaoResult;
+  const kakaoPlaceUrl = existingKakaoMatched ? existingKakaoUrl : kakaoResult.placeUrl || fallbackLinks.kakaoPlaceUrl;
+  const existingNaverUrl = existing.naverPlaceUrl?.trim() || "";
+  const resolvedNaverPlaceUrl = isActualNaverPlaceUrl(existingNaverUrl) ? existingNaverUrl : await resolveNaverPlaceUrl(query);
+  const naverPlaceUrl = resolvedNaverPlaceUrl || existingNaverUrl || fallbackLinks.naverPlaceUrl;
   const googleMapUrl = existing.googleMapUrl?.trim() || fallbackLinks.googleMapUrl;
   const checkedAt = naverPlaceUrl || kakaoPlaceUrl || googleMapUrl ? new Date().toISOString() : null;
 
@@ -33,7 +48,13 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
     checkedAt,
     enrichedPhone: kakaoResult.phone,
     enrichedIndustry: kakaoResult.industry,
-    enrichedAddress: kakaoResult.address
+    enrichedAddress: kakaoResult.address,
+    kakaoMatched: kakaoResult.matched,
+    kakaoQueryVariant: kakaoResult.queryVariant,
+    kakaoDocumentCount: kakaoResult.documentCount,
+    kakaoPhoneFound: Boolean(kakaoResult.phone),
+    kakaoMatchDistanceM: kakaoResult.distanceM,
+    naverMatched: Boolean(resolvedNaverPlaceUrl)
   };
 }
 
@@ -65,42 +86,149 @@ type KakaoPlaceResult = {
   phone: string;
   industry: string;
   address: string;
+  distanceM: number | null;
+  documentCount: number;
+  matched: boolean;
+  queryVariant: KakaoQueryVariant;
 };
 
-async function resolveKakaoPlace(query: string): Promise<KakaoPlaceResult> {
-  const empty: KakaoPlaceResult = { placeUrl: "", phone: "", industry: "", address: "" };
-  const restKey = process.env.KAKAO_REST_KEY;
-  if (!restKey || restKey === "replace-with-kakao-rest-api-key" || !query.trim()) return empty;
+type KakaoKeywordDocument = {
+  address_name?: string;
+  category_name?: string;
+  id?: string;
+  phone?: string;
+  place_name?: string;
+  place_url?: string;
+  road_address_name?: string;
+  x?: string;
+  y?: string;
+};
 
-  try {
-    const response = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}&size=1`, {
+const emptyKakaoPlaceResult = (documentCount = 0): KakaoPlaceResult => ({
+  address: "",
+  distanceM: null,
+  documentCount,
+  industry: "",
+  matched: false,
+  phone: "",
+  placeUrl: "",
+  queryVariant: "none"
+});
+
+function existingKakaoPlaceResult(placeUrl: string): KakaoPlaceResult {
+  return { ...emptyKakaoPlaceResult(), matched: true, placeUrl, queryVariant: "existing" };
+}
+
+export function isActualKakaoPlaceUrl(value?: string) {
+  return /^https:\/\/place\.map\.kakao\.com\/\d+/.test(value?.trim() || "");
+}
+
+function isActualNaverPlaceUrl(value?: string) {
+  const url = value?.trim() || "";
+  return /^https:\/\/(m\.|pcmap\.|new\.)?map\.naver\.com\//.test(url) && !url.includes("/p/search/");
+}
+
+export function buildKakaoPlaceSearchQueries(input: PlaceLinkInput): Array<{ query: string; variant: Exclude<KakaoQueryVariant, "existing" | "none"> }> {
+  const name = input.customerName.trim();
+  if (!name) return [];
+  const { detail, region } = extractKoreanAddressSearchParts(input.address || "");
+  const candidates = [
+    region ? { query: `${name} ${region}`, variant: "region" as const } : null,
+    detail ? { query: `${name} ${detail}`, variant: "region_detail" as const } : null,
+    { query: name, variant: "name_only" as const }
+  ].filter((item): item is { query: string; variant: Exclude<KakaoQueryVariant, "existing" | "none"> } => Boolean(item));
+  return candidates.filter((item, index) => candidates.findIndex((candidate) => candidate.query === item.query) === index);
+}
+
+function extractKoreanAddressSearchParts(address: string) {
+  const normalized = address.replace(/[,]/g, " ").replace(/\s+/g, " ").trim();
+  const tokens = normalized.split(" ").filter(Boolean);
+  const sido = tokens[0] || "";
+  const sigungu = tokens.find((token, index) => index > 0 && /(?:시|군|구)$/.test(token.replace(/[()]/g, "")))?.replace(/[()]/g, "") || "";
+  const parentheticalLocality = (normalized.match(/\(([^)]*)\)/)?.[1] || "")
+    .split(/[\s,]+/)
+    .map((token) => token.replace(/[^가-힣0-9]/g, ""))
+    .find((token) => /(?:동|읍|면|리)$/.test(token));
+  const road = tokens.map((token) => token.replace(/[(),]/g, "")).find((token) => /(?:로|길)(?:\d+번길)?$/.test(token));
+  const region = [sido, sigungu].filter(Boolean).join(" ");
+  const detail = [sigungu, parentheticalLocality || road].filter(Boolean).join(" ");
+  return { detail, region, sigungu };
+}
+
+export function isKakaoPlaceCandidate(input: PlaceLinkInput, document: KakaoKeywordDocument) {
+  const expectedName = normalizePlaceName(input.customerName);
+  const candidateName = normalizePlaceName(document.place_name || "");
+  if (!expectedName || !candidateName || (!expectedName.includes(candidateName) && !candidateName.includes(expectedName))) return false;
+
+  const expectedDistrict = extractKoreanAddressSearchParts(input.address || "").sigungu;
+  const candidateAddress = document.road_address_name || document.address_name || "";
+  const candidateDistrict = extractKoreanAddressSearchParts(candidateAddress).sigungu;
+  if (expectedDistrict && candidateDistrict !== expectedDistrict) return false;
+
+  const distanceM = kakaoCandidateDistanceM(input, document);
+  return distanceM == null || distanceM <= 1000;
+}
+
+function normalizePlaceName(value: string) {
+  return value.toLowerCase().replace(/\(주\)|주식회사/g, "").replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function kakaoCandidateDistanceM(input: PlaceLinkInput, document: KakaoKeywordDocument) {
+  if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) return null;
+  const latitude = Number(document.y);
+  const longitude = Number(document.x);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return Math.round(haversineMeters(input.latitude as number, input.longitude as number, latitude, longitude));
+}
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const latDelta = toRadians(lat2 - lat1);
+  const lngDelta = toRadians(lng2 - lng1);
+  const a = Math.sin(latDelta / 2) ** 2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(lngDelta / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPlaceResult> {
+  const empty = emptyKakaoPlaceResult();
+  const restKey = process.env.KAKAO_REST_KEY;
+  if (!restKey || restKey === "replace-with-kakao-rest-api-key") return empty;
+
+  let inspectedDocuments = 0;
+  for (const attempt of buildKakaoPlaceSearchQueries(input)) {
+    try {
+      const response = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(attempt.query)}&size=10`, {
       headers: {
         Authorization: `KakaoAK ${restKey}`
       },
       cache: "no-store"
-    });
+      });
 
-    if (!response.ok) return empty;
-    const payload = (await response.json()) as {
-      documents?: Array<{ id?: string; place_url?: string; phone?: string; category_name?: string; road_address_name?: string; address_name?: string }>;
-    };
-    const place = payload.documents?.[0];
-    if (!place) return empty;
+      if (!response.ok) continue;
+      const payload = (await response.json()) as { documents?: KakaoKeywordDocument[] };
+      const documents = payload.documents || [];
+      inspectedDocuments += documents.length;
+      const place = documents.find((document) => isKakaoPlaceCandidate(input, document));
+      if (!place) continue;
 
-    const placeUrl = place.place_url || (place.id ? `https://place.map.kakao.com/${place.id}` : "");
-    // category_name은 "음식점 > 곱창,막창 > 곱창전골" 형태라 가장 구체적인 마지막 구간만 업종으로 사용합니다.
-    const industry = place.category_name?.split(">").map((part) => part.trim()).filter(Boolean).pop() || "";
+      const placeUrl = place.place_url || (place.id ? `https://place.map.kakao.com/${place.id}` : "");
+      const industry = place.category_name?.split(">").map((part) => part.trim()).filter(Boolean).pop() || "";
 
-    return {
-      placeUrl,
-      phone: place.phone?.trim() || "",
-      industry,
-      // 도로명 주소를 우선하고, 없으면 지번 주소로 대체합니다(영업리드 주소 미확인 보강, 2026-08-24 피드백).
-      address: place.road_address_name?.trim() || place.address_name?.trim() || ""
-    };
-  } catch {
-    return empty;
+      return {
+        placeUrl,
+        phone: place.phone?.trim() || "",
+        industry,
+        address: place.road_address_name?.trim() || place.address_name?.trim() || "",
+        distanceM: kakaoCandidateDistanceM(input, place),
+        documentCount: documents.length,
+        matched: Boolean(placeUrl),
+        queryVariant: attempt.variant
+      };
+    } catch {
+      continue;
+    }
   }
+  return emptyKakaoPlaceResult(inspectedDocuments);
 }
 
 async function resolveNaverPlaceUrl(query: string): Promise<string> {

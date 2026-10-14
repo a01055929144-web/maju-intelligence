@@ -77,6 +77,29 @@ describe("buildLeadEnrichmentEventOutcome", () => {
     expect(outcome.metadata.event_type).toBe("external_info_enrichment");
   });
 
+  it("records Kakao matching diagnostics separately from fallback place links", () => {
+    const outcome = buildLeadEnrichmentEventOutcome({
+      persisted: true,
+      skippedFields: [],
+      sources: { ...emptySources, placeLinks: true },
+      kakaoMatch: {
+        documentCount: 6,
+        matched: true,
+        matchDistanceM: 240,
+        phoneFound: true,
+        queryVariant: "region"
+      }
+    });
+
+    expect(outcome.metadata).toMatchObject({
+      kakao_document_count: 6,
+      kakao_match_distance_m: 240,
+      kakao_matched: true,
+      kakao_phone_found: true,
+      kakao_query_variant: "region"
+    });
+  });
+
   it("marks an attempt with no saved external signal as failed", () => {
     const outcome = buildLeadEnrichmentEventOutcome({
       persisted: true,

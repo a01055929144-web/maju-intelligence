@@ -8790,6 +8790,13 @@ export function buildLeadEnrichmentEventOutcome(input: {
   persisted: boolean;
   skippedFields: string[];
   sources: PermitLeadExternalEnrichmentResult["sources"];
+  kakaoMatch?: {
+    documentCount: number;
+    matched: boolean;
+    matchDistanceM: number | null;
+    phoneFound: boolean;
+    queryVariant: string;
+  };
 }) {
   const contactFieldsFilled = [
     !input.beforePhone && Boolean(input.afterPhone),
@@ -8806,6 +8813,11 @@ export function buildLeadEnrichmentEventOutcome(input: {
     metadata: {
       contact_fields_filled: contactFieldsFilled,
       event_type: "external_info_enrichment",
+      kakao_document_count: input.kakaoMatch?.documentCount ?? 0,
+      kakao_match_distance_m: input.kakaoMatch?.matchDistanceM ?? null,
+      kakao_matched: input.kakaoMatch?.matched ?? false,
+      kakao_phone_found: input.kakaoMatch?.phoneFound ?? false,
+      kakao_query_variant: input.kakaoMatch?.queryVariant ?? "none",
       persisted: input.persisted,
       skipped_fields: input.skippedFields,
       sources: input.sources
@@ -8838,7 +8850,12 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
   const sources = { ...emptySources };
 
   const placeLinks = await resolvePlaceLinks(
-    { address: row.address || undefined, customerName: row.business_name },
+    {
+      address: row.address || undefined,
+      customerName: row.business_name,
+      latitude: row.latitude ?? undefined,
+      longitude: row.longitude ?? undefined
+    },
     {
       googleMapUrl: row.google_place_url || undefined,
       kakaoPlaceUrl: row.kakao_place_url || undefined,
@@ -8855,7 +8872,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     // 주소 미확인 리드 보강(2026-08-24 피드백: "영업리드들의 정보들이 비어져있는게 많네") — 인허가
     // 원본 데이터에 주소가 없을 때만 카카오 로컬 검색 결과의 도로명/지번 주소로 채웁니다.
     if (!row.address && placeLinks.enrichedAddress) payload.address = placeLinks.enrichedAddress;
-    sources.placeLinks = Boolean(payload.naver_place_url || payload.kakao_place_url || payload.google_place_url);
+    sources.placeLinks = placeLinks.kakaoMatched || placeLinks.naverMatched;
   }
 
   const googleReviews = await syncGoogleReviewsForCustomer({ customerName: row.business_name, address: row.address || undefined }).catch(() => null);
@@ -8953,7 +8970,14 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     beforePhone: row.phone || undefined,
     persisted,
     skippedFields,
-    sources
+    sources,
+    kakaoMatch: {
+      documentCount: placeLinks?.kakaoDocumentCount ?? 0,
+      matched: placeLinks?.kakaoMatched ?? false,
+      matchDistanceM: placeLinks?.kakaoMatchDistanceM ?? null,
+      phoneFound: placeLinks?.kakaoPhoneFound ?? false,
+      queryVariant: placeLinks?.kakaoQueryVariant ?? "none"
+    }
   });
 
   return {
