@@ -7,6 +7,7 @@ import {
   makeCustomerKey,
   normalizeBusinessNumber,
   normalizeNameForDuplicateCheck,
+  resolveExistingCustomerStaffAssignment,
   resolveNewCustomerStaffAssignment
 } from "../lib/store";
 
@@ -54,6 +55,42 @@ describe("territory customer assignment", () => {
       assignedStaffMemberId: undefined,
       assignedStaffName: "외부 기사"
     });
+  });
+});
+
+describe("existing customer staff assignment", () => {
+  const staff = [
+    { id: "staff-gang", name: "강민호", role: "driver" },
+    { id: "staff-jeong", name: "정두영", role: "owner" }
+  ];
+
+  it("moves both the name snapshot and stable id when the manager changes", () => {
+    const assignment = resolveExistingCustomerStaffAssignment(
+      { deliveryManager: "정두영" },
+      { deliveryManager: "강민호", assignedStaffMemberId: "staff-gang" },
+      staff
+    );
+    expect(assignment).toEqual({ assignedStaffMemberId: "staff-jeong", assignedStaffName: "정두영" });
+    const customer = {
+      id: "customer", customerName: "거래처", address: "서울", region: "서울", industry: "미분류",
+      grade: "C" as const, deliveryKm: 0, lastOrderDays: 0, memoCount: 0, monthlyRevenue: 0, visitCount: 0,
+      deliveryManager: assignment.assignedStaffName, assignedStaffMemberId: assignment.assignedStaffMemberId
+    };
+    expect(filterCustomersByAssignment([customer], { staffMemberId: "staff-jeong", legacyManagerKeys: ["정두영"], legacyTerritoryKeys: [] })).toEqual([customer]);
+    expect(filterCustomersByAssignment([customer], { staffMemberId: "staff-gang", legacyManagerKeys: ["강민호"], legacyTerritoryKeys: [] })).toEqual([]);
+  });
+
+  it("clears an old id for unmatched free text and rejects mismatched id/name", () => {
+    expect(resolveExistingCustomerStaffAssignment(
+      { deliveryManager: "외부 기사" },
+      { deliveryManager: "강민호", assignedStaffMemberId: "staff-gang" },
+      staff
+    )).toEqual({ assignedStaffMemberId: undefined, assignedStaffName: "외부 기사" });
+    expect(() => resolveExistingCustomerStaffAssignment(
+      { deliveryManager: "정두영", assignedStaffMemberId: "staff-gang" },
+      { deliveryManager: "강민호", assignedStaffMemberId: "staff-gang" },
+      staff
+    )).toThrow("담당자명과 연결 직원이 다릅니다");
   });
 });
 

@@ -62,6 +62,7 @@ type CustomerView = {
   visitCount: number;
 };
 type TerritoryOption = { id: string; name: string; isActive: boolean; areas: string[]; defaultStaff: Array<{ staffMemberId: string; staffName: string; priority: number }> };
+type StaffOption = { id: string; name: string; role: string };
 type CustomerNoteView = {
   id: string;
   createdAt: string;
@@ -240,6 +241,7 @@ export default function CrmTimelinePage() {
   const [customers, setCustomers] = useState<CustomerView[]>([]);
   const [customersTruncated, setCustomersTruncated] = useState(false);
   const [territories, setTerritories] = useState<TerritoryOption[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [isLoadingMoreCustomers, setIsLoadingMoreCustomers] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
   // 2026-09-11 버그 수정: 이전에는 401/5xx/타임아웃 등 API 실패가 전부 "진짜 0건"과
@@ -311,7 +313,11 @@ export default function CrmTimelinePage() {
     let cancelled = false;
     fetchWithTimeout(withCompanyQuery("/api/customer/territories"), { cache: "no-store" }, 12000)
       .then((response) => response.ok ? response.json() : null)
-      .then((payload) => { if (!cancelled && Array.isArray(payload?.territories)) setTerritories(payload.territories); })
+      .then((payload) => {
+        if (cancelled) return;
+        if (Array.isArray(payload?.territories)) setTerritories(payload.territories);
+        if (Array.isArray(payload?.staff)) setStaffOptions(payload.staff);
+      })
       .catch(() => null);
     return () => { cancelled = true; };
   }, []);
@@ -364,19 +370,28 @@ export default function CrmTimelinePage() {
       const customerIds = Array.from(new Set(Array.from(bulkSelectedIds).map((id) => id.trim()).filter(Boolean)));
       const selectedIdSet = new Set(customerIds);
       const nextManager = bulkManagerInput.trim();
+      const matchingStaff = staffOptions.filter((staff) => staff.name.trim() === nextManager);
+      const staffMemberId = matchingStaff.length === 1 ? matchingStaff[0].id : undefined;
       const response = await fetchWithTimeout(
         "/api/customers/bulk-manager",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: nextManager })
+          body: JSON.stringify({ companyId: getAdminCompanyIdFromUrl(), customerIds, deliveryManager: nextManager, staffMemberId })
         },
         15000
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.message || "일괄 변경에 실패했습니다.");
 
-      setCustomers((previous) => previous.map((customer) => (customer.id && selectedIdSet.has(customer.id) ? { ...customer, deliveryManager: nextManager } : customer)));
+      const savedManager = typeof payload?.deliveryManager === "string" ? payload.deliveryManager : nextManager;
+      const savedStaffId = typeof payload?.assignedStaffMemberId === "string" ? payload.assignedStaffMemberId : undefined;
+      setCustomers((previous) => previous.map((customer) => (customer.id && selectedIdSet.has(customer.id) ? {
+        ...customer,
+        deliveryManager: savedManager,
+        assignedStaffMemberId: savedStaffId,
+        assignmentDisplayManager: savedManager
+      } : customer)));
       const updatedCount = typeof payload?.updated === "number" ? payload.updated : customerIds.length;
       setBulkManagerMessage(`${updatedCount.toLocaleString()}곳의 담당자를 "${nextManager}"(으)로 변경했습니다.`);
       setBulkSelectedIds(new Set());
@@ -635,10 +650,10 @@ export default function CrmTimelinePage() {
   const managerMissingCount = customers.filter((customer) => !customer.deliveryManager).length;
   const managerOptions = useMemo(
     () =>
-      Array.from(new Set(customers.map((customer) => customer.deliveryManager?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) =>
+      Array.from(new Set([...staffOptions.map((staff) => staff.name.trim()), ...customers.map((customer) => customer.deliveryManager?.trim())].filter((value): value is string => Boolean(value)))).sort((a, b) =>
         a.localeCompare(b, "ko")
       ),
-    [customers]
+    [customers, staffOptions]
   );
   const selectedFilteredArrayIndex = filteredCustomers.findIndex(({ index }) => index === selectedIndex);
   const selectedFilteredPosition = selectedFilteredArrayIndex + 1;
@@ -1910,9 +1925,19 @@ export default function CrmTimelinePage() {
                         inputList="bulk-manager-options"
                         inputRef={deliveryManagerInputRef}
                         label="배송담당자"
-                        onChange={(value) => updateDraft("deliveryManager", value)}
+                        onChange={(value) => {
+                          const matches = staffOptions.filter((staff) => staff.name.trim() === value.trim());
+                          setDraftCustomer((current) => current ? {
+                            ...current,
+                            deliveryManager: value,
+                            assignedStaffMemberId: matches.length === 1 ? matches[0].id : undefined
+                          } : current);
+                        }}
                         value={draftCustomer.deliveryManager || ""}
                       />
+                      <p className="-mt-2 text-xs text-slate-500">
+                        {draftCustomer.assignedStaffMemberId ? "활성 직원과 연결됨" : "직원 아님 · 이름 기준으로 저장됩니다."}
+                      </p>
                       <label className="flex flex-col gap-1.5 text-sm font-bold text-slate-700">
                         배송 권역
                         <select

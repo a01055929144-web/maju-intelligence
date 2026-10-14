@@ -981,6 +981,36 @@ export function resolveNewCustomerStaffAssignment(
   };
 }
 
+export function resolveExistingCustomerStaffAssignment(
+  input: Pick<CustomerMasterInput, "assignedStaffMemberId" | "deliveryManager">,
+  existing: { assignedStaffMemberId?: string | null; deliveryManager?: string | null },
+  activeStaff: CompanyStaffMemberOption[]
+) {
+  const requestedName = input.deliveryManager?.trim() || "";
+  const currentName = existing.deliveryManager?.trim() || "";
+  const managerChanged = requestedName !== currentName;
+
+  if (input.assignedStaffMemberId) {
+    const selected = activeStaff.find((staff) => staff.id === input.assignedStaffMemberId);
+    if (!selected) throw new Error("선택한 담당자는 현재 활성 직원이 아닙니다.");
+    if (requestedName && requestedName !== selected.name.trim()) {
+      throw new Error(`담당자명과 연결 직원이 다릅니다. 선택한 직원명은 \"${selected.name}\"입니다.`);
+    }
+    return { assignedStaffMemberId: selected.id, assignedStaffName: selected.name.trim() };
+  }
+  if (!managerChanged) {
+    return { assignedStaffMemberId: existing.assignedStaffMemberId || undefined, assignedStaffName: requestedName || undefined };
+  }
+  const normalized = requestedName.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ");
+  const matches = requestedName
+    ? activeStaff.filter((staff) => staff.name.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ") === normalized)
+    : [];
+  return {
+    assignedStaffMemberId: matches.length === 1 ? matches[0].id : undefined,
+    assignedStaffName: requestedName || undefined
+  };
+}
+
 /** PostgREST bulk 요청은 모든 JSON 객체의 키가 같아야 하므로 동일 컬럼 묶음별로 분리합니다. */
 export function groupRowsByColumnSignature(rows: Array<Record<string, unknown>>) {
   const groups = new Map<string, Array<Record<string, unknown>>>();
@@ -4798,11 +4828,11 @@ export async function upsertCustomerMaster(
     businessNumber && !exemptBusinessNumbers.has(businessNumber) ? businessNumber : makeCustomerKey(customerName, input.address || "");
   // updated_at도 함께 읽어 아래 동시 편집 감지(낙관적 동시성 제어)에 사용합니다. 이 컬럼이 아직
   // 없는 환경(마이그레이션 미적용)에서도 나머지 저장 로직이 깨지지 않도록 실패 시 컬럼 없이 재시도합니다.
-  const existingRows = await supabaseRequest<Array<{ id: string; updated_at?: string | null }>>(
-    `normalized_customers?select=id,updated_at&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+  const existingRows = await supabaseRequest<Array<{ id: string; updated_at?: string | null; delivery_manager?: string | null; assigned_staff_member_id?: string | null }>>(
+    `normalized_customers?select=id,updated_at,delivery_manager,assigned_staff_member_id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
   ).catch(() =>
-    supabaseRequest<Array<{ id: string; updated_at?: string | null }>>(
-      `normalized_customers?select=id&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
+    supabaseRequest<Array<{ id: string; updated_at?: string | null; delivery_manager?: string | null; assigned_staff_member_id?: string | null }>>(
+      `normalized_customers?select=id,delivery_manager&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
     ).catch(() => [])
   );
   // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 위 normalized_key가 정확히 일치할 때는
@@ -4826,15 +4856,27 @@ export async function upsertCustomerMaster(
   }
   // 자동 권역 배정은 신규 거래처 생성 시점에만 수행합니다. 기존 거래처 27곳은 주소 추천을
   // 사용자가 확인한 뒤 명시적으로 저장해야 하며, 수정 요청만으로 조용히 백필하지 않습니다.
-  const territoryContext = !existingRows.length
+  const shouldResolveExistingStaff = Boolean(
+    existingRows.length
+      && (input.assignedStaffMemberId !== undefined || deliveryManager !== (existingRows[0].delivery_manager?.trim() || ""))
+  );
+  const territoryContext = !existingRows.length || shouldResolveExistingStaff
     ? await loadTerritoryResolutionContext(id).catch((): TerritoryResolutionContext => ({ territories: [], staff: [] }))
     : undefined;
   const territoryRecommendation = territoryContext
     ? assignCustomerByTerritoryFromContext(input.address || "", territoryContext)
     : undefined;
-  const staffAssignment = territoryRecommendation && territoryContext
+  const staffAssignment = !existingRows.length && territoryRecommendation && territoryContext
     ? resolveNewCustomerStaffAssignment(input, territoryRecommendation, territoryContext.staff)
-    : { assignedStaffMemberId: input.assignedStaffMemberId, assignedStaffName: deliveryManager || undefined };
+    : existingRows.length && territoryContext
+      ? resolveExistingCustomerStaffAssignment(input, {
+          assignedStaffMemberId: existingRows[0].assigned_staff_member_id,
+          deliveryManager: existingRows[0].delivery_manager
+        }, territoryContext.staff)
+      : {
+          assignedStaffMemberId: existingRows[0]?.assigned_staff_member_id || input.assignedStaffMemberId,
+          assignedStaffName: deliveryManager || undefined
+        };
   const resolvedAssignedStaffMemberId = staffAssignment.assignedStaffMemberId;
   const resolvedDeliveryTerritoryId = input.deliveryTerritoryId || territoryRecommendation?.territoryId;
   const resolvedDeliveryManager = staffAssignment.assignedStaffName || "";
@@ -4881,7 +4923,7 @@ export async function upsertCustomerMaster(
     delivery_vehicle: deliveryVehicle || null
   };
   const territoryAssignmentFields: Record<string, unknown> = {};
-  if (!existingRows.length || input.assignedStaffMemberId !== undefined) {
+  if (!existingRows.length || shouldResolveExistingStaff) {
     territoryAssignmentFields.assigned_staff_member_id = resolvedAssignedStaffMemberId || null;
   }
   if (!existingRows.length || input.deliveryTerritoryId !== undefined) {
@@ -7194,17 +7236,26 @@ export async function saveAnalysis(
     })
     .filter((row): row is Record<string, unknown> => row !== null);
 
+  const normalizedBatchFailures: Array<{ batch: number; rows: number; message: string }> = [];
+  let normalizedRowsSaved = 0;
   if (normalizedRows.length) {
     // PostgREST는 한 bulk 요청 안의 모든 JSON 객체가 같은 키 집합을 가져야 합니다. 신규 행에는
     // 권역/담당자 키가 있고 기존 행에는 없어야 기존 배정을 보존할 수 있으므로, 키 집합별 요청으로
     // 분리합니다. sales-analysis의 조건부 delivery_km 역시 같은 방식으로 안전하게 나뉩니다.
-    await Promise.all(groupRowsByColumnSignature(normalizedRows).map((batch) =>
-      supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
-        method: "POST",
-        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify(batch)
-      })
-    ));
+    const batches = groupRowsByColumnSignature(normalizedRows);
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      try {
+        await supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+          body: JSON.stringify(batch)
+        });
+        normalizedRowsSaved += batch.length;
+      } catch (error) {
+        normalizedBatchFailures.push({ batch: index + 1, rows: batch.length, message: getErrorMessage(error) });
+      }
+    }
   }
 
   const masterRows = await getNormalizedCustomersForAnalysis(companyId);
@@ -7335,7 +7386,9 @@ export async function saveAnalysis(
       duplicateCount,
       qualityScore,
       skippedRowNumbers,
-      duplicateWarnings
+      duplicateWarnings,
+      normalizedRowsSaved,
+      normalizedBatchFailures
     }
   };
 }
@@ -10727,21 +10780,39 @@ const BUSINESS_STATUS_REFRESH_LIMIT = 300;
  * when NTS_BUSINESS_API_KEY isn't set, so callers can show a clear "API 키 필요" message instead
  * of a silent failure.
  */
-export async function bulkUpdateDeliveryManager(companyId: string, customerIds: string[], deliveryManager: string): Promise<{ updated: number }> {
-  if (!customerIds.length) return { updated: 0 };
-  if (!isProductionStoreConfigured()) return { updated: 0 };
+export async function bulkUpdateDeliveryManager(
+  companyId: string,
+  customerIds: string[],
+  deliveryManager: string,
+  staffMemberId?: string
+): Promise<{ updated: number; deliveryManager: string; assignedStaffMemberId: string | null }> {
+  if (!customerIds.length) return { updated: 0, deliveryManager: deliveryManager.trim(), assignedStaffMemberId: staffMemberId || null };
+  if (!isProductionStoreConfigured()) return { updated: 0, deliveryManager: deliveryManager.trim(), assignedStaffMemberId: staffMemberId || null };
 
   const trimmed = deliveryManager.trim();
+  const activeStaff = await getCompanyStaffMemberOptions(companyId);
+  const resolved = resolveExistingCustomerStaffAssignment(
+    { deliveryManager: trimmed, assignedStaffMemberId: staffMemberId },
+    { deliveryManager: "" },
+    activeStaff
+  );
   await supabaseRequest(
     `normalized_customers?company_id=eq.${encodeURIComponent(companyId)}&id=in.(${customerIds.map((id) => encodeURIComponent(id)).join(",")})`,
     {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ delivery_manager: trimmed || null })
+      body: JSON.stringify({
+        delivery_manager: resolved.assignedStaffName || null,
+        assigned_staff_member_id: resolved.assignedStaffMemberId || null
+      })
     }
   );
 
-  return { updated: customerIds.length };
+  return {
+    updated: customerIds.length,
+    deliveryManager: resolved.assignedStaffName || "",
+    assignedStaffMemberId: resolved.assignedStaffMemberId || null
+  };
 }
 
 /**

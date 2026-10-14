@@ -3,7 +3,7 @@ import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { bulkUpdateDeliveryManager } from "@/lib/store";
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { companyId?: string; customerIds?: string[]; deliveryManager?: string } | null;
+  const body = (await request.json().catch(() => null)) as { companyId?: string; customerIds?: string[]; deliveryManager?: string; staffMemberId?: string } | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) {
@@ -24,6 +24,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "담당자명을 입력하세요." }, { status: 400 });
   }
 
-  const result = await bulkUpdateDeliveryManager(scope.companyId, customerIds, deliveryManager);
-  return NextResponse.json(result);
+  const staffMemberId = typeof body?.staffMemberId === "string" ? body.staffMemberId.trim() : undefined;
+  try {
+    const result = await bulkUpdateDeliveryManager(scope.companyId, customerIds, deliveryManager, staffMemberId);
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json({ message: error instanceof Error ? error.message : "담당자를 변경하지 못했습니다." }, { status: 400 });
+  }
 }

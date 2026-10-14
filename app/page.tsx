@@ -507,6 +507,13 @@ export default function Home() {
           `이름이 같은 거래처가 이미 있어 ${duplicateWarnings.length}개 행을 저장하지 않았습니다: ${names}${duplicateWarnings.length > 5 ? " 외" : ""}. 거래처 관리에서 직접 확인 후 등록하세요.`
         );
       }
+      const failedBatches: Array<{ batch: number; rows: number; message: string }> = Array.isArray(payload?.pipeline?.normalizedBatchFailures)
+        ? payload.pipeline.normalizedBatchFailures
+        : [];
+      if (failedBatches.length) {
+        const failedRows = failedBatches.reduce((sum, batch) => sum + Number(batch.rows || 0), 0);
+        warningLines.push(`일부 저장 묶음이 실패해 ${failedRows}개 행을 저장하지 못했습니다. 실패 묶음: ${failedBatches.map((batch) => `${batch.batch}번(${batch.rows}행)`).join(", ")}. 다시 업로드해 주세요.`);
+      }
       const hasWarnings = warningLines.length > 0;
       setRegistrationStatus({
         actionLabel: persisted ? (hasWarnings ? "저장 완료 · 확인 필요" : "저장 완료") : "분석 완료 · 저장 확인 필요",
