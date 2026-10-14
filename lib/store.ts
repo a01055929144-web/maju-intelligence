@@ -123,6 +123,8 @@ export type CompanySettingsInput = {
 export type CustomerMasterItem = {
   id: string;
   address: string;
+  assignedStaffMemberId?: string;
+  assignedStaffName?: string;
   bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
@@ -134,6 +136,9 @@ export type CustomerMasterItem = {
   deliveryManager?: string;
   deliveryMinutes?: number;
   deliveryVehicle?: string;
+  deliveryVehicleId?: string;
+  deliveryVehicleName?: string;
+  deliveryVehicleTerritory?: string;
   deliveryZone?: string;
   email?: string;
   grade: "A" | "B" | "C";
@@ -800,6 +805,9 @@ const CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY = `${CUSTOMER_MASTER_SELECT_WITH_A
 // 수동 등급은 월 매출 기반 자동 등급보다 우선합니다. 마이그레이션이 아직 적용되지 않은 환경은
 // 바로 아래 조회 티어로 폴백해 기존 자동 등급을 계속 사용합니다.
 const CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE = `${CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY},grade_override`;
+// PHASE 1 assignment IDs are the authoritative references once populated. This remains the
+// outermost tier so older/local databases can still fall back to the legacy text-only model.
+const CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS = `${CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE},assigned_staff_member_id,delivery_vehicle_id`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -4071,6 +4079,8 @@ export async function getCustomerMaster(
   type CustomerMasterRow = {
     id: string;
     address: string | null;
+    assigned_staff_member_id?: string | null;
+    assigned_staff_name?: string | null;
     bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
@@ -4082,6 +4092,8 @@ export async function getCustomerMaster(
     delivery_manager: string | null;
     delivery_minutes: number | null;
     delivery_vehicle?: string | null;
+    delivery_vehicle_id?: string | null;
+    delivery_vehicle_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
@@ -4118,6 +4130,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS,
     CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE,
     CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
     CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD,
@@ -4130,12 +4143,14 @@ export async function getCustomerMaster(
   ];
   let lastFetchError: unknown;
   let fetched: CustomerMasterRow[] | null = null;
+  let fetchedAssignmentIds = false;
   let fetchedGradeOverride = false;
   for (const select of CUSTOMER_MASTER_SELECT_TIERS) {
     try {
       fetched = await supabaseRequest<Array<CustomerMasterRow>>(
         `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
+      fetchedAssignmentIds = select.includes("assigned_staff_member_id");
       fetchedGradeOverride = select.includes("grade_override");
       break;
     } catch (error) {
@@ -4161,6 +4176,31 @@ export async function getCustomerMaster(
       // 그 외의 연결/권한 오류는 숨기지 않아 운영 장애와 스키마 미적용을 구분합니다.
       if (!isMissingColumnError(error)) throw error;
     }
+  }
+  if (fetchedAssignmentIds && fetched.length) {
+    const staffMemberIds = Array.from(new Set(fetched.map((row) => row.assigned_staff_member_id).filter((value): value is string => Boolean(value))));
+    const vehicleIds = Array.from(new Set(fetched.map((row) => row.delivery_vehicle_id).filter((value): value is string => Boolean(value))));
+    const staffMemberIdFilter = staffMemberIds.map((value) => encodeURIComponent(value)).join(",");
+    const vehicleIdFilter = vehicleIds.map((value) => encodeURIComponent(value)).join(",");
+    const [staffRows, vehicleRows] = await Promise.all([
+      staffMemberIds.length
+        ? supabaseRequest<Array<{ app_users: { name: string | null } | null; id: string }>>(
+            `company_members?select=id,app_users(name)&company_id=eq.${encodeURIComponent(id)}&id=in.(${staffMemberIdFilter})`
+          )
+        : Promise.resolve([]),
+      vehicleIds.length
+        ? supabaseRequest<Array<{ id: string; name: string | null }>>(
+            `delivery_vehicle_master?select=id,name&company_id=eq.${encodeURIComponent(id)}&id=in.(${vehicleIdFilter})`
+          )
+        : Promise.resolve([])
+    ]);
+    const staffNameByMemberId = new Map(staffRows.map((row) => [row.id, row.app_users?.name?.trim() || null]));
+    const vehicleNameById = new Map(vehicleRows.map((row) => [row.id, row.name?.trim() || null]));
+    fetched = fetched.map((row) => ({
+      ...row,
+      assigned_staff_name: row.assigned_staff_member_id ? staffNameByMemberId.get(row.assigned_staff_member_id) || null : null,
+      delivery_vehicle_name: row.delivery_vehicle_id ? vehicleNameById.get(row.delivery_vehicle_id) || null : null
+    }));
   }
   const rows = fetched;
 
@@ -11859,6 +11899,8 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
   return {
     id: String(row.id || ""),
     address: asNullableString(row.address),
+    assigned_staff_member_id: asNullableString(row.assigned_staff_member_id),
+    assigned_staff_name: asNullableString(row.assigned_staff_name),
     bank_account_file_url: asNullableString(row.bank_account_file_url),
     birth_date: asNullableString(row.birth_date),
     business_license_file_url: asNullableString(row.business_license_file_url),
@@ -11870,6 +11912,8 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     delivery_manager: asNullableString(row.delivery_manager),
     delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
     delivery_vehicle: asNullableString(row.delivery_vehicle),
+    delivery_vehicle_id: asNullableString(row.delivery_vehicle_id),
+    delivery_vehicle_name: asNullableString(row.delivery_vehicle_name),
     delivery_zone: asNullableString(row.delivery_zone),
     email: asNullableString(row.email),
     google_map_url: asNullableString(row.google_map_url),
@@ -11895,10 +11939,24 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
   };
 }
 
+export function resolveCustomerAssignmentDisplay(input: {
+  assignedStaffName?: string | null;
+  deliveryManager?: string | null;
+  deliveryVehicleName?: string | null;
+  deliveryVehicleTerritory?: string | null;
+}) {
+  return {
+    deliveryManager: input.assignedStaffName?.trim() || input.deliveryManager?.trim() || undefined,
+    deliveryVehicle: input.deliveryVehicleName?.trim() || input.deliveryVehicleTerritory?.trim() || undefined
+  };
+}
+
 function toCustomerMasterItem(
   row: {
     id: string;
     address: string | null;
+    assigned_staff_member_id?: string | null;
+    assigned_staff_name?: string | null;
     bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
@@ -11910,6 +11968,8 @@ function toCustomerMasterItem(
     delivery_manager: string | null;
     delivery_minutes: number | null;
     delivery_vehicle?: string | null;
+    delivery_vehicle_id?: string | null;
+    delivery_vehicle_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
     google_map_url?: string | null;
@@ -11943,10 +12003,18 @@ function toCustomerMasterItem(
   index: number
 ): CustomerMasterItem {
   const monthlyRevenue = Number(row.monthly_revenue || 0);
+  const assignmentDisplay = resolveCustomerAssignmentDisplay({
+    assignedStaffName: row.assigned_staff_name,
+    deliveryManager: row.delivery_manager,
+    deliveryVehicleName: row.delivery_vehicle_name,
+    deliveryVehicleTerritory: row.delivery_vehicle
+  });
 
   return {
     id: row.id,
     address: row.address || "",
+    assignedStaffMemberId: row.assigned_staff_member_id || undefined,
+    assignedStaffName: row.assigned_staff_name || undefined,
     bankAccountFileUrl: row.bank_account_file_url || undefined,
     birthDate: row.birth_date || undefined,
     businessLicenseFileUrl: row.business_license_file_url || undefined,
@@ -11955,9 +12023,12 @@ function toCustomerMasterItem(
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
     deliveryKm: Number(row.delivery_km || 0),
-    deliveryManager: row.delivery_manager || undefined,
+    deliveryManager: assignmentDisplay.deliveryManager,
     deliveryMinutes: row.delivery_minutes || undefined,
-    deliveryVehicle: row.delivery_vehicle || undefined,
+    deliveryVehicle: assignmentDisplay.deliveryVehicle,
+    deliveryVehicleId: row.delivery_vehicle_id || undefined,
+    deliveryVehicleName: row.delivery_vehicle_name || undefined,
+    deliveryVehicleTerritory: row.delivery_vehicle || undefined,
     deliveryZone: row.delivery_zone || undefined,
     email: row.email || undefined,
     grade: row.grade_override === "A" || row.grade_override === "B" || row.grade_override === "C" ? row.grade_override : getRevenueGrade(monthlyRevenue),
