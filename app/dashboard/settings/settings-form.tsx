@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Bell, Building2, FileText, Loader2, MapPin, Route, Save, SendHorizonal } from "lucide-react";
+import { Bell, Building2, FileText, Link2, Loader2, MapPin, Route, Save, SendHorizonal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -57,6 +57,8 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
   });
   const [telegramTestMessage, setTelegramTestMessage] = useState("");
   const [telegramTesting, setTelegramTesting] = useState(false);
+  const [telegramConnectionCode, setTelegramConnectionCode] = useState("");
+  const [telegramDiscovering, setTelegramDiscovering] = useState(false);
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [addressSearching, setAddressSearching] = useState(false);
@@ -162,6 +164,31 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
 
     setTelegramTesting(false);
     setTelegramTestMessage(response?.ok ? "테스트 메시지를 보냈습니다. 텔레그램 그룹을 확인하세요." : payload?.message || "테스트 발송에 실패했습니다.");
+  }
+
+  async function discoverTelegramChat() {
+    setTelegramDiscovering(true);
+    setTelegramTestMessage("");
+    const method = telegramConnectionCode ? "POST" : "GET";
+    const response = await fetchWithTimeout("/api/customer/telegram-discover", { method }, 12000).catch(() => null);
+    const payload = await response?.json().catch(() => null);
+    setTelegramDiscovering(false);
+    if (!response?.ok) {
+      setTelegramTestMessage(payload?.message || "텔레그램 그룹을 확인하지 못했습니다.");
+      return;
+    }
+    if (method === "GET") {
+      setTelegramConnectionCode(String(payload?.connectionCode || ""));
+      setTelegramTestMessage("아래 연결 코드를 텔레그램 그룹에 보낸 뒤 자동 가져오기를 다시 눌러주세요.");
+      return;
+    }
+    const chatId = String(payload?.chatId || "");
+    if (!chatId) {
+      setTelegramTestMessage("텔레그램 그룹 정보를 확인하지 못했습니다.");
+      return;
+    }
+    updateSection("telegram", { telegramChatId: chatId });
+    setTelegramTestMessage(`${payload?.title || "텔레그램 그룹"}을 찾았습니다. 아래 저장 버튼을 눌러 적용하세요.`);
   }
 
   async function searchOriginAddress() {
@@ -432,8 +459,18 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
                   {telegramTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizonal className="h-4 w-4" />}
                   {telegramTesting ? "발송 중..." : "테스트 발송"}
                 </Button>
+                <Button className="w-full shrink-0 sm:w-auto" disabled={telegramDiscovering} onClick={discoverTelegramChat} type="button" variant="outline">
+                  {telegramDiscovering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                  {telegramDiscovering ? "확인 중..." : telegramConnectionCode ? "자동 가져오기" : "연결 코드 받기"}
+                </Button>
               </div>
             </label>
+            {telegramConnectionCode ? (
+              <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2.5">
+                <p className="text-xs font-bold text-teal-900">텔레그램 그룹에 아래 코드를 메시지로 보내세요.</p>
+                <code className="mt-1.5 block select-all rounded bg-white px-3 py-2 text-sm font-black tracking-wide text-slate-950 ring-1 ring-inset ring-teal-100">{telegramConnectionCode}</code>
+              </div>
+            ) : null}
             <details className="group rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold leading-5 text-slate-500">
               <summary className="cursor-pointer list-none px-3 py-2.5 font-bold text-slate-700 marker:content-none">
                 텔레그램 연결 방법 보기
@@ -443,10 +480,10 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
               <div className="border-t border-slate-200 px-3 pb-3 pt-2">
               <ol className="mt-1.5 list-decimal space-y-1 pl-4">
                 <li>알림 받을 텔레그램 그룹을 만들고, MAJU 담당자에게 안내받은 봇을 그 그룹에 초대합니다.</li>
-                <li>그룹 chat_id를 확인합니다 — 그룹에 아무 메시지나 보낸 뒤, 브라우저에서 <code className="rounded bg-white px-1 py-0.5">https://api.telegram.org/bot(봇 토큰)/getUpdates</code>에 접속하면 <code className="rounded bg-white px-1 py-0.5">chat.id</code> 값(그룹은 보통 -로 시작하는 숫자)을 확인할 수 있습니다. 봇 토큰은 MAJU 담당자에게 문의하세요.</li>
-                <li>위 입력칸에 chat_id를 저장한 뒤 &quot;테스트 발송&quot;으로 실제 도착을 확인합니다.</li>
+                <li>&quot;연결 코드 받기&quot;를 누르고 표시된 코드를 텔레그램 그룹에 메시지로 보냅니다.</li>
+                <li>&quot;자동 가져오기&quot;를 누르면 그룹 정보가 입력됩니다. 아래 저장 버튼을 누른 뒤 테스트 발송으로 도착을 확인합니다.</li>
               </ol>
-              <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 chat_id가 바뀌면 알림이 조용히 끊깁니다 — 주기적으로 테스트 발송으로 확인해주세요.</p>
+              <p className="mt-1.5 text-amber-700">그룹에서 봇이 제외되거나 연결 정보가 바뀌어 발송이 중단되면 시스템 로그와 등록 이메일로 안내합니다.</p>
               </div>
             </details>
             {telegramTestMessage ? (

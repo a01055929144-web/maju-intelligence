@@ -193,6 +193,7 @@
 - **Completion Criteria**: 반복 재진입 시 CDP/DevTools 상 프레임 드롭 또는 장시간 블로킹 없음
 
 ### Task C — 문서 동기화 (도메인 맵)
+> **구현 완료 (2026-10-14)**: quote 도메인과 `product_catalog`/`sales_quotes`, `lead_actions` 확장 컬럼, `lead_enrichment_events`를 실제 코드·마이그레이션 기준으로 반영했습니다.
 - **Objective**: `docs/02_DOMAIN_MAP.md`에 quote 도메인 반영
 - **Files**: `docs/02_DOMAIN_MAP.md`
 - **Required Changes**: `domains/quote/quote.ts`, `sales_quotes`/`product_catalog` 테이블, `lead_actions`의 `collateral_types`/`follow_up_at`/`metadata` 컬럼을 기존 도메인 맵 형식에 맞춰 추가
@@ -270,6 +271,7 @@
 - **Completion Criteria**: 화면에 노출되는 폴백 문구 어디에도 "Vercel", "환경변수", "Kakao Developers", "재배포" 등의 운영/개발 용어가 남지 않음
 
 ### Task J — bare-path 접속에 대한 커스텀 404 페이지
+> **구현 완료 (2026-10-14)**: MAJU 브랜딩과 대시보드·로그인 복귀 동선을 포함한 앱 공용 404 화면을 추가했습니다.
 - **Objective**: `/customers`, `/reports`처럼 실제 라우트가 아닌 상위 경로로 직접 접속했을 때 Next.js 기본 404 대신 앱 내비게이션이 있는 커스텀 404 화면을 보여주기
 - **Files**: 신규 `app/not-found.tsx` (Next.js App Router 컨벤션)
 - **Do Not Touch**: 기존 라우트 구조(`app/customers/data`, `app/reports/[id]`, `app/reports/latest` 등) — 이번 작업은 404 발생 시 보여줄 화면만 추가, 라우트 자체를 새로 만들지 않음
@@ -308,6 +310,7 @@
 - **Completion Criteria**: `/revenue/contacts` 재현 시나리오(새로고침 2회 이상)에서 "Connection closed"/"화면을 표시하는 중 오류가 발생했습니다"가 더 이상 나타나지 않음
 
 ### Task N — 텔레그램 알림 설정 UX 개선 및 조용한 실패 방지
+> **구현 완료 (2026-10-14)**: 회사별 연결 코드로 텔레그램 그룹을 자동 탐색하는 설정 흐름과, 접근 실패의 감사 로그·가입 이메일 대체 안내를 추가했습니다. 기존 21일 발송 조건과 알림 본문은 유지했습니다.
 - **Objective**: chat_id 확인 절차를 비개발자도 할 수 있게 단순화하고, 알림 발송 실패를 서버가 감지해 운영자에게 별도로 알리는 안전장치 추가
 - **Files**: `app/dashboard/settings/settings-form.tsx`(텔레그램 설정 UI), 텔레그램 발송을 수행하는 서버 로직(그렙 대상: "telegram"/"chat_id" 발송 함수)
 - **Do Not Touch**: 기존에 정상 등록된 chat_id의 알림 발송 스케줄/조건(21일 기준) 자체
@@ -348,18 +351,18 @@
 
 - [ ] Task A 적용 후 `check:auth-boundaries` 통과
 - [ ] Task B 재현 시나리오로 5회 이상 왕복 테스트, 프리즈 미재현 확인
-- [ ] Task C 적용 후 `docs/02_DOMAIN_MAP.md`와 실제 `domains/`, `supabase/migrations/` 구조 대조
+- [x] Task C 적용 후 `docs/02_DOMAIN_MAP.md`와 실제 `domains/`, `supabase/migrations/` 구조 대조
 - [ ] Task D 적용 후 `npm audit`/`npm test`/`npm run build` 재실행
 - [x] 기사(드라이버) 모바일 화면 점검 — 2026-10-11 재감사에서 `/mobile/today`·`/mobile/register`·`/mobile/sales`·`/mobile/join` 4개 화면 실제 열람 완료, 전반적으로 양호(§6-12). 다만 390×844 1종 해상도만 확인했으므로 실기기 최종 확인은 여전히 권장
 - [x] `resize_window` 기반 반응형 레이아웃 재검증 — `resize_window`를 `navigate` 이전에 호출하는 순서로 바꿔 정상 재현 성공(§4 P3-3)
 - [ ] Task I 적용 후 지도 로딩 실패 화면에서 운영/개발 전용 용어가 전혀 노출되지 않는지 확인
-- [ ] Task J 적용 후 bare-path 접속 시 커스텀 404 + 홈으로 돌아가기 동작 확인
+- [x] Task J 적용 후 bare-path 접속 시 커스텀 404 + 홈으로 돌아가기 동작 확인
 - [ ] Task K 적용 후 만료/오타 공개 견적 링크 접속 시 고객용 안내 화면(기본 404 아님) 노출 확인
 - [ ] Task L 적용 후 "다음 액션 요약" 3개 카드가 각각 다른 상태로 사전 필터링된 후보 탭으로 이동하는지 확인
 - [x] "아직 본 적 없는 화면" 전수 점검 완료 — `/workspaces`·`/map/fullscreen`·`/admin/*`·`/routes/today`·`/leads/permits`·`/quote/[token]`·`/revenue/pipeline` 서브탭·`/signup`·`/forgot-password`·`/reset-password`·`/legal/*`·`/dashboard/settings` 전체 확인
 - [x] Task M 적용 후 `/revenue/contacts`가 실제 데이터 1,000건을 에러 없이 로드하는지 확인 (2026-10-13, Claude 운영 검증)
 - [ ] Task O 승인 후 자동·수동 보강 기록 분리, 컨택 원장 자동 기록 제외, 7일 재시도 제한 적용
-- [ ] Task N 적용 후 텔레그램 chat_id 설정이 비개발자도 가능한 흐름으로 바뀌고, 발송 실패가 감지되는지 확인
+- [x] Task N 적용 후 텔레그램 chat_id 설정이 비개발자도 가능한 흐름으로 바뀌고, 발송 실패가 감지되는지 확인
 - [x] Task E 적용 후 견적 드로어에서 미저장 이탈 시 확인창 노출 + 중첩 스크롤 해소 확인 (2026-10-14 구현·빌드 검증, 운영 PM 재검토 권장)
 - [x] Task F 1번(훅 연결) 적용 후 대상 9개 화면에서 새로고침/탭 닫기 시 미저장 경고 노출 확인 (2026-10-14 구현·빌드 검증)
 - [ ] Task F 2번(공용 내비게이션 가드) 설계안 리뷰·승인 여부 확인 — 승인 전에는 구현 착수 금지

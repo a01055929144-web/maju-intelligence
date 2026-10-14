@@ -9,7 +9,7 @@ import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicat
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
-import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
+import { isTelegramAccessFailure, isTelegramConfigured, sendTelegramMessage } from "./telegram";
 import { hasCustomerKakaoIndustryEvidence, hasLeadKakaoIndustryEvidence, resolveKakaoIndustryBackfill } from "./industry-backfill";
 import { hashPassword } from "./password";
 import { sendEmail } from "./email";
@@ -10581,6 +10581,33 @@ export type BusinessClosureAlertResult = {
   companiesFailed: Array<{ companyId: string; companyName: string; error: string }>;
 };
 
+async function recordTelegramDeliveryFailure(input: { companyId: string; companyName: string; context: string; error: string }) {
+  console.error(`[telegram-delivery-failure] companyId=${input.companyId} context=${input.context}: ${input.error}`);
+  await writeAdminAuditLog({
+    action: "telegram_delivery_failed",
+    companyId: input.companyId,
+    metadata: { companyName: input.companyName, context: input.context, error: input.error, accessFailure: isTelegramAccessFailure(input.error) },
+    targetType: "telegram_notification"
+  });
+
+  if (!isTelegramAccessFailure(input.error)) return;
+  try {
+    const credentials = await supabaseRequest<Array<{ customer_email: string | null }>>(
+      `auth_credentials?select=customer_email&customer_company_id=eq.${encodeURIComponent(input.companyId)}&limit=1`
+    );
+    const recipient = credentials[0]?.customer_email?.trim();
+    if (!recipient) return;
+    const safeCompanyName = input.companyName.replace(/[<>&"']/g, "");
+    await sendEmail({
+      to: recipient,
+      subject: `[MAJU] ${input.companyName} 텔레그램 알림 연결을 확인해주세요`,
+      html: `<p><strong>${safeCompanyName}</strong>의 텔레그램 알림 발송이 중단되었습니다.</p><p>회사 설정에서 봇이 그룹에 참여 중인지 확인한 뒤 연결 정보를 다시 가져오고 테스트 발송을 진행해주세요.</p>`
+    });
+  } catch (error) {
+    console.error(`[telegram-delivery-fallback] companyId=${input.companyId} 이메일 대체 알림 실패: ${getErrorMessage(error)}`);
+  }
+}
+
 /**
  * refreshAllCompaniesBusinessStatuses()가 찾아낸 "새로 폐업 확인됨" 거래처를, 회사별로 묶어서
  * 텔레그램으로 즉시 알립니다. 기존에는 closed[]가 cron 응답 JSON에만 담겨서 아무도 보지 못했는데,
@@ -10626,7 +10653,11 @@ export async function sendBusinessClosureAlerts(closed: BusinessStatusDailyRefre
           .join("\n");
 
         const sendResult = await sendTelegramMessage(company.telegram_chat_id as string, text);
-        if (!sendResult.ok) throw new Error(sendResult.error || "발송 실패");
+        if (!sendResult.ok) {
+          const error = sendResult.error || "발송 실패";
+          await recordTelegramDeliveryFailure({ companyId: company.id, companyName: company.name, context: "business_closure", error });
+          throw new Error(error);
+        }
         return { skipped: false as const };
       } catch (error) {
         return { skipped: false as const, error: error instanceof Error ? error.message : String(error), companyId: company.id, companyName: company.name };
@@ -10691,7 +10722,11 @@ export async function sendDailyChurnRiskDigests(): Promise<ChurnRiskDigestResult
           .join("\n");
 
         const sendResult = await sendTelegramMessage(company.telegram_chat_id as string, text);
-        if (!sendResult.ok) throw new Error(sendResult.error || "발송 실패");
+        if (!sendResult.ok) {
+          const error = sendResult.error || "발송 실패";
+          await recordTelegramDeliveryFailure({ companyId: company.id, companyName: company.name, context: "churn_risk_21_days", error });
+          throw new Error(error);
+        }
         return { skipped: false as const };
       } catch (error) {
         return { skipped: false as const, error: error instanceof Error ? error.message : String(error), companyId: company.id, companyName: company.name };
