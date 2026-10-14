@@ -3,9 +3,11 @@ import {
   buildLeadEnrichmentEventOutcome,
   extractCustomerAdministrativeArea,
   filterCustomersByAssignment,
+  groupRowsByColumnSignature,
   makeCustomerKey,
   normalizeBusinessNumber,
-  normalizeNameForDuplicateCheck
+  normalizeNameForDuplicateCheck,
+  resolveNewCustomerStaffAssignment
 } from "../lib/store";
 
 describe("extractCustomerAdministrativeArea", () => {
@@ -16,6 +18,57 @@ describe("extractCustomerAdministrativeArea", () => {
 
   it("returns empty when a sigungu cannot be identified", () => {
     expect(extractCustomerAdministrativeArea("주소 미확인")).toBe("");
+  });
+});
+
+describe("territory customer assignment", () => {
+  const staff = [
+    { id: "staff-requested", name: "정두영", role: "driver" },
+    { id: "staff-territory", name: "강민호", role: "driver" }
+  ];
+  const recommendation = {
+    status: "matched" as const,
+    territoryId: "territory-gangnam",
+    territoryName: "강남 권역",
+    assignedStaffMemberId: "staff-territory",
+    assignedStaffName: "강민호"
+  };
+
+  it("uses an explicitly named active staff member instead of the territory default", () => {
+    const assignment = resolveNewCustomerStaffAssignment({ deliveryManager: "정두영" }, recommendation, staff);
+    expect(assignment).toEqual({
+      assignedStaffMemberId: "staff-requested",
+      assignedStaffName: "정두영"
+    });
+    const customer = {
+      id: "new-customer", customerName: "신규 거래처", address: "서울 강남구", region: "강남", industry: "미분류",
+      grade: "C" as const, deliveryKm: 0, lastOrderDays: 0, memoCount: 0, monthlyRevenue: 0, visitCount: 0,
+      deliveryManager: assignment.assignedStaffName, assignedStaffMemberId: assignment.assignedStaffMemberId, deliveryVehicle: "강남"
+    };
+    expect(filterCustomersByAssignment([customer], { staffMemberId: "staff-requested", legacyManagerKeys: ["정두영"], legacyTerritoryKeys: [] })).toEqual([customer]);
+    expect(filterCustomersByAssignment([customer], { staffMemberId: "staff-territory", legacyManagerKeys: ["강민호"], legacyTerritoryKeys: [] })).toEqual([]);
+  });
+
+  it("keeps an unmatched text assignee without attaching a mismatched id", () => {
+    expect(resolveNewCustomerStaffAssignment({ deliveryManager: "외부 기사" }, recommendation, staff)).toEqual({
+      assignedStaffMemberId: undefined,
+      assignedStaffName: "외부 기사"
+    });
+  });
+});
+
+describe("groupRowsByColumnSignature", () => {
+  it("separates new and existing customer payloads so PostgREST receives uniform object keys", () => {
+    const existing = { company_id: "company", normalized_key: "old", customer_name: "기존" };
+    const created = { ...existing, normalized_key: "new", customer_name: "신규", delivery_territory_id: "territory", assigned_staff_member_id: "staff" };
+    const groups = groupRowsByColumnSignature([existing, created]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((group) => group.every((row) => Object.keys(row).sort().join(",") === Object.keys(group[0]).sort().join(",")))).toBe(true);
+  });
+
+  it("also separates conditional sales-analysis delivery distance keys", () => {
+    const groups = groupRowsByColumnSignature([{ normalized_key: "a" }, { normalized_key: "b", delivery_km: 12 }]);
+    expect(groups).toHaveLength(2);
   });
 });
 

@@ -3138,7 +3138,7 @@ function QuickRegisterDrawer({
   const [deliveryVehicle, setDeliveryVehicle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string } | null>(null);
+  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string; assignmentNotice?: string } | null>(null);
   // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 서버가 상호명이 같은 기존 거래처를
   // 발견하면 바로 저장하지 않고 이 상태에 그 목록을 담아 확인창을 띄웁니다. 사용자가 "그래도 등록"을
   // 선택해야만 confirmDuplicate: true로 다시 요청을 보내 실제로 저장합니다.
@@ -3191,7 +3191,7 @@ function QuickRegisterDrawer({
       const customerId = String(payload?.customer?.id || "");
       if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리에서 확인해주세요.");
 
-      setCreatedCustomer({ id: customerId, name: customerName });
+      setCreatedCustomer({ id: customerId, name: customerName, assignmentNotice: payload?.assignmentNotice });
       onRegistered();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
@@ -3228,6 +3228,11 @@ function QuickRegisterDrawer({
           {createdCustomer ? (
             <div className="space-y-4">
               <CustomerAttachmentUploadPanel customerId={createdCustomer.id} customerName={createdCustomer.name} />
+              {createdCustomer.assignmentNotice ? (
+                <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800">
+                  {createdCustomer.assignmentNotice}
+                </div>
+              ) : null}
               <button className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm" onClick={onClose} type="button">
                 <Check className="h-4 w-4" />
                 완료

@@ -36,7 +36,7 @@ type Draft = {
   kakaoPlaceUrl: string;
 };
 
-type CreatedCustomer = { id: string; customerName: string };
+type CreatedCustomer = { id: string; customerName: string; assignmentNotice?: string };
 
 type AttachmentItem = {
   id: string;
@@ -152,7 +152,7 @@ export function MobileRegisterWorkspace() {
 
       setDuplicateMatches(null);
       setDraft(emptyDraft);
-      setCreatedCustomer({ id: customerId, customerName: draft.customerName });
+      setCreatedCustomer({ id: customerId, customerName: draft.customerName, assignmentNotice: payload?.assignmentNotice });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
     } finally {
@@ -170,7 +170,7 @@ export function MobileRegisterWorkspace() {
   }
 
   if (createdCustomer) {
-    return <MobileRegisterAttachmentStep customerId={createdCustomer.id} customerName={createdCustomer.customerName} onRegisterAnother={resetToSearch} />;
+    return <MobileRegisterAttachmentStep assignmentNotice={createdCustomer.assignmentNotice} customerId={createdCustomer.id} customerName={createdCustomer.customerName} onRegisterAnother={resetToSearch} />;
   }
 
   if (showForm) {
@@ -358,10 +358,12 @@ function FormField({
 }
 
 function MobileRegisterAttachmentStep({
+  assignmentNotice,
   customerId,
   customerName,
   onRegisterAnother
 }: {
+  assignmentNotice?: string;
   customerId: string;
   customerName: string;
   onRegisterAnother: () => void;
@@ -394,6 +396,7 @@ function MobileRegisterAttachmentStep({
           <CheckCircle2 className="h-5 w-5" />
           <p className="font-black">{customerName} 등록 완료</p>
         </div>
+        {assignmentNotice ? <p className="mt-2 text-sm font-bold text-teal-800">{assignmentNotice}</p> : null}
         <p className="mt-1 text-xs font-bold leading-5 text-teal-700">
           필요한 파일만 바로 올리세요. 나머지는 나중에 추가할 수 있습니다.
         </p>

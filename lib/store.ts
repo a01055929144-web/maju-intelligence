@@ -927,10 +927,15 @@ function normalizeAdministrativeArea(value?: string | null) {
 
 type TerritoryResolutionContext = {
   territories: DeliveryTerritoryItem[];
+  staff: CompanyStaffMemberOption[];
 };
 
 async function loadTerritoryResolutionContext(companyId: string): Promise<TerritoryResolutionContext> {
-  return { territories: await getDeliveryTerritories(companyId) };
+  const [territories, staff] = await Promise.all([
+    getDeliveryTerritories(companyId),
+    getCompanyStaffMemberOptions(companyId)
+  ]);
+  return { territories, staff };
 }
 
 function assignCustomerByTerritoryFromContext(address: string, context: TerritoryResolutionContext): CustomerTerritoryRecommendation {
@@ -953,6 +958,37 @@ function assignCustomerByTerritoryFromContext(address: string, context: Territor
 /** 신규 거래처 등록 시에만 호출하는 공통 권역 추천 함수입니다. 이 함수 자체는 DB를 수정하지 않습니다. */
 export async function assignCustomerByTerritory(companyId: string, address: string): Promise<CustomerTerritoryRecommendation> {
   return assignCustomerByTerritoryFromContext(address, await loadTerritoryResolutionContext(companyId));
+}
+
+export function resolveNewCustomerStaffAssignment(
+  input: Pick<CustomerMasterInput, "assignedStaffMemberId" | "deliveryManager">,
+  recommendation: CustomerTerritoryRecommendation,
+  activeStaff: CompanyStaffMemberOption[]
+) {
+  if (input.assignedStaffMemberId) {
+    const selected = activeStaff.find((staff) => staff.id === input.assignedStaffMemberId);
+    return { assignedStaffMemberId: selected?.id, assignedStaffName: input.deliveryManager?.trim() || selected?.name };
+  }
+  const requestedName = input.deliveryManager?.trim();
+  if (requestedName) {
+    const normalized = requestedName.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ");
+    const matches = activeStaff.filter((staff) => staff.name.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ") === normalized);
+    return { assignedStaffMemberId: matches.length === 1 ? matches[0].id : undefined, assignedStaffName: requestedName };
+  }
+  return {
+    assignedStaffMemberId: recommendation.assignedStaffMemberId,
+    assignedStaffName: recommendation.assignedStaffName
+  };
+}
+
+/** PostgREST bulk 요청은 모든 JSON 객체의 키가 같아야 하므로 동일 컬럼 묶음별로 분리합니다. */
+export function groupRowsByColumnSignature(rows: Array<Record<string, unknown>>) {
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const signature = Object.keys(row).sort().join(",");
+    groups.set(signature, [...(groups.get(signature) || []), row]);
+  }
+  return Array.from(groups.values());
 }
 
 export async function getCompanyStaffMemberOptions(companyId: string): Promise<CompanyStaffMemberOption[]> {
@@ -999,8 +1035,29 @@ export async function saveDeliveryTerritory(companyId: string, input: {
   const name = input.name.trim();
   if (!name) throw new Error("권역명을 입력해주세요.");
   const areas = Array.from(new Set(input.areas.map(normalizeAdministrativeArea).filter(Boolean)));
+  const staffMemberIds = Array.from(new Set(input.staffMemberIds.filter(Boolean)));
+  const [occupiedAreas, activeStaff] = await Promise.all([
+    areas.length
+      ? supabaseRequest<Array<{ administrative_area: string; territory_id: string; delivery_territories: { name: string | null } | null }>>(
+          `delivery_territory_areas?select=administrative_area,territory_id,delivery_territories(name)&company_id=eq.${encodeURIComponent(companyId)}&administrative_area=in.(${areas.map((area) => encodeURIComponent(area)).join(",")})`
+        )
+      : Promise.resolve([]),
+    getCompanyStaffMemberOptions(companyId)
+  ]);
+  const conflict = occupiedAreas.find((area) => area.territory_id !== input.id);
+  if (conflict) throw new Error(`${conflict.administrative_area}는 ${conflict.delivery_territories?.name || "다른"} 권역에 이미 포함되어 있습니다.`);
+  const activeStaffIds = new Set(activeStaff.map((staff) => staff.id));
+  const inactiveStaffId = staffMemberIds.find((id) => !activeStaffIds.has(id));
+  if (inactiveStaffId) throw new Error("비활성 또는 다른 회사 직원은 권역 담당자로 지정할 수 없습니다.");
   let territoryId = input.id;
+  let createdNewTerritory = false;
+  const previousTerritory = territoryId
+    ? (await supabaseRequest<Array<{ name: string; is_active: boolean }>>(
+        `delivery_territories?select=name,is_active&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}&limit=1`
+      ))[0]
+    : undefined;
   if (territoryId) {
+    if (!previousTerritory) throw new Error("수정할 권역을 찾을 수 없습니다.");
     await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, {
       method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name, is_active: input.isActive !== false, updated_at: new Date().toISOString() })
     });
@@ -1009,19 +1066,39 @@ export async function saveDeliveryTerritory(companyId: string, input: {
       method: "POST", body: JSON.stringify({ company_id: companyId, name, is_active: input.isActive !== false })
     });
     territoryId = created[0]?.id;
+    createdNewTerritory = true;
   }
   if (!territoryId) throw new Error("권역 저장 결과를 확인하지 못했습니다.");
-  await supabaseRequest(`delivery_territory_areas?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
-  await supabaseRequest(`territory_staff_assignments?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
-  if (input.isActive !== false && areas.length) {
-    await supabaseRequest("delivery_territory_areas", { method: "POST", body: JSON.stringify(areas.map((area) => ({ company_id: companyId, territory_id: territoryId, administrative_area: area }))) });
-  }
-  const staffMemberIds = Array.from(new Set(input.staffMemberIds.filter(Boolean)));
-  if (input.isActive !== false && staffMemberIds.length) {
-    await supabaseRequest("territory_staff_assignments", {
-      method: "POST",
-      body: JSON.stringify(staffMemberIds.map((staffMemberId, index) => ({ company_id: companyId, territory_id: territoryId, staff_member_id: staffMemberId, assignment_role: "customer_default", priority: index + 1, is_active: true })))
-    });
+  const [previousAreas, previousAssignments] = await Promise.all([
+    supabaseRequest<Array<{ administrative_area: string }>>(`delivery_territory_areas?select=administrative_area&company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`),
+    supabaseRequest<Array<{ staff_member_id: string; priority: number; is_active: boolean }>>(`territory_staff_assignments?select=staff_member_id,priority,is_active&company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}&assignment_role=eq.customer_default`)
+  ]);
+  try {
+    await supabaseRequest(`delivery_territory_areas?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    await supabaseRequest(`territory_staff_assignments?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    if (input.isActive !== false && areas.length) {
+      await supabaseRequest("delivery_territory_areas", { method: "POST", body: JSON.stringify(areas.map((area) => ({ company_id: companyId, territory_id: territoryId, administrative_area: area }))) });
+    }
+    if (input.isActive !== false && staffMemberIds.length) {
+      await supabaseRequest("territory_staff_assignments", {
+        method: "POST",
+        body: JSON.stringify(staffMemberIds.map((staffMemberId, index) => ({ company_id: companyId, territory_id: territoryId, staff_member_id: staffMemberId, assignment_role: "customer_default", priority: index + 1, is_active: true })))
+      });
+    }
+  } catch (error) {
+    // RPC 도입 전 방어선: 교체 중 실패하면 직전 지역·담당자 구성을 최선 노력으로 복원합니다.
+    await supabaseRequest(`delivery_territory_areas?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => null);
+    await supabaseRequest(`territory_staff_assignments?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => null);
+    if (previousAreas.length) await supabaseRequest("delivery_territory_areas", { method: "POST", body: JSON.stringify(previousAreas.map((area) => ({ company_id: companyId, territory_id: territoryId, administrative_area: area.administrative_area }))) }).catch(() => null);
+    if (previousAssignments.length) await supabaseRequest("territory_staff_assignments", { method: "POST", body: JSON.stringify(previousAssignments.map((assignment) => ({ company_id: companyId, territory_id: territoryId, staff_member_id: assignment.staff_member_id, assignment_role: "customer_default", priority: assignment.priority, is_active: assignment.is_active }))) }).catch(() => null);
+    if (createdNewTerritory) {
+      await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => null);
+    } else if (previousTerritory) {
+      await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, {
+        method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name: previousTerritory.name, is_active: previousTerritory.is_active, updated_at: new Date().toISOString() })
+      }).catch(() => null);
+    }
+    throw error;
   }
   return territoryId;
 }
@@ -4749,12 +4826,18 @@ export async function upsertCustomerMaster(
   }
   // 자동 권역 배정은 신규 거래처 생성 시점에만 수행합니다. 기존 거래처 27곳은 주소 추천을
   // 사용자가 확인한 뒤 명시적으로 저장해야 하며, 수정 요청만으로 조용히 백필하지 않습니다.
-  const territoryRecommendation = !existingRows.length
-    ? await assignCustomerByTerritory(id, input.address || "").catch((): CustomerTerritoryRecommendation => ({ status: "unassigned" }))
+  const territoryContext = !existingRows.length
+    ? await loadTerritoryResolutionContext(id).catch((): TerritoryResolutionContext => ({ territories: [], staff: [] }))
     : undefined;
-  const resolvedAssignedStaffMemberId = input.assignedStaffMemberId || territoryRecommendation?.assignedStaffMemberId;
+  const territoryRecommendation = territoryContext
+    ? assignCustomerByTerritoryFromContext(input.address || "", territoryContext)
+    : undefined;
+  const staffAssignment = territoryRecommendation && territoryContext
+    ? resolveNewCustomerStaffAssignment(input, territoryRecommendation, territoryContext.staff)
+    : { assignedStaffMemberId: input.assignedStaffMemberId, assignedStaffName: deliveryManager || undefined };
+  const resolvedAssignedStaffMemberId = staffAssignment.assignedStaffMemberId;
   const resolvedDeliveryTerritoryId = input.deliveryTerritoryId || territoryRecommendation?.territoryId;
-  const resolvedDeliveryManager = deliveryManager || (!existingRows.length ? territoryRecommendation?.assignedStaffName || "" : "");
+  const resolvedDeliveryManager = staffAssignment.assignedStaffName || "";
   const placeLinks = {
     google_map_url: resolvedPlaceLinks.googleMapUrl || null,
     kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
@@ -4912,6 +4995,9 @@ export async function upsertCustomerMaster(
 
   return {
     customer: savedCustomer,
+    assignmentNotice: !existingRows.length && territoryRecommendation?.territoryName
+      ? `${territoryRecommendation.territoryName} 권역${resolvedDeliveryManager ? ` · ${resolvedDeliveryManager}에게 배정됨` : " · 담당자 미지정"}`
+      : undefined,
     territoryRecommendation,
     persisted: true
   };
@@ -7031,8 +7117,8 @@ export async function saveAnalysis(
         ).catch(() => [])
       : Promise.resolve([] as Array<{ id: string; customer_name: string; address: string | null; normalized_key: string }>),
     options.uploadType !== "sales-analysis"
-      ? loadTerritoryResolutionContext(companyId).catch(() => ({ territories: [] }))
-      : Promise.resolve({ territories: [] } as TerritoryResolutionContext)
+      ? loadTerritoryResolutionContext(companyId).catch((): TerritoryResolutionContext => ({ territories: [], staff: [] }))
+      : Promise.resolve({ territories: [], staff: [] } as TerritoryResolutionContext)
   ]);
 
   const existingByNameLower = new Map<string, Array<{ id: string; customerName: string; address: string; normalizedKey: string }>>();
@@ -7109,13 +7195,16 @@ export async function saveAnalysis(
     .filter((row): row is Record<string, unknown> => row !== null);
 
   if (normalizedRows.length) {
-    await supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
-      method: "POST",
-      headers: {
-        Prefer: "resolution=merge-duplicates,return=representation"
-      },
-      body: JSON.stringify(normalizedRows)
-    });
+    // PostgREST는 한 bulk 요청 안의 모든 JSON 객체가 같은 키 집합을 가져야 합니다. 신규 행에는
+    // 권역/담당자 키가 있고 기존 행에는 없어야 기존 배정을 보존할 수 있으므로, 키 집합별 요청으로
+    // 분리합니다. sales-analysis의 조건부 delivery_km 역시 같은 방식으로 안전하게 나뉩니다.
+    await Promise.all(groupRowsByColumnSignature(normalizedRows).map((batch) =>
+      supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify(batch)
+      })
+    ));
   }
 
   const masterRows = await getNormalizedCustomersForAnalysis(companyId);
