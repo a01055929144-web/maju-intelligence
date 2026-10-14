@@ -1,6 +1,6 @@
 # PHASE 1 Customer Master — 배송 배정 ID 전환 설계안
 
-> 상태: **설계 승인 대기**  
+> 상태: **설계 승인 완료 · 1단계 마이그레이션 적용 승인 대기**
 > 작성일: 2026-10-14  
 > 이 문서의 SQL은 초안이며 운영 DB에 실행하지 않았다.
 
@@ -14,7 +14,8 @@
 - 활성 직원 `app_users.name`과 회사 내부에서 유일하게 일치: 고유값 2/3(66.7%), 거래처 17/27(63.0%)
 - 불일치: `강민호 대표` 1개 값, 거래처 10곳. 수락된 초대의 `assigned_manager_name`은 `강민호 대표`, 실제 직원명은 `강민호 대표님`이라 초대 별칭까지 사용하면 유일하게 연결된다.
 - 동명이인으로 모호한 값: 0개
-- `delivery_vehicle` 고유값 3개, 거래처 27곳이나 차량 마스터 이름·번호판과 유일 일치 0곳. 현재 값 `강남`·`인천`·`의정부`는 실제 차량 ID로 자동 백필하면 안 된다.
+- `delivery_vehicle` 고유값 3개, 거래처 27곳. 사용자 확인 결과 `강남`·`인천`·`의정부`는 **권역이면서 그 권역 전담 차량을 나타내는 운영 라벨**이므로 삭제하거나 차량명으로 바꾸지 않는다.
+- 운영 `delivery_vehicle_master` 목록은 현재 전 회사 0대다. 따라서 `delivery_vehicle_id`는 권역별 차량이 등록되고 사용자가 명시적으로 연결한 뒤에만 채운다.
 
 ## Root Cause
 
@@ -76,7 +77,7 @@
 - `assigned_staff_member_id uuid`: `app_users.id`가 아니라 **회사 소속 레코드인 `company_members.id`**를 참조한다. 퇴사·소속 해제와 동명이인을 회사 단위로 처리할 수 있다.
 - `delivery_vehicle_id uuid`: `delivery_vehicle_master.id`를 참조한다.
 
-직접 단일 FK만 두면 다른 회사의 직원·차량 ID가 들어갈 수 있으므로 `(company_id, id)` 복합 UNIQUE와 복합 FK를 사용한다. 삭제 시 과거 표시 문자열은 보존하고 ID만 `SET NULL`로 만드는 동작이 필요하지만 Postgres 복합 FK의 `ON DELETE SET NULL`은 `company_id`까지 비울 수 있으므로 사용하지 않는다. 삭제는 서비스 계층에서 참조 여부를 확인하고 ID를 먼저 null 처리한 뒤 수행하며 FK는 기본 `NO ACTION`으로 둔다.
+직접 단일 FK만 두면 다른 회사의 직원·차량 ID가 들어갈 수 있으므로 `(company_id, id)` 복합 UNIQUE와 복합 FK를 사용한다. 운영 DB는 PostgreSQL 17.6이다. PostgreSQL 15 이상에서는 복합 FK의 `ON DELETE SET NULL` 뒤에 null 처리할 컬럼 목록을 지정할 수 있으므로, `company_id`는 유지하고 `assigned_staff_member_id` 또는 `delivery_vehicle_id`만 null 처리한다.
 
 인덱스:
 
@@ -90,13 +91,14 @@
 3. 직원 후보 별칭은 활성 `company_members -> app_users.name`과, 해당 회원이 수락한 `staff_invitations.employee_name`·`assigned_manager_name`을 사용한다.
 4. 하나의 텍스트가 정확히 한 `company_members.id`로 수렴할 때만 백필한다.
 5. 후보 0개는 ID를 null로 두고 기존 text를 보존한다. 후보 2개 이상은 동명이인 검토 큐로 남기며 자동 배정하지 않는다.
-6. 차량은 같은 회사의 차량명 또는 번호판과 정확히 일치하고 후보가 하나일 때만 백필한다. 권역명처럼 보이는 현재 문자열은 자동 추론하지 않는다.
-7. 백필 전후 성공·미매칭·모호 건수를 회사별로 별도 결과 테이블 또는 실행 로그에 남긴다.
+6. `delivery_vehicle`은 권역 라벨로 영구 보존한다. 차량명·번호판과 문자열이 같아도 자동 백필하지 않는다.
+7. 차량 ID는 사용자가 확정한 `권역 라벨 -> delivery_vehicle_master.id` 매핑표로만 백필한다. 아직 차량 마스터가 0대이므로 현재 백필 대상은 없다.
+8. 백필 전후 성공·미매칭·모호 건수를 회사별로 별도 결과 테이블 또는 실행 로그에 남긴다.
 
 ### 3. 전환 기간 호환 전략
 
 - **읽기**: ID가 있으면 조인된 현재 직원명/차량명을 권위값으로 사용하고, ID가 없을 때만 기존 text로 폴백한다.
-- **쓰기**: 새 UI/API는 ID를 필수 선택값으로 전달한다. 전환 기간에는 같은 트랜잭션에서 ID와 당시 표시 문자열 스냅샷을 함께 갱신한다.
+- **쓰기**: 새 UI/API는 직원 membership ID와 차량 ID를 전달한다. 직원 text는 표시 스냅샷으로 함께 갱신하되, 차량의 `delivery_vehicle` text는 권역 라벨이므로 차량명으로 덮어쓰지 않는다.
 - **기존 클라이언트**: text만 보내는 요청은 회사 내부에서 유일 후보를 찾을 때만 ID도 채운다. 모호하거나 미매칭이면 text만 보존하고 경고 가능한 결과 코드를 반환한다.
 - **표시명 변경**: ID가 있는 거래처는 조인된 최신 이름을 표시하므로 배정이 끊기지 않는다. text는 마지막 저장 당시 스냅샷으로 유지한다.
 - **퇴사/차량 비활성화**: 참조 ID는 유지하되 선택 목록에서는 비활성 상태로 표시해 과거 배정을 추적한다. 실제 재배정 시 새 ID로 바꾼다.
@@ -118,7 +120,7 @@
 
 - **오늘 코스**: 로그인 사용자의 `company_members.id`와 거래처 `assigned_staff_member_id`를 직접 비교한다. 표시명 변경 후에도 코스가 유지된다.
 - **지도 담당자 필터**: 필터 value를 이름이 아닌 membership ID로 바꾼다. 동명이인은 이름이 같아도 별도 항목으로 표시한다.
-- **차량 필터/라이브 위치**: `delivery_vehicle_id`를 우선 사용하고 GPS 이벤트의 `user_id`를 membership으로 해석한다. 기존 `delivery_vehicle` 문자열은 레거시 폴백이다.
+- **차량 필터/라이브 위치**: `delivery_vehicle_id`를 우선 사용하고 GPS 이벤트의 `user_id`를 membership으로 해석한다. 기존 `delivery_vehicle` 문자열은 권역 라벨 및 ID 미지정 폴백으로 유지한다.
 - **담당자별 원장 범위 제한**: 영업·배송 직원의 허용 거래처 조건을 ID로 적용한다. 관리자/대표의 회사 전체 범위 규칙은 유지한다.
 - **완료·히스토리**: 과거 이벤트는 문자열뿐이므로 과거 조회는 문자열 폴백을 유지하고 신규 이벤트부터 ID 스냅샷 추가를 후속 검토한다.
 
@@ -132,34 +134,79 @@ PHASE 1에서는 기존 `customer_key`를 FK로 바꾸지 않는다.
 
 후속 단계에서는 `sales_transactions.customer_id uuid null`을 추가해 `(company_id, customer_id)` 복합 FK로 연결하고, 미매칭 거래는 `customer_key`로 보존하는 dual-reference 방식이 안전하다. 이는 배송 배정 ID 전환과 별도 마이그레이션으로 분리한다.
 
-## Migration SQL Draft — 실행 금지
+### 7. DELETE 경로 조사
+
+- `company_members` 직접 DELETE: `lib/store.ts`의 `leaveCustomerWorkspace` 한 곳. 새 FK는 `ON DELETE SET NULL (assigned_staff_member_id)`이므로 배정 거래처가 있어도 워크스페이스 나가기가 막히지 않는다.
+- `deleteStaffInvitation`: `company_members`를 삭제하지 않고 `status='inactive'`로 변경한다.
+- 개인 워크스페이스 정리의 `companies` DELETE: 회사 하위 거래처·소속·차량이 함께 cascade 삭제되므로 개별 배정 ID를 보존할 대상이 없다.
+- `delivery_vehicle_master` 직접 DELETE: 현재 없음. `app/api/delivery-vehicle-master/route.ts`와 `vehicleMasterRepository`는 생성·수정·상태 변경만 제공한다.
+- `deleteDeliveryVehicleFuelType`: 레거시 `delivery_vehicles` 행만 삭제하며 `delivery_vehicle_master`를 삭제하지 않는다.
+
+## Migration SQL Final — 적용 승인 전 실행 금지
+
+저장 파일: `supabase/migrations/20261014084917_phase1_customer_assignment_ids.sql`
 
 ```sql
 begin;
 
-alter table public.company_members
-  add constraint company_members_company_id_id_unique unique (company_id, id);
-
-alter table public.delivery_vehicle_master
-  add constraint delivery_vehicle_master_company_id_id_unique unique (company_id, id);
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
 
 alter table public.normalized_customers
-  add column assigned_staff_member_id uuid,
-  add column delivery_vehicle_id uuid;
+  add column if not exists assigned_staff_member_id uuid,
+  add column if not exists delivery_vehicle_id uuid;
 
-alter table public.normalized_customers
-  add constraint normalized_customers_assigned_staff_member_fk
-    foreign key (company_id, assigned_staff_member_id)
-    references public.company_members (company_id, id),
-  add constraint normalized_customers_delivery_vehicle_fk
-    foreign key (company_id, delivery_vehicle_id)
-    references public.delivery_vehicle_master (company_id, id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.company_members'::regclass
+      and conname = 'company_members_company_id_id_unique'
+  ) then
+    alter table public.company_members
+      add constraint company_members_company_id_id_unique unique (company_id, id);
+  end if;
 
-create index idx_normalized_customers_company_staff_assignment
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.delivery_vehicle_master'::regclass
+      and conname = 'delivery_vehicle_master_company_id_id_unique'
+  ) then
+    alter table public.delivery_vehicle_master
+      add constraint delivery_vehicle_master_company_id_id_unique unique (company_id, id);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.normalized_customers'::regclass
+      and conname = 'normalized_customers_assigned_staff_member_fk'
+  ) then
+    alter table public.normalized_customers
+      add constraint normalized_customers_assigned_staff_member_fk
+      foreign key (company_id, assigned_staff_member_id)
+      references public.company_members (company_id, id)
+      on delete set null (assigned_staff_member_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.normalized_customers'::regclass
+      and conname = 'normalized_customers_delivery_vehicle_fk'
+  ) then
+    alter table public.normalized_customers
+      add constraint normalized_customers_delivery_vehicle_fk
+      foreign key (company_id, delivery_vehicle_id)
+      references public.delivery_vehicle_master (company_id, id)
+      on delete set null (delivery_vehicle_id);
+  end if;
+end
+$$;
+
+create index if not exists idx_normalized_customers_company_staff_assignment
   on public.normalized_customers (company_id, assigned_staff_member_id)
   where assigned_staff_member_id is not null;
 
-create index idx_normalized_customers_company_vehicle_assignment
+create index if not exists idx_normalized_customers_company_vehicle_assignment
   on public.normalized_customers (company_id, delivery_vehicle_id)
   where delivery_vehicle_id is not null;
 
@@ -200,27 +247,28 @@ where nc.company_id = usa.company_id
   and nc.assigned_staff_member_id is null
   and lower(regexp_replace(btrim(nc.delivery_manager), '\s+', '', 'g')) = usa.alias_key;
 
--- 차량명 또는 번호판이 회사 내부의 한 차량으로만 수렴하는 경우에만 반영한다.
-with vehicle_aliases as (
-  select company_id, id as vehicle_id,
-         lower(regexp_replace(btrim(alias_value), '\s+', '', 'g')) as alias_key
-  from public.delivery_vehicle_master
-  cross join lateral unnest(array[name, plate_number]) alias_value
-), unique_vehicle_aliases as (
-  select company_id, alias_key, (array_agg(vehicle_id order by vehicle_id))[1] as vehicle_id
-  from vehicle_aliases
-  group by company_id, alias_key
-  having count(distinct vehicle_id) = 1
-)
-update public.normalized_customers nc
-set delivery_vehicle_id = uva.vehicle_id
-from unique_vehicle_aliases uva
-where nc.company_id = uva.company_id
-  and nc.delivery_vehicle_id is null
-  and lower(regexp_replace(btrim(nc.delivery_vehicle), '\s+', '', 'g')) = uva.alias_key;
 ```
 
-백필 실행 전에는 동일 CTE를 `SELECT`로 바꿔 성공·미매칭·모호 목록을 검토해야 한다. 현재 운영 데이터 기준 차량 자동 백필 예상은 0/27이므로, 차량 27건은 마스터 차량 선택을 통한 수동 정리가 필요하다.
+차량 백필은 위 직원 백필 SQL과 별도로 취급한다. 사용자가 권역별 차량을 확정하기 전에는 차량 UPDATE SQL을 만들거나 실행하지 않는다. 확정 후에는 다음처럼 명시적 매핑만 사용한다.
+
+```sql
+-- 실행 금지: 사용자가 실제 vehicle_id를 확정한 뒤 VALUES를 채워 별도 승인한다.
+with approved_vehicle_mapping(company_id, territory_label, vehicle_id) as (
+  values
+    -- ('<company_uuid>'::uuid, '강남', '<vehicle_uuid>'::uuid)
+    (null::uuid, null::text, null::uuid)
+)
+update public.normalized_customers nc
+set delivery_vehicle_id = m.vehicle_id
+from approved_vehicle_mapping m
+join public.delivery_vehicle_master v
+  on v.company_id = m.company_id and v.id = m.vehicle_id
+where m.company_id is not null
+  and nc.company_id = m.company_id
+  and nc.delivery_vehicle = m.territory_label;
+```
+
+백필 실행 전에는 동일 후보 로직을 `SELECT`로 바꿔 성공·미매칭·모호 목록을 검토해야 한다.
 
 ## Rollback
 
@@ -255,11 +303,11 @@ commit;
 1. 직원명 변경 전후 동일 membership에 배정된 오늘 코스가 유지된다.
 2. 같은 이름의 직원 2명이 있어도 ID 선택으로 서로 다른 거래처가 표시된다.
 3. 타 회사 membership/vehicle ID를 저장하면 FK 또는 서버 검증으로 거부된다.
-4. ID가 null인 기존 거래처는 text 폴백으로 기존 지도·코스에 계속 보인다.
+4. ID가 null인 기존 거래처는 text 폴백으로 기존 지도·코스에 계속 보이며 `delivery_vehicle` 권역 라벨이 유지된다.
 5. 퇴사 직원·비활성 차량의 과거 배정은 조회되며 신규 선택 목록에서는 상태가 표시된다.
-6. 거래처 단건 저장, 일괄 담당자 변경, 일괄 차량 변경 후 ID와 text 스냅샷이 함께 갱신된다.
+6. 거래처 단건 저장과 일괄 담당자 변경 후 직원 ID와 표시 스냅샷이 함께 갱신되고, 차량 지정 후에도 기존 권역 라벨은 바뀌지 않는다.
 7. 기사 계정은 자기 membership ID로 배정된 거래처만 보고, 대표/관리자는 회사 전체를 본다.
-8. 마주식자재 백필 dry-run은 직원 27/27(초대 별칭 포함), 차량 0/27을 예상하며 실제 UPDATE 전 결과가 일치해야 한다.
+8. 마주식자재 직원 백필 dry-run은 27/27(초대 별칭 포함)을 예상한다. 차량은 사용자가 권역별 차량을 지정하기 전 0/27을 유지한다.
 9. `sales_transactions` import·중복 병합·원장 조회는 이번 단계 전후 동일하게 동작한다.
 
 ## Completion Criteria
