@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   }
 
   const assignmentKeys = getCustomerAssignmentKeys(scope.customerSession);
-  const allowedCustomerIds = assignmentKeys?.length
+  const allowedCustomerIds = assignmentKeys
     ? (
         await Promise.all(
           customerIds.map(async (customerId) => ({

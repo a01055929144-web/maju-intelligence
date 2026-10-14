@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
-import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin } from "./store";
+import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 
@@ -16,6 +16,7 @@ export type CustomerSession = {
   appRole: Extract<AppUserRole, "customer_user">;
   companyId: string;
   companyName: string;
+  companyMemberId?: string;
   email: string;
   role: "owner" | "member";
   name: string;
@@ -107,6 +108,7 @@ export async function getCustomerSession() {
     const role: CustomerSession["role"] = workspaceRole === "owner" ? "owner" : "member";
     return {
       ...session,
+      companyMemberId: membership.companyMemberId,
       assignedManagerName: membership.assignedManagerName,
       assignedVehicle: membership.assignedVehicle,
       operationalDisplayName: role === "owner" ? membership.companyOwnerName : session.operationalDisplayName,
@@ -201,19 +203,18 @@ export function shouldScopeCustomerData(session: CustomerSession | null) {
   return role !== "owner" && role !== "manager";
 }
 
-export function getCustomerAssignmentKeys(session: CustomerSession | null) {
+export function getCustomerAssignmentKeys(session: CustomerSession | null): CustomerAssignmentScope | undefined {
   if (!session) return undefined;
   if (!shouldScopeCustomerData(session)) return undefined;
-  return [
-    session.userId,
-    session.name,
-    session.email,
-    session.assignedManagerName,
-    session.assignedVehicle,
-    session.invitedEmployeeName
-  ]
-    .map((value) => value?.trim())
-    .filter(Boolean) as string[];
+  return {
+    staffMemberId: session.companyMemberId,
+    legacyManagerKeys: [session.userId, session.name, session.email, session.assignedManagerName, session.invitedEmployeeName]
+      .map((value) => value?.trim())
+      .filter(Boolean) as string[],
+    legacyTerritoryKeys: [session.assignedVehicle]
+      .map((value) => value?.trim())
+      .filter(Boolean) as string[]
+  };
 }
 
 /** Returns the stable operations-facing name used by delivery, GPS, and assignment screens. */

@@ -174,6 +174,11 @@ export type CustomerMasterItem = {
   // 서버가 확인할 수 있습니다.
   updatedAt?: string;
 };
+export type CustomerAssignmentScope = {
+  staffMemberId?: string;
+  legacyManagerKeys: string[];
+  legacyTerritoryKeys: string[];
+};
 export type CustomerMasterInput = {
   address?: string;
   bankAccountFileUrl?: string;
@@ -2413,8 +2418,11 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   if (acceptedInvitations.length) {
     const { customers } = await getCustomerMaster(companyId).catch(() => ({ customers: [] as CustomerMasterItem[] }));
     for (const invitation of acceptedInvitations) {
-      const keys = [invitation.employeeName, invitation.assignedManagerName, invitation.assignedVehicle].filter(Boolean) as string[];
-      invitation.matchedCustomerCount = filterCustomersByAssignment(customers, keys).length;
+      const assignmentScope: CustomerAssignmentScope = {
+        legacyManagerKeys: [invitation.employeeName, invitation.assignedManagerName].filter(Boolean) as string[],
+        legacyTerritoryKeys: [invitation.assignedVehicle].filter(Boolean) as string[]
+      };
+      invitation.matchedCustomerCount = filterCustomersByAssignment(customers, assignmentScope).length;
     }
   }
 
@@ -2692,6 +2700,7 @@ async function getStaffAssignmentOverride(
 
 export async function getActiveCustomerMembership(input: { companyId: string; userId: string }): Promise<{
   active: boolean;
+  companyMemberId?: string;
   assignedManagerName?: string;
   assignedVehicle?: string;
   companyOwnerName?: string;
@@ -2703,12 +2712,13 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
 
   const rows = await supabaseRequest<
     Array<{
+      id: string;
       role: StaffInvitation["role"] | "owner" | "member";
       app_users: { phone: string | null; status: string | null } | null;
       companies: { owner_name: string | null; status: string | null } | null;
     }>
   >(
-    `company_members?select=role,app_users(status,phone),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
+    `company_members?select=id,role,app_users(status,phone),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
       input.userId
     )}&status=eq.active&limit=1`
   );
@@ -2720,6 +2730,7 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
   const assignment = await getStaffAssignmentOverride(input.companyId, input.userId);
   return {
     active: true,
+    companyMemberId: member.id,
     assignedManagerName: assignment?.assignedManagerName,
     assignedVehicle: assignment?.assignedVehicle,
     companyOwnerName: member.companies?.owner_name?.trim() || undefined,
@@ -4064,7 +4075,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
 
 export async function getCustomerMaster(
   companyId?: string,
-  options?: { assignmentKeys?: string[]; offset?: number }
+  options?: { assignmentKeys?: CustomerAssignmentScope; offset?: number }
 ): Promise<{ customers: CustomerMasterItem[]; source: "empty" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
   const offset = Math.max(0, Math.floor(options?.offset || 0));
@@ -4278,13 +4289,14 @@ export type CustomerMapSummaryItem = {
  */
 export async function getCustomerMapSummaries(
   companyId?: string,
-  options?: { assignmentKeys?: string[] }
+  options?: { assignmentKeys?: CustomerAssignmentScope }
 ): Promise<{ customers: CustomerMapSummaryItem[]; source: "empty" | "supabase"; truncated: boolean }> {
   if (!isProductionStoreConfigured()) return { customers: [], source: "empty", truncated: false };
 
   const id = companyId || getDefaultCompanyId();
   type CustomerMapRow = {
     address: string | null;
+    assigned_staff_member_id?: string | null;
     customer_name: string;
     delivery_manager: string | null;
     delivery_vehicle?: string | null;
@@ -4297,11 +4309,13 @@ export async function getCustomerMapSummaries(
   };
   const baseSelect = "id,customer_name,region,address,monthly_revenue,delivery_manager,email,phone";
   let rows: CustomerMapRow[];
+  let fetchedAssignmentIds = false;
   let fetchedGradeOverride = false;
   try {
     rows = await supabaseRequest<CustomerMapRow[]>(
-      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override,assigned_staff_member_id&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
+    fetchedAssignmentIds = true;
     fetchedGradeOverride = true;
   } catch (error) {
     if (!isMissingColumnError(error)) throw error;
@@ -4334,12 +4348,16 @@ export async function getCustomerMapSummaries(
     }
   }
 
-  const assignmentKeys = (options?.assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
   const customers = rows
     .filter((row) => {
-      if (!assignmentKeys.length) return true;
-      const fields = [row.delivery_manager, row.delivery_vehicle, row.email, row.phone].map(normalizeAssignmentKey).filter(Boolean);
-      return fields.some((field) => assignmentKeys.some((key) => matchesAssignmentKey(field, key)));
+      if (!options?.assignmentKeys) return true;
+      return matchesCustomerAssignmentScope({
+        assignedStaffMemberId: fetchedAssignmentIds ? row.assigned_staff_member_id || undefined : undefined,
+        deliveryManager: row.delivery_manager || undefined,
+        deliveryVehicle: row.delivery_vehicle || undefined,
+        email: row.email || undefined,
+        phone: row.phone || undefined
+      }, options.assignmentKeys);
     })
     .map((row) => {
       const monthlyRevenue = Number(row.monthly_revenue || 0);
@@ -4370,51 +4388,57 @@ function matchesAssignmentKey(field: string, key: string) {
   return field.length >= 5 && key.length >= 5 && (field.includes(key) || key.includes(field));
 }
 
-export function filterCustomersByAssignment(customers: CustomerMasterItem[], assignmentKeys?: string[]) {
-  const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
-  if (!normalizedKeys.length) return customers;
+type CustomerAssignmentFields = Pick<CustomerMasterItem, "assignedStaffMemberId" | "deliveryManager" | "deliveryVehicle" | "email" | "phone">;
 
-  return customers.filter((customer) => {
-    const assignmentFields = [
-      customer.deliveryManager,
-      customer.deliveryVehicle,
-      customer.email,
-      customer.phone
-    ].map(normalizeAssignmentKey).filter(Boolean);
+function matchesCustomerAssignmentScope(customer: CustomerAssignmentFields, scope: CustomerAssignmentScope) {
+  const staffMatch = Boolean(scope.staffMemberId && customer.assignedStaffMemberId === scope.staffMemberId);
+  const managerKeys = scope.legacyManagerKeys.map(normalizeAssignmentKey).filter(Boolean);
+  const territoryKeys = scope.legacyTerritoryKeys.map(normalizeAssignmentKey).filter(Boolean);
+  const managerFields = [customer.deliveryManager, customer.email, customer.phone].map(normalizeAssignmentKey).filter(Boolean);
+  const territory = normalizeAssignmentKey(customer.deliveryVehicle);
 
-    return assignmentFields.some((field) => normalizedKeys.some((key) => matchesAssignmentKey(field, key)));
-  });
+  // A stable staff assignment replaces only the legacy manager-name branch. Territory remains an
+  // independent delivery access path, so backfilling salesperson A never hides the customer from driver B.
+  const legacyManagerMatch = !customer.assignedStaffMemberId
+    && managerFields.some((field) => managerKeys.some((key) => matchesAssignmentKey(field, key)));
+  const legacyTerritoryMatch = Boolean(
+    territory && territoryKeys.some((key) => matchesAssignmentKey(territory, key))
+  );
+  return staffMatch || legacyManagerMatch || legacyTerritoryMatch;
 }
 
-export async function canAccessAssignedCustomer(companyId: string | undefined, customerId: string, assignmentKeys?: string[]) {
-  const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
-  if (!normalizedKeys.length || customerId.startsWith("sample-") || customerId.startsWith("local-")) return true;
+export function filterCustomersByAssignment(customers: CustomerMasterItem[], assignmentScope?: CustomerAssignmentScope) {
+  if (!assignmentScope) return customers;
+  return customers.filter((customer) => matchesCustomerAssignmentScope(customer, assignmentScope));
+}
+
+export async function canAccessAssignedCustomer(companyId: string | undefined, customerId: string, assignmentScope?: CustomerAssignmentScope) {
+  if (!assignmentScope || customerId.startsWith("sample-") || customerId.startsWith("local-")) return true;
   if (!isProductionStoreConfigured()) return true;
 
   const rows = await supabaseRequest<
     Array<{
+      assigned_staff_member_id?: string | null;
       delivery_manager: string | null;
       delivery_vehicle?: string | null;
       email: string | null;
       phone: string | null;
     }>
   >(
-    `normalized_customers?select=delivery_manager,delivery_vehicle,email,phone&company_id=eq.${encodeURIComponent(
+    `normalized_customers?select=assigned_staff_member_id,delivery_manager,delivery_vehicle,email,phone&company_id=eq.${encodeURIComponent(
       companyId || getDefaultCompanyId()
     )}&id=eq.${encodeURIComponent(customerId)}&limit=1`
   ).catch(() => []);
   const row = rows[0];
   if (!row) return false;
 
-  return [
-    row.delivery_manager,
-    row.delivery_vehicle,
-    row.email,
-    row.phone
-  ]
-    .map(normalizeAssignmentKey)
-    .filter(Boolean)
-    .some((field) => normalizedKeys.some((key) => matchesAssignmentKey(field, key)));
+  return matchesCustomerAssignmentScope({
+    assignedStaffMemberId: row.assigned_staff_member_id || undefined,
+    deliveryManager: row.delivery_manager || undefined,
+    deliveryVehicle: row.delivery_vehicle || undefined,
+    email: row.email || undefined,
+    phone: row.phone || undefined
+  }, assignmentScope);
 }
 
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
@@ -9558,7 +9582,7 @@ export async function saveRouteOrderConfirmation(companyId: string | undefined, 
   return { persisted: true };
 }
 
-export async function getTodayRoutePlan(companyId?: string, options?: { assignmentKeys?: string[] }): Promise<RoutePlan> {
+export async function getTodayRoutePlan(companyId?: string, options?: { assignmentKeys?: CustomerAssignmentScope }): Promise<RoutePlan> {
   const resolvedCompanyId = companyId || getDefaultCompanyId();
   const [routeCache, customerMaster, routeOrderConfirmations] = await Promise.all([
     getRouteDistanceCacheMap(resolvedCompanyId),

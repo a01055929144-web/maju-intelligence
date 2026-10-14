@@ -39,20 +39,18 @@ describe("organization data exposure policy", () => {
     const session = makeSession("driver", {
       assignedManagerName: " 김배송 ",
       assignedVehicle: " 1호차 ",
+      companyMemberId: "member-123",
       invitedEmployeeName: "김 기사",
       name: "카카오닉네임",
       userId: "user-123"
     });
 
     expect(shouldScopeCustomerData(session)).toBe(true);
-    expect(getCustomerAssignmentKeys(session)).toEqual([
-      "user-123",
-      "카카오닉네임",
-      "driver@example.com",
-      "김배송",
-      "1호차",
-      "김 기사"
-    ]);
+    expect(getCustomerAssignmentKeys(session)).toEqual({
+      staffMemberId: "member-123",
+      legacyManagerKeys: ["user-123", "카카오닉네임", "driver@example.com", "김배송", "김 기사"],
+      legacyTerritoryKeys: ["1호차"]
+    });
   });
 
   it("does not apply assignment filtering to owners or managers", () => {

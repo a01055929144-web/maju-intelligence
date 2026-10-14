@@ -73,10 +73,75 @@ describe("filterCustomersByAssignment", () => {
       visitCount: 0
     };
 
-    expect(filterCustomersByAssignment([customer], ["정두영"])).toEqual([customer]);
-    expect(filterCustomersByAssignment([customer], ["의정부"])).toEqual([customer]);
-    expect(filterCustomersByAssignment([customer], ["현재 직원명"])).toEqual([]);
-    expect(filterCustomersByAssignment([customer], ["12가 3456"])).toEqual([]);
+    expect(filterCustomersByAssignment([customer], {
+      staffMemberId: "member-1",
+      legacyManagerKeys: [],
+      legacyTerritoryKeys: []
+    })).toEqual([customer]);
+    expect(filterCustomersByAssignment([customer], {
+      staffMemberId: "driver-member",
+      legacyManagerKeys: [],
+      legacyTerritoryKeys: ["의정부"]
+    })).toEqual([customer]);
+    expect(filterCustomersByAssignment([customer], {
+      legacyManagerKeys: ["현재 직원명"],
+      legacyTerritoryKeys: []
+    })).toEqual([]);
+    expect(filterCustomersByAssignment([customer], {
+      legacyManagerKeys: [],
+      legacyTerritoryKeys: ["12가 3456"]
+    })).toEqual([]);
+  });
+
+  it("keeps territory driver B access after salesperson A ID is backfilled", () => {
+    const customer = {
+      address: "서울 강남구",
+      assignedStaffMemberId: "salesperson-a",
+      customerName: "강남 거래처",
+      deliveryKm: 0,
+      deliveryManager: "영업 A",
+      deliveryVehicle: "강남",
+      grade: "C" as const,
+      id: "customer-2",
+      industry: "미분류",
+      lastOrderDays: 0,
+      memoCount: 0,
+      monthlyRevenue: 0,
+      region: "강남",
+      visitCount: 0
+    };
+
+    expect(filterCustomersByAssignment([customer], {
+      staffMemberId: "driver-b",
+      legacyManagerKeys: ["배송 B"],
+      legacyTerritoryKeys: ["강남"]
+    })).toEqual([customer]);
+  });
+
+  it("uses the legacy manager name only while the stable staff assignment is absent", () => {
+    const legacyCustomer = {
+      address: "인천광역시",
+      customerName: "레거시 거래처",
+      deliveryKm: 0,
+      deliveryManager: "초대 별칭",
+      deliveryVehicle: "인천",
+      grade: "C" as const,
+      id: "customer-legacy",
+      industry: "미분류",
+      lastOrderDays: 0,
+      memoCount: 0,
+      monthlyRevenue: 0,
+      region: "인천",
+      visitCount: 0
+    };
+    const scope = {
+      staffMemberId: "member-other",
+      legacyManagerKeys: ["초대 별칭"],
+      legacyTerritoryKeys: []
+    };
+
+    expect(filterCustomersByAssignment([legacyCustomer], scope)).toEqual([legacyCustomer]);
+    expect(filterCustomersByAssignment([{ ...legacyCustomer, assignedStaffMemberId: "member-a" }], scope)).toEqual([]);
   });
 });
 
