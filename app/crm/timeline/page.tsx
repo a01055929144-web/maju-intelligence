@@ -34,6 +34,7 @@ type DbSummary = {
 type CustomerView = {
   id?: string;
   address: string;
+  assignmentDisplayManager?: string;
   bankAccountFileUrl?: string;
   businessLicenseFileUrl?: string;
   businessNumber?: string;
@@ -1566,7 +1567,7 @@ export default function CrmTimelinePage() {
                   <p className="mb-1 text-xs font-black uppercase tracking-wide text-teal-700">2 · 원장 보완</p>
                   <h2 className="break-words text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{selectedCustomer.customerName}</h2>
                   <p className="mt-1.5 break-words text-sm font-bold leading-5 text-slate-500">
-                    {selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
+                    {selectedCustomer.assignmentDisplayManager || selectedCustomer.deliveryManager} · {selectedCustomer.region} · {selectedCustomer.address}
                   </p>
                   {duplicateCandidates.length ? (
                     <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
@@ -1700,7 +1701,7 @@ export default function CrmTimelinePage() {
                     helper={operationsStatus === "ready" ? "상담·배송 특이사항" : "기존 기록을 미등록으로 판정하지 않습니다"}
                     tone="slate"
                   />
-                  <PriorityTile label="담당 배송자" value={selectedCustomer.deliveryManager || "미지정"} helper={`${selectedCustomer.region || "미분류"} 권역`} tone="emerald" />
+                  <PriorityTile label="담당 배송자" value={selectedCustomer.assignmentDisplayManager || selectedCustomer.deliveryManager || "미지정"} helper={`${selectedCustomer.region || "미분류"} 권역`} tone="emerald" />
                 </div>
               </div>
               <OperationalActionStrip
@@ -1912,7 +1913,7 @@ export default function CrmTimelinePage() {
                       <LedgerSectionLabel eyebrow="Operation" title="배송 / 운영 정보" />
                       <DetailRow label="지역" value={selectedCustomer.region} />
                       <DetailRow label="주소" value={selectedCustomer.address} />
-                      <DetailRow label="담당자" value={selectedCustomer.deliveryManager} />
+                      <DetailRow label="담당자" value={selectedCustomer.assignmentDisplayManager || selectedCustomer.deliveryManager} />
                       <DetailRow label="출발지 거리" value={`${selectedCustomer.deliveryKm}km`} />
                       <DetailRow label="최근 주문" value={`${selectedCustomer.lastOrderDays}일 전`} />
                     </div>

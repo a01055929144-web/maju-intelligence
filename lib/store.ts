@@ -123,6 +123,7 @@ export type CompanySettingsInput = {
 export type CustomerMasterItem = {
   id: string;
   address: string;
+  assignmentDisplayManager?: string;
   assignedStaffMemberId?: string;
   assignedStaffName?: string;
   bankAccountFileUrl?: string;
@@ -4369,7 +4370,7 @@ function matchesAssignmentKey(field: string, key: string) {
   return field.length >= 5 && key.length >= 5 && (field.includes(key) || key.includes(field));
 }
 
-function filterCustomersByAssignment(customers: CustomerMasterItem[], assignmentKeys?: string[]) {
+export function filterCustomersByAssignment(customers: CustomerMasterItem[], assignmentKeys?: string[]) {
   const normalizedKeys = (assignmentKeys || []).map(normalizeAssignmentKey).filter(Boolean);
   if (!normalizedKeys.length) return customers;
 
@@ -11939,18 +11940,6 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
   };
 }
 
-export function resolveCustomerAssignmentDisplay(input: {
-  assignedStaffName?: string | null;
-  deliveryManager?: string | null;
-  deliveryVehicleName?: string | null;
-  deliveryVehicleTerritory?: string | null;
-}) {
-  return {
-    deliveryManager: input.assignedStaffName?.trim() || input.deliveryManager?.trim() || undefined,
-    deliveryVehicle: input.deliveryVehicleName?.trim() || input.deliveryVehicleTerritory?.trim() || undefined
-  };
-}
-
 function toCustomerMasterItem(
   row: {
     id: string;
@@ -12003,16 +11992,11 @@ function toCustomerMasterItem(
   index: number
 ): CustomerMasterItem {
   const monthlyRevenue = Number(row.monthly_revenue || 0);
-  const assignmentDisplay = resolveCustomerAssignmentDisplay({
-    assignedStaffName: row.assigned_staff_name,
-    deliveryManager: row.delivery_manager,
-    deliveryVehicleName: row.delivery_vehicle_name,
-    deliveryVehicleTerritory: row.delivery_vehicle
-  });
 
   return {
     id: row.id,
     address: row.address || "",
+    assignmentDisplayManager: row.assigned_staff_name || row.delivery_manager || undefined,
     assignedStaffMemberId: row.assigned_staff_member_id || undefined,
     assignedStaffName: row.assigned_staff_name || undefined,
     bankAccountFileUrl: row.bank_account_file_url || undefined,
@@ -12023,9 +12007,9 @@ function toCustomerMasterItem(
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
     deliveryKm: Number(row.delivery_km || 0),
-    deliveryManager: assignmentDisplay.deliveryManager,
+    deliveryManager: row.delivery_manager || undefined,
     deliveryMinutes: row.delivery_minutes || undefined,
-    deliveryVehicle: assignmentDisplay.deliveryVehicle,
+    deliveryVehicle: row.delivery_vehicle || undefined,
     deliveryVehicleId: row.delivery_vehicle_id || undefined,
     deliveryVehicleName: row.delivery_vehicle_name || undefined,
     deliveryVehicleTerritory: row.delivery_vehicle || undefined,

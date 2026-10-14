@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLeadEnrichmentEventOutcome,
+  filterCustomersByAssignment,
   makeCustomerKey,
   normalizeBusinessNumber,
-  normalizeNameForDuplicateCheck,
-  resolveCustomerAssignmentDisplay
+  normalizeNameForDuplicateCheck
 } from "../lib/store";
 
 describe("normalizeBusinessNumber", () => {
@@ -51,27 +51,32 @@ describe("normalizeNameForDuplicateCheck", () => {
   });
 });
 
-describe("resolveCustomerAssignmentDisplay", () => {
-  it("prefers joined current names when assignment IDs have resolved", () => {
-    expect(
-      resolveCustomerAssignmentDisplay({
-        assignedStaffName: "현재 직원명",
-        deliveryManager: "기존 담당자명",
-        deliveryVehicleName: "12가 3456",
-        deliveryVehicleTerritory: "강남"
-      })
-    ).toEqual({ deliveryManager: "현재 직원명", deliveryVehicle: "12가 3456" });
-  });
+describe("filterCustomersByAssignment", () => {
+  it("keeps legacy manager and territory matching after stable assignment IDs are populated", () => {
+    const customer = {
+      address: "경기도 의정부시",
+      assignedStaffMemberId: "member-1",
+      assignedStaffName: "현재 직원명",
+      assignmentDisplayManager: "현재 직원명",
+      customerName: "테스트 거래처",
+      deliveryKm: 0,
+      deliveryManager: "정두영",
+      deliveryVehicle: "의정부",
+      deliveryVehicleId: "vehicle-1",
+      deliveryVehicleName: "12가 3456",
+      grade: "C" as const,
+      id: "customer-1",
+      industry: "미분류",
+      lastOrderDays: 0,
+      monthlyRevenue: 0,
+      region: "의정부",
+      visitCount: 0
+    };
 
-  it("keeps the legacy text display unchanged while assignment IDs are empty", () => {
-    expect(
-      resolveCustomerAssignmentDisplay({
-        assignedStaffName: null,
-        deliveryManager: "정두영",
-        deliveryVehicleName: null,
-        deliveryVehicleTerritory: "의정부"
-      })
-    ).toEqual({ deliveryManager: "정두영", deliveryVehicle: "의정부" });
+    expect(filterCustomersByAssignment([customer], ["정두영"])).toEqual([customer]);
+    expect(filterCustomersByAssignment([customer], ["의정부"])).toEqual([customer]);
+    expect(filterCustomersByAssignment([customer], ["현재 직원명"])).toEqual([]);
+    expect(filterCustomersByAssignment([customer], ["12가 3456"])).toEqual([]);
   });
 });
 
