@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, Copy, FileText, Loader2, Plus, Search, Share2, Trash2, X } from "lucide-react";
 import {
   applyDefaultMargin,
@@ -10,6 +10,8 @@ import {
   type QuoteLine
 } from "@/domains/quote/quote";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import type { SalesQuoteEditorData } from "@/lib/store";
+import type { SalesQuoteFieldErrors } from "@/domains/quote/quote";
 
 type CatalogItem = {
   id: string;
@@ -27,13 +29,17 @@ type CatalogItem = {
 type IssuedQuote = { publicUrl: string; quoteNumber: string };
 
 export function MobileQuoteBuilder({
+  customerId,
+  initialQuote,
   leadId,
   recipientName,
   recipientPhone,
   contactMemo,
   onIssued
 }: {
-  leadId: string;
+  customerId?: string;
+  initialQuote?: SalesQuoteEditorData;
+  leadId?: string;
   recipientName: string;
   recipientPhone?: string;
   contactMemo: string;
@@ -42,18 +48,30 @@ export function MobileQuoteBuilder({
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
-  const [lines, setLines] = useState<QuoteLine[]>([]);
-  const [margin, setMargin] = useState(12);
-  const [validDays, setValidDays] = useState(14);
+  const initialLines = initialQuote?.items.map((item, index) => ({
+    catalogProductId: item.productCatalogId, id: `saved-${index}`, item: item.productName,
+    marginRate: item.marginPercent, matchStatus: item.isCustomRequest ? "requested" as const : "matched" as const,
+    photoUrl: item.photoUrl, purchasePrice: item.purchaseUnitPrice, qty: item.quantity, spec: item.specification || "", unit: item.unit || "EA",
+    unitPrice: item.salesUnitPrice
+  })) || [];
+  const initialValidDays = initialQuote ? Math.max(1, Math.ceil((new Date(initialQuote.validUntil).getTime() - Date.now()) / 86_400_000)) : 14;
+  const [lines, setLines] = useState<QuoteLine[]>(initialLines);
+  const [margin, setMargin] = useState(initialQuote?.defaultMarginPercent || 12);
+  const [validDays, setValidDays] = useState(initialValidDays);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [issued, setIssued] = useState<IssuedQuote | null>(null);
+  const [messageTone, setMessageTone] = useState<"error" | "success">("error");
+  const [issued, setIssued] = useState<IssuedQuote | null>(initialQuote?.status === "sent" ? { publicUrl: `/quote/${initialQuote.publicToken}`, quoteNumber: initialQuote.quoteNumber } : null);
+  const [quoteId, setQuoteId] = useState(initialQuote?.id || "");
+  const [fieldErrors, setFieldErrors] = useState<SalesQuoteFieldErrors>({});
   const [copied, setCopied] = useState(false);
   const [photos, setPhotos] = useState<Record<string, File>>({});
   const [photoStates, setPhotoStates] = useState<Record<string, "idle" | "uploading" | "uploaded" | "error">>({});
   const [uploadedPhotoPaths, setUploadedPhotoPaths] = useState<Record<string, string>>({});
-  const [savedPreferences, setSavedPreferences] = useState({ margin: 12, validDays: 14 });
-  const [savedDraftSignature, setSavedDraftSignature] = useState("");
+  const [savedPreferences, setSavedPreferences] = useState({ margin: initialQuote?.defaultMarginPercent || 12, validDays: initialValidDays });
+  const [savedDraftSignature, setSavedDraftSignature] = useState(initialQuote ? JSON.stringify({ lines: initialLines, margin: initialQuote.defaultMarginPercent, photos: [], validDays: initialValidDays }) : "");
+  const localDraftKey = `maju:quote-composer:v1:${initialQuote?.id || leadId || customerId || "unlinked"}`;
+  const restoredLocalDraftRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -76,12 +94,31 @@ export function MobileQuoteBuilder({
   }, []);
 
   useEffect(() => {
+    if (initialQuote) return;
+    try {
+      const raw = window.localStorage.getItem(localDraftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as { lines?: QuoteLine[]; margin?: number; validDays?: number };
+      if (!draft.lines?.length || !window.confirm("작성 중인 견적이 있습니다. 불러올까요?")) return;
+      restoredLocalDraftRef.current = true;
+      setLines(draft.lines);
+      if (Number.isFinite(draft.margin)) setMargin(Number(draft.margin));
+      if (Number.isFinite(draft.validDays)) setValidDays(Number(draft.validDays));
+      setMessage("브라우저에 보관된 작성 중 견적을 불러왔습니다.");
+      setMessageTone("success");
+    } catch {
+      // 저장소 접근 제한이나 손상된 임시 데이터는 작성 흐름을 막지 않습니다.
+    }
+  }, [initialQuote, localDraftKey]);
+
+  useEffect(() => {
+    if (initialQuote) return;
     let active = true;
     void fetch("/api/customer/settings", { cache: "no-store" })
       .then(async (response) => {
         const payload = (await response.json().catch(() => null)) as { company?: { defaultQuoteMarginPercent?: number; defaultQuoteValidDays?: number }; message?: string } | null;
         if (!response.ok) throw new Error(payload?.message || "견적 기본 설정을 불러오지 못했습니다.");
-        if (!active) return;
+        if (!active || restoredLocalDraftRef.current) return;
         const nextMargin = Number(payload?.company?.defaultQuoteMarginPercent);
         const nextValidDays = Number(payload?.company?.defaultQuoteValidDays);
         const resolvedMargin = [10, 12, 15].includes(nextMargin) ? nextMargin : 12;
@@ -92,7 +129,7 @@ export function MobileQuoteBuilder({
       })
       .catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "견적 기본 설정을 불러오지 못했습니다."); });
     return () => { active = false; };
-  }, []);
+  }, [initialQuote]);
 
   const totals = useMemo(() => calculateQuoteTotals(lines), [lines]);
   const draftSignature = useMemo(() => JSON.stringify({
@@ -103,6 +140,13 @@ export function MobileQuoteBuilder({
   }), [lines, margin, photos, validDays]);
   const hasDraftInput = lines.length > 0 || Object.keys(photos).length > 0 || margin !== savedPreferences.margin || validDays !== savedPreferences.validDays;
   useUnsavedChangesWarning(savedDraftSignature ? draftSignature !== savedDraftSignature : hasDraftInput);
+  useEffect(() => {
+    if (!hasDraftInput) return;
+    const timer = window.setTimeout(() => {
+      try { window.localStorage.setItem(localDraftKey, JSON.stringify({ lines, margin, validDays, savedAt: new Date().toISOString() })); } catch { /* 브라우저 저장 실패는 서버 저장을 막지 않습니다. */ }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [hasDraftInput, lines, localDraftKey, margin, validDays]);
   const candidates = useMemo(() => {
     const token = query.trim().toLocaleLowerCase("ko-KR");
     return catalog.filter((item) => !token || [item.name, item.salesName, item.spec, item.salesSpec].some((value) => value?.toLocaleLowerCase("ko-KR").includes(token))).slice(0, 20);
@@ -150,6 +194,7 @@ export function MobileQuoteBuilder({
       if (!photo || nextPaths[line.id]) continue;
       setPhotoStates((current) => ({ ...current, [line.id]: "uploading" }));
       const form = new FormData();
+      if (!leadId) throw new Error("사진 첨부는 리드 견적에서만 지원됩니다.");
       form.set("leadId", leadId);
       form.set("photo", photo);
       try {
@@ -167,24 +212,27 @@ export function MobileQuoteBuilder({
     return nextPaths;
   }
 
-  async function issueQuote() {
-    if (!contactMemo.trim()) return setMessage("견적 발행 전 컨택 메모를 입력해 주세요.");
-    if (!lines.length || lines.some((line) => !line.item.trim() || line.qty <= 0 || line.unitPrice <= 0)) {
-      return setMessage("상품명, 수량, 판매단가를 확인해 주세요.");
-    }
+  async function saveQuote(status: "draft" | "sent") {
+    const nextErrors: SalesQuoteFieldErrors = {};
+    if (!leadId && !customerId) nextErrors.subject = "리드 또는 거래처 연결이 필요합니다.";
+    if (!lines.length || lines.some((line) => !line.item.trim() || line.qty <= 0 || line.unitPrice < 0)) nextErrors.items = "상품명, 수량, 판매단가를 확인해 주세요.";
+    if (!Number.isFinite(margin) || margin < 0 || margin > 90) nextErrors.margin = "마진율은 0~90% 사이여야 합니다.";
+    if (status === "sent" && !contactMemo.trim() && !initialQuote) nextErrors.subject = "견적 발행 전 컨택 메모를 입력해 주세요.";
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length) { setMessageTone("error"); setMessage(Object.values(nextErrors)[0] || "입력값을 확인해 주세요."); return; }
     setSaving(true);
     setMessage("");
     try {
       const photoPaths = await uploadPendingPhotos();
-      const response = await fetch("/api/sales-quotes", {
-        method: "POST",
+      const response = await fetch(quoteId ? `/api/sales-quotes/${encodeURIComponent(quoteId)}` : "/api/sales-quotes", {
+        method: quoteId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           defaultMarginPercent: margin,
           items: lines.map((line) => ({
             isCustomRequest: line.matchStatus === "requested",
             marginPercent: line.marginRate,
-            photoUrl: photoPaths[line.id],
+            photoUrl: photoPaths[line.id] || line.photoUrl,
             productCatalogId: line.catalogProductId,
             productName: line.item.trim(),
             purchaseUnitPrice: line.purchasePrice,
@@ -193,22 +241,32 @@ export function MobileQuoteBuilder({
             specification: line.spec.trim(),
             unit: line.unit.trim()
           })),
+          customerId,
           leadId,
           memo: contactMemo.trim(),
           recipientName,
           recipientPhone,
+          status,
           title: `${recipientName} 식자재 견적서`,
           validUntil: resolveQuoteValidUntil(validDays)
         })
       });
-      const payload = (await response.json().catch(() => null)) as (IssuedQuote & { message?: string }) | null;
-      if (!response.ok || !payload?.publicUrl) throw new Error(payload?.message || "견적서를 발행하지 못했습니다.");
-      const next = { publicUrl: payload.publicUrl, quoteNumber: payload.quoteNumber };
-      setIssued(next);
+      const payload = (await response.json().catch(() => null)) as { fieldErrors?: SalesQuoteFieldErrors; id?: string; message?: string; publicUrl?: string; quoteNumber?: string } | null;
+      if (!response.ok || !payload?.quoteNumber) {
+        if (payload?.fieldErrors) setFieldErrors(payload.fieldErrors);
+        throw new Error(payload?.message || "견적서를 저장하지 못했습니다.");
+      }
+      setQuoteId(payload.id || quoteId);
+      const next = { publicUrl: payload.publicUrl || "", quoteNumber: payload.quoteNumber };
+      setIssued(status === "sent" ? next : null);
       setSavedDraftSignature(draftSignature);
-      setMessage("견적서가 저장되었습니다. 고객용 링크에는 원가와 마진이 표시되지 않습니다.");
-      onIssued(next);
+      setFieldErrors({});
+      try { window.localStorage.removeItem(localDraftKey); } catch { /* 저장 완료 후 정리 실패는 무시 */ }
+      setMessage(status === "draft" ? "견적을 임시저장했습니다. 고객에게는 공개되지 않습니다." : "견적서가 저장되었습니다. 고객용 링크에는 원가와 마진이 표시되지 않습니다.");
+      setMessageTone("success");
+      if (status === "sent" && payload.publicUrl) onIssued(next);
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "견적서를 발행하지 못했습니다.");
     } finally {
       setSaving(false);
@@ -242,13 +300,16 @@ export function MobileQuoteBuilder({
       <div className="mt-3 space-y-3">{lines.map((line, index) => <QuoteLineEditor key={line.id} index={index} line={line} photoState={photoStates[line.id] || "idle"} onPhotoChange={(file) => { setPhotos((current) => { const next = { ...current }; if (file) next[line.id] = file; else delete next[line.id]; return next; }); setUploadedPhotoPaths((current) => { const next = { ...current }; delete next[line.id]; return next; }); setPhotoStates((current) => ({ ...current, [line.id]: "idle" })); updateLine(line.id, { requestPhotoName: file?.name }); }} onChange={(patch) => updateLine(line.id, patch)} onRemove={() => setLines((current) => current.filter((item) => item.id !== line.id))} />)}</div>
       {!lines.length ? <p className="mt-3 rounded-lg border border-dashed border-teal-200 bg-white p-4 text-center text-xs font-semibold text-slate-500">견적 품목을 추가해 주세요.</p> : null}
 
+      {fieldErrors.subject ? <p className="mt-3 text-xs font-semibold text-rose-700">{fieldErrors.subject}</p> : null}
+      {fieldErrors.items ? <p className="mt-2 text-xs font-semibold text-rose-700">{fieldErrors.items}</p> : null}
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <label className="text-[11px] font-semibold">기본 마진율<select className="mobile-input mt-1 min-h-10 w-full rounded-lg border px-2 text-sm" value={margin} onChange={(event) => changeMargin(Number(event.target.value))}>{[10,12,15].map((value) => <option key={value} value={value}>{value}%</option>)}</select></label>
-        <label className="text-[11px] font-semibold">유효기간<select className="mobile-input mt-1 min-h-10 w-full rounded-lg border px-2 text-sm" value={validDays} onChange={(event) => setValidDays(Number(event.target.value))}>{[7,14,30].map((value) => <option key={value} value={value}>{value}일</option>)}</select></label>
+        <label className="text-[11px] font-semibold">기본 마진율<select aria-invalid={Boolean(fieldErrors.margin)} className="mobile-input mt-1 min-h-10 w-full rounded-lg border px-2 text-sm" value={margin} onChange={(event) => changeMargin(Number(event.target.value))}>{[10,12,15].map((value) => <option key={value} value={value}>{value}%</option>)}</select>{fieldErrors.margin ? <span className="mt-1 block text-rose-700">{fieldErrors.margin}</span> : null}</label>
+        <label className="text-[11px] font-semibold">유효기간<select aria-invalid={Boolean(fieldErrors.validUntil)} className="mobile-input mt-1 min-h-10 w-full rounded-lg border px-2 text-sm" value={validDays} onChange={(event) => setValidDays(Number(event.target.value))}>{Array.from(new Set([7,14,30,initialValidDays])).sort((a,b) => a-b).map((value) => <option key={value} value={value}>{value}일</option>)}</select>{fieldErrors.validUntil ? <span className="mt-1 block text-rose-700">{fieldErrors.validUntil}</span> : null}</label>
       </div>
       <div className="mt-3 rounded-lg bg-slate-900 p-3 text-white"><div className="flex justify-between text-xs"><span>판매 합계</span><b>{totals.salesAmount.toLocaleString()}원</b></div><div className="mt-1 flex justify-between text-[11px] text-slate-300"><span>내부 예상 이익 · 고객 비공개</span><span>{totals.expectedProfit.toLocaleString()}원 · {totals.marginRate.toFixed(1)}%</span></div></div>
-      {message ? <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${issued ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{message}</p> : null}
-      {issued ? <div className="mt-3 grid grid-cols-2 gap-2"><button className="mobile-primary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg text-xs font-semibold" onClick={() => void copyOrShare(true)} type="button"><Share2 className="h-4 w-4" />공유</button><button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border text-xs font-semibold" onClick={() => void copyOrShare(false)} type="button">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "복사됨" : "링크 복사"}</button></div> : <button className="mobile-primary-action mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void issueQuote()} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}{saving ? "발행 중" : "고객용 견적 발행"}</button>}
+      {message ? <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${messageTone === "success" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{message}</p> : null}
+      <div className="mt-3 grid grid-cols-2 gap-2"><button className="mobile-secondary-action inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void saveQuote("draft")} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}임시저장</button><button className="mobile-primary-action inline-flex min-h-12 items-center justify-center gap-2 rounded-lg text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void saveQuote("sent")} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}{issued ? "수정 저장" : "고객용 발행"}</button></div>
+      {issued ? <div className="mt-2 grid grid-cols-2 gap-2"><button className="mobile-primary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg text-xs font-semibold" onClick={() => void copyOrShare(true)} type="button"><Share2 className="h-4 w-4" />공유</button><button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border text-xs font-semibold" onClick={() => void copyOrShare(false)} type="button">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "복사됨" : "링크 복사"}</button></div> : null}
     </section>
   );
 }

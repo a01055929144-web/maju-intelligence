@@ -227,8 +227,8 @@ function SalesQuoteLedger({
     <section className="maju-section-card overflow-hidden" id="sales-quote-ledger">
       <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="maju-section-title">발행 견적 원장</p>
-          <p className="mt-1 text-sm text-slate-500">모바일 영업에서 저장한 견적의 금액·유효기간·고객 링크를 확인합니다.</p>
+          <p className="maju-section-title">견적 원장</p>
+          <p className="mt-1 text-sm text-slate-500">임시저장 견적을 이어 작성하고 발행 견적의 금액·유효기간·고객 링크를 관리합니다.</p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-semibold">
           <Badge className="bg-blue-50 text-blue-700">공유 중 {activeCount}건</Badge>
@@ -317,11 +317,16 @@ function SalesQuoteLedger({
                     <td className="px-4 py-3 text-sm font-medium text-slate-600">{formatKoreanDate(quote.validUntil)}</td>
                     <td className="px-4 py-3"><Badge className={status.className}>{status.label}</Badge></td>
                     <td className="px-4 py-3 text-right">
-                      {publicAvailable ? (
-                        <Link className="maju-button-secondary min-h-9 justify-center" href={`/quote/${quote.publicToken}`} target="_blank">
-                          열기 <ExternalLink className="h-3.5 w-3.5" />
+                      <div className="flex justify-end gap-2">
+                        <Link className="maju-button-secondary min-h-9 justify-center" href={`/revenue/pipeline/quotes/${quote.id}${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`}>
+                          {quote.status === "draft" ? "이어서 작성" : "수정"}
                         </Link>
-                      ) : <span className="text-xs font-semibold text-slate-400">공유 종료</span>}
+                        {publicAvailable ? (
+                          <Link className="maju-button-secondary min-h-9 justify-center" href={`/quote/${quote.publicToken}`} target="_blank">
+                            열기 <ExternalLink className="h-3.5 w-3.5" />
+                          </Link>
+                        ) : <span className="self-center text-xs font-semibold text-slate-400">공유 종료</span>}
+                      </div>
                     </td>
                   </tr>
                 );

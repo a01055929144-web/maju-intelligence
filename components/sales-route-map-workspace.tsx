@@ -91,7 +91,8 @@ import {
   normalizeProductToken,
   resolveQuoteValidUntil,
   toCustomerQuoteLines,
-  type QuoteLine
+  type QuoteLine,
+  type SalesQuoteFieldErrors
 } from "@/domains/quote/quote";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
@@ -6927,25 +6928,26 @@ function QuoteDrawer({
   readonly subject: QuoteSubject;
 }) {
   const draftKey = quoteDraftId(subject);
-  const initialDraft = readQuoteDraft(subject);
-  const initialRows = initialDraft?.rows || buildQuoteDraftRows(subject.industry, initialDraft?.defaultMarginRate || 12);
-  const initialMenuNotes = initialDraft?.menuNotes || subject.menuNotes || "";
-  const initialMarginRate = initialDraft?.defaultMarginRate || 12;
-  const initialValidDays = initialDraft?.validDays || 14;
-  const initialRecommendationCount = initialDraft?.recommendationCount || 10;
-  const initialRecommendationBasis = initialDraft?.recommendationBasis || "";
-  const [defaultMarginRate, setDefaultMarginRate] = useState(initialDraft?.defaultMarginRate || 12);
-  const [validDays, setValidDays] = useState(initialDraft?.validDays || 14);
+  const initialRows = buildQuoteDraftRows(subject.industry, 12);
+  const initialMenuNotes = subject.menuNotes || "";
+  const initialMarginRate = 12;
+  const initialValidDays = 14;
+  const initialRecommendationCount = 10;
+  const initialRecommendationBasis = "";
+  const [defaultMarginRate, setDefaultMarginRate] = useState(12);
+  const [validDays, setValidDays] = useState(14);
   const [rows, setRows] = useState<QuoteLine[]>(initialRows);
   const [menuNotes, setMenuNotes] = useState(initialMenuNotes);
   const [quoteMessage, setQuoteMessage] = useState("");
-  const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || "");
-  const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(initialDraft?.recommendationCount || 10);
-  const [recommendationBasis, setRecommendationBasis] = useState(initialDraft?.recommendationBasis || "");
+  const [quoteFieldErrors, setQuoteFieldErrors] = useState<SalesQuoteFieldErrors>({});
+  const [savedAt, setSavedAt] = useState("");
+  const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(10);
+  const [recommendationBasis, setRecommendationBasis] = useState("");
   const [isRecommending, setIsRecommending] = useState(false);
   const [catalog, setCatalog] = useState<Array<{ id: string; matchStatus: QuoteLine["matchStatus"]; name: string; purchasePrice: number; salesName?: string; salesPrice?: number; spec?: string; unit: string }>>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState("");
+  const [serverQuoteId, setServerQuoteId] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [savedEditorSnapshot, setSavedEditorSnapshot] = useState(() =>
@@ -6966,6 +6968,7 @@ function QuoteDrawer({
 
   useEffect(() => {
     const draft = readQuoteDraft(subject);
+    if (draft && !window.confirm("작성 중인 견적이 있습니다. 불러올까요?")) return;
     const nextMarginRate = draft?.defaultMarginRate || 12;
     const nextRows = draft?.rows || buildQuoteDraftRows(subject.industry, nextMarginRate);
     const nextMenuNotes = draft?.menuNotes || subject.menuNotes || "";
@@ -6983,6 +6986,18 @@ function QuoteDrawer({
     setPublishedUrl("");
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
   }, [draftKey, subject]);
+
+  useEffect(() => {
+    if (!isQuoteDirty) return;
+    const timer = window.setTimeout(() => {
+      try {
+        saveQuoteDraftToLocal(subject, { menuNotes, recommendationBasis, recommendationCount, rows, savedAt: new Date().toISOString(), subject, defaultMarginRate, validDays, validUntil: resolveQuoteValidUntil(validDays) });
+      } catch {
+        // 브라우저 저장 공간이 제한돼도 서버 저장·발행 흐름은 계속 사용할 수 있습니다.
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [defaultMarginRate, isQuoteDirty, menuNotes, recommendationBasis, recommendationCount, rows, subject, validDays]);
 
   useEffect(() => {
     if (readQuoteDraft(subject)) return;
@@ -7130,16 +7145,20 @@ function QuoteDrawer({
   const shareText = buildQuoteShareText(companyName, subject, rows, menuNotes, total, validUntil);
   const customerShareText = publishedUrl ? `${shareText}\n\n견적서 보기: ${publishedUrl}` : shareText;
 
-  async function publishQuoteLink() {
+  async function persistQuote(status: "draft" | "sent") {
+    const nextErrors: SalesQuoteFieldErrors = {};
+    if (!subject.customerId && !subject.leadId) nextErrors.subject = "리드 또는 거래처를 연결해 주세요.";
     if (!customerRows.length) {
-      setQuoteMessage("링크를 만들 견적 품목을 먼저 입력해주세요.");
-      return;
+      nextErrors.items = "저장할 견적 품목을 먼저 입력해주세요.";
     }
+    if (!Number.isFinite(defaultMarginRate) || defaultMarginRate < 0 || defaultMarginRate > 90) nextErrors.margin = "마진율은 0~90% 사이여야 합니다.";
+    setQuoteFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length) { setQuoteMessage(Object.values(nextErrors)[0] || "입력값을 확인해 주세요."); return; }
     setPublishing(true);
     setQuoteMessage("");
     try {
-      const response = await fetch("/api/sales-quotes", {
-        method: "POST",
+      const response = await fetch(serverQuoteId ? `/api/sales-quotes/${encodeURIComponent(serverQuoteId)}` : "/api/sales-quotes", {
+        method: serverQuoteId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId: subject.customerId,
@@ -7159,17 +7178,22 @@ function QuoteDrawer({
           memo: menuNotes,
           recipientName: subject.name,
           recipientPhone: subject.phone,
+          status,
           validUntil
         })
       });
-      const payload = (await response.json().catch(() => null)) as { message?: string; publicUrl?: string } | null;
-      if (!response.ok || !payload?.publicUrl) throw new Error(payload?.message || "견적 링크를 만들지 못했습니다.");
-      setPublishedUrl(payload.publicUrl);
+      const payload = (await response.json().catch(() => null)) as { fieldErrors?: SalesQuoteFieldErrors; id?: string; message?: string; publicUrl?: string } | null;
+      if (payload?.fieldErrors) setQuoteFieldErrors(payload.fieldErrors);
+      if (!response.ok || !payload?.id) throw new Error(payload?.message || "견적을 저장하지 못했습니다.");
+      setServerQuoteId(payload.id);
+      setPublishedUrl(status === "sent" ? payload.publicUrl || "" : "");
       setSavedEditorSnapshot(editorSnapshot);
-      await navigator.clipboard.writeText(payload.publicUrl).catch(() => undefined);
-      setQuoteMessage("유효기간이 적용된 거래처용 링크를 만들고 복사했습니다.");
+      setQuoteFieldErrors({});
+      deleteQuoteDraftFromLocal(subject);
+      if (status === "sent" && payload.publicUrl) await navigator.clipboard.writeText(payload.publicUrl).catch(() => undefined);
+      setQuoteMessage(status === "draft" ? "견적을 임시저장했습니다. 고객에게는 공개되지 않습니다." : "유효기간이 적용된 거래처용 링크를 저장하고 복사했습니다.");
     } catch (error) {
-      setQuoteMessage(error instanceof Error ? error.message : "견적 링크를 만들지 못했습니다.");
+      setQuoteMessage(error instanceof Error ? error.message : "견적을 저장하지 못했습니다.");
     } finally {
       setPublishing(false);
     }
@@ -7395,6 +7419,7 @@ function QuoteDrawer({
                 ))}
               </div>
             </div>
+            {quoteFieldErrors.margin ? <p className="mt-2 text-[11px] font-bold text-rose-700">{quoteFieldErrors.margin}</p> : null}
             <label className="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
               견적 유효기간
               <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-black text-slate-800" onChange={(event) => setValidDays(Number(event.target.value))} value={validDays}>
@@ -7525,6 +7550,9 @@ function QuoteDrawer({
               품목 추가
             </button>
           </div>
+          {quoteFieldErrors.subject ? <p className="text-xs font-bold text-rose-700">{quoteFieldErrors.subject}</p> : null}
+          {quoteFieldErrors.items ? <p className="text-xs font-bold text-rose-700">{quoteFieldErrors.items}</p> : null}
+          {quoteFieldErrors.validUntil ? <p className="text-xs font-bold text-rose-700">{quoteFieldErrors.validUntil}</p> : null}
 
           <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 text-xs sm:grid-cols-4">
             <p><span className="block font-bold text-slate-400">총 매입가</span><strong className="mt-1 block text-slate-800">{quoteTotals.purchaseAmount.toLocaleString()}원</strong></p>
@@ -7543,10 +7571,16 @@ function QuoteDrawer({
             />
           </div>
 
-          <button className="maju-button-primary w-full disabled:opacity-60" disabled={publishing || !customerRows.length} onClick={() => void publishQuoteLink()} type="button">
-            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            {publishing ? "안전한 링크 생성 중" : publishedUrl ? "유효기간 링크 다시 생성" : "유효기간 견적 링크 생성"}
+          <div className="grid grid-cols-2 gap-2">
+          <button className="maju-button-secondary w-full disabled:opacity-60" disabled={publishing || !customerRows.length} onClick={() => void persistQuote("draft")} type="button">
+            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            임시저장
           </button>
+          <button className="maju-button-primary w-full disabled:opacity-60" disabled={publishing || !customerRows.length} onClick={() => void persistQuote("sent")} type="button">
+            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+            {publishing ? "저장 중" : publishedUrl ? "발행 견적 수정 저장" : "고객용 견적 발행"}
+          </button>
+          </div>
           {publishedUrl ? <a className="block break-all rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs font-bold text-teal-800" href={publishedUrl} rel="noreferrer" target="_blank">{publishedUrl}</a> : null}
 
           <button className="maju-button-primary w-full" onClick={() => void downloadQuoteExcel()} type="button">

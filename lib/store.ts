@@ -6304,6 +6304,7 @@ export type CreateSalesQuoteInput = {
   recipientPhone?: string;
   title?: string;
   validUntil: string;
+  status?: "draft" | "sent";
   items: Array<{
     isCustomRequest?: boolean;
     marginPercent: number;
@@ -6362,6 +6363,7 @@ export async function createSalesQuote(input: CreateSalesQuoteInput) {
     throw new Error("회사 범위를 벗어난 견적 사진은 사용할 수 없습니다.");
   }
   const publicToken = randomUUID();
+  const status = input.status === "draft" ? "draft" : "sent";
   const quoteNumber = `Q-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${randomBytes(2).toString("hex").toUpperCase()}`;
   try {
     const quoteRows = await supabaseRequest<Array<{ id: string; public_token: string; valid_until: string }>>(
@@ -6376,13 +6378,13 @@ export async function createSalesQuote(input: CreateSalesQuoteInput) {
           default_margin_percent: input.defaultMarginPercent,
           lead_id: input.leadId || null,
           memo: input.memo || null,
-          public_enabled: true,
+          public_enabled: status === "sent",
           public_token: publicToken,
           quote_number: quoteNumber,
           recipient_name: input.recipientName || null,
           recipient_phone: input.recipientPhone || null,
-          status: "sent",
-          sent_at: new Date().toISOString(),
+          status,
+          sent_at: status === "sent" ? new Date().toISOString() : null,
           title: input.title || "식자재 납품 견적서",
           valid_until: input.validUntil
         }])
@@ -6421,6 +6423,133 @@ export async function createSalesQuote(input: CreateSalesQuoteInput) {
     }
     throw error;
   }
+}
+
+export type SalesQuoteEditorData = {
+  companyId: string;
+  customerId?: string;
+  defaultMarginPercent: number;
+  id: string;
+  items: CreateSalesQuoteInput["items"];
+  leadId?: string;
+  memo?: string;
+  publicEnabled: boolean;
+  publicToken: string;
+  quoteNumber: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  status: "draft" | "sent";
+  title: string;
+  validUntil: string;
+};
+
+export async function getSalesQuoteForEdit(companyId: string, quoteId: string): Promise<SalesQuoteEditorData | null> {
+  if (!isProductionStoreConfigured()) return null;
+  const quotes = await supabaseRequest<Array<{
+    company_id: string; customer_id: string | null; default_margin_percent: number; id: string; lead_id: string | null;
+    memo: string | null; public_enabled: boolean; public_token: string; quote_number: string; recipient_name: string | null;
+    recipient_phone: string | null; status: string; title: string; valid_until: string;
+  }>>(`sales_quotes?select=*&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quoteId)}&limit=1`);
+  const quote = quotes[0];
+  if (!quote || !["draft", "sent"].includes(quote.status)) return null;
+  const items = await supabaseRequest<Array<{
+    is_custom_request: boolean; margin_percent: number; photo_url: string | null; product_catalog_id: string | null;
+    product_name: string; purchase_unit_price: number; quantity: number; sales_unit_price: number; sort_order: number;
+    specification: string | null; unit: string;
+  }>>(`sales_quote_items?select=*&company_id=eq.${encodeURIComponent(companyId)}&quote_id=eq.${encodeURIComponent(quoteId)}&order=sort_order.asc`);
+  return {
+    companyId: quote.company_id,
+    customerId: quote.customer_id || undefined,
+    defaultMarginPercent: Number(quote.default_margin_percent),
+    id: quote.id,
+    items: items.map((item) => ({
+      isCustomRequest: item.is_custom_request,
+      marginPercent: Number(item.margin_percent),
+      photoUrl: item.photo_url || undefined,
+      productCatalogId: item.product_catalog_id || undefined,
+      productName: item.product_name,
+      purchaseUnitPrice: Number(item.purchase_unit_price),
+      quantity: Number(item.quantity),
+      salesUnitPrice: Number(item.sales_unit_price),
+      specification: item.specification || undefined,
+      unit: item.unit
+    })),
+    leadId: quote.lead_id || undefined,
+    memo: quote.memo || undefined,
+    publicEnabled: quote.public_enabled,
+    publicToken: quote.public_token,
+    quoteNumber: quote.quote_number,
+    recipientName: quote.recipient_name || undefined,
+    recipientPhone: quote.recipient_phone || undefined,
+    status: quote.status as "draft" | "sent",
+    title: quote.title,
+    validUntil: quote.valid_until
+  };
+}
+
+export async function updateSalesQuote(companyId: string, quoteId: string, input: Omit<CreateSalesQuoteInput, "companyId" | "createdByName">) {
+  const existing = await getSalesQuoteForEdit(companyId, quoteId);
+  if (!existing) throw new Error("이 회사에서 수정할 수 있는 견적이 아닙니다.");
+  if (input.items.some((item) => item.photoUrl && !isCompanySalesQuotePhotoPath(companyId, item.photoUrl))) {
+    throw new Error("회사 범위를 벗어난 견적 사진은 사용할 수 없습니다.");
+  }
+  const nextStatus = input.status === "draft" ? "draft" : "sent";
+  const previousItems = existing.items;
+  await supabaseRequest(`sales_quote_items?company_id=eq.${encodeURIComponent(companyId)}&quote_id=eq.${encodeURIComponent(quoteId)}`, { method: "DELETE" });
+  try {
+    await supabaseRequest("sales_quote_items", {
+      method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(input.items.map((item, index) => ({
+        company_id: companyId, is_custom_request: Boolean(item.isCustomRequest), margin_percent: item.marginPercent,
+        photo_url: item.photoUrl || null, product_catalog_id: item.productCatalogId || null, product_name: item.productName,
+        purchase_unit_price: item.purchaseUnitPrice, quantity: item.quantity, quote_id: quoteId,
+        sales_unit_price: item.salesUnitPrice, sort_order: index, specification: item.specification || null, unit: item.unit || "EA"
+      })))
+    });
+  } catch (error) {
+    await supabaseRequest("sales_quote_items", {
+      method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(previousItems.map((item, index) => ({
+        company_id: companyId, is_custom_request: Boolean(item.isCustomRequest), margin_percent: item.marginPercent,
+        photo_url: item.photoUrl || null, product_catalog_id: item.productCatalogId || null, product_name: item.productName,
+        purchase_unit_price: item.purchaseUnitPrice, quantity: item.quantity, quote_id: quoteId,
+        sales_unit_price: item.salesUnitPrice, sort_order: index, specification: item.specification || null, unit: item.unit || "EA"
+      })))
+    }).catch(() => null);
+    throw error;
+  }
+  let rows: Array<{ id: string; public_token: string; quote_number: string; valid_until: string }>;
+  try {
+    rows = await supabaseRequest<Array<{ id: string; public_token: string; quote_number: string; valid_until: string }>>(
+      `sales_quotes?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quoteId)}&select=id,public_token,quote_number,valid_until`,
+      { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({
+        customer_id: input.customerId || existing.customerId || null,
+        default_margin_percent: input.defaultMarginPercent,
+        lead_id: input.leadId || existing.leadId || null,
+        memo: input.memo || null,
+        public_enabled: nextStatus === "sent",
+        recipient_name: input.recipientName || null,
+        recipient_phone: input.recipientPhone || null,
+        sent_at: nextStatus === "sent" ? new Date().toISOString() : null,
+        status: nextStatus,
+        title: input.title || existing.title,
+        updated_at: new Date().toISOString(),
+        valid_until: input.validUntil
+      }) }
+    );
+  } catch (error) {
+    await supabaseRequest(`sales_quote_items?company_id=eq.${encodeURIComponent(companyId)}&quote_id=eq.${encodeURIComponent(quoteId)}`, { method: "DELETE" }).catch(() => null);
+    await supabaseRequest("sales_quote_items", {
+      method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(previousItems.map((item, index) => ({
+        company_id: companyId, is_custom_request: Boolean(item.isCustomRequest), margin_percent: item.marginPercent,
+        photo_url: item.photoUrl || null, product_catalog_id: item.productCatalogId || null, product_name: item.productName,
+        purchase_unit_price: item.purchaseUnitPrice, quantity: item.quantity, quote_id: quoteId,
+        sales_unit_price: item.salesUnitPrice, sort_order: index, specification: item.specification || null, unit: item.unit || "EA"
+      })))
+    }).catch(() => null);
+    throw error;
+  }
+  const quote = rows[0];
+  if (!quote) throw new Error("견적 수정 결과를 확인하지 못했습니다.");
+  return { id: quote.id, publicToken: quote.public_token, quoteNumber: quote.quote_number, validUntil: quote.valid_until };
 }
 
 export type SalesQuoteListItem = {

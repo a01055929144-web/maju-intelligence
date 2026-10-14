@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   applyDefaultMargin,
   calculateQuoteTotals,
@@ -6,6 +8,7 @@ import {
   findCatalogMatch,
   resolveQuoteValidUntil,
   toCustomerQuoteLines,
+  validateSalesQuoteInput,
   type QuoteLine
 } from "../domains/quote/quote";
 
@@ -58,5 +61,31 @@ describe("quote domain", () => {
     expect(result[0].unitPrice).toBe(8_890);
     expect(result[0].marginRate).toBe(10);
     expect(result[1]).toEqual(locked);
+  });
+
+  it("allows a draft with an expired validity date but blocks publishing it", () => {
+    const input = {
+      leadId: "lead-1", defaultMarginPercent: 12, items: [{ productName: "식용유", quantity: 1, salesUnitPrice: 10_000, marginPercent: 12 }],
+      validUntil: "2020-01-01T00:00:00.000Z"
+    };
+    expect(validateSalesQuoteInput({ ...input, status: "draft" }).validUntil).toBeUndefined();
+    expect(validateSalesQuoteInput({ ...input, status: "sent" }).validUntil).toContain("현재 이후");
+  });
+
+  it("returns field-specific validation errors", () => {
+    expect(validateSalesQuoteInput({ defaultMarginPercent: 95, items: [], status: "sent", validUntil: "" })).toEqual({
+      subject: "리드 또는 거래처를 연결해 주세요.",
+      items: "견적 품목은 1~100개여야 합니다.",
+      margin: "마진율은 0~90% 사이로 입력해 주세요.",
+      validUntil: "발행 유효기간은 현재 이후여야 합니다."
+    });
+  });
+
+  it("keeps quote edits tenant-scoped", () => {
+    const source = readFileSync(resolve(process.cwd(), "lib/store.ts"), "utf8");
+    const editorStart = source.indexOf("export async function getSalesQuoteForEdit");
+    const editorEnd = source.indexOf("export type SalesQuoteListItem", editorStart);
+    const editorSource = source.slice(editorStart, editorEnd);
+    expect(editorSource).toContain("company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quoteId)}");
   });
 });

@@ -13,6 +13,7 @@ export type QuoteLine = {
   marginRate: number;
   matchStatus: "matched" | "unmatched" | "requested";
   priceLocked?: boolean;
+  photoUrl?: string;
   requestPhotoName?: string;
 };
 
@@ -107,4 +108,31 @@ export function findCatalogMatch<T extends { id: string; name: string; spec?: st
       return specMatches && unitMatches;
     }) || null
   );
+}
+
+export type SalesQuoteFieldErrors = Partial<Record<"subject" | "items" | "margin" | "validUntil", string>>;
+
+export function validateSalesQuoteInput(input: {
+  customerId?: string;
+  leadId?: string;
+  defaultMarginPercent: number;
+  items?: Array<{ productName?: string; quantity?: number; salesUnitPrice?: number; marginPercent?: number }>;
+  status?: "draft" | "sent";
+  validUntil?: string;
+}) {
+  const errors: SalesQuoteFieldErrors = {};
+  if (!input.leadId && !input.customerId) errors.subject = "리드 또는 거래처를 연결해 주세요.";
+  if (!input.items?.length || input.items.length > 100) errors.items = "견적 품목은 1~100개여야 합니다.";
+  else if (input.items.some((item) => !item.productName?.trim() || Number(item.quantity) <= 0 || Number(item.salesUnitPrice) < 0)) {
+    errors.items = "각 품목의 상품명·수량·판매단가를 확인해 주세요.";
+  }
+  if (!Number.isFinite(input.defaultMarginPercent) || input.defaultMarginPercent < 0 || input.defaultMarginPercent > 90
+    || input.items?.some((item) => !Number.isFinite(item.marginPercent) || Number(item.marginPercent) < 0 || Number(item.marginPercent) > 90)) {
+    errors.margin = "마진율은 0~90% 사이로 입력해 주세요.";
+  }
+  if (input.status !== "draft") {
+    const validUntil = new Date(input.validUntil || "");
+    if (Number.isNaN(validUntil.getTime()) || validUntil <= new Date()) errors.validUntil = "발행 유효기간은 현재 이후여야 합니다.";
+  }
+  return errors;
 }
