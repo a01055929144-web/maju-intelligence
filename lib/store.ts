@@ -21,6 +21,7 @@ import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import { validateDeliveryRouteUnitInput, type DeliveryRouteUnit, type DeliveryRouteUnitInput } from "../domains/delivery/route-unit";
 import type { LeadActionRepository } from "@/domains/lead/lead-action";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
@@ -2967,6 +2968,8 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
   assignedManagerName?: string;
   assignedVehicle?: string;
   companyOwnerName?: string;
+  routeUnitName?: string;
+  vehicleDisplayName?: string;
   userPhone?: string;
   role?: StaffInvitation["role"] | "owner" | "member";
 }> {
@@ -2990,13 +2993,18 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
     return { active: false };
   }
 
-  const assignment = await getStaffAssignmentOverride(input.companyId, input.userId);
+  const [assignment, routeUnitDisplay] = await Promise.all([
+    getStaffAssignmentOverride(input.companyId, input.userId),
+    getStaffRouteUnitDisplay(input.companyId, member.id)
+  ]);
   return {
     active: true,
     companyMemberId: member.id,
     assignedManagerName: assignment?.assignedManagerName,
     assignedVehicle: assignment?.assignedVehicle,
     companyOwnerName: member.companies?.owner_name?.trim() || undefined,
+    routeUnitName: routeUnitDisplay.routeUnitName,
+    vehicleDisplayName: routeUnitDisplay.vehicleDisplayName,
     userPhone: member.app_users?.phone?.trim() || undefined,
     role: member.role || "member"
   };
@@ -10124,6 +10132,148 @@ type VehicleMasterRow = {
   plate_number: string;
   updated_at: string;
 };
+
+type DeliveryRouteUnitRow = {
+  company_id: string;
+  created_at: string;
+  current_vehicle_id: string | null;
+  default_driver_staff_member_id: string | null;
+  id: string;
+  is_active: boolean;
+  memo: string | null;
+  name: string;
+  territory_id: string;
+  updated_at: string;
+};
+
+export class RouteUnitVehicleConflictError extends Error {
+  constructor(readonly conflict: { id: string; name: string }) {
+    super(`${conflict.name}에서 사용 중인 차량입니다.`);
+  }
+}
+
+export async function listDeliveryRouteUnits(companyId: string): Promise<DeliveryRouteUnit[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const [rows, territories, staff, vehicleResult] = await Promise.all([
+    supabaseRequest<DeliveryRouteUnitRow[]>(
+      `delivery_route_units?select=*&company_id=eq.${encodeURIComponent(companyId)}&order=is_active.desc,name.asc`
+    ),
+    getDeliveryTerritories(companyId),
+    getCompanyStaffMemberOptions(companyId),
+    vehicleMasterRepository.list(companyId)
+  ]);
+  const territoryById = new Map(territories.map((item) => [item.id, item.name]));
+  const staffById = new Map(staff.map((item) => [item.id, item.name]));
+  const vehicleById = new Map(vehicleResult.vehicles.map((item) => [item.id, item]));
+  return rows.map((row) => {
+    const vehicle = row.current_vehicle_id ? vehicleById.get(row.current_vehicle_id) : undefined;
+    return {
+      id: row.id,
+      companyId: row.company_id,
+      territoryId: row.territory_id,
+      territoryName: territoryById.get(row.territory_id) || "미확인 권역",
+      name: row.name,
+      currentVehicleId: row.current_vehicle_id || undefined,
+      currentVehicleName: vehicle?.name,
+      currentVehiclePlateNumber: vehicle?.plateNumber,
+      defaultDriverStaffMemberId: row.default_driver_staff_member_id || undefined,
+      defaultDriverName: row.default_driver_staff_member_id ? staffById.get(row.default_driver_staff_member_id) : undefined,
+      isActive: row.is_active,
+      memo: row.memo || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  });
+}
+
+export async function saveDeliveryRouteUnit(
+  companyId: string,
+  input: DeliveryRouteUnitInput,
+  options: { id?: string; moveVehicle?: boolean } = {}
+) {
+  if (!isProductionStoreConfigured()) throw new Error("운영 데이터베이스가 연결되어 있지 않습니다.");
+  const [territories, staff, vehicleResult] = await Promise.all([
+    getDeliveryTerritories(companyId),
+    getCompanyStaffMemberOptions(companyId),
+    vehicleMasterRepository.list(companyId)
+  ]);
+  const normalized = validateDeliveryRouteUnitInput(companyId, input, {
+    territories: territories.map((item) => ({ id: item.id, companyId, isActive: item.isActive, name: item.name })),
+    staff: staff.map((item) => ({ id: item.id, companyId, isActive: true, name: item.name })),
+    vehicles: vehicleResult.vehicles.map((item) => ({ id: item.id, companyId, isActive: item.status === "active", name: item.name }))
+  });
+  const now = new Date().toISOString();
+  const conflictRows = normalized.currentVehicleId && normalized.isActive
+    ? await supabaseRequest<Array<{ id: string; name: string }>>(
+        `delivery_route_units?select=id,name&company_id=eq.${encodeURIComponent(companyId)}&current_vehicle_id=eq.${encodeURIComponent(normalized.currentVehicleId)}&is_active=eq.true${options.id ? `&id=neq.${encodeURIComponent(options.id)}` : ""}&limit=1`
+      )
+    : [];
+  const conflict = conflictRows[0];
+  if (conflict && !options.moveVehicle) throw new RouteUnitVehicleConflictError(conflict);
+
+  if (conflict) {
+    await supabaseRequest(
+      `delivery_route_units?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(conflict.id)}`,
+      { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ current_vehicle_id: null, updated_at: now }) }
+    );
+  }
+
+  try {
+    const body = {
+      company_id: companyId,
+      territory_id: normalized.territoryId,
+      name: normalized.name,
+      current_vehicle_id: normalized.currentVehicleId || null,
+      default_driver_staff_member_id: normalized.defaultDriverStaffMemberId || null,
+      is_active: normalized.isActive,
+      memo: normalized.memo || null,
+      updated_at: now
+    };
+    const rows = await supabaseRequest<DeliveryRouteUnitRow[]>(
+      options.id
+        ? `delivery_route_units?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(options.id)}`
+        : "delivery_route_units",
+      {
+        method: options.id ? "PATCH" : "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(options.id ? body : [body])
+      }
+    );
+    if (!rows[0]) throw new Error("호차 저장 결과를 확인하지 못했습니다.");
+  } catch (error) {
+    if (conflict && normalized.currentVehicleId) {
+      try {
+        await supabaseRequest(
+          `delivery_route_units?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(conflict.id)}`,
+          { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ current_vehicle_id: normalized.currentVehicleId, updated_at: new Date().toISOString() }) }
+        );
+      } catch {
+        throw new Error(`호차 저장에 실패했고 ${conflict.name}의 차량 연결도 자동 복원하지 못했습니다. 차량 배정을 확인해주세요.`);
+      }
+    }
+    throw error;
+  }
+  return listDeliveryRouteUnits(companyId);
+}
+
+export async function getStaffRouteUnitDisplay(companyId: string, companyMemberId?: string) {
+  if (!companyMemberId || !isProductionStoreConfigured()) return {};
+  const units = await supabaseRequest<Array<{ name: string; current_vehicle_id: string | null }>>(
+    `delivery_route_units?select=name,current_vehicle_id&company_id=eq.${encodeURIComponent(companyId)}&default_driver_staff_member_id=eq.${encodeURIComponent(companyMemberId)}&is_active=eq.true&order=name.asc&limit=1`
+  ).catch(() => []);
+  const unit = units[0];
+  if (!unit) return {};
+  const vehicles = unit.current_vehicle_id
+    ? await supabaseRequest<Array<{ name: string; plate_number: string }>>(
+        `delivery_vehicle_master?select=name,plate_number&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(unit.current_vehicle_id)}&limit=1`
+      ).catch(() => [])
+    : [];
+  const vehicle = vehicles[0];
+  return {
+    routeUnitName: unit.name,
+    vehicleDisplayName: vehicle ? `${vehicle.plate_number} · ${vehicle.name}` : undefined
+  };
+}
 
 function toVehicleMaster(row: VehicleMasterRow): VehicleMaster {
   return {

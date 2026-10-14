@@ -39,6 +39,9 @@ export type CustomerSession = {
   // getCustomerSession이 멤버십을 검증할 때 최신 값을 다시 읽어 설정 변경 후 재로그인 없이 반영합니다.
   operationalDisplayName?: string;
   operationalPhone?: string;
+  // 호차/실물 차량은 화면 표시용입니다. 거래처 권한 판정은 기존 담당자·권역 기준을 유지합니다.
+  routeUnitName?: string;
+  vehicleDisplayName?: string;
 };
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
@@ -113,6 +116,8 @@ export async function getCustomerSession() {
       assignedVehicle: membership.assignedVehicle,
       operationalDisplayName: role === "owner" ? membership.companyOwnerName : session.operationalDisplayName,
       operationalPhone: membership.userPhone || session.operationalPhone,
+      routeUnitName: membership.routeUnitName,
+      vehicleDisplayName: membership.vehicleDisplayName,
       role,
       workspaceRole
     };
