@@ -60,6 +60,7 @@ import {
 import { LinkifiedText } from "@/components/linkified-text";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
+import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
@@ -8374,6 +8375,10 @@ function StoreDetail({
 
               <CollapsibleSection title="담당자 연락처">
                 <CustomerContactsSection customerId={store.id} />
+              </CollapsibleSection>
+
+              <CollapsibleSection title="계약 단가">
+                <CustomerContractPrices customerId={store.id} />
               </CollapsibleSection>
 
               <CollapsibleSection title="리뷰 요약 · 키워드 (AI)">

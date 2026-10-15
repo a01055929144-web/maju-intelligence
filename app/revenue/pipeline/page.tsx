@@ -6,6 +6,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { PipelineCandidatesTable } from "@/components/pipeline-candidates-table";
 import { Progress } from "@/components/ui/progress";
 import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
+import { SalesQuoteAcceptButton } from "@/components/sales-quote-accept-button";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getRevenuePipeline, listSalesQuotes, type RevenuePipeline, type SalesQuoteListItem } from "@/lib/store";
 
@@ -318,6 +319,7 @@ function SalesQuoteLedger({
                     <td className="px-4 py-3"><Badge className={status.className}>{status.label}</Badge></td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
+                        {quote.status === "sent" ? <SalesQuoteAcceptButton quoteId={quote.id} /> : null}
                         <Link className="maju-button-secondary min-h-9 justify-center" href={`/revenue/pipeline/quotes/${quote.id}${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`}>
                           {quote.status === "draft" ? "이어서 작성" : "수정"}
                         </Link>

@@ -1,9 +1,9 @@
 -- Production-applied Phase A schema record. Do not re-run against the production project.
 alter table public.product_catalog add column if not exists product_code text;
-alter table public.product_catalog add column if not exists purchase_to_sales_ratio numeric;
+alter table public.product_catalog add column if not exists purchase_to_sales_ratio numeric(14,6);
 alter table public.product_catalog add column if not exists tax_type text;
 alter table public.supplier_products add column if not exists parsed_tax_type text;
-alter table public.supplier_product_matches add column if not exists purchase_to_sales_ratio numeric;
+alter table public.supplier_product_matches add column if not exists purchase_to_sales_ratio numeric(14,6);
 alter table public.supplier_product_matches add column if not exists conversion_confirmed boolean not null default false;
 
 do $$ begin

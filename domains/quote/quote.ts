@@ -1,5 +1,6 @@
 export const QUOTE_MARGIN_PRESETS = [10, 12, 15] as const;
 export type QuoteMarginPreset = (typeof QUOTE_MARGIN_PRESETS)[number];
+export type QuoteTaxType = "taxable" | "exempt";
 
 export type QuoteLine = {
   id: string;
@@ -65,6 +66,27 @@ export function calculateQuoteTotals(lines: QuoteLine[]) {
       return total;
     },
     { expectedProfit: 0, marginRate: 0, purchaseAmount: 0, salesAmount: 0 }
+  );
+}
+
+export function calculateQuoteTaxLine(unitPrice: number, quantity: number, taxType: QuoteTaxType) {
+  const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+  const supplyAmount = Math.round(sanitizeMoney(unitPrice) * safeQuantity);
+  const taxAmount = taxType === "taxable" ? Math.round(supplyAmount * 0.1) : 0;
+  return { supplyAmount, taxAmount, totalAmount: supplyAmount + taxAmount };
+}
+
+export function calculateQuoteTaxTotals(lines: Array<{ quantity: number; taxType: QuoteTaxType; unitPrice: number }>) {
+  return lines.reduce(
+    (total, line) => {
+      const amounts = calculateQuoteTaxLine(line.unitPrice, line.quantity, line.taxType);
+      if (line.taxType === "taxable") total.taxableSupplyAmount += amounts.supplyAmount;
+      else total.exemptSupplyAmount += amounts.supplyAmount;
+      total.taxAmount += amounts.taxAmount;
+      total.totalAmount += amounts.totalAmount;
+      return total;
+    },
+    { exemptSupplyAmount: 0, taxAmount: 0, taxableSupplyAmount: 0, totalAmount: 0 }
   );
 }
 

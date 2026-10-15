@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   applyDefaultMargin,
+  calculateQuoteTaxLine,
+  calculateQuoteTaxTotals,
   calculateQuoteTotals,
   calculateSalesPrice,
   findCatalogMatch,
@@ -23,6 +25,16 @@ const line: QuoteLine = {
   marginRate: 20,
   matchStatus: "matched"
 };
+
+describe("quote tax snapshots", () => {
+  it("rounds each line and separates taxable and exempt supplies", () => {
+    expect(calculateQuoteTaxLine(101, 0.5, "taxable")).toEqual({ supplyAmount: 51, taxAmount: 5, totalAmount: 56 });
+    expect(calculateQuoteTaxTotals([
+      { quantity: 0.5, taxType: "taxable", unitPrice: 101 },
+      { quantity: 2, taxType: "exempt", unitPrice: 500 }
+    ])).toEqual({ taxableSupplyAmount: 51, exemptSupplyAmount: 1000, taxAmount: 5, totalAmount: 1056 });
+  });
+});
 
 describe("quote domain", () => {
   it("calculates a sales price from gross margin", () => {
