@@ -48,14 +48,15 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const compactMapHome = fullBleed && hidePageTitle;
   const scopedHref = (href: string) => {
     if (mode !== "admin-preview" || !previewCompanyId) return href;
-    if (href === "/dashboard/settings") return "/admin/companies";
+    if (href.startsWith("/dashboard/settings")) return "/admin/companies";
 
-    const [path, query = ""] = href.split("?");
+    const [hrefWithoutHash, hash = ""] = href.split("#");
+    const [path, query = ""] = hrefWithoutHash.split("?");
     const params = new URLSearchParams(query);
     params.set("companyId", previewCompanyId);
     const nextQuery = params.toString();
 
-    return `${path}${nextQuery ? `?${nextQuery}` : ""}`;
+    return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
   };
   const visibleNavigationGroups = customerNavigationGroups;
 
@@ -362,7 +363,8 @@ function CustomerAccountActions({ compact = false }: { readonly compact?: boolea
 
 function isCurrentNavItem(pathname: string | null, href: string, currentSearch = "") {
   if (!pathname) return false;
-  const [hrefPath = "/", hrefQuery = ""] = href.split("?");
+  const [hrefWithoutHash] = href.split("#");
+  const [hrefPath = "/", hrefQuery = ""] = hrefWithoutHash.split("?");
   if (hrefPath === "/") return pathname === "/";
   // 지도 홈은 회사 설정을 포함한 /dashboard 하위 화면의 상위 경로이기도 합니다.
   // 이 항목만큼은 정확한 경로에서만 활성화해야 설정 화면과 동시에 강조되지 않습니다.

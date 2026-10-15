@@ -38,7 +38,7 @@ export function SalesWorkspaceNav({
   ];
 
   if (showProducts) {
-    items.push({ active: active === "products", description: "매입·판매 품목 연결", href: scopedHref("/revenue/products", companyId), icon: PackageSearch, label: "상품" });
+    items.push({ active: active === "products", description: "마스터 상품과 표준 품목 연결", href: scopedHref("/revenue/products", companyId), icon: PackageSearch, label: "상품관리" });
   }
 
   items.push({ active: active === "performance", description: "담당자별 목표와 실적", href: scopedHref("/sales/performance", companyId), icon: BarChart3, label: "성과" });

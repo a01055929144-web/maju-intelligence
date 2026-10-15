@@ -45,15 +45,18 @@ const money = (value?: number) =>
 
 export function ProductCatalogWorkspace({
   companyId = "",
+  initialTab = "catalog",
 }: {
   companyId?: string;
+  initialTab?: "catalog" | "supplier" | "mapping";
 }) {
-  const [tab, setTab] = useState<"catalog" | "supplier" | "mapping">("catalog");
+  const [tab, setTab] = useState<"catalog" | "supplier" | "mapping">(initialTab);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  useEffect(() => setTab(initialTab), [initialTab]);
   async function load() {
     setLoading(true);
     try {
@@ -137,9 +140,9 @@ export function ProductCatalogWorkspace({
         <div className="flex gap-1">
           {(
             [
-              ["catalog", "표준 품목"],
-              ["supplier", "유통사 상품"],
-              ["mapping", "상품 매핑"],
+              ["catalog", "마스터 상품"],
+              ["supplier", "매입처 상품·업로드"],
+              ["mapping", "표준 품목 연결"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -174,8 +177,8 @@ export function ProductCatalogWorkspace({
             <div>
               <h2 className="maju-section-title">
                 {tab === "supplier"
-                  ? "유통사 원본 상품"
-                  : "표준 품목 연결 상태"}
+                  ? "매입처 원본 상품"
+                  : "회사 상품 연결 상태"}
               </h2>
               <p className="mt-1 maju-muted-label">
                 {items.length.toLocaleString()}개 · 표준 품목{" "}

@@ -3,28 +3,22 @@ import { describe, expect, it } from "vitest";
 import { customerNavigationGroups, flattenCustomerNavigationItems } from "../lib/customer-navigation";
 
 describe("customer navigation", () => {
-  it("keeps the same leaf destinations after grouping the growth navigation", () => {
-    const growth = customerNavigationGroups.find((group) => group.label === "성장");
-    const flattened = flattenCustomerNavigationItems(growth ? [growth] : []);
-
-    expect(flattened.map(({ active, href }) => `${active}:${href}`)).toEqual([
-      "revenue:/revenue/pipeline",
-      "sales-contacts:/revenue/contacts",
-      "product-catalog:/revenue/products",
-      "sales-performance:/sales/performance",
-      "dashboard:/dashboard?view=leads&leadType=permit",
-      "dashboard:/dashboard?view=leads&leadType=keyword",
-      "revenue-ledger:/revenue/transactions",
-      "billing:/revenue/billing",
-      "assistant:/assistant",
-      "report:/reports/latest"
-    ]);
+  it("keeps the confirmed ERP-oriented sidebar groups", () => {
+    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["영업", "운영 관리", "TMS 물류효율화", "설정·데이터"]);
   });
 
-  it("groups growth destinations into four sidebar sections", () => {
-    const growth = customerNavigationGroups.find((group) => group.label === "성장");
+  it("keeps sales, supplier, customer, product and logistics destinations reachable", () => {
+    const flattened = flattenCustomerNavigationItems();
 
-    expect(growth?.items.map((item) => item.label)).toEqual(["영업 관리", "리드", "매출", "AI"]);
-    expect(growth?.items.map((item) => item.children?.length)).toEqual([4, 2, 2, 2]);
+    expect(flattened.map((item) => item.href)).toEqual(expect.arrayContaining([
+      "/dashboard?view=leads&leadType=permit", "/dashboard?view=leads&leadType=keyword", "/assistant",
+      "/revenue/pipeline", "/revenue/contacts", "/sales/performance", "/purchasing/suppliers",
+      "/crm/timeline", "/revenue/transactions", "/revenue/products", "/revenue/products?tab=mapping",
+      "/dashboard", "/routes/today", "/dashboard?view=history", "/dashboard/settings?section=tms#territory-settings"
+    ]));
+  });
+
+  it("does not expose the future group messaging placeholder", () => {
+    expect(flattenCustomerNavigationItems().map((item) => item.label)).not.toContain("단체메시지");
   });
 });
