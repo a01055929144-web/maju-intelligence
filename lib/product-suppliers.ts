@@ -1,4 +1,8 @@
 import { supabaseRequest } from "./store";
+import {
+  normalizeProductSupplierProfile,
+  type ProductSupplierProfileInput
+} from "../domains/purchasing/supplier-profile";
 
 const enc = encodeURIComponent;
 
@@ -11,13 +15,20 @@ export type ProductSupplierDirectory = {
 };
 
 export type ProductSupplierSummary = {
+  businessNumber?: string;
+  contactEmail?: string;
+  contactName?: string;
+  contactPhone?: string;
   id: string;
   name: string;
   isActive: boolean;
+  memo?: string;
+  paymentTerms?: string;
   productCount: number;
   confirmedCostCount: number;
   confirmedCostRate: number;
   latestImportAt?: string;
+  representativeName?: string;
 };
 
 export type ProductSupplierProduct = {
@@ -61,10 +72,76 @@ export type ProductSupplierComparison = {
   offers: Array<{ supplierId: string; supplierName: string; cost: number; observedAt?: string }>;
 };
 
+type ProductSupplierRow = {
+  business_number: string | null;
+  contact_email: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  id: string;
+  is_active: boolean;
+  memo: string | null;
+  name: string;
+  payment_terms: string | null;
+  representative_name: string | null;
+};
+
+function toSupplierProfile(row: ProductSupplierRow) {
+  return {
+    businessNumber: row.business_number || undefined,
+    contactEmail: row.contact_email || undefined,
+    contactName: row.contact_name || undefined,
+    contactPhone: row.contact_phone || undefined,
+    id: row.id,
+    isActive: row.is_active,
+    memo: row.memo || undefined,
+    name: row.name,
+    paymentTerms: row.payment_terms || undefined,
+    representativeName: row.representative_name || undefined
+  };
+}
+
+export async function saveProductSupplierProfile(
+  companyId: string,
+  supplierId: string,
+  input: ProductSupplierProfileInput
+) {
+  const profile = normalizeProductSupplierProfile(input);
+  if (profile.business_number) {
+    const duplicate = await supabaseRequest<Array<{ id: string; name: string }>>(
+      `product_suppliers?select=id,name&company_id=eq.${enc(companyId)}`
+        + `&business_number=eq.${profile.business_number}&id=neq.${enc(supplierId)}&limit=1`
+    );
+    if (duplicate[0]) {
+      throw new Error(`이미 ${duplicate[0].name} 매입처에서 사용 중인 사업자등록번호입니다.`);
+    }
+  }
+
+  try {
+    const rows = await supabaseRequest<ProductSupplierRow[]>(
+      `product_suppliers?company_id=eq.${enc(companyId)}&id=eq.${enc(supplierId)}`
+        + "&select=id,name,is_active,business_number,representative_name,contact_name,contact_phone,contact_email,payment_terms,memo",
+      {
+        body: JSON.stringify(profile),
+        headers: { Prefer: "return=representation" },
+        method: "PATCH"
+      }
+    );
+    if (!rows[0]) throw new Error("이 회사의 매입처를 찾지 못했습니다.");
+    return toSupplierProfile(rows[0]);
+  } catch (error) {
+    if (error instanceof Error && /product_suppliers_company_business_number_uq|duplicate key|23505/i.test(error.message)) {
+      throw new Error("이미 다른 매입처에서 사용 중인 사업자등록번호입니다.");
+    }
+    throw error;
+  }
+}
+
 export async function listProductSupplierDirectory(companyId: string): Promise<ProductSupplierDirectory> {
   const [supplierRows, productRows, matchRows, catalogRows, historyRows, importRows] = await Promise.all([
-    supabaseRequest<Array<{ id: string; name: string; is_active: boolean }>>(
-      `product_suppliers?select=id,name,is_active&company_id=eq.${enc(companyId)}&order=name`
+    supabaseRequest<ProductSupplierRow[]>(
+      "product_suppliers?select=id,name,is_active,business_number,representative_name,"
+        + "contact_name,contact_phone,contact_email,payment_terms,memo"
+        + `&company_id=eq.${enc(companyId)}&order=name`
     ),
     supabaseRequest<Array<{ id: string; supplier_id: string; raw_name: string; raw_spec: string | null; raw_unit: string | null; latest_cost: number | null; cost_confirmed: boolean; last_seen_date: string | null }>>(
       `supplier_products?select=id,supplier_id,raw_name,raw_spec,raw_unit,latest_cost,cost_confirmed,last_seen_date&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=5000`
@@ -88,7 +165,11 @@ export async function listProductSupplierDirectory(companyId: string): Promise<P
   const catalogNames = new Map(catalogRows.map((row) => [row.id, row.canonical_name || row.purchase_product_name]));
   const matchByProduct = new Map(matchRows.map((row) => [row.supplier_product_id, row.product_catalog_id]));
   const latestImportBySupplier = new Map<string, string>();
-  for (const row of importRows) if (!latestImportBySupplier.has(row.supplier_id)) latestImportBySupplier.set(row.supplier_id, row.completed_at || row.created_at);
+  for (const row of importRows) {
+    if (!latestImportBySupplier.has(row.supplier_id)) {
+      latestImportBySupplier.set(row.supplier_id, row.completed_at || row.created_at);
+    }
+  }
 
   const products = productRows.map((row) => {
     const catalogId = matchByProduct.get(row.id);
@@ -116,8 +197,17 @@ export async function listProductSupplierDirectory(companyId: string): Promise<P
   const comparisonMap = new Map<string, ProductSupplierComparison>();
   for (const product of products) {
     if (!product.matchedCatalogId || !product.matchedCatalogName || !product.costConfirmed || product.latestCost == null) continue;
-    const current = comparisonMap.get(product.matchedCatalogId) || { catalogId: product.matchedCatalogId, catalogName: product.matchedCatalogName, offers: [] };
-    current.offers.push({ supplierId: product.supplierId, supplierName: supplierNames.get(product.supplierId) || "매입처 미확인", cost: product.latestCost, observedAt: product.lastSeenDate });
+    const current = comparisonMap.get(product.matchedCatalogId) || {
+      catalogId: product.matchedCatalogId,
+      catalogName: product.matchedCatalogName,
+      offers: []
+    };
+    current.offers.push({
+      cost: product.latestCost,
+      observedAt: product.lastSeenDate,
+      supplierId: product.supplierId,
+      supplierName: supplierNames.get(product.supplierId) || "매입처 미확인"
+    });
     comparisonMap.set(product.matchedCatalogId, current);
   }
 
@@ -125,14 +215,38 @@ export async function listProductSupplierDirectory(companyId: string): Promise<P
     suppliers: supplierRows.map((row) => {
       const count = productCounts.get(row.id) || 0;
       const confirmed = confirmedCounts.get(row.id) || 0;
-      return { id: row.id, name: row.name, isActive: row.is_active, productCount: count, confirmedCostCount: confirmed, confirmedCostRate: count ? Math.round((confirmed / count) * 100) : 0, latestImportAt: latestImportBySupplier.get(row.id) };
+      return {
+        ...toSupplierProfile(row),
+        confirmedCostCount: confirmed,
+        confirmedCostRate: count ? Math.round((confirmed / count) * 100) : 0,
+        latestImportAt: latestImportBySupplier.get(row.id),
+        productCount: count
+      };
     }),
     products,
     costHistory: historyRows.flatMap((row) => {
       const product = productById.get(row.supplier_product_id);
-      return product ? [{ id: row.id, supplierProductId: row.supplier_product_id, supplierId: product.supplier_id, productName: product.raw_name, priceDate: row.price_date, purchasePrice: Number(row.purchase_price) }] : [];
+      return product ? [{
+        id: row.id,
+        priceDate: row.price_date,
+        productName: product.raw_name,
+        purchasePrice: Number(row.purchase_price),
+        supplierId: product.supplier_id,
+        supplierProductId: row.supplier_product_id
+      }] : [];
     }),
-    imports: importRows.map((row) => ({ id: row.id, supplierId: row.supplier_id, fileName: row.file_name, status: row.status, totalRows: row.total_rows, createdCount: row.created_count, updatedCount: row.updated_count, excludedCount: row.excluded_count, createdAt: row.created_at, completedAt: row.completed_at || undefined })),
+    imports: importRows.map((row) => ({
+      completedAt: row.completed_at || undefined,
+      createdAt: row.created_at,
+      createdCount: row.created_count,
+      excludedCount: row.excluded_count,
+      fileName: row.file_name,
+      id: row.id,
+      status: row.status,
+      supplierId: row.supplier_id,
+      totalRows: row.total_rows,
+      updatedCount: row.updated_count
+    })),
     comparisons: Array.from(comparisonMap.values()).filter((row) => new Set(row.offers.map((offer) => offer.supplierId)).size > 1)
   };
 }

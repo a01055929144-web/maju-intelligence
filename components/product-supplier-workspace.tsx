@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, FileSpreadsheet, PackageSearch, Search, Truck } from "lucide-react";
-import type { ProductSupplierDirectory } from "@/lib/product-suppliers";
+import { type FormEvent, useMemo, useState } from "react";
+import { ArrowRight, CheckCircle2, FileSpreadsheet, PackageSearch, Save, Search, Truck } from "lucide-react";
+import type { ProductSupplierDirectory, ProductSupplierSummary } from "@/lib/product-suppliers";
 
 const money = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
 const date = (value?: string) => value ? new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "없음";
 
 export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?: string; data: ProductSupplierDirectory }) {
+  const [suppliers, setSuppliers] = useState(data.suppliers);
   const [selectedId, setSelectedId] = useState(data.suppliers[0]?.id || "");
   const [query, setQuery] = useState("");
-  const selected = data.suppliers.find((supplier) => supplier.id === selectedId);
+  const selected = suppliers.find((supplier) => supplier.id === selectedId);
   const products = useMemo(() => data.products.filter((item) => item.supplierId === selectedId && item.rawName.toLocaleLowerCase("ko").includes(query.trim().toLocaleLowerCase("ko"))), [data.products, query, selectedId]);
   const history = data.costHistory.filter((item) => item.supplierId === selectedId).slice(0, 100);
   const imports = data.imports.filter((item) => item.supplierId === selectedId);
@@ -20,7 +21,7 @@ export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?:
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="활성 매입처" value={`${data.suppliers.filter((item) => item.isActive).length}곳`} />
+        <Metric label="활성 매입처" value={`${suppliers.filter((item) => item.isActive).length}곳`} />
         <Metric label="매입 상품" value={`${data.products.length.toLocaleString()}개`} />
         <Metric label="원가 비교 가능" value={`${data.comparisons.length.toLocaleString()}개 품목`} />
       </div>
@@ -34,20 +35,30 @@ export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?:
             </div>
           </div>
           <div className="max-h-[700px] divide-y overflow-y-auto">
-            {data.suppliers.map((supplier) => (
+            {suppliers.map((supplier) => (
               <button className={`w-full px-4 py-4 text-left transition ${selectedId === supplier.id ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "hover:bg-slate-50"}`} key={supplier.id} onClick={() => { setSelectedId(supplier.id); setQuery(""); }} type="button">
                 <div className="flex items-start justify-between gap-2"><b className="text-sm text-slate-950">{supplier.name}</b><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{supplier.isActive ? "활성" : "비활성"}</span></div>
                 <p className="mt-2 text-xs font-semibold text-slate-500">상품 {supplier.productCount.toLocaleString()}개 · 원가 확정 {supplier.confirmedCostRate}%</p>
                 <p className="mt-1 text-xs text-slate-400">최근 업로드 {date(supplier.latestImportAt)}</p>
               </button>
             ))}
-            {!data.suppliers.length ? <div className="p-10 text-center text-sm font-semibold text-slate-500">매입 단가표를 업로드하면 매입처가 생성됩니다.</div> : null}
+            {!suppliers.length ? <div className="p-10 text-center text-sm font-semibold text-slate-500">매입 단가표를 업로드하면 매입처가 생성됩니다.</div> : null}
           </div>
         </aside>
 
         <div className="min-w-0 space-y-4">
           {selected ? (
             <>
+              <SupplierProfileCard
+                companyId={companyId}
+                key={selected.id}
+                onSaved={(supplier) => {
+                  setSuppliers((current) => current.map((item) => (
+                    item.id === supplier.id ? { ...item, ...supplier } : item
+                  )));
+                }}
+                supplier={selected}
+              />
               <section className="maju-section-card">
                 <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
                   <div><p className="text-xs font-bold text-teal-700">SUPPLIER DETAIL</p><h2 className="maju-section-title">{selected.name}</h2><p className="mt-1 maju-muted-label">상품 {selected.productCount.toLocaleString()}개 · 최근 업로드 {date(selected.latestImportAt)}</p></div>
@@ -83,6 +94,119 @@ export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?:
         {!data.comparisons.length ? <Empty text="두 곳 이상의 매입처에 연결된 확정 원가가 아직 없습니다." /> : null}
       </section>
     </div>
+  );
+}
+
+function SupplierProfileCard({
+  companyId,
+  onSaved,
+  supplier
+}: {
+  companyId: string;
+  onSaved: (supplier: ProductSupplierSummary) => void;
+  supplier: ProductSupplierSummary;
+}) {
+  const [form, setForm] = useState({
+    businessNumber: supplier.businessNumber || "",
+    contactEmail: supplier.contactEmail || "",
+    contactName: supplier.contactName || "",
+    contactPhone: supplier.contactPhone || "",
+    memo: supplier.memo || "",
+    paymentTerms: supplier.paymentTerms || "",
+    representativeName: supplier.representativeName || ""
+  });
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const update = (key: keyof typeof form, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setMessage("");
+  };
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/product-suppliers/${supplier.id}`, {
+        body: JSON.stringify({ ...form, companyId: companyId || undefined }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH"
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || "매입처 기본정보를 저장하지 못했습니다.");
+      onSaved(payload.supplier);
+      setMessage("저장했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "매입처 기본정보를 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="maju-section-card">
+      <form onSubmit={save}>
+        <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-teal-700">SUPPLIER PROFILE</p>
+            <h2 className="maju-section-title">{supplier.name} 기본정보</h2>
+            <p className="mt-1 maju-muted-label">계약과 정산에 필요한 매입처 정보를 관리합니다.</p>
+          </div>
+          <button className="maju-button-primary" disabled={saving} type="submit">
+            <Save className="h-4 w-4" /> {saving ? "저장 중" : "기본정보 저장"}
+          </button>
+        </div>
+        <div className="grid gap-4 border-t border-slate-100 p-4 md:grid-cols-2 xl:grid-cols-3">
+          <ProfileField label="사업자등록번호" hint="숫자 10자리">
+            <input
+              className="maju-input w-full"
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(event) => update("businessNumber", event.target.value)}
+              placeholder="000-00-00000"
+              value={form.businessNumber}
+            />
+          </ProfileField>
+          <ProfileField label="대표자">
+            <input className="maju-input w-full" maxLength={100} onChange={(event) => update("representativeName", event.target.value)} value={form.representativeName} />
+          </ProfileField>
+          <ProfileField label="담당자">
+            <input className="maju-input w-full" maxLength={100} onChange={(event) => update("contactName", event.target.value)} value={form.contactName} />
+          </ProfileField>
+          <ProfileField label="담당자 연락처">
+            <input className="maju-input w-full" maxLength={30} onChange={(event) => update("contactPhone", event.target.value)} value={form.contactPhone} />
+          </ProfileField>
+          <ProfileField label="담당자 이메일">
+            <input className="maju-input w-full" maxLength={254} onChange={(event) => update("contactEmail", event.target.value)} type="email" value={form.contactEmail} />
+          </ProfileField>
+          <ProfileField label="결제 조건">
+            <input className="maju-input w-full" maxLength={500} onChange={(event) => update("paymentTerms", event.target.value)} placeholder="예: 월말 마감, 익월 10일 지급" value={form.paymentTerms} />
+          </ProfileField>
+          <div className="md:col-span-2 xl:col-span-3">
+            <ProfileField label="메모">
+              <textarea className="maju-input min-h-24 w-full resize-y py-3" maxLength={4000} onChange={(event) => update("memo", event.target.value)} value={form.memo} />
+            </ProfileField>
+          </div>
+          {message ? (
+            <p className={`md:col-span-2 xl:col-span-3 text-sm font-semibold ${message === "저장했습니다." ? "text-emerald-700" : "text-rose-700"}`} role="status">
+              {message}
+            </p>
+          ) : null}
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function ProfileField({ children, hint, label }: { children: React.ReactNode; hint?: string; label: string }) {
+  return (
+    <label className="block space-y-2">
+      <span className="flex items-center justify-between gap-2 text-xs font-bold text-slate-600">
+        {label}{hint ? <span className="font-medium text-slate-400">{hint}</span> : null}
+      </span>
+      {children}
+    </label>
   );
 }
 
