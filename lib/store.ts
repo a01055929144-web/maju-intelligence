@@ -870,7 +870,7 @@ function getSupabaseConfig(): SupabaseConfig | null {
   return { url: url.replace(/\/$/, ""), serviceRoleKey };
 }
 
-async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const config = getSupabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
 

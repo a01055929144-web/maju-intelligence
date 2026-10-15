@@ -1,32 +1,532 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileSpreadsheet, Loader2, PackagePlus, Upload, X } from "lucide-react";
-import { buildCatalogPreview, catalogFields, suggestCatalogMapping, type CatalogField, type CatalogMapping, type RawCatalogRow } from "@/domains/product/catalog-import";
+import {
+  CheckCircle2,
+  FileSpreadsheet,
+  Loader2,
+  PackagePlus,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  buildCatalogPreview,
+  catalogFields,
+  suggestCatalogMapping,
+  type CatalogField,
+  type CatalogMapping,
+  type RawCatalogRow,
+} from "@/domains/product/catalog-import";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
 import type { SupplierProductAdminItem } from "@/lib/product-catalog-import";
 
-type Workspace={catalogCount:number;items:SupplierProductAdminItem[];suppliers:Array<{id:string;name:string}>};
-const labels:Record<CatalogField,string>={productName:"상품명",spec:"규격",unit:"단위",cost:"원가(직접 확인)",salesPrice:"판매가 참고",productCode:"상품코드",barcode:"바코드",buyerName:"구매처명",buyerCode:"구매처코드",date:"일자",quantity:"수량"};
-const money=(value?:number)=>value==null?"-":`${value.toLocaleString("ko-KR")}원`;
+type Workspace = {
+  catalogCount: number;
+  items: SupplierProductAdminItem[];
+  suppliers: Array<{ id: string; name: string }>;
+};
+const labels: Record<CatalogField, string> = {
+  productName: "상품명",
+  spec: "규격",
+  unit: "단위",
+  cost: "원가(직접 확인)",
+  salesPrice: "판매가 참고",
+  productCode: "상품코드",
+  barcode: "바코드",
+  buyerName: "구매처명",
+  buyerCode: "구매처코드",
+  date: "일자",
+  quantity: "수량",
+};
+const money = (value?: number) =>
+  value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
 
-export function ProductCatalogWorkspace({companyId=""}:{companyId?:string}){
-  const [tab,setTab]=useState<"catalog"|"supplier"|"mapping">("catalog");const [workspace,setWorkspace]=useState<Workspace|null>(null);const [loading,setLoading]=useState(false);const [drawer,setDrawer]=useState(false);const [selected,setSelected]=useState<string[]>([]);const [message,setMessage]=useState("");
-  async function load(){setLoading(true);try{const q=companyId?`?companyId=${encodeURIComponent(companyId)}`:"";const r=await fetch(`/api/product-catalog/imports${q}`,{cache:"no-store"});const p=await r.json() as Workspace&{message?:string};if(!r.ok)throw new Error(p.message||"불러오기 실패");setWorkspace(p);}catch(e){setMessage(e instanceof Error?e.message:"유통사 상품을 불러오지 못했습니다.");}finally{setLoading(false)}}
-  useEffect(()=>{if(tab!=="catalog")void load()},[tab]); // eslint-disable-line react-hooks/exhaustive-deps
-  async function createStandards(){if(!selected.length)return;setLoading(true);setMessage("");try{const r=await fetch("/api/product-catalog/imports",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"create-standards",companyId,supplierProductIds:selected})});const p=await r.json() as {createdCount?:number;message?:string};if(!r.ok)throw new Error(p.message||"표준 품목 생성 실패");setMessage(`${p.createdCount||0}개를 표준 품목으로 생성하고 연결했습니다.`);setSelected([]);await load();}catch(e){setMessage(e instanceof Error?e.message:"표준 품목을 만들지 못했습니다.");}finally{setLoading(false)}}
-  const items=workspace?.items||[];
-  return <div className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"><div className="flex gap-1">{([['catalog','표준 품목'],['supplier','유통사 상품'],['mapping','상품 매핑']] as const).map(([id,label])=><button className={`rounded-xl px-4 py-2 text-sm font-bold ${tab===id?'bg-teal-700 text-white':'text-slate-600 hover:bg-slate-100'}`} key={id} onClick={()=>setTab(id)} type="button">{label}</button>)}</div><button className="maju-button-primary inline-flex items-center gap-2" onClick={()=>setDrawer(true)} type="button"><Upload className="h-4 w-4"/>매입 단가표 업로드</button></div>
-  {message?<div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">{message}</div>:null}
-  {tab==="catalog"?<ProductCatalogAdmin companyId={companyId}/>:<section className="maju-section-card"><div className="maju-card-header flex items-center justify-between"><div><h2 className="maju-section-title">{tab==="supplier"?'유통사 원본 상품':'표준 품목 연결 상태'}</h2><p className="mt-1 maju-muted-label">{items.length.toLocaleString()}개 · 표준 품목 {workspace?.catalogCount||0}개</p></div>{tab==="supplier"&&selected.length?<button className="maju-button-primary inline-flex items-center gap-2" disabled={loading} onClick={createStandards} type="button"><PackagePlus className="h-4 w-4"/>선택 {selected.length}개 표준 품목 생성</button>:null}</div>{loading&&!workspace?<div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin"/></div>:<div className="overflow-x-auto"><table className="w-full min-w-[960px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-500"><tr>{tab==="supplier"?<th className="px-4 py-3">선택</th>:null}<th className="px-4 py-3">유통사</th><th className="px-4 py-3">원본 상품</th><th className="px-4 py-3">코드 / 바코드</th><th className="px-4 py-3 text-right">확정 원가</th><th className="px-4 py-3">매핑</th></tr></thead><tbody className="divide-y">{items.map(item=><tr key={item.id}>{tab==="supplier"?<td className="px-4 py-3"><input aria-label={`${item.rawName} 선택`} checked={selected.includes(item.id)} onChange={e=>setSelected(v=>e.target.checked?[...v,item.id]:v.filter(id=>id!==item.id))} type="checkbox"/></td>:null}<td className="px-4 py-3 font-semibold">{item.supplierName}</td><td className="px-4 py-3"><b>{item.rawName}</b><div className="text-xs text-slate-500">{item.rawSpec||'-'} · {item.rawUnit||'-'}</div></td><td className="px-4 py-3 text-xs text-slate-600">{item.productCode||'-'} / {item.barcode||'-'}</td><td className="px-4 py-3 text-right font-bold">{item.costConfirmed?money(item.latestCost):<span className="text-amber-700">원가 미확정</span>}</td><td className="px-4 py-3">{item.matchedCatalogName?<span className="font-semibold text-emerald-700">{item.matchedCatalogName}</span>:<span className="text-slate-500">후보 확인 필요</span>}</td></tr>)}</tbody></table>{!items.length?<div className="p-12 text-center text-sm font-semibold text-slate-500">먼저 매입 단가표를 업로드해 주세요.</div>:null}</div>}</section>}
-  {drawer?<ImportDrawer companyId={companyId} onClose={()=>setDrawer(false)} onSaved={async m=>{setMessage(m);setDrawer(false);setTab("supplier");await load()}}/>:null}</div>;
+export function ProductCatalogWorkspace({
+  companyId = "",
+}: {
+  companyId?: string;
+}) {
+  const [tab, setTab] = useState<"catalog" | "supplier" | "mapping">("catalog");
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [drawer, setDrawer] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
+  async function load() {
+    setLoading(true);
+    try {
+      const q = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+      const r = await fetch(`/api/product-catalog/imports${q}`, {
+        cache: "no-store",
+      });
+      const p = (await r.json()) as Workspace & { message?: string };
+      if (!r.ok) throw new Error(p.message || "불러오기 실패");
+      setWorkspace(p);
+    } catch (e) {
+      setMessage(
+        e instanceof Error ? e.message : "유통사 상품을 불러오지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    if (tab !== "catalog") void load();
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function createStandards() {
+    if (!selected.length) return;
+    setLoading(true);
+    setMessage("");
+    try {
+      const r = await fetch("/api/product-catalog/imports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create-standards",
+          companyId,
+          supplierProductIds: selected,
+        }),
+      });
+      const p = (await r.json()) as { createdCount?: number; message?: string };
+      if (!r.ok) throw new Error(p.message || "표준 품목 생성 실패");
+      setMessage(
+        `${p.createdCount || 0}개를 표준 품목으로 생성하고 연결했습니다.`,
+      );
+      setSelected([]);
+      await load();
+    } catch (e) {
+      setMessage(
+        e instanceof Error ? e.message : "표준 품목을 만들지 못했습니다.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  const items = workspace?.items || [];
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="flex gap-1">
+          {(
+            [
+              ["catalog", "표준 품목"],
+              ["supplier", "유통사 상품"],
+              ["mapping", "상품 매핑"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              className={`rounded-xl px-4 py-2 text-sm font-bold ${tab === id ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              key={id}
+              onClick={() => setTab(id)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <button
+          className="maju-button-primary inline-flex items-center gap-2"
+          onClick={() => setDrawer(true)}
+          type="button"
+        >
+          <Upload className="h-4 w-4" />
+          매입 단가표 업로드
+        </button>
+      </div>
+      {message ? (
+        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
+          {message}
+        </div>
+      ) : null}
+      {tab === "catalog" ? (
+        <ProductCatalogAdmin companyId={companyId} />
+      ) : (
+        <section className="maju-section-card">
+          <div className="maju-card-header flex items-center justify-between">
+            <div>
+              <h2 className="maju-section-title">
+                {tab === "supplier"
+                  ? "유통사 원본 상품"
+                  : "표준 품목 연결 상태"}
+              </h2>
+              <p className="mt-1 maju-muted-label">
+                {items.length.toLocaleString()}개 · 표준 품목{" "}
+                {workspace?.catalogCount || 0}개
+              </p>
+            </div>
+            {tab === "supplier" && selected.length ? (
+              <button
+                className="maju-button-primary inline-flex items-center gap-2"
+                disabled={loading}
+                onClick={createStandards}
+                type="button"
+              >
+                <PackagePlus className="h-4 w-4" />
+                선택 {selected.length}개 표준 품목 생성
+              </button>
+            ) : null}
+          </div>
+          {loading && !workspace ? (
+            <div className="flex justify-center p-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    {tab === "supplier" ? (
+                      <th className="px-4 py-3">선택</th>
+                    ) : null}
+                    <th className="px-4 py-3">유통사</th>
+                    <th className="px-4 py-3">원본 상품</th>
+                    <th className="px-4 py-3">코드 / 바코드</th>
+                    <th className="px-4 py-3 text-right">확정 원가</th>
+                    <th className="px-4 py-3">매핑</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      {tab === "supplier" ? (
+                        <td className="px-4 py-3">
+                          <input
+                            aria-label={`${item.rawName} 선택`}
+                            checked={selected.includes(item.id)}
+                            onChange={(e) =>
+                              setSelected((v) =>
+                                e.target.checked
+                                  ? [...v, item.id]
+                                  : v.filter((id) => id !== item.id),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                        </td>
+                      ) : null}
+                      <td className="px-4 py-3 font-semibold">
+                        {item.supplierName}
+                      </td>
+                      <td className="px-4 py-3">
+                        <b>{item.rawName}</b>
+                        <div className="text-xs text-slate-500">
+                          {item.rawSpec || "-"} · {item.rawUnit || "-"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {item.productCode || "-"} / {item.barcode || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold">
+                        {item.costConfirmed ? (
+                          money(item.latestCost)
+                        ) : (
+                          <span className="text-amber-700">원가 미확정</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.matchedCatalogName ? (
+                          <span className="font-semibold text-emerald-700">
+                            {item.matchedCatalogName}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">후보 확인 필요</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!items.length ? (
+                <div className="p-12 text-center text-sm font-semibold text-slate-500">
+                  먼저 매입 단가표를 업로드해 주세요.
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
+      )}
+      {drawer ? (
+        <ImportDrawer
+          companyId={companyId}
+          onClose={() => setDrawer(false)}
+          onSaved={async (m) => {
+            setMessage(m);
+            setDrawer(false);
+            setTab("supplier");
+            await load();
+          }}
+        />
+      ) : null}
+    </div>
+  );
 }
 
-function ImportDrawer({companyId,onClose,onSaved}:{companyId:string;onClose:()=>void;onSaved:(message:string)=>void}){
-  const [file,setFile]=useState<File|null>(null),[supplier,setSupplier]=useState(""),[rows,setRows]=useState<RawCatalogRow[]>([]),[headers,setHeaders]=useState<string[]>([]),[mapping,setMapping]=useState<CatalogMapping>({}),[step,setStep]=useState(1),[saving,setSaving]=useState(false),[error,setError]=useState("");
-  const preview=useMemo(()=>{if(step<3)return null;try{return buildCatalogPreview(rows,mapping,supplier)}catch(e){return {error:e instanceof Error?e.message:"미리보기를 만들지 못했습니다."}}},[mapping,rows,step,supplier]);
-  async function read(next:File){setError("");try{const XLSX=await import("xlsx");const data=await next.arrayBuffer();const workbook=XLSX.read(data,{type:"array",cellDates:true});const sheet=workbook.Sheets[workbook.SheetNames[0]];const parsed=XLSX.utils.sheet_to_json<RawCatalogRow>(sheet,{defval:"",raw:false,dateNF:"yyyy-mm-dd"});const names=parsed[0]?Object.keys(parsed[0]):[];setFile(next);setRows(parsed);setHeaders(names);setMapping(suggestCatalogMapping(names));setStep(2);}catch(e){setError(e instanceof Error?e.message:"파일을 읽지 못했습니다.")}}
-  async function save(){if(!file||!preview||"error" in preview)return;setSaving(true);setError("");try{const r=await fetch("/api/product-catalog/imports",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"save-import",companyId,fileName:file.name,supplierName:supplier,mapping,products:preview.products,excludedCount:preview.excludedCount,warnings:preview.warnings})});const p=await r.json() as {createdCount?:number;updatedCount?:number;excludedCount?:number;warningCount?:number;message?:string};if(!r.ok)throw new Error(p.message||"저장 실패");onSaved(`신규 ${p.createdCount||0} · 갱신 ${p.updatedCount||0} · 제외 ${p.excludedCount||0} · 경고 ${p.warningCount||0}`);}catch(e){setError(e instanceof Error?e.message:"업로드를 저장하지 못했습니다.");}finally{setSaving(false)}}
-  return <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/45"><section aria-label="매입 단가표 업로드" className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"><header className="flex items-center justify-between border-b p-5"><div><p className="text-xs font-black text-teal-700">STEP {step} / 3</p><h2 className="text-xl font-black">매입 단가표 업로드</h2></div><button aria-label="닫기" className="rounded-lg p-2 hover:bg-slate-100" onClick={onClose}><X/></button></header><div className="flex-1 space-y-5 overflow-y-auto p-5">{step===1?<><label className="space-y-2"><span className="text-sm font-bold">유통사명</span><input className="maju-input w-full" onChange={e=>setSupplier(e.target.value)} placeholder="예: 배동바지" value={supplier}/></label><label className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><FileSpreadsheet className="mb-3 h-10 w-10 text-teal-700"/><b>.xls · .xlsx · .csv 파일 선택</b><span className="mt-1 text-sm text-slate-500">원가 열은 다음 단계에서 직접 확인합니다.</span><input accept=".xls,.xlsx,.csv" className="sr-only" onChange={e=>{const f=e.target.files?.[0];if(f&&supplier.trim())void read(f);else if(f)setError("유통사명을 먼저 입력해 주세요.")}} type="file"/></label></>:null}{step===2?<><div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900"><b>원가 열은 자동 확정하지 않습니다.</b> 실제 매입 원가가 든 열인지 확인해야 자동 견적에 사용됩니다.</div><div className="grid gap-3 sm:grid-cols-2">{catalogFields.map(field=><label className="space-y-1" key={field}><span className="text-xs font-bold text-slate-600">{labels[field]}{field==='productName'||field==='cost'?' *':''}</span><select className="maju-input w-full" onChange={e=>setMapping(v=>({...v,[field]:e.target.value||undefined}))} value={mapping[field]||""}><option value="">선택 안 함</option>{headers.map(h=><option key={h}>{h}</option>)}</select></label>)}</div></>:null}{step===3&&preview&&!('error' in preview)?<><div className="grid grid-cols-3 gap-3"><Metric label="정상 품목" value={preview.products.length}/><Metric label="제외 행" value={preview.excludedCount}/><Metric label="경고" value={preview.warnings.length}/></div>{preview.warnings.map(w=><div className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900" key={w}>{w}</div>)}<div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs"><tr><th className="p-3">상품</th><th className="p-3">규격</th><th className="p-3 text-right">확정 원가</th><th className="p-3 text-right">판매가 중앙값</th></tr></thead><tbody className="divide-y">{preview.products.slice(0,100).map(p=><tr key={p.sourceFingerprint}><td className="p-3 font-semibold">{p.rawName}</td><td className="p-3">{p.rawSpec||'-'} / {p.unit}</td><td className="p-3 text-right">{money(p.cost)}</td><td className="p-3 text-right">{money(p.salesMedian)}</td></tr>)}</tbody></table></div><p className="text-xs text-slate-500">표준 품목이 없으면 저장 후 ‘유통사 상품’ 탭에서 확인한 품목을 일괄 생성할 수 있습니다.</p></>:null}{preview&&'error' in preview?<p className="text-sm font-semibold text-rose-700">{preview.error}</p>:null}{error?<p className="text-sm font-semibold text-rose-700" role="alert">{error}</p>:null}</div><footer className="flex justify-between border-t p-5"><button className="maju-button-secondary" disabled={step===1} onClick={()=>setStep(v=>Math.max(1,v-1))}>이전</button>{step===2?<button className="maju-button-primary" onClick={()=>setStep(3)}>미리보기</button>:step===3?<button className="maju-button-primary inline-flex items-center gap-2" disabled={saving||!preview||'error' in preview} onClick={save}>{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<CheckCircle2 className="h-4 w-4"/>}확인 후 저장</button>:<span/>}</footer></section></div>;
+function ImportDrawer({
+  companyId,
+  onClose,
+  onSaved,
+}: {
+  companyId: string;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null),
+    [supplier, setSupplier] = useState(""),
+    [rows, setRows] = useState<RawCatalogRow[]>([]),
+    [headers, setHeaders] = useState<string[]>([]),
+    [mapping, setMapping] = useState<CatalogMapping>({}),
+    [step, setStep] = useState(1),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState("");
+  const preview = useMemo(() => {
+    if (step < 3) return null;
+    try {
+      return buildCatalogPreview(rows, mapping, supplier);
+    } catch (e) {
+      return {
+        error: e instanceof Error ? e.message : "미리보기를 만들지 못했습니다.",
+      };
+    }
+  }, [mapping, rows, step, supplier]);
+  async function read(next: File) {
+    setError("");
+    try {
+      const XLSX = await import("xlsx");
+      const data = await next.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array", cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const parsed = XLSX.utils.sheet_to_json<RawCatalogRow>(sheet, {
+        defval: "",
+        raw: false,
+        dateNF: "yyyy-mm-dd",
+      });
+      const names = parsed[0] ? Object.keys(parsed[0]) : [];
+      setFile(next);
+      setRows(parsed);
+      setHeaders(names);
+      setMapping(suggestCatalogMapping(names));
+      setStep(2);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "파일을 읽지 못했습니다.");
+    }
+  }
+  async function save() {
+    if (!file || !preview || "error" in preview) return;
+    setSaving(true);
+    setError("");
+    try {
+      const r = await fetch("/api/product-catalog/imports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save-import",
+          companyId,
+          fileName: file.name,
+          supplierName: supplier,
+          mapping,
+          products: preview.products,
+          excludedCount: preview.excludedCount,
+          warnings: preview.warnings,
+        }),
+      });
+      const p = (await r.json()) as {
+        createdCount?: number;
+        updatedCount?: number;
+        excludedCount?: number;
+        warningCount?: number;
+        message?: string;
+      };
+      if (!r.ok) throw new Error(p.message || "저장 실패");
+      onSaved(
+        `신규 ${p.createdCount || 0} · 갱신 ${p.updatedCount || 0} · 제외 ${p.excludedCount || 0} · 경고 ${p.warningCount || 0}`,
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "업로드를 저장하지 못했습니다.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/45">
+      <section
+        aria-label="매입 단가표 업로드"
+        className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
+      >
+        <header className="flex items-center justify-between border-b p-5">
+          <div>
+            <p className="text-xs font-black text-teal-700">STEP {step} / 3</p>
+            <h2 className="text-xl font-black">매입 단가표 업로드</h2>
+          </div>
+          <button
+            aria-label="닫기"
+            className="rounded-lg p-2 hover:bg-slate-100"
+            onClick={onClose}
+          >
+            <X />
+          </button>
+        </header>
+        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+          {step === 1 ? (
+            <>
+              <label className="space-y-2">
+                <span className="text-sm font-bold">유통사명</span>
+                <input
+                  className="maju-input w-full"
+                  onChange={(e) => setSupplier(e.target.value)}
+                  placeholder="예: 배동바지"
+                  value={supplier}
+                />
+              </label>
+              <label className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
+                <FileSpreadsheet className="mb-3 h-10 w-10 text-teal-700" />
+                <b>.xls · .xlsx · .csv 파일 선택</b>
+                <span className="mt-1 text-sm text-slate-500">
+                  원가 열은 다음 단계에서 직접 확인합니다.
+                </span>
+                <input
+                  accept=".xls,.xlsx,.csv"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f && supplier.trim()) void read(f);
+                    else if (f) setError("유통사명을 먼저 입력해 주세요.");
+                  }}
+                  type="file"
+                />
+              </label>
+            </>
+          ) : null}
+          {step === 2 ? (
+            <>
+              <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+                <b>원가 열은 자동 확정하지 않습니다.</b> 실제 매입 원가가 든
+                열인지 확인해야 자동 견적에 사용됩니다.
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {catalogFields.map((field) => (
+                  <label className="space-y-1" key={field}>
+                    <span className="text-xs font-bold text-slate-600">
+                      {labels[field]}
+                      {field === "productName" || field === "cost" ? " *" : ""}
+                    </span>
+                    <select
+                      className="maju-input w-full"
+                      onChange={(e) =>
+                        setMapping((v) => ({
+                          ...v,
+                          [field]: e.target.value || undefined,
+                        }))
+                      }
+                      value={mapping[field] || ""}
+                    >
+                      <option value="">선택 안 함</option>
+                      {headers.map((h) => (
+                        <option key={h}>{h}</option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {step === 3 && preview && !("error" in preview) ? (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <Metric label="정상 품목" value={preview.products.length} />
+                <Metric label="제외 행" value={preview.excludedCount} />
+                <Metric label="경고" value={preview.warnings.length} />
+              </div>
+              {preview.warnings.map((w) => (
+                <div
+                  className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900"
+                  key={w}
+                >
+                  {w}
+                </div>
+              ))}
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full min-w-[700px] text-sm">
+                  <thead className="bg-slate-50 text-left text-xs">
+                    <tr>
+                      <th className="p-3">상품</th>
+                      <th className="p-3">규격</th>
+                      <th className="p-3 text-right">확정 원가</th>
+                      <th className="p-3 text-right">판매가 중앙값</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {preview.products.slice(0, 100).map((p) => (
+                      <tr key={p.sourceFingerprint}>
+                        <td className="p-3 font-semibold">{p.rawName}</td>
+                        <td className="p-3">
+                          {p.rawSpec || "-"} / {p.unit}
+                        </td>
+                        <td className="p-3 text-right">{money(p.cost)}</td>
+                        <td className="p-3 text-right">
+                          {money(p.salesMedian)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-slate-500">
+                표준 품목이 없으면 저장 후 ‘유통사 상품’ 탭에서 확인한 품목을
+                일괄 생성할 수 있습니다.
+              </p>
+            </>
+          ) : null}
+          {preview && "error" in preview ? (
+            <p className="text-sm font-semibold text-rose-700">
+              {preview.error}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="text-sm font-semibold text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <footer className="flex justify-between border-t p-5">
+          <button
+            className="maju-button-secondary"
+            disabled={step === 1}
+            onClick={() => setStep((v) => Math.max(1, v - 1))}
+          >
+            이전
+          </button>
+          {step === 2 ? (
+            <button className="maju-button-primary" onClick={() => setStep(3)}>
+              미리보기
+            </button>
+          ) : step === 3 ? (
+            <button
+              className="maju-button-primary inline-flex items-center gap-2"
+              disabled={saving || !preview || "error" in preview}
+              onClick={save}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              확인 후 저장
+            </button>
+          ) : (
+            <span />
+          )}
+        </footer>
+      </section>
+    </div>
+  );
 }
-function Metric({label,value}:{label:string;value:number}){return <div className="rounded-xl border bg-slate-50 p-4"><div className="text-xs font-bold text-slate-500">{label}</div><div className="mt-1 text-xl font-black">{value.toLocaleString()}건</div></div>}
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border bg-slate-50 p-4">
+      <div className="text-xs font-bold text-slate-500">{label}</div>
+      <div className="mt-1 text-xl font-black">{value.toLocaleString()}건</div>
+    </div>
+  );
+}
